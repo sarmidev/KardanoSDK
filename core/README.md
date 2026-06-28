@@ -36,3 +36,11 @@ Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
 
 `:shared` depends on `:core`. The sample apps depend on `:shared`, so they receive `:core`
 transitively; they do not depend on `:core` directly yet.
+
+## Testing
+
+Shared SDK-logic tests go in `core/src/commonTest`; a minimal `core/src/jvmTest` smoke test
+verifies JVM test wiring. Fixtures live under `core/src/commonTest/resources/fixtures/`. See
+[docs/TESTING.md](../docs/TESTING.md) for source-set expectations and the test-vector policy.
+
+- Core (JVM) tests: `./gradlew :core:jvmTest`

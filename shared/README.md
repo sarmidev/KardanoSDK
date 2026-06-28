@@ -32,3 +32,14 @@ project. See [docs/DECISIONS/0002-module-structure.md](../docs/DECISIONS/0002-mo
 
 - `:androidApp`, `:desktopApp` depend on `:shared`.
 - `iosApp` (Xcode) links the `Shared` framework produced here.
+
+## Testing
+
+`:shared` carries example tests in `commonTest`, `jvmTest`, `androidHostTest`, and `iosTest`
+that demonstrate the wiring per target. Protocol vectors and SDK-logic tests belong in
+`:core`, not here. See [docs/TESTING.md](../docs/TESTING.md) for the testing strategy and
+test-vector policy.
+
+- Desktop (JVM) tests: `./gradlew :shared:jvmTest`
+- Android host tests: `./gradlew :shared:testAndroidHostTest`
+- iOS simulator tests: `./gradlew :shared:iosSimulatorArm64Test`

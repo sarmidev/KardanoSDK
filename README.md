@@ -38,6 +38,7 @@ be used with mainnet funds or real private keys.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — phases and Phase 0 work blocks.
 - [docs/HANDOFF.md](docs/HANDOFF.md) — current state and session handoff.
 - [docs/AI_WORKING_AGREEMENT.md](docs/AI_WORKING_AGREEMENT.md) — how humans and AI agents change this repo.
+- [docs/TESTING.md](docs/TESTING.md) — test source sets, fixture layout, and test-vector policy.
 - [docs/SECURITY.md](docs/SECURITY.md) — security policy and reporting.
 - [docs/DECISIONS/](docs/DECISIONS/) — architecture decision records (ADRs).
 
@@ -58,7 +59,8 @@ Build:
   - Standard run: `./gradlew :desktopApp:run`
 - iOS app: open the `iosApp` directory in Xcode and run it from there.
 
-Test (run per module, e.g. `:core` and `:shared`):
+Test (run per module, e.g. `:core` and `:shared`). See [docs/TESTING.md](docs/TESTING.md)
+for source-set expectations, fixture layout, and the test-vector policy:
 
 - Core (JVM) tests: `./gradlew :core:jvmTest`
 - Android tests: `./gradlew :shared:testAndroidHostTest`

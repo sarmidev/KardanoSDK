@@ -107,6 +107,8 @@ Acceptance criteria:
 
 ### 0.3 Testing Infrastructure
 
+Status: complete.
+
 Goal:
 
 Create the testing foundation before implementing protocol logic.
@@ -119,6 +121,23 @@ Deliverables:
 - iOS/native test awareness.
 - Fixture folder structure.
 - Test vector policy.
+
+Outcome:
+
+- Added `docs/TESTING.md` documenting test source-set expectations (`commonTest`,
+  `jvmTest`, Android host tests, iOS tests), fixture layout, the external test-vector
+  policy (verbatim from cited specs; no AI-invented vectors), and the verification commands.
+- Added a fixture folder structure under `core/src/commonTest/resources/fixtures/` with a
+  top-level `README.md` and placeholder subfolders (`bech32/`, `cbor/`, `address/`) that
+  name their future authoritative sources (BIP-173/350, RFC 8949 Appendix A, CIP-19). No
+  protocol vectors are added yet. A note in `shared/src/commonTest/resources/fixtures/`
+  keeps protocol vectors in `:core`.
+- Added a minimal `:core` `jvmTest` smoke test (`JvmTestWiringTest`) that verifies JVM test
+  wiring without adding protocol behavior.
+- Linked `docs/TESTING.md` from `README.md`, `core/README.md`, and `shared/README.md`.
+- Verified: `:core:jvmTest`, `:shared:jvmTest`, and `:shared:testAndroidHostTest` pass.
+  `:shared:iosSimulatorArm64Test` compiles and links; running the simulator requires a
+  macOS/Xcode iOS simulator SDK and could not execute on the current machine.
 
 Acceptance criteria:
 
