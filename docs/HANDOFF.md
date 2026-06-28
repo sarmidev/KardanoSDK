@@ -15,7 +15,9 @@ Current project identity:
 - Name: Kardano SDK.
 - Package/group: `org.sarmidev.kardano`.
 - Main targets: Android, iOS, JVM/Desktop.
-- Current status: KMP wizard project plus Phase 0 guidance files.
+- Current status: Phase 0 in progress. Blocks 0.1 (Project Governance And AI Rules) and
+  0.2 (SDK-Oriented Module Structure) are complete: a UI-free `:core` module exists and
+  `:shared` depends on it. Next is Block 0.3 (Testing Infrastructure).
 
 Business goal:
 
@@ -23,7 +25,7 @@ Business goal:
 
 Technical goal for Phase 0:
 
-> Create a safe, tested and documented foundation before implementing wallet creation, transaction signing or real network flows.
+> Create a tested, documented foundation before implementing wallet creation, transaction signing or real network flows.
 
 ## Important Files
 
@@ -32,8 +34,8 @@ Read these first:
 - `docs/PROJECT_BRIEF.md`
 - `docs/ROADMAP.md`
 - `docs/AI_WORKING_AGREEMENT.md`
-- `SECURITY.md`
-- `docs/adr/0001-cbor-and-parser-policy.md` or equivalent ADR path
+- `docs/SECURITY.md`
+- `docs/DECISIONS/0001-cbor-and-parser-policy.md` or equivalent ADR path
 - Cursor rule files, usually under `.cursor/rules/`
 
 If paths differ, locate files by name.
@@ -42,14 +44,31 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 0 - Safe Core Foundation.
+- Phase 0 - Core Foundation.
+
+Block status:
+
+- Block 0.1 Project Governance And AI Rules: complete (all deliverables exist and are
+  consistent — see `docs/ROADMAP.md`).
+- Block 0.2 SDK-Oriented Module Structure: complete. UI-free `:core` module introduced;
+  `Platform` moved into it; `:shared` depends on `:core` and remains the sample/UI host.
+  The `:core` + `:shared` split is the settled Phase 0 module structure; further splits are
+  deferred. See `docs/DECISIONS/0002-module-structure.md`.
+- Block 0.3 Testing Infrastructure: not started (next recommended task).
+
+Current modules:
+
+- `:core` (UI-free SDK core seed)
+- `:shared` (sample/UI host; builds the iOS `Shared` framework)
+- `:androidApp`, `:desktopApp`, and `iosApp` (Xcode entry point)
 
 Current priority:
 
 - Keep scope tight.
-- Avoid unsafe crypto.
+- Avoid custom crypto.
 - Avoid transaction signing.
 - Build tests and docs from the start.
+- Work through the Phase 0 blocks in `docs/ROADMAP.md` from 0.3 through 0.9.
 
 ## Decisions Already Made
 
@@ -71,7 +90,9 @@ Current priority:
 These should be resolved before or during Phase 0 implementation:
 
 1. Final module structure:
-   - Start with fewer modules or create all target modules immediately?
+   - A UI-free `:core` module has been introduced (ADR-0002). The final structure is still
+     open: whether/when to add `:crypto`, `:wallet`, `:tx`, `:provider`, and whether
+     `:shared` later becomes a dedicated `:sample:*` module.
 
 2. CBOR strategy:
    - Vetted KMP library?
@@ -116,35 +137,54 @@ At the end of each session, update this section.
 
 ### Last Session Summary
 
-Date:
+Date: 2026-06-29
 
 Summary:
 
-- 
+- Documentation-only cleanup to close Block 0.2 after `:core` was introduced and verified.
+- Why: the docs still had inconsistencies from introducing `:core` (it was listed both as a
+  current module and as a deferred candidate), the root README listed only `:shared` test
+  commands, and Block 0.2 was still marked in progress.
+- Marked Block 0.2 complete in `docs/ROADMAP.md`, removed `:core` from the deferred candidate
+  list (it now appears only under current modules), and recorded that the `:core` + `:shared`
+  split is the settled Phase 0 module structure.
+- Added the `:core` JVM test command to `README.md` and clarified tests run per module.
+- Updated this handoff: marked Block 0.2 complete and set Block 0.3 Testing Infrastructure as
+  the next recommended task.
 
 Files changed:
 
-- 
+- `docs/ROADMAP.md`
+- `docs/HANDOFF.md`
+- `README.md`
 
 Tests run:
 
-- 
+- None. This is a documentation-only change, so no Gradle tasks were run.
 
 Docs updated:
 
-- 
+- `docs/ROADMAP.md`
+- `docs/HANDOFF.md`
+- `README.md`
 
 Decisions made:
 
-- 
+- The current `:core` + `:shared` structure is the settled Phase 0 module structure;
+  Block 0.2 is complete and further module splits are deferred until code justifies them.
+- ADR-0002 stays Accepted; ADR-0001 (CBOR/parser policy) stays Open. No ADR changes needed.
 
 Risks or concerns:
 
-- 
+- `:shared` still carries Compose because the iOS app needs a Kotlin-produced UI framework;
+  the UI-free direction lives in `:core`. A later step may migrate `:shared` to a dedicated
+  `:sample:*` module (touches the Xcode project).
+- No `LICENSE` file exists yet; license selection remains an owner decision.
 
 Next recommended task:
 
-- 
+- Begin Block 0.3 Testing Infrastructure (commonTest/jvmTest structure, fixture folders,
+  test-vector policy). Do not add further modules without a documented reason.
 
 ## Prompt For Cursor Business/Product Work
 
@@ -158,8 +198,8 @@ Use these files as source of truth:
 - docs/ROADMAP.md
 - docs/HANDOFF.md
 - docs/AI_WORKING_AGREEMENT.md
-- SECURITY.md
-- ADR files under docs/adr or equivalent
+- docs/SECURITY.md
+- ADR files under docs/DECISIONS/
 
 Do not edit source code.
 
@@ -188,8 +228,8 @@ Read:
 - docs/ROADMAP.md
 - docs/HANDOFF.md
 - docs/AI_WORKING_AGREEMENT.md
-- SECURITY.md
-- ADR files under docs/adr or equivalent
+- docs/SECURITY.md
+- ADR files under docs/DECISIONS/
 
 Do not edit files yet.
 
@@ -202,7 +242,7 @@ Return:
 - docs required
 - risks
 - exact acceptance criteria
-- whether this is safe for Agent mode
+- whether this is appropriate for Agent mode
 ```
 
 ## Prompt For Updating This Handoff

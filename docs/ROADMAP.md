@@ -12,26 +12,15 @@ Selected targets:
 
 Current priority:
 
-> Build a safe Phase 0 foundation before implementing wallet behavior, signing or transaction submission.
+> Build a disciplined Phase 0 foundation before implementing wallet behavior, signing or transaction submission.
 
-## Phase 0 - Safe Core Foundation
+## Phase 0 - Core Foundation
 
 Goal:
 
-Create the technical base of Kardano SDK with strong tests, documentation and security boundaries.
+Create the technical base of Kardano SDK before wallet creation, transaction signing, transaction building or real network flows.
 
-Expected outputs:
-
-- Project guidance and AI working agreement.
-- Security policy.
-- Parser and CBOR policy ADR.
-- SDK-oriented module plan.
-- Testing strategy.
-- Documentation strategy.
-- Core primitives.
-- Encoding utilities.
-- Address validation strategy.
-- Crypto strategy document.
+Phase 0 is complete only when the repository has structure, tests, documentation, primitives, parser policies and technical decisions strong enough to start the real MVP.
 
 Strict non-goals:
 
@@ -39,39 +28,62 @@ Strict non-goals:
 - No custom cryptography.
 - No real mnemonics or private keys.
 - No real funds.
-- No production-ready claims.
+- No claims of deployment readiness.
 
-## Phase 0 Suggested Task Order
+## Phase 0 Work Blocks
 
-### 0.1 Project Rules And Docs
+### 0.1 Project Governance And AI Rules
 
-Status: in progress.
+Status: complete.
+
+Goal:
+
+Define how humans and AI agents work in the repository.
 
 Deliverables:
 
 - `docs/AI_WORKING_AGREEMENT.md`
-- `SECURITY.md`
+- `docs/SECURITY.md`
 - Cursor rules.
-- CBOR/parser ADR.
 - `docs/PROJECT_BRIEF.md`
 - `docs/ROADMAP.md`
 - `docs/HANDOFF.md`
+- Initial decision record structure.
 
 Acceptance criteria:
 
-- The project has clear AI coding rules.
-- Security-sensitive boundaries are explicit.
-- The business/product context is documented.
+- Phase 0 boundaries are explicit.
+- AI agents know what they can and cannot do.
+- Security-sensitive areas are documented.
+- No code implementation starts without rules.
 
-### 0.2 Module Structure
+### 0.2 SDK-Oriented Module Structure
+
+Status: complete.
 
 Goal:
 
-Move from wizard-generated app structure toward an SDK-oriented structure.
+Move from wizard-generated app structure toward a clean SDK architecture.
 
-Candidate modules:
+Outcome:
 
-- `:core`
+- Introduced a UI-free `:core` module (see `docs/DECISIONS/0002-module-structure.md`).
+- Moved the `Platform` `expect`/`actual` declarations from `:shared` into `:core`.
+- `:shared` now depends on `:core` and remains the sample/UI host (keeps Compose and builds
+  the iOS `Shared` framework). Sample apps are unchanged.
+- This `:core` + `:shared` split is the settled Phase 0 module structure; further splits are
+  deferred until there is code to justify them.
+
+Current modules:
+
+- `:core` (UI-free SDK core seed)
+- `:shared` (sample/UI host; builds the iOS `Shared` framework)
+- `:androidApp`
+- `:desktopApp`
+- `iosApp` (Xcode entry point)
+
+Deferred candidate future modules (names are not final; do not create yet):
+
 - `:crypto`
 - `:wallet`
 - `:tx`
@@ -80,7 +92,9 @@ Candidate modules:
 - `:sample:ios`
 - `:sample:desktop`
 
-Phase 0 should start with the minimum necessary modules. Avoid over-splitting before code exists.
+Important:
+
+Do not over-split too early. Start with the minimum structure that keeps the SDK clean.
 
 Acceptance criteria:
 
@@ -88,34 +102,37 @@ Acceptance criteria:
 - Android target compiles.
 - JVM/Desktop target compiles.
 - iOS target compiles where available.
-- Existing sample apps still run or are intentionally adjusted.
+- Sample apps remain usable or are intentionally adjusted.
+- No business logic is hidden inside sample apps.
 
 ### 0.3 Testing Infrastructure
 
 Goal:
 
-Set up a unit-test-first workflow.
+Create the testing foundation before implementing protocol logic.
 
 Deliverables:
 
-- Common tests.
-- JVM tests.
-- Android tests where useful.
+- `commonTest` structure.
+- `jvmTest` structure.
+- Android test strategy.
 - iOS/native test awareness.
 - Fixture folder structure.
-- Rules for external test vectors.
+- Test vector policy.
 
 Acceptance criteria:
 
-- Tests can be run locally.
+- Unit tests can run locally.
 - Test naming is consistent.
-- Fixtures are not invented to match implementation bugs.
+- Fixtures are clearly separated from implementation.
+- External vectors must cite their source.
+- AI must not invent vectors to match implementation behavior.
 
 ### 0.4 Core Primitives
 
 Goal:
 
-Introduce safe value types for basic Cardano concepts.
+Introduce value types for basic Cardano concepts.
 
 Candidate primitives:
 
@@ -129,76 +146,110 @@ Candidate primitives:
 
 Acceptance criteria:
 
-- Length and range checks exist.
-- Invalid values are rejected.
 - Public APIs have KDoc.
-- Unit tests cover valid, invalid and edge cases.
-- ByteArray wrappers use defensive copies and content equality.
+- Invalid values are rejected.
+- Valid, invalid and edge cases are tested.
+- ByteArray wrappers use defensive copies.
+- ByteArray equality uses `contentEquals` / `contentHashCode`.
+- No silent truncation of numeric values.
 
 ### 0.5 Encoding Utilities
 
 Goal:
 
-Implement or integrate safe encoding utilities needed by later phases.
+Implement or decide bounded utilities for public encoded formats.
 
 Candidate areas:
 
 - Hex.
-- Base encodings if required.
-- Bech32 after explicit decision.
+- Bech32.
+- Base encodings only if needed.
 
 Acceptance criteria:
 
-- Valid vectors pass.
-- Invalid checksums fail.
-- Malformed input is rejected.
-- No lenient parser behavior is introduced to make tests pass.
+- Strings are allowed for encoded public formats.
+- Internal binary representation should use byte wrappers.
+- Invalid characters are rejected.
+- Invalid checksums are rejected.
+- Tests include official or cited vectors where possible.
+- Parsers are not made lenient to pass tests.
 
-### 0.6 CBOR Decision And Minimal Support
+### 0.6 CBOR And Parser Strategy
 
 Goal:
 
-Decide how Kardano SDK will handle CBOR safely.
+Decide how Kardano SDK will handle CBOR and binary parsers before implementation.
 
 Options to evaluate:
 
 - Vetted KMP library.
 - Small constrained internal subset.
-- Platform-specific or wrapper approach.
+- Wrapper/platform-specific approach.
 
 Acceptance criteria:
 
-- Decision is documented in an ADR.
-- Parser limits are named.
-- No allocation from untrusted declared length.
-- Non-canonical, trailing or unsupported encodings are rejected unless explicitly documented.
+- ADR exists for CBOR/parser policy.
+- Named parser limits are defined.
+- No allocation directly from untrusted declared length.
+- Max input size, max depth and max element count are defined.
+- Unsupported, malformed, trailing or non-canonical encodings are rejected unless explicitly documented.
 - Integer range policy is defined.
+- Bignum/BigInteger support is explicitly in or out of Phase 0.
 
-### 0.7 Address Validation
+### 0.7 Address Parsing And Structural Validation
 
 Goal:
 
-Support structural Cardano address parsing and validation.
+Support structural validation of Cardano addresses.
 
 Acceptance criteria:
 
-- Network id is preserved and checked.
+- Network id is preserved.
 - Mainnet/testnet/preprod/preview distinctions are not ignored.
 - KDoc states validation is structural only.
+- Validation does not claim ownership, existence, spendability or balance.
 - Tests include valid addresses, malformed addresses, wrong checksums and network mismatches.
 
-### 0.8 Crypto Strategy
+### 0.8 Crypto Strategy Document
 
 Goal:
 
-Document future crypto approach before implementing anything.
+Document the future cryptography approach before implementing any crypto behavior.
+
+Important:
+
+No custom cryptography in Phase 0.
+
+Deliverables:
+
+- Crypto strategy document or ADR.
+- Candidate library/binding evaluation.
+- Target support matrix.
+- Required test vector sources.
 
 Acceptance criteria:
 
-- No handwritten cryptography.
-- Candidate libraries or bindings are evaluated.
-- Mnemonic, derivation and signing remain out of Phase 0 implementation.
-- Future implementation requires external vectors and review.
+- No mnemonic generation implemented yet.
+- No private key handling implemented yet.
+- No transaction signing implemented yet.
+- Future crypto implementation requires external vectors and review.
+- Android, iOS and JVM/Desktop compatibility is considered.
+
+### 0.9 Phase 0 Closure Review
+
+Goal:
+
+Check that the project is ready to start Phase 1/MVP work.
+
+Acceptance criteria:
+
+- All Phase 0 docs are updated.
+- Tests pass on available targets.
+- Public APIs have KDoc.
+- Security docs are consistent.
+- `docs/HANDOFF.md` reflects the current state.
+- Open decisions are listed.
+- No transaction signing or real wallet flow exists yet.
 
 ## Phase 1 - MVP Transaction Flow
 

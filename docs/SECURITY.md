@@ -41,7 +41,8 @@ timeline with you.
 
 - Issues that require a component that is explicitly out of scope for Phase 0 (e.g.
   transaction signing, key derivation) — these will be tracked as feature requests.
-- Issues in sample apps (under `samples/`) that do not affect the SDK core.
+- Issues in the sample apps (`androidApp`, `desktopApp`, `iosApp`) that do not affect the
+  SDK core.
 
 ## Implementation security principles
 
