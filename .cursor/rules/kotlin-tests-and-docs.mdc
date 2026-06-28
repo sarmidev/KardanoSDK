@@ -1,0 +1,75 @@
+---
+description: KDoc, testing, ByteArray safety, and error policy for Kotlin source
+globs: **/*.kt
+alwaysApply: false
+---
+
+# Kotlin: KDoc, Testing & Safety
+
+## Public API KDoc
+
+Every public declaration (class, function, property) needs KDoc. Document params, return
+value, error/failure behavior, and link to the relevant spec (BIP/CIP/RFC). Validators
+must say **"structural validation only"** in KDoc — never imply an address exists or
+is spendable.
+
+```kotlin
+/**
+ * Decodes a Bech32-encoded string into its human-readable part and data payload.
+ *
+ * Performs structural validation only. Does not verify that the address exists
+ * on-chain, is owned, or is spendable.
+ *
+ * @param input the Bech32-encoded string (e.g. "addr_test1...").
+ * @return [Ok] with [Bech32Decoded] on success, or [Err] with [Bech32Error] if the
+ *   checksum, characters, length, or HRP are invalid. Never throws on malformed input.
+ * @see <a href="https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki">BIP-173</a>
+ */
+public fun decodeBech32(input: String): Result<Bech32Decoded, Bech32Error>
+```
+
+## Error policy
+
+- Public APIs that can fail return a **sealed error or `Result` type** — no throwing.
+- Any unavoidable thrower must be annotated `@Throws` and documented in KDoc.
+- Never let an exception cross the Swift/ObjC boundary — it crashes iOS.
+
+## ByteArray correctness
+
+```kotlin
+// BAD — reference equality
+require(a == b)
+
+// GOOD — value equality
+require(a.contentEquals(b))
+```
+
+- Defensive copy on construction and from every accessor.
+- Never expose a mutable internal `ByteArray`.
+- Override `equals` / `hashCode` using `contentEquals` / `contentHashCode`.
+
+## Tests
+
+Every primitive/encoding/parser/validator change needs tests covering **valid**,
+**invalid**, and **edge** cases (empty, max length, boundary bytes, bad checksum/chars,
+truncated input, nesting limits).
+
+Round-trip: `decode(encode(x)) == x` is safe to test. Testing `encode(decode(y)) == y`
+must not silently accept non-canonical input — if used, also test that non-canonical
+input is rejected before decoding.
+
+**Never invent test vectors.** Authoritative vectors must be copied verbatim from:
+- Bech32/Bech32m — BIP-173, BIP-350.
+- CBOR — RFC 8949 Appendix A.
+- Addresses — CIP-19.
+
+Cite the source URL in a comment above each fixture block. Never weaken a validator to
+make a test pass.
+
+## Parser safety
+
+- Never allocate from an untrusted length field (`ByteArray(untrustedLen)` is unsafe).
+- Define named limit constants (`MAX_INPUT_BYTES`, `MAX_NESTING_DEPTH`,
+  `MAX_COLLECTION_ELEMENTS`) and reject inputs that exceed them.
+- Reject non-canonical or unsupported encodings explicitly.
+- Reject out-of-range numeric values; never truncate silently.

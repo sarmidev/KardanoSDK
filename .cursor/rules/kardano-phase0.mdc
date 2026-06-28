@@ -1,0 +1,69 @@
+---
+description: Kardano SDK Phase 0 guardrails — scope, security, non-goals, DoD
+alwaysApply: true
+---
+
+# Kardano SDK — Phase 0 Guardrails
+
+Full details in `docs/AI_WORKING_AGREEMENT.md`. UI-free Kotlin Multiplatform Cardano SDK
+(Android/iOS/JVM), group `org.sarmidev.kardano`.
+
+## Hard rules (never violate)
+
+- No handwritten cryptographic algorithms (Blake2b, Ed25519, SHA, etc.).
+- No transaction signing.
+- No real mnemonics, private keys, or anything touching real funds — anywhere.
+- No banned words: `secure`, `safe`, `hardened`, `audited`, `production-ready`,
+  `guaranteed`, `cryptographically safe`. Use factual wording instead.
+- Keep the SDK core UI-free and lean; no dependency without a documented rationale.
+- Do not modify Gradle, Kotlin source, iOS, or Android project files unless the task
+  explicitly authorizes it.
+- No dynamic (`+`) or unpinned dependency versions.
+
+## Phase 0 scope
+
+Byte primitives, hex, Bech32/Bech32m, a minimal documented CBOR subset, and structural
+CIP-19 address validation (parsing only). Crypto is `expect`/strategy docs only.
+Before implementing CBOR or Bech32, check `docs/DECISIONS/0001-cbor-and-parser-policy.md`.
+
+## Parser safety (applies to CBOR, Bech32, hex, address)
+
+- Never allocate a buffer from an untrusted length field.
+- Enforce named constants: `MAX_INPUT_BYTES`, `MAX_NESTING_DEPTH`, `MAX_COLLECTION_ELEMENTS`.
+- Reject malformed, non-canonical, or unsupported input — never normalize it.
+- Reject out-of-range numeric values; never truncate silently.
+
+## KMP error policy
+
+- Public APIs that can fail return a sealed error or `Result` type — no throwing.
+- Any unavoidable thrower must have `@Throws` and be documented in KDoc.
+- Throwing across the Swift/ObjC boundary crashes iOS.
+
+## ByteArray correctness
+
+- Use `contentEquals` / `contentHashCode` — never `ByteArray ==`.
+- Defensive copy on construction and accessors.
+- Never expose a mutable internal `ByteArray`.
+
+## Test integrity
+
+- Never invent test vectors — copy them verbatim from cited specs.
+- Never weaken a validator to make a test pass.
+- `decode(encode(x)) == x` is safe. `encode(decode(y)) == y` must not silently accept
+  non-canonical input — if tested, also assert non-canonical input is rejected.
+
+## Working style
+
+- One logical change per diff; target < ~300–400 changed lines.
+- Broad refactors require a short written plan before editing.
+- A change is not done until tests and docs are updated.
+
+## Definition of done
+
+- Compiles: common, JVM, Android (where applicable), iOS simulator (where applicable).
+- Tests pass; new behavior has valid/invalid/edge tests.
+- Security-sensitive behavior cites external test vectors (BIP-173/350, RFC 8949, CIP-19).
+- Public APIs have KDoc; validators say "structural only" where applicable.
+- Docs updated in the same change.
+- No banned words or unsafe claims.
+- Diff is manually reviewable.
