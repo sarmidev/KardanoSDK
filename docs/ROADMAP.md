@@ -149,6 +149,8 @@ Acceptance criteria:
 
 ### 0.4 Core Primitives
 
+Status: complete.
+
 Goal:
 
 Introduce value types for basic Cardano concepts.
@@ -160,8 +162,40 @@ Candidate primitives:
 - `TxHash`
 - `PolicyId`
 - `AssetName`
-- `Address`
+- `Address` (deferred to Block 0.7)
 - `UtxoRef`
+
+Outcome (first step):
+
+- Added a shared `KardanoResult<T, E>` (`Ok` / `Err`) typed success-or-failure type in
+  `:core`, used by failable factories instead of throwing (throwing across the Swift/ObjC
+  boundary crashes iOS).
+- Added `Network` (`TESTNET` = 0, `MAINNET` = 1) with `Network.fromId` returning a typed
+  error for unsupported ids. It makes no preview/preprod claim beyond the network id.
+- Added `Lovelace`, a `@JvmInline value class` over `Long` with the documented range
+  `0..Long.MAX_VALUE`; `Lovelace.of` rejects negatives without truncation. Maximum ADA
+  supply enforcement is deferred (a protocol concern, not a structural primitive concern).
+  No arithmetic operators are exposed yet, avoiding overflow surface.
+- Tests in `core/src/commonTest` cover valid/invalid/edge cases for both types. No fixtures
+  or external vectors were added (these are hand-written primitive cases, not protocol
+  vectors). No dependencies or Gradle changes; ADR-0001 stays Open.
+
+Outcome (final step):
+
+- Added byte-backed structural value types in `:core`: `TxHash` (exactly 32 bytes),
+  `PolicyId` (exactly 28 bytes), `AssetName` (0..32 bytes), and `UtxoRef` (a `TxHash` plus a
+  non-negative output index, `0..Long.MAX_VALUE`). The three byte-length types share a
+  `ByteSizeError` (`Fixed` / `Range`); `UtxoRef` has its own `UtxoRefError.NegativeIndex`.
+- Each byte container copies its input on construction, returns a copy from `toByteArray()`,
+  and uses `contentEquals` / `contentHashCode` for equality. `toString()` is structural and
+  does not render bytes or hex. These are structural containers only: they do not verify
+  hash/script origin, on-chain existence, spendability, or any hex representation.
+- Tests in `core/src/commonTest` cover exact-length and range validation, length boundaries,
+  defensive copying (construction and accessor), and content equality/hashCode, plus
+  `UtxoRef` index validation. Hand-written cases only; no fixtures or external vectors.
+- `Address` is deferred to Block 0.7 because address parsing and structural (CIP-19)
+  validation belong there. No hex string APIs were added (hex is Block 0.5). No
+  dependencies or Gradle changes; ADR-0001 stays Open.
 
 Acceptance criteria:
 
@@ -219,7 +253,8 @@ Acceptance criteria:
 
 Goal:
 
-Support structural validation of Cardano addresses.
+Support structural validation of Cardano addresses. The `Address` value type (deferred
+from Block 0.4) is introduced here, alongside the parsing/validation it depends on.
 
 Acceptance criteria:
 

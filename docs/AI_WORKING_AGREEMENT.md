@@ -104,10 +104,12 @@ These apply to every parser (CBOR, Bech32, hex, address):
 
 ## KMP public API error policy
 
-Public APIs that can fail **must** use sealed error/`Result` types, not exceptions.
+Public APIs that can fail **must** use sealed error / result types, not exceptions.
 Throwing exceptions across the Swift/ObjC boundary crashes the iOS app.
 
-- Default: `Result<T, E>` or a sealed `Either`-style type for all failable public APIs.
+- Default: the SDK's `KardanoResult<T, E>` (or a sealed `Either`-style type) for all
+  failable public APIs. Do not name the SDK type `Result`, to avoid confusion with
+  `kotlin.Result`.
 - Any API that unavoidably throws must be **explicitly documented** and annotated with
   `@Throws` in the KDoc and in the actual declaration.
 - Internal helpers may throw; the public surface must not unless annotated.

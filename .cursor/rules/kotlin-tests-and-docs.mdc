@@ -21,16 +21,18 @@ is spendable.
  * on-chain, is owned, or is spendable.
  *
  * @param input the Bech32-encoded string (e.g. "addr_test1...").
- * @return [Ok] with [Bech32Decoded] on success, or [Err] with [Bech32Error] if the
- *   checksum, characters, length, or HRP are invalid. Never throws on malformed input.
+ * @return [KardanoResult.Ok] with [Bech32Decoded] on success, or [KardanoResult.Err] with
+ *   [Bech32Error] if the checksum, characters, length, or HRP are invalid. Never throws on
+ *   malformed input.
  * @see <a href="https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki">BIP-173</a>
  */
-public fun decodeBech32(input: String): Result<Bech32Decoded, Bech32Error>
+public fun decodeBech32(input: String): KardanoResult<Bech32Decoded, Bech32Error>
 ```
 
 ## Error policy
 
-- Public APIs that can fail return a **sealed error or `Result` type** — no throwing.
+- Public APIs that can fail return a **sealed error or the SDK's `KardanoResult` type** —
+  no throwing. Do not name the SDK type `Result` (avoids confusion with `kotlin.Result`).
 - Any unavoidable thrower must be annotated `@Throws` and documented in KDoc.
 - Never let an exception cross the Swift/ObjC boundary — it crashes iOS.
 

@@ -19,7 +19,9 @@ Current project identity:
   0.2 (SDK-Oriented Module Structure), and 0.3 (Testing Infrastructure) are complete: a
   UI-free `:core` module exists, `:shared` depends on it, and the testing foundation
   (test source-set strategy, fixture layout, test-vector policy in `docs/TESTING.md`) is
-  in place. Next is Block 0.4 (Core Primitives).
+  in place. Block 0.4 (Core Primitives) is complete: `KardanoResult`, `Network`,
+  `Lovelace`, and the byte-backed primitives (`TxHash`, `PolicyId`, `AssetName`, `UtxoRef`)
+  and their tests have landed in `:core`. Next is Block 0.5 (Encoding Utilities).
 
 Business goal:
 
@@ -60,8 +62,17 @@ Block status:
   strategy, fixture layout, external test-vector policy), a `core/.../resources/fixtures/`
   folder structure with placeholder READMEs citing future sources, and a minimal `:core`
   `jvmTest` smoke test. See `docs/ROADMAP.md` Block 0.3 Outcome.
+- Block 0.4 Core Primitives: complete. First step landed a shared `KardanoResult<T, E>`
+  (`Ok` / `Err`) type, `Network` (`TESTNET` = 0, `MAINNET` = 1) with a typed `fromId`, and
+  `Lovelace` (`@JvmInline value class` over `Long`, range `0..Long.MAX_VALUE`, negatives
+  rejected, no arithmetic). Final step added byte-backed structural value types: `TxHash`
+  (32 bytes), `PolicyId` (28 bytes), `AssetName` (0..32 bytes) sharing a `ByteSizeError`,
+  and `UtxoRef` (`TxHash` + non-negative output index) with `UtxoRefError`. All have
+  valid/invalid/edge tests in `core/src/commonTest`. `Address` was deferred to Block 0.7.
+  See `docs/ROADMAP.md` Block 0.4 Outcome.
 
-Next recommended task: Block 0.4 Core Primitives.
+Next recommended task: Block 0.5 Encoding Utilities. ADR-0001 (CBOR/parser policy) stays
+Open and must be resolved before any Bech32/CBOR implementation.
 
 Current modules:
 
@@ -151,78 +162,86 @@ Date: 2026-06-29
 
 Summary:
 
-- Executed Block 0.3 Testing Infrastructure: a small, reviewable testing-foundation pass.
-- Why: the roadmap requires a documented testing strategy, fixture layout, and test-vector
-  policy before any protocol logic is implemented, so later primitive/parser work lands on
-  a consistent, documented base.
-- Added `docs/TESTING.md` describing test source-set expectations (`commonTest`, `jvmTest`,
-  Android host tests, iOS tests), fixture folder layout, the external test-vector policy
-  (verbatim from cited specs; no AI-invented vectors; validators not weakened), and the
-  verification commands.
-- Added a fixture folder structure under `core/src/commonTest/resources/fixtures/` with a
-  top-level `README.md` and placeholder subfolders (`bech32/`, `cbor/`, `address/`) naming
-  future authoritative sources (BIP-173/350, RFC 8949 Appendix A, CIP-19). No protocol
-  vectors were added. Added a `shared/.../fixtures/README.md` note keeping protocol vectors
-  in `:core`.
-- Added a minimal `:core` `jvmTest` smoke test (`JvmTestWiringTest`) verifying JVM test
-  wiring; no production code changed.
-- Linked `docs/TESTING.md` from `README.md`, `core/README.md`, and `shared/README.md`, and
-  marked Block 0.3 complete in `docs/ROADMAP.md`.
+- Completed Block 0.4 Core Primitives by adding the remaining byte-backed value types in
+  `:core`: a small, reviewable pass building on the earlier `KardanoResult`/`Network`/
+  `Lovelace` step.
+- Why: Block 0.4 calls for value types for basic Cardano concepts; these byte containers are
+  the structural ones that do not depend on hex/Bech32/CBOR or address parsing, so they can
+  land now while `Address` waits for Block 0.7.
+- Added `ByteSizeError` (`Fixed(expected, actual)` / `Range(min, max, actual)`), a shared
+  typed error for byte-length validation.
+- Added `TxHash` (exactly 32 bytes) and `PolicyId` (exactly 28 bytes): private constructor,
+  `of(bytes)` returning `KardanoResult<_, ByteSizeError>`, defensive copy on construction and
+  from `toByteArray()`, `equals`/`hashCode` via `contentEquals`/`contentHashCode`, and a
+  structural `toString()` that does not render bytes or hex.
+- Added `AssetName` (0..32 bytes, empty valid) with the same shape, using
+  `ByteSizeError.Range` for out-of-range lengths.
+- Added `UtxoRef` (regular class, not a data class) wrapping a `TxHash` and a non-negative
+  `outputIndex` (`0..Long.MAX_VALUE`), with `UtxoRefError.NegativeIndex` and equality based
+  on `txHash` content plus index.
+- Added valid/invalid/edge tests in `core/src/commonTest` (`TxHashTest`, `PolicyIdTest`,
+  `AssetNameTest`, `UtxoRefTest`) covering exact-length/range validation, length boundaries,
+  defensive copying (construction and accessor), and content equality/hashCode. Hand-written
+  cases only; no fixtures or external vectors.
+- Updated `core/README.md` and `docs/ROADMAP.md` (Block 0.4 marked complete; `Address`
+  recorded as deferred to Block 0.7) and this handoff. No Gradle, dependency, or ADR changes.
 
 Files changed:
 
-- `docs/TESTING.md` (new)
-- `core/src/commonTest/resources/fixtures/README.md` (new)
-- `core/src/commonTest/resources/fixtures/bech32/README.md` (new)
-- `core/src/commonTest/resources/fixtures/cbor/README.md` (new)
-- `core/src/commonTest/resources/fixtures/address/README.md` (new)
-- `shared/src/commonTest/resources/fixtures/README.md` (new)
-- `core/src/jvmTest/kotlin/org/sarmidev/kardano/JvmTestWiringTest.kt` (new)
-- `README.md`
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/ByteSizeError.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/TxHash.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/PolicyId.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/AssetName.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/UtxoRef.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/TxHashTest.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/PolicyIdTest.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/AssetNameTest.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/UtxoRefTest.kt` (new)
 - `core/README.md`
-- `shared/README.md`
 - `docs/ROADMAP.md`
 - `docs/HANDOFF.md`
 
 Tests run:
 
-- `./gradlew :core:jvmTest` — pass (includes the new `JvmTestWiringTest`).
-- `./gradlew :shared:jvmTest` — pass.
-- `./gradlew :shared:testAndroidHostTest` — pass.
-- `./gradlew :shared:iosSimulatorArm64Test` — compiles and links, but the simulator run did
-  not execute on this machine: "Xcode does not support simulator tests for
-  ios_simulator_arm64. Check that requested SDK is installed." This is an environment/SDK
-  limitation, not a code failure.
+- `./gradlew :core:compileKotlinJvm` — pass.
+- `./gradlew :core:jvmTest` — pass.
+- `./gradlew :core:testAndroidHostTest` — pass.
+- `./gradlew :core:compileTestKotlinIosSimulatorArm64` — pass (compiles and links the iOS
+  test binary; the simulator run itself was not executed).
 
 Docs updated:
 
-- `docs/TESTING.md` (new), `README.md`, `core/README.md`, `shared/README.md`,
-  `docs/ROADMAP.md`, `docs/HANDOFF.md`.
+- `core/README.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`.
 
 Decisions made:
 
-- Block 0.3 is complete: the testing strategy, fixture layout, and test-vector policy are
-  documented and the source-set wiring is exercised by passing JVM/Android host tests.
-- Protocol vectors live in `:core` fixtures, added only alongside the feature that uses
-  them; `:shared` carries no protocol vectors.
-- No dependencies added. ADR-0001 (CBOR/parser policy) stays Open; ADR-0002 stays Accepted.
+- Block 0.4 is complete. The byte-backed primitives (`TxHash`, `PolicyId`, `AssetName`,
+  `UtxoRef`) join the earlier `KardanoResult`/`Network`/`Lovelace`. `Address` is deferred to
+  Block 0.7 (address parsing / CIP-19 validation), not dropped.
+- `TxHash`/`PolicyId`/`AssetName` share one `ByteSizeError` because they fail only on length;
+  `UtxoRef` keeps its own `UtxoRefError` for the distinct negative-index case.
+- `UtxoRef` is a regular class (not a `data class`) so its generated `copy()` cannot bypass
+  the non-negative-index factory check.
+- No hex APIs were added (hex is Block 0.5). No dependencies added. ADR-0001 (CBOR/parser
+  policy) stays Open; ADR-0002 stays Accepted.
 
 Risks or concerns:
 
-- `:shared:iosSimulatorArm64Test` could not run on this machine (missing iOS simulator SDK);
-  iOS test execution should be confirmed on a macOS/Xcode environment with a simulator
-  installed. The iOS test target does compile and link.
-- Fixture subfolders are intentionally empty of vectors; reviewers should not expect vectors
-  until the matching Phase 0 feature (Bech32/CBOR/address) is implemented.
-- `:shared` still carries Compose (iOS UI framework dependency); UI-free direction lives in
-  `:core`. No `LICENSE` file exists yet; license selection remains an owner decision.
+- These types do not validate cryptographic correctness, hash origin, on-chain existence, or
+  spendability; KDoc states they are structural containers only.
+- `toString()` is intentionally byte-free; callers needing a textual form must wait for the
+  hex utilities in Block 0.5.
+- The byte primitives wrap an already-materialized caller `ByteArray`, so the parser
+  anti-DoS "never allocate from an untrusted length" rule is not triggered here; that rule
+  still applies to the future Bech32/CBOR parsers.
+- iOS simulator tests were not executed on this machine (missing simulator SDK noted in
+  prior sessions); the iOS test binary compiles and links.
 
 Next recommended task:
 
-- Begin Block 0.4 Core Primitives (e.g. `Network`, `Lovelace`, byte-wrapper value types) in
-  `:core`, with valid/invalid/edge tests in `core/src/commonTest`. Do not implement crypto,
-  signing, or add modules without a documented reason; ADR-0001 must be resolved before any
-  CBOR/Bech32 implementation.
+- Begin Block 0.5 Encoding Utilities (hex first; Bech32 only after ADR-0001 is resolved).
+  ADR-0001 (CBOR/parser policy) must move from Open to Accepted before any Bech32/CBOR code.
+  Do not implement crypto or signing.
 
 ## Prompt For Cursor Business/Product Work
 
