@@ -6,13 +6,15 @@ for the full policy.
 
 ## Status
 
-No protocol vectors exist yet. Phase 0 has not implemented Bech32, CBOR, or address
-parsing. The subfolders below are placeholders that name the authoritative source for the
-vectors that will live there once the matching feature is implemented.
+The generic Bech32/Bech32m codec is implemented; its official BIP-173/BIP-350 vectors are
+embedded verbatim in the `:core` test source (with cited source URLs) rather than as
+resource files, because `:core` has no shared (common) resource loader (see `bech32/`).
+CBOR and address parsing are not implemented yet. The subfolders below name the
+authoritative source for the vectors of each area.
 
 ## Layout
 
-- `bech32/` — BIP-173 / BIP-350 vectors (added with the Bech32 implementation).
+- `bech32/` — BIP-173 / BIP-350 vectors (implemented; vectors embedded in the test source).
 - `cbor/` — RFC 8949 Appendix A vectors (added with the CBOR subset implementation).
 - `address/` — CIP-19 vectors (added with address structural validation).
 

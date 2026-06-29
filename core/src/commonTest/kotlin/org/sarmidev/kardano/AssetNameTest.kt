@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class AssetNameTest {
 
@@ -59,5 +60,19 @@ class AssetNameTest {
         val a = assertIs<KardanoResult.Ok<AssetName>>(AssetName.of(byteArrayOf(1, 2, 3))).value
         val b = assertIs<KardanoResult.Ok<AssetName>>(AssetName.of(byteArrayOf(1, 2, 4))).value
         assertFalse(a == b)
+    }
+
+    @Test
+    fun toStringDoesNotRenderBytes() {
+        // Recognizable, non-empty byte content. The structural toString must not leak it.
+        val assetName = assertIs<KardanoResult.Ok<AssetName>>(
+            AssetName.of(byteArrayOf(0xAB.toByte(), 0xCD.toByte())),
+        ).value
+        val text = assetName.toString()
+        assertTrue(text.contains("size="), "toString should keep a structural marker")
+        assertFalse(
+            text.contains(Hex.encode(assetName.toByteArray())),
+            "toString must not render the wrapped bytes",
+        )
     }
 }

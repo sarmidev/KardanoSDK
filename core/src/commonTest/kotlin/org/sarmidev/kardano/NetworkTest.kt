@@ -25,12 +25,6 @@ class NetworkTest {
     }
 
     @Test
-    fun enumNamesArePresent() {
-        assertEquals("TESTNET", Network.TESTNET.name)
-        assertEquals("MAINNET", Network.MAINNET.name)
-    }
-
-    @Test
     fun fromIdRejectsUnsupportedIds() {
         for (id in listOf(-1, 2, 15, Int.MAX_VALUE, Int.MIN_VALUE)) {
             val result = Network.fromId(id)

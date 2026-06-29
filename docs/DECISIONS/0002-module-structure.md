@@ -64,4 +64,5 @@ layer, so the module that produces the iOS framework must keep the Compose UI fo
 - Revisit additional module splits (`:crypto`, `:wallet`, `:tx`, `:provider`) when code
   exists to justify them.
 - `LICENSE` selection remains an owner decision and is not made here.
-- ADR-0001 (CBOR/parser policy) remains Open and is unaffected by this decision.
+- ADR-0001 (CBOR/parser policy) was Open at the time of this decision and unaffected by it;
+  it was later Accepted.

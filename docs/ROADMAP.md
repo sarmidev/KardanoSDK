@@ -178,7 +178,8 @@ Outcome (first step):
   No arithmetic operators are exposed yet, avoiding overflow surface.
 - Tests in `core/src/commonTest` cover valid/invalid/edge cases for both types. No fixtures
   or external vectors were added (these are hand-written primitive cases, not protocol
-  vectors). No dependencies or Gradle changes; ADR-0001 stays Open.
+  vectors). No dependencies or Gradle changes; ADR-0001 was Open at the time of this step;
+  it is now Accepted.
 
 Outcome (final step):
 
@@ -195,7 +196,8 @@ Outcome (final step):
   `UtxoRef` index validation. Hand-written cases only; no fixtures or external vectors.
 - `Address` is deferred to Block 0.7 because address parsing and structural (CIP-19)
   validation belong there. No hex string APIs were added (hex is Block 0.5). No
-  dependencies or Gradle changes; ADR-0001 stays Open.
+  dependencies or Gradle changes; ADR-0001 was Open at the time of this step; it is now
+  Accepted.
 
 Acceptance criteria:
 
@@ -210,7 +212,15 @@ Acceptance criteria:
 
 Goal:
 
-Implement or decide bounded utilities for public encoded formats.
+Implement bounded utilities for public encoded formats.
+
+Decision status:
+
+- ADR-0001 (CBOR/parser policy) is **Accepted**: Bech32/Bech32m use a constrained internal
+  implementation with no external dependency. Hex lands first, then Bech32/Bech32m must be
+  implemented according to ADR-0001 (variant support, mixed-case rejection, lowercase
+  encoder output, HRP/separator/charset/checksum/padding validation, SDK-owned Cardano-mode
+  limits, and the `addr`/`addr_test`/`stake`/`stake_test` HRP allowlist).
 
 Candidate areas:
 
@@ -218,36 +228,95 @@ Candidate areas:
 - Bech32.
 - Base encodings only if needed.
 
+Status: complete (Hex, the generic Bech32/Bech32m engine, and the Cardano HRP allowlist
+wrappers have landed).
+
+Outcome (Hex step):
+
+- Added a generic, bounded `Hex` codec in `:core` (`Hex.encode` / `Hex.decode`) with a typed
+  `HexError` (`InputTooLong`, `OddLength`, `InvalidCharacter`). `encode` emits canonical
+  lowercase; `decode` returns `KardanoResult<ByteArray, HexError>` (never throws), accepts
+  lowercase/uppercase/mixed case (hex is checksum-free, so case is unambiguous to decode),
+  and rejects odd-length, non-hex, and over-limit input. A named SDK-owned limit
+  `Hex.MAX_INPUT_CHARS` is enforced, and length/characters are validated before the output
+  `ByteArray` is allocated (no allocation from an untrusted length; no silent truncation).
+- Tests in `core/src/commonTest` cover encode/decode/round-trip valid/invalid/edge cases with
+  hand-written hex (no external protocol vectors needed for plain hex). No primitive-specific
+  hex helpers were added; no dependencies or Gradle changes.
+
+Outcome (Bech32/Bech32m engine step):
+
+- Added a generic, bounded Bech32/Bech32m codec in `:core` per ADR-0001: `Bech32.encode` /
+  `Bech32.decode` working at the 5-bit data layer, a `Bech32Variant` enum (`BECH32` /
+  `BECH32M`), a `Bech32Decoded` carrier (regular class, defensive copies, `contentEquals` /
+  `contentHashCode`, `toData5BitArray()` accessor), and a typed `Bech32Error`. `decode`
+  auto-detects the variant, rejects mixed case, and validates HRP / separator / data charset /
+  variant checksum; the encoder emits canonical lowercase. SDK-owned named limits
+  (`MAX_INPUT_CHARS = 1023`, `MAX_HRP_CHARS = 83`, `MAX_DATA_VALUES = 1016`, and
+  `MAX_DATA_BYTES = 640` for the internal 5/8-bit `convertBits` only) are enforced with typed
+  errors before allocation; BIP-173's 90-character cap is intentionally not applied. Both
+  APIs return `KardanoResult` and never throw.
+- Tests in `core/src/commonTest` use the official BIP-173 and BIP-350 valid and invalid
+  vectors verbatim (cited inline), plus mixed-case, HRP, separator, charset, checksum,
+  cross-variant, over-limit, padding, and round-trip cases. No AI-invented protocol vectors;
+  no dependencies or Gradle changes. The "overall max length exceeded" invalid vectors are
+  rejected via the SDK HRP-length limit (their HRP is 84 chars), not via the 90-char cap.
+Outcome (Cardano HRP allowlist wrappers step):
+
+- Added thin Cardano-facing wrappers over the generic engine: `CardanoHrp` (the allowlist
+  enum `ADDR` / `ADDR_TEST` / `STAKE` / `STAKE_TEST` carrying the lowercase HRP value),
+  `CardanoBech32` (an `object` with `encode(hrp, data5Bit)` and `decode(input)`), and a typed
+  `CardanoBech32Error` (`Underlying` / `UnsupportedHrp` / `UnsupportedVariant`). `encode`
+  takes a `CardanoHrp` and forces `Bech32Variant.BECH32`; `decode` delegates to
+  `Bech32.decode` and, on success, checks the HRP allowlist first and the variant second, so
+  a Bech32m string with an unsupported HRP returns `UnsupportedHrp` while a Bech32m string
+  with an allowlisted HRP returns `UnsupportedVariant`. Generic failures propagate via
+  `Underlying`. Both return `KardanoResult` and never throw.
+- This is HRP allowlist plus Bech32 checksum/charset validation only per ADR-0001 — not
+  CIP-19 structural address validation. The wrappers do not parse payloads, inspect header
+  bytes, or read the network id; `Address` and structural validation remain in Block 0.7.
+- Tests in `core/src/commonTest` generate valid strings with the generic engine (no real
+  addresses, no funds, no CIP-19 vectors) and cover encode/decode/round-trip for the four
+  HRPs, unsupported HRP rejection, propagated generic checksum/charset errors, Bech32m
+  rejection, and the HRP-before-variant check order. No engine change, no dependencies, no
+  Gradle changes. Block 0.5 is complete; the next block is 0.6 (CBOR subset).
+
 Acceptance criteria:
 
 - Strings are allowed for encoded public formats.
 - Internal binary representation should use byte wrappers.
 - Invalid characters are rejected.
 - Invalid checksums are rejected.
-- Tests include official or cited vectors where possible.
+- Bech32/Bech32m implementation follows ADR-0001.
+- Tests include official or cited vectors where possible (Bech32 → BIP-173, Bech32m →
+  BIP-350); no AI-invented protocol vectors.
 - Parsers are not made lenient to pass tests.
 
 ### 0.6 CBOR And Parser Strategy
 
 Goal:
 
-Decide how Kardano SDK will handle CBOR and binary parsers before implementation.
+Implement the CBOR subset and binary parsers according to ADR-0001.
 
-Options to evaluate:
+Decision status:
 
-- Vetted KMP library.
-- Small constrained internal subset.
-- Wrapper/platform-specific approach.
+- ADR-0001 (CBOR/parser policy) is **Accepted**: the CBOR subset is a constrained internal
+  implementation (definite-length only) with no external dependency. Implementation must
+  follow ADR-0001 (supported major types within signed `Long` range; byte/text strings,
+  arrays, maps with explicit limits; reject indefinite lengths, tags including bignum tags
+  2 and 3, floats/simple/null/undefined, trailing bytes, out-of-range integers, and
+  duplicate map keys; canonical map ordering in deterministic/Cardano mode).
 
 Acceptance criteria:
 
-- ADR exists for CBOR/parser policy.
+- ADR exists for CBOR/parser policy. (Done — ADR-0001 Accepted.)
 - Named parser limits are defined.
 - No allocation directly from untrusted declared length.
 - Max input size, max depth and max element count are defined.
 - Unsupported, malformed, trailing or non-canonical encodings are rejected unless explicitly documented.
 - Integer range policy is defined.
-- Bignum/BigInteger support is explicitly in or out of Phase 0.
+- Bignum/BigInteger support is explicitly in or out of Phase 0. (Out — rejected per ADR-0001.)
+- Tests use RFC 8949 Appendix A vectors for supported types; no AI-invented protocol vectors.
 
 ### 0.7 Address Parsing And Structural Validation
 

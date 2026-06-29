@@ -21,7 +21,12 @@ Current project identity:
   (test source-set strategy, fixture layout, test-vector policy in `docs/TESTING.md`) is
   in place. Block 0.4 (Core Primitives) is complete: `KardanoResult`, `Network`,
   `Lovelace`, and the byte-backed primitives (`TxHash`, `PolicyId`, `AssetName`, `UtxoRef`)
-  and their tests have landed in `:core`. Next is Block 0.5 (Encoding Utilities).
+  and their tests have landed in `:core`.   ADR-0001 (CBOR/parser policy) is now Accepted
+  (constrained internal Bech32/Bech32m and CBOR subset; no external dependency). Block 0.5
+  (Encoding Utilities) is complete: a generic, bounded `Hex` codec, a generic, bounded
+  Bech32/Bech32m codec, and the Cardano HRP allowlist wrappers (`CardanoBech32` /
+  `CardanoHrp` / `CardanoBech32Error`) have landed in `:core`. The next block is 0.6 (CBOR
+  subset).
 
 Business goal:
 
@@ -70,9 +75,26 @@ Block status:
   and `UtxoRef` (`TxHash` + non-negative output index) with `UtxoRefError`. All have
   valid/invalid/edge tests in `core/src/commonTest`. `Address` was deferred to Block 0.7.
   See `docs/ROADMAP.md` Block 0.4 Outcome.
+- Block 0.5 Encoding Utilities: complete. The Hex step landed a generic, bounded `Hex`
+  codec in `:core` (`Hex.encode` / `Hex.decode`) with a typed `HexError`
+  (`InputTooLong` / `OddLength` / `InvalidCharacter`), a named limit `Hex.MAX_INPUT_CHARS`,
+  canonical lowercase encoding, mixed-case decoding, and validation before allocation. The
+  Bech32 step landed a generic, bounded Bech32/Bech32m codec in `:core` (`Bech32.encode` /
+  `Bech32.decode`, `Bech32Variant`, `Bech32Decoded`, `Bech32Error`) working at the 5-bit data
+  layer: variant auto-detection on decode, mixed-case rejection, lowercase encoder output,
+  HRP/separator/charset/checksum validation, and SDK-owned limits (`MAX_INPUT_CHARS`,
+  `MAX_HRP_CHARS`, `MAX_DATA_VALUES`, plus `MAX_DATA_BYTES` for the internal `convertBits`)
+  enforced with typed errors before allocation. Tests use the official BIP-173/BIP-350
+  vectors verbatim plus edge/limit/round-trip cases. The final step added the Cardano HRP
+  allowlist wrappers (`CardanoHrp`, `CardanoBech32`, `CardanoBech32Error`): `encode` takes a
+  `CardanoHrp` and forces Bech32; `decode` delegates to the engine, then checks the HRP
+  allowlist first and the variant second, rejecting Bech32m and non-allowlisted HRPs with a
+  typed error while propagating generic failures via `Underlying`. HRP allowlist plus Bech32
+  checksum/charset validation only — no address parsing, header inspection, or network-id
+  reading. No dependencies or Gradle changes. See `docs/ROADMAP.md` Block 0.5 Outcome.
 
-Next recommended task: Block 0.5 Encoding Utilities. ADR-0001 (CBOR/parser policy) stays
-Open and must be resolved before any Bech32/CBOR implementation.
+Next recommended task: Block 0.6 (CBOR subset) per ADR-0001 (RFC 8949 Appendix A vectors,
+no external dependency, no AI-invented vectors).
 
 Current modules:
 
@@ -112,14 +134,13 @@ These should be resolved before or during Phase 0 implementation:
      open: whether/when to add `:crypto`, `:wallet`, `:tx`, `:provider`, and whether
      `:shared` later becomes a dedicated `:sample:*` module.
 
-2. CBOR strategy:
-   - Vetted KMP library?
-   - Small constrained internal subset?
-   - Wrapper/platform-specific approach?
+2. CBOR strategy: **Resolved** (ADR-0001 Accepted) — constrained internal CBOR subset
+   (definite-length only), no external dependency. Implementation follows ADR-0001.
 
-3. Bech32 strategy:
-   - Implement internally with external vectors?
-   - Use a vetted library?
+3. Bech32 strategy: **Resolved and implemented** (ADR-0001 Accepted) — a constrained internal
+   generic Bech32/Bech32m codec has landed in `:core` with verbatim BIP-173/BIP-350 vectors and
+   no external dependency, plus the Cardano HRP allowlist wrappers (`CardanoBech32`). Block 0.5
+   is complete.
 
 4. Crypto strategy:
    - Which library or binding will eventually support Ed25519/BIP32/CIP-1852?
@@ -162,86 +183,111 @@ Date: 2026-06-29
 
 Summary:
 
-- Completed Block 0.4 Core Primitives by adding the remaining byte-backed value types in
-  `:core`: a small, reviewable pass building on the earlier `KardanoResult`/`Network`/
-  `Lovelace` step.
-- Why: Block 0.4 calls for value types for basic Cardano concepts; these byte containers are
-  the structural ones that do not depend on hex/Bech32/CBOR or address parsing, so they can
-  land now while `Address` waits for Block 0.7.
-- Added `ByteSizeError` (`Fixed(expected, actual)` / `Range(min, max, actual)`), a shared
-  typed error for byte-length validation.
-- Added `TxHash` (exactly 32 bytes) and `PolicyId` (exactly 28 bytes): private constructor,
-  `of(bytes)` returning `KardanoResult<_, ByteSizeError>`, defensive copy on construction and
-  from `toByteArray()`, `equals`/`hashCode` via `contentEquals`/`contentHashCode`, and a
-  structural `toString()` that does not render bytes or hex.
-- Added `AssetName` (0..32 bytes, empty valid) with the same shape, using
-  `ByteSizeError.Range` for out-of-range lengths.
-- Added `UtxoRef` (regular class, not a data class) wrapping a `TxHash` and a non-negative
-  `outputIndex` (`0..Long.MAX_VALUE`), with `UtxoRefError.NegativeIndex` and equality based
-  on `txHash` content plus index.
-- Added valid/invalid/edge tests in `core/src/commonTest` (`TxHashTest`, `PolicyIdTest`,
-  `AssetNameTest`, `UtxoRefTest`) covering exact-length/range validation, length boundaries,
-  defensive copying (construction and accessor), and content equality/hashCode. Hand-written
-  cases only; no fixtures or external vectors.
-- Updated `core/README.md` and `docs/ROADMAP.md` (Block 0.4 marked complete; `Address`
-  recorded as deferred to Block 0.7) and this handoff. No Gradle, dependency, or ADR changes.
+- Implemented the Cardano HRP allowlist wrappers step of Block 0.5, completing the block.
+  Added three new `:core` source files: `CardanoHrp` (allowlist enum `ADDR` / `ADDR_TEST` /
+  `STAKE` / `STAKE_TEST` with a lowercase `value` and an `internal fromValue` lookup),
+  `CardanoBech32` (`object` with `encode(hrp: CardanoHrp, data5Bit): KardanoResult<String,
+  CardanoBech32Error>` forcing `Bech32Variant.BECH32`, and `decode(input): KardanoResult<
+  Bech32Decoded, CardanoBech32Error>`), and `CardanoBech32Error` (`Underlying` /
+  `UnsupportedHrp` / `UnsupportedVariant`).
+- Design decisions: the wrappers expose no variant parameter (Cardano uses Bech32, not
+  Bech32m); `decode` delegates to the generic engine, then checks the HRP allowlist **first**
+  and the variant **second** — so a Bech32m string with an unsupported HRP returns
+  `UnsupportedHrp` (the more domain-specific error) and a Bech32m string with an allowlisted
+  HRP returns `UnsupportedVariant`. `Bech32Decoded` is reused; no new carrier type. KDoc on
+  every public declaration states this is HRP allowlist + Bech32 checksum/charset validation
+  only, not CIP-19 structural address validation, phrased defensively ("does not prove").
+- Added `CardanoBech32Test` in `core/src/commonTest`: valid strings are generated with the
+  generic engine (no real addresses, no funds, no CIP-19 vectors). Covers encode/decode/
+  round-trip for the four HRPs, unsupported-HRP rejection, propagated generic checksum and
+  charset errors via `Underlying`, Bech32m rejection, and the HRP-before-variant check order.
+- The generic engine was not modified; no dependencies or Gradle changes.
+
+Files changed this step:
+
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/CardanoHrp.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/CardanoBech32.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/CardanoBech32Error.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/CardanoBech32Test.kt` (new)
+- `core/README.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+### Previous Session Summary
+
+Date: 2026-06-29
+
+Summary:
+
+- Implemented the Bech32/Bech32m step of Block 0.5 Encoding Utilities: a generic, bounded
+  Bech32/Bech32m codec in `:core` per ADR-0001. Added `Bech32` (`object`) with
+  `encode(hrp, data, variant): KardanoResult<String, Bech32Error>` and
+  `decode(input): KardanoResult<Bech32Decoded, Bech32Error>` (neither throws), a
+  `Bech32Variant` enum (`BECH32` / `BECH32M`, internal checksum constants), a `Bech32Decoded`
+  carrier (regular class — not `data class` — with defensive copies, `contentEquals` /
+  `contentHashCode`, and a `toData5BitArray()` accessor), and a typed `Bech32Error` sealed
+  interface.
+- Why: ADR-0001 sequences Block 0.5 as Hex first, then Bech32/Bech32m.
+- Design: the public API works at the **5-bit data layer** (each data value `0..31`), which
+  is exactly what the official BIP-173/350 generic vectors validate; the 5/8-bit `convertBits`
+  helper is internal. `decode` auto-detects the variant from the checksum constant, rejects
+  mixed case, and validates length / separator (last `1`) / HRP (chars `33..126`, length) /
+  data charset / checksum, allocating the result only after all checks. `encode` rejects data
+  values outside `0..31` (`DataValueOutOfRange`) and emits canonical lowercase.
+- Limits (SDK-owned, revisable, enforced before allocation with typed errors):
+  `MAX_INPUT_CHARS = 1023`, `MAX_HRP_CHARS = 83`, `MAX_DATA_VALUES = 1016` (5-bit layer), and
+  `MAX_DATA_BYTES = 640` (8-bit `convertBits` output only). BIP-173's 90-char cap is
+  intentionally not applied (CIP-19 addresses can exceed it).
+- Added `Bech32Test` in `core/src/commonTest` using the official BIP-173 and BIP-350 valid and
+  invalid vectors verbatim (cited inline), plus mixed-case, HRP, separator, charset, checksum,
+  cross-variant, over-limit, padding, and round-trip cases. No AI-invented vectors.
 
 Files changed:
 
-- `core/src/commonMain/kotlin/org/sarmidev/kardano/ByteSizeError.kt` (new)
-- `core/src/commonMain/kotlin/org/sarmidev/kardano/TxHash.kt` (new)
-- `core/src/commonMain/kotlin/org/sarmidev/kardano/PolicyId.kt` (new)
-- `core/src/commonMain/kotlin/org/sarmidev/kardano/AssetName.kt` (new)
-- `core/src/commonMain/kotlin/org/sarmidev/kardano/UtxoRef.kt` (new)
-- `core/src/commonTest/kotlin/org/sarmidev/kardano/TxHashTest.kt` (new)
-- `core/src/commonTest/kotlin/org/sarmidev/kardano/PolicyIdTest.kt` (new)
-- `core/src/commonTest/kotlin/org/sarmidev/kardano/AssetNameTest.kt` (new)
-- `core/src/commonTest/kotlin/org/sarmidev/kardano/UtxoRefTest.kt` (new)
-- `core/README.md`
-- `docs/ROADMAP.md`
-- `docs/HANDOFF.md`
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/Bech32.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/Bech32Variant.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/Bech32Decoded.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/Bech32Error.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/Bech32Test.kt` (new)
+- `core/README.md`, `core/src/commonTest/resources/fixtures/README.md`,
+  `core/src/commonTest/resources/fixtures/bech32/README.md`, `docs/ROADMAP.md`,
+  `docs/HANDOFF.md`
 
 Tests run:
 
-- `./gradlew :core:compileKotlinJvm` — pass.
-- `./gradlew :core:jvmTest` — pass.
-- `./gradlew :core:testAndroidHostTest` — pass.
-- `./gradlew :core:compileTestKotlinIosSimulatorArm64` — pass (compiles and links the iOS
-  test binary; the simulator run itself was not executed).
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile).
 
 Docs updated:
 
-- `core/README.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`.
+- `core/README.md`, both fixture `README.md` files, `docs/ROADMAP.md`, `docs/HANDOFF.md`.
 
 Decisions made:
 
-- Block 0.4 is complete. The byte-backed primitives (`TxHash`, `PolicyId`, `AssetName`,
-  `UtxoRef`) join the earlier `KardanoResult`/`Network`/`Lovelace`. `Address` is deferred to
-  Block 0.7 (address parsing / CIP-19 validation), not dropped.
-- `TxHash`/`PolicyId`/`AssetName` share one `ByteSizeError` because they fail only on length;
-  `UtxoRef` keeps its own `UtxoRefError` for the distinct negative-index case.
-- `UtxoRef` is a regular class (not a `data class`) so its generated `copy()` cannot bypass
-  the non-negative-index factory check.
-- No hex APIs were added (hex is Block 0.5). No dependencies added. ADR-0001 (CBOR/parser
-  policy) stays Open; ADR-0002 stays Accepted.
+- Public Bech32 API operates at the 5-bit data layer; `convertBits` (5/8-bit) is internal.
+  This lets the official generic vectors validate the HRP/charset/checksum layer directly,
+  without forcing a 5→8 conversion that those vectors are not required to satisfy.
+- `Bech32Decoded` is a regular class (not `data class`) so its `ByteArray` uses
+  `contentEquals` / `contentHashCode` and defensive copies.
+- Added `MAX_DATA_VALUES` as a new SDK-owned 5-bit-layer limit alongside the three limit
+  names ADR-0001 lists (`MAX_INPUT_CHARS`, `MAX_HRP_CHARS`, `MAX_DATA_BYTES`); `MAX_DATA_BYTES`
+  now bounds only the internal `convertBits` 8-bit output.
+- The "overall max length exceeded" invalid vectors are rejected via the SDK HRP-length limit
+  (their HRP is 84 chars, exceeding the 83-char `MAX_HRP_CHARS`), not via BIP-173's 90-char
+  overall cap, consistent with ADR-0001.
+- Block 0.5 stays **in progress** (not complete) until the Cardano HRP allowlist wrappers are
+  added (deferred to a follow-up / Block 0.7).
 
 Risks or concerns:
 
-- These types do not validate cryptographic correctness, hash origin, on-chain existence, or
-  spendability; KDoc states they are structural containers only.
-- `toString()` is intentionally byte-free; callers needing a textual form must wait for the
-  hex utilities in Block 0.5.
-- The byte primitives wrap an already-materialized caller `ByteArray`, so the parser
-  anti-DoS "never allocate from an untrusted length" rule is not triggered here; that rule
-  still applies to the future Bech32/CBOR parsers.
-- iOS simulator tests were not executed on this machine (missing simulator SDK noted in
-  prior sessions); the iOS test binary compiles and links.
+- The numeric limit values are SDK-owned starting points (documented as revisable). They are
+  chosen to accept all official vectors and keep the limits mutually consistent backstops.
+- iOS simulator tests were not executed (environment can fail); only the iOS test sources
+  were compiled (`compileTestKotlinIosSimulatorArm64`).
 
 Next recommended task:
 
-- Begin Block 0.5 Encoding Utilities (hex first; Bech32 only after ADR-0001 is resolved).
-  ADR-0001 (CBOR/parser policy) must move from Open to Accepted before any Bech32/CBOR code.
-  Do not implement crypto or signing.
+- Either add the Cardano HRP allowlist wrappers (`addr`, `addr_test`, `stake`, `stake_test`)
+  on top of the generic engine, or move to Block 0.6 (CBOR subset) per ADR-0001 (RFC 8949
+  Appendix A vectors). Do not add dependencies; do not implement crypto or signing.
 
 ## Prompt For Cursor Business/Product Work
 
