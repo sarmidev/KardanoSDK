@@ -21,12 +21,14 @@ Current project identity:
   (test source-set strategy, fixture layout, test-vector policy in `docs/TESTING.md`) is
   in place. Block 0.4 (Core Primitives) is complete: `KardanoResult`, `Network`,
   `Lovelace`, and the byte-backed primitives (`TxHash`, `PolicyId`, `AssetName`, `UtxoRef`)
-  and their tests have landed in `:core`.   ADR-0001 (CBOR/parser policy) is now Accepted
+  and their tests have landed in `:core`. ADR-0001 (CBOR/parser policy) is now Accepted
   (constrained internal Bech32/Bech32m and CBOR subset; no external dependency). Block 0.5
   (Encoding Utilities) is complete: a generic, bounded `Hex` codec, a generic, bounded
   Bech32/Bech32m codec, and the Cardano HRP allowlist wrappers (`CardanoBech32` /
-  `CardanoHrp` / `CardanoBech32Error`) have landed in `:core`. The next block is 0.6 (CBOR
-  subset).
+  `CardanoHrp` / `CardanoBech32Error`) have landed in `:core`. Block 0.6 (CBOR subset) is
+  complete: the definite-length subset (`Cbor` / `CborValue` / `CborError`) covers the
+  primitives plus definite-length arrays and maps, with named nesting/element limits and the
+  Phase 0 deterministic map-ordering rule.
 
 Business goal:
 
@@ -92,9 +94,23 @@ Block status:
   typed error while propagating generic failures via `Underlying`. HRP allowlist plus Bech32
   checksum/charset validation only — no address parsing, header inspection, or network-id
   reading. No dependencies or Gradle changes. See `docs/ROADMAP.md` Block 0.5 Outcome.
+- Block 0.6 CBOR And Parser Strategy: complete. A bounded CBOR decoder/encoder in `:core`
+  covers the definite-length subset (`Cbor`, sealed `CborValue` = `CborUnsigned` /
+  `CborNegative` within signed `Long`, `CborByteString`, `CborTextString`, `CborArray`,
+  `CborMap` as an ordered list of `CborEntry`; typed `CborError`). Canonical shortest-form
+  encoding; named limits (`CBOR_MAX_INPUT_BYTES`, `CBOR_MAX_BYTESTRING_BYTES`,
+  `CBOR_MAX_STRING_BYTES`, `CBOR_MAX_NESTING_DEPTH` = 64, `CBOR_MAX_COLLECTION_ELEMENTS` =
+  65536) enforced before allocation / before reading collection elements; no allocation or
+  list sizing from an untrusted declared length or count. Maps enforce the Phase 0
+  deterministic rule (ADR-0001 / RFC 8949 §4.2.1: strictly ascending canonical key bytes, no
+  duplicates) on both decode and encode; the encoder rejects rather than sorting. Tags/
+  bignums/floats/indefinite/non-canonical/out-of-range/over-limit/over-deep/trailing all
+  rejected with typed errors. See `docs/ROADMAP.md` Block 0.6 Outcome.
 
-Next recommended task: Block 0.6 (CBOR subset) per ADR-0001 (RFC 8949 Appendix A vectors,
-no external dependency, no AI-invented vectors).
+Next recommended task: Block 0.7 (Address Parsing And Structural Validation) per
+`docs/ROADMAP.md` — introduce the deferred `Address` value type with structural (CIP-19)
+validation on top of the existing `CardanoBech32` / `Cbor` codecs, preserving and checking the
+network id. No crypto, no signing, no dependencies; cite CIP-19 vectors.
 
 Current modules:
 
@@ -134,8 +150,13 @@ These should be resolved before or during Phase 0 implementation:
      open: whether/when to add `:crypto`, `:wallet`, `:tx`, `:provider`, and whether
      `:shared` later becomes a dedicated `:sample:*` module.
 
-2. CBOR strategy: **Resolved** (ADR-0001 Accepted) — constrained internal CBOR subset
-   (definite-length only), no external dependency. Implementation follows ADR-0001.
+2. CBOR strategy: **Resolved and implemented** (ADR-0001 Accepted) — constrained internal
+   CBOR subset (definite-length only), no external dependency. The definite-length subset
+   (`Cbor` / `CborValue` / `CborError`) has landed in `:core` covering primitives plus arrays
+   and maps; Block 0.6 is complete. One open item is recorded for later: the Phase 0 map
+   ordering rule uses RFC 8949 §4.2.1 (bytewise) per ADR-0001; whether Cardano transaction
+   serialization will instead need RFC 7049 length-first ordering is left to the future
+   tx-serialization work and is not asserted here.
 
 3. Bech32 strategy: **Resolved and implemented** (ADR-0001 Accepted) — a constrained internal
    generic Bech32/Bech32m codec has landed in `:core` with verbatim BIP-173/BIP-350 vectors and
@@ -183,6 +204,135 @@ Date: 2026-06-29
 
 Summary:
 
+- Completed Block 0.6 by adding definite-length CBOR arrays (major type 4) and maps (major
+  type 5) to the existing primitive subset, with no other CBOR types and no dependencies.
+- `CborValue` gained `CborArray` (ordered `List<CborValue>`), `CborEntry` (key/value pair),
+  and `CborMap` (an ordered `List<CborEntry>`, deliberately **not** a Kotlin `Map` so the
+  canonical key order is an explicit, testable property). Both containers are regular classes
+  with defensive list snapshots, content-based `equals`/`hashCode`, and structural `toString`.
+- Added named limits `CBOR_MAX_NESTING_DEPTH` (64) and `CBOR_MAX_COLLECTION_ELEMENTS` (65536).
+  The decoder threads a depth and validates a collection's declared count (canonical prefix,
+  signed-`Long` range, then the element limit) **before** reading any element, and checks the
+  depth limit when a collection head is reached — no list is sized from an untrusted count.
+- Map ordering/duplicate policy: decoder records each key's canonical encoded bytes (the key
+  was decoded under the same canonical rules, so its bytes are canonical) and requires the
+  sequence to be strictly ascending bytewise — descending ⇒ `NonCanonicalMapKeyOrder`, equal ⇒
+  `DuplicateMapKey`. Comparing adjacent keys suffices. Unsupported child/key types are rejected
+  by the normal child decode. The encoder is recursive with the same limits, emits canonical
+  definite-length collections, and **rejects rather than sorts** non-canonical/duplicate map
+  keys (made explicit in KDoc and a dedicated "no silent sorting" test), consistent with the
+  SDK-wide "reject, never normalize" rule. Tags/bignums/floats/simple/null/undefined/indefinite
+  remain unrepresentable in `CborValue`, so the encoder `when` stays exhaustive.
+- Map ordering rule is documented as the Phase 0 ADR-0001 / RFC 8949 §4.2.1 (bytewise)
+  deterministic rule and is **not** asserted as final Cardano transaction-serialization
+  compatibility (Cardano historically used RFC 7049 length-first ordering); that decision is
+  left to the future tx-serialization work.
+- New typed errors: `MaxNestingDepthExceeded`, `CollectionTooLarge`, `NonCanonicalMapKeyOrder`,
+  `DuplicateMapKey`. Removed the now-dead `ArraysNotSupportedYet` / `MapsNotSupportedYet`
+  variants and broadened the KDoc of `NonCanonicalLength` / `LengthOutOfRange` to cover
+  collection count prefixes (major types 4/5).
+- Tests: `CborDecodeTest` / `CborEncodeTest` use the RFC 8949 Appendix A array/map vectors
+  verbatim (decode, canonical encode, round-trip) plus hand-written rule tests for the
+  element-count and nesting-depth limits, indefinite collections, non-canonical map order,
+  duplicate keys, nested unsupported values, trailing bytes, truncation, non-canonical count
+  prefix, and container copy/equality/`toString`. No AI-invented protocol vectors; no
+  dependencies or Gradle changes.
+- Review microfix (same substep): `CborArray.items()` / `CborMap.entries()` now copy on every
+  read (`items.toList()` / `entries.toList()`), not just on construction, so a caller cannot
+  cast the returned `List` to `MutableList` and mutate internal state — matching the
+  copy-on-read precedent of `CborByteString.toByteArray()`. Added accessor-copy tests
+  mirroring the existing construction-copy tests. Block 0.6 is closed after this fix.
+
+Files changed this step:
+
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/CborValue.kt` (added `CborArray`, `CborEntry`, `CborMap`)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/CborError.kt` (new collection errors; removed `…NotSupportedYet`; broadened KDoc)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/Cbor.kt` (limits, depth-threaded decode, `readArray`/`readMap`, recursive encode)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/CborDecodeTest.kt`, `CborEncodeTest.kt`
+- `core/README.md`, `core/src/commonTest/resources/fixtures/cbor/README.md`,
+  `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile). iOS
+  simulator execution requires macOS/Xcode and was not run.
+
+Next recommended task:
+
+- Block 0.7 (Address Parsing And Structural Validation): introduce the deferred `Address`
+  value type with structural CIP-19 validation on top of `CardanoBech32` / `Cbor`, preserving
+  and checking the network id. No crypto, no signing, no dependencies; cite CIP-19 vectors.
+
+### Previous Session Summary
+
+Date: 2026-06-29
+
+Summary:
+
+- Implemented the first step of Block 0.6 (CBOR subset): a bounded decoder/encoder in `:core`
+  for the definite-length **primitive** subset of RFC 8949 only. Added three new
+  `commonMain` files: `CborValue.kt` (sealed `CborValue` with `CborUnsigned`, `CborNegative`,
+  `CborByteString`, `CborTextString`), `CborError.kt` (sealed `CborError`), and `Cbor.kt`
+  (`object Cbor` with `decode` / `encode`).
+- Design decisions: `CborUnsigned`/`CborNegative` are data classes carrying documented range
+  invariants (`0..Long.MAX_VALUE` and `Long.MIN_VALUE..-1`); the encoder enforces them with
+  typed errors (`UnsignedValueNegative` / `NegativeValueNonNegative`) rather than throwing,
+  and the decoder only constructs in-range instances. `CborByteString` is a regular class
+  (defensive copy, `contentEquals` / `contentHashCode`, structural `toString`). For a `uint64`
+  argument (additional info 27), the out-of-range check is unified across major types 0 and 1:
+  reject iff bit 63 is set. String size limits were set below `CBOR_MAX_INPUT_BYTES`
+  (`1 shl 16` vs `1 shl 20`) so they are independently meaningful and reachable. Strict UTF-8
+  uses `decodeToString` / `encodeToByteArray(throwOnInvalidSequence = true)` wrapped in an
+  internal `try/catch` mapping `CharacterCodingException` to `CborError.InvalidUtf8`.
+- Anti-DoS ordering per ADR-0001: total input limit, then declared length vs remaining bytes,
+  then declared length vs the named string limit, then copy. No buffer is allocated from an
+  untrusted declared length.
+- Tests: `CborDecodeTest` and `CborEncodeTest` in `core/src/commonTest`. Positive cases use
+  RFC 8949 Appendix A vectors verbatim (cited inline); malformed/non-canonical/over-limit/
+  unsupported/trailing-byte cases are hand-written and commented with the rule each exercises.
+  Added explicit `Long.MAX_VALUE` / `Long.MIN_VALUE` boundary tests and `uint64`-overflow
+  rejection tests (reusing the real Appendix A `0x1bff...` / `0x3bff...` vectors and asserting
+  SDK rejection). Arrays, maps, tags, bignums, floats/simple/null/undefined, indefinite
+  lengths, reserved additional info, and trailing bytes are all asserted rejected.
+- No dependencies or Gradle changes. Arrays/maps are explicitly deferred to the next 0.6
+  substep.
+- Review follow-up (same substep, no scope change): added a distinct
+  `CborError.LengthOutOfRange(majorType)` for byte/text string length prefixes whose `uint64`
+  argument has bit 63 set, so an out-of-range length is rejected as `LengthOutOfRange` rather
+  than folded into `DeclaredLengthExceedsInput` with a negative declared length; integer
+  overflow for major types 0 and 1 (`IntegerOutOfRange`) is unchanged. Added decode tests for
+  out-of-range byte/text string lengths (`5b…` / `7b…`, hand-written) and an explicit
+  `CborByteString.toString()` structural test. The primitive substep review fix is complete.
+
+Files changed this step:
+
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/CborValue.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/CborError.kt` (new; `LengthOutOfRange` added)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/Cbor.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/CborDecodeTest.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/CborEncodeTest.kt` (new)
+- `core/README.md`, `core/src/commonTest/resources/fixtures/cbor/README.md`,
+  `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile). iOS
+  simulator execution requires macOS/Xcode and was not run.
+
+Next recommended task:
+
+- The Block 0.6 arrays/maps substep (major types 4 and 5): add `CBOR_MAX_NESTING_DEPTH` and
+  `CBOR_MAX_COLLECTION_ELEMENTS`, enforce canonical map key ordering, reject duplicate keys,
+  with RFC 8949 Appendix A vectors. No dependencies; no crypto or signing.
+
+### Earlier Session Summary
+
+Date: 2026-06-29
+
+Summary:
+
 - Implemented the Cardano HRP allowlist wrappers step of Block 0.5, completing the block.
   Added three new `:core` source files: `CardanoHrp` (allowlist enum `ADDR` / `ADDR_TEST` /
   `STAKE` / `STAKE_TEST` with a lowercase `value` and an `internal fromValue` lookup),
@@ -211,7 +361,7 @@ Files changed this step:
 - `core/src/commonTest/kotlin/org/sarmidev/kardano/CardanoBech32Test.kt` (new)
 - `core/README.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`
 
-### Previous Session Summary
+### Older Session Summary
 
 Date: 2026-06-29
 

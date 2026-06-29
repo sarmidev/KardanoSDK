@@ -55,14 +55,37 @@ Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
   Generic engine failures propagate via `CardanoBech32Error.Underlying`. This is HRP
   allowlist plus Bech32 checksum/charset validation only — not CIP-19 structural address
   validation: it does not parse payloads, inspect header bytes, or read the network id.
+- `Cbor` — a bounded decoder/encoder for the Phase 0 definite-length CBOR subset (RFC 8949).
+  Supported types, exposed as the sealed `CborValue`: unsigned integers (`CborUnsigned`) and
+  negative integers (`CborNegative`) within the signed `Long` range, definite-length byte
+  strings (`CborByteString`), definite-length UTF-8 text strings (`CborTextString`),
+  definite-length arrays (`CborArray`), and definite-length maps (`CborMap`, an ordered list of
+  `CborEntry` pairs — not a Kotlin `Map`). `Cbor.decode` returns a `KardanoResult<CborValue,
+  CborError>` and `Cbor.encode` returns a `KardanoResult<ByteArray, CborError>` (neither
+  throws). The encoder emits canonical (shortest-form) definite-length output. SDK-owned named
+  limits (`CBOR_MAX_INPUT_BYTES`, `CBOR_MAX_BYTESTRING_BYTES`, `CBOR_MAX_STRING_BYTES`,
+  `CBOR_MAX_NESTING_DEPTH` = 64, `CBOR_MAX_COLLECTION_ELEMENTS` = 65536) are enforced before any
+  buffer is allocated or any collection element is read, and no buffer is allocated from an
+  untrusted declared length or element count. Maps follow the Phase 0 deterministic rule (per
+  ADR-0001, RFC 8949 §4.2.1): keys must be in strictly ascending order by the bytewise
+  comparison of their canonical encoding, with no duplicates — the decoder rejects maps that
+  violate this (`NonCanonicalMapKeyOrder` / `DuplicateMapKey`) and the encoder requires
+  already-ordered, duplicate-free entries and rejects rather than reordering. This Phase 0
+  deterministic rule is not asserted to be final Cardano transaction-serialization
+  compatibility. Tags (incl. bignum tags 2/3), floats/simple/null/undefined, indefinite
+  lengths, reserved additional info, non-canonical encodings, out-of-range integers/counts,
+  over-deep nesting, over-large collections, malformed UTF-8, over-limit input, and trailing
+  bytes are rejected with a typed `CborError`, never normalized.
 
 ## Out of scope
 
 - UI / Compose.
 - Cryptography, key handling, mnemonics, or transaction signing.
 - Network/IO, providers, or wallet behavior.
-- CBOR and address validation are not implemented yet; they are planned for later Phase 0
-  blocks (see [docs/ROADMAP.md](../docs/ROADMAP.md)). The `Bech32` codec is generic and does
+- The CBOR subset above covers primitives plus definite-length arrays and maps only (no tags,
+  bignums, floats, simple values, or indefinite lengths) and does not interpret Cardano
+  semantics. Address validation is not implemented yet; it is planned for a
+  later Phase 0 block (see [docs/ROADMAP.md](../docs/ROADMAP.md)). The `Bech32` codec is generic and does
   not restrict the HRP to Cardano prefixes; the `CardanoBech32` wrappers add the HRP allowlist
   but perform no address parsing or CIP-19 structural validation (that belongs to Block 0.7).
   Primitive-specific hex helpers (e.g. `TxHash.fromHex`) are intentionally not added; use the

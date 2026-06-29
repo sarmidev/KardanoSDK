@@ -307,6 +307,70 @@ Decision status:
   2 and 3, floats/simple/null/undefined, trailing bytes, out-of-range integers, and
   duplicate map keys; canonical map ordering in deterministic/Cardano mode).
 
+Status: complete (primitives + definite-length arrays/maps landed).
+
+Outcome (first step — primitive values):
+
+- Added a bounded CBOR decoder/encoder to `:core` for the definite-length **primitive
+  subset only**: `Cbor.decode` / `Cbor.encode` over a sealed `CborValue` (`CborUnsigned`,
+  `CborNegative` within the signed `Long` range; `CborByteString` and `CborTextString`,
+  definite-length), with a typed `CborError`. Both return `KardanoResult` and never throw.
+  The encoder emits canonical (shortest-form) definite-length output; `CborByteString` uses
+  defensive copies and `contentEquals` / `contentHashCode`.
+- Named SDK-owned limits `CBOR_MAX_INPUT_BYTES` (`1 shl 20`), `CBOR_MAX_BYTESTRING_BYTES`
+  and `CBOR_MAX_STRING_BYTES` (`1 shl 16`, deliberately below the input limit so each string
+  is bounded independently) are enforced before allocation. No buffer is allocated from an
+  untrusted declared length: a declared length is validated against the total input limit,
+  then the remaining bytes, then the named limit, before any copy. `CBOR_MAX_NESTING_DEPTH`
+  and `CBOR_MAX_COLLECTION_ELEMENTS` are intentionally deferred to the arrays/maps substep.
+- Rejected with typed errors (never normalized): indefinite lengths, reserved additional
+  info (28/29/30), non-canonical integer/length encodings, integers outside signed `Long`
+  (`IntegerOutOfRange`), byte/text string length prefixes outside signed `Long`
+  (`LengthOutOfRange`, so a `uint64` length with bit 63 set is rejected rather than
+  reinterpreted as a negative declared length), malformed UTF-8, over-limit input, trailing
+  bytes, arrays (major 4) and maps (major 5, deferred), tags (major 6, incl. bignum 2/3),
+  and floats/simple values (major 7).
+- Tests in `core/src/commonTest` (`CborDecodeTest`, `CborEncodeTest`) use RFC 8949
+  Appendix A vectors verbatim for supported positive examples plus hand-written edge cases
+  (commented with the rule exercised) for malformed/non-canonical/over-limit/unsupported/
+  trailing-byte cases, including explicit `Long.MAX_VALUE` / `Long.MIN_VALUE` boundary and
+  `uint64`-overflow rejection cases. No AI-invented protocol vectors; no dependencies or
+  Gradle changes.
+
+Outcome (arrays/maps substep — completes Block 0.6):
+
+- Extended the subset to definite-length arrays (major type 4) and maps (major type 5).
+  `CborValue` gained `CborArray` (ordered `List<CborValue>`) and `CborMap` (an ordered list of
+  `CborEntry` pairs, deliberately not a Kotlin `Map` so the canonical key order is explicit);
+  both are regular classes with defensive copies, content-based equality, and structural
+  `toString`. Added the named limits `CBOR_MAX_NESTING_DEPTH` (64) and
+  `CBOR_MAX_COLLECTION_ELEMENTS` (65536).
+- Decoder threads a nesting depth and reads definite-length collections only: the declared
+  element/entry count is validated (canonical prefix, signed-`Long` range, then against
+  `CBOR_MAX_COLLECTION_ELEMENTS`) before any element is read, and the depth limit is checked
+  when a collection head is reached — no list is sized from an untrusted count. Maps enforce
+  the Phase 0 deterministic rule (per ADR-0001, RFC 8949 §4.2.1) by comparing each key's
+  recorded canonical encoded bytes against the previous key's: keys must be strictly ascending
+  (`NonCanonicalMapKeyOrder` otherwise) with no duplicates (`DuplicateMapKey`). Unsupported
+  child/key types are rejected through the normal child decode.
+- Encoder is recursive with the same limits and emits canonical definite-length arrays/maps.
+  For maps it requires the caller to supply already-canonical, duplicate-free entries and
+  rejects otherwise (`NonCanonicalMapKeyOrder` / `DuplicateMapKey`) — it does not sort or
+  deduplicate, consistent with the SDK-wide "reject, never normalize" rule. Tags, bignums,
+  floats/simple/null/undefined, and indefinite lengths remain unrepresentable in `CborValue`
+  and so cannot be encoded.
+- New typed errors: `MaxNestingDepthExceeded`, `CollectionTooLarge`, `NonCanonicalMapKeyOrder`,
+  `DuplicateMapKey`; the now-dead `ArraysNotSupportedYet` / `MapsNotSupportedYet` variants were
+  removed. The Phase 0 deterministic map-ordering rule is documented as ADR-0001 / RFC 8949
+  §4.2.1 and is explicitly not asserted as final Cardano transaction-serialization
+  compatibility (Cardano historically used RFC 7049 length-first ordering); that is left to the
+  future tx-serialization work.
+- Tests use the RFC 8949 Appendix A array/map vectors verbatim (decode + canonical-encode +
+  round-trip) plus hand-written rule tests for the element-count and nesting-depth limits,
+  indefinite collections, non-canonical map order, duplicate keys, nested unsupported values,
+  trailing bytes, truncation, and a "no silent sorting" encoder case. No AI-invented vectors;
+  no dependencies or Gradle changes.
+
 Acceptance criteria:
 
 - ADR exists for CBOR/parser policy. (Done — ADR-0001 Accepted.)
