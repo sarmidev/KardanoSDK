@@ -191,30 +191,11 @@ public class Address private constructor(
 
             // For base addresses the payment and delegation parts can each be a key or a
             // script hash, selected independently by the two low bits of the type nibble.
-            val (type, paymentKind, stakeKind) = when (typeNibble) {
-                BASE_KEY_KEY, BASE_SCRIPT_KEY, BASE_KEY_SCRIPT, BASE_SCRIPT_SCRIPT ->
-                    Triple(
-                        AddressType.BASE,
-                        if (typeNibble and PAYMENT_SCRIPT_BIT != 0) {
-                            CredentialKind.SCRIPT
-                        } else {
-                            CredentialKind.KEY
-                        },
-                        if (typeNibble and DELEGATION_SCRIPT_BIT != 0) {
-                            CredentialKind.SCRIPT
-                        } else {
-                            CredentialKind.KEY
-                        },
-                    )
-                POINTER_KEY_TYPE -> Triple(AddressType.POINTER, CredentialKind.KEY, null)
-                POINTER_SCRIPT_TYPE -> Triple(AddressType.POINTER, CredentialKind.SCRIPT, null)
-                ENTERPRISE_KEY_TYPE -> Triple(AddressType.ENTERPRISE, CredentialKind.KEY, null)
-                ENTERPRISE_SCRIPT_TYPE ->
-                    Triple(AddressType.ENTERPRISE, CredentialKind.SCRIPT, null)
-                REWARD_KEY_TYPE -> Triple(AddressType.REWARD, null, CredentialKind.KEY)
-                REWARD_SCRIPT_TYPE -> Triple(AddressType.REWARD, null, CredentialKind.SCRIPT)
-                else -> return KardanoResult.Err(AddressError.UnsupportedAddressType(typeNibble))
-            }
+            val classification = classifyHeader(typeNibble)
+                ?: return KardanoResult.Err(AddressError.UnsupportedAddressType(typeNibble))
+            val type = classification.type
+            val paymentKind = classification.paymentKind
+            val stakeKind = classification.stakeKind
 
             val network = when (val result = Network.fromId(networkNibble)) {
                 is KardanoResult.Ok -> result.value
@@ -266,12 +247,7 @@ public class Address private constructor(
             // Enterprise/base carry the payment credential in the first 28-byte slot after
             // the header; reward addresses carry their single stake credential there.
             val paymentCredential = if (paymentKind != null) {
-                when (
-                    val result = AddressCredential.of(
-                        paymentKind,
-                        payload.copyOfRange(1, 1 + AddressCredential.HASH_SIZE),
-                    )
-                ) {
+                when (val result = credentialAt(paymentKind, payload, 1)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(result.error)
                 }
@@ -282,12 +258,7 @@ public class Address private constructor(
             val stakeCredential = if (stakeKind != null) {
                 val stakeStart =
                     if (type == AddressType.BASE) 1 + AddressCredential.HASH_SIZE else 1
-                when (
-                    val result = AddressCredential.of(
-                        stakeKind,
-                        payload.copyOfRange(stakeStart, stakeStart + AddressCredential.HASH_SIZE),
-                    )
-                ) {
+                when (val result = credentialAt(stakeKind, payload, stakeStart)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(result.error)
                 }
@@ -315,44 +286,29 @@ public class Address private constructor(
                 return KardanoResult.Err(AddressError.TruncatedPointer)
             }
 
-            val paymentCredential = when (
-                val result = AddressCredential.of(
-                    paymentKind,
-                    payload.copyOfRange(1, 1 + AddressCredential.HASH_SIZE),
-                )
-            ) {
+            val paymentCredential = when (val result = credentialAt(paymentKind, payload, 1)) {
                 is KardanoResult.Ok -> result.value
                 is KardanoResult.Err -> return KardanoResult.Err(result.error)
             }
 
             var offset = 1 + AddressCredential.HASH_SIZE
-            val slot = when (
-                val result = decodePointerField(payload, offset, PointerField.SLOT)
-            ) {
-                is KardanoResult.Ok -> {
-                    offset = result.value.nextOffset
-                    result.value.value
+            val fields = arrayOf(
+                PointerField.SLOT,
+                PointerField.TRANSACTION_INDEX,
+                PointerField.CERTIFICATE_INDEX,
+            )
+            val fieldValues = LongArray(fields.size)
+            for (i in fields.indices) {
+                when (val result = decodePointerField(payload, offset, fields[i])) {
+                    is KardanoResult.Ok -> {
+                        fieldValues[i] = result.value.value
+                        offset = result.value.nextOffset
+                    }
+                    is KardanoResult.Err -> return KardanoResult.Err(result.error)
                 }
-                is KardanoResult.Err -> return KardanoResult.Err(result.error)
             }
-            val transactionIndex = when (
-                val result = decodePointerField(payload, offset, PointerField.TRANSACTION_INDEX)
-            ) {
-                is KardanoResult.Ok -> {
-                    offset = result.value.nextOffset
-                    result.value.value
-                }
-                is KardanoResult.Err -> return KardanoResult.Err(result.error)
-            }
-            val certificateIndex = when (
-                val result = decodePointerField(payload, offset, PointerField.CERTIFICATE_INDEX)
-            ) {
-                is KardanoResult.Ok -> {
-                    offset = result.value.nextOffset
-                    result.value.value
-                }
-                is KardanoResult.Err -> return KardanoResult.Err(result.error)
-            }
+            val (slot, transactionIndex, certificateIndex) =
+                Triple(fieldValues[0], fieldValues[1], fieldValues[2])
 
             if (offset != payload.size) {
                 return KardanoResult.Err(
@@ -441,6 +397,49 @@ public class Address private constructor(
         private const val ENTERPRISE_SCRIPT_TYPE: Int = 7
         private const val REWARD_KEY_TYPE: Int = 14
         private const val REWARD_SCRIPT_TYPE: Int = 15
+
+        /**
+         * The type, payment credential kind, and stake credential kind resolved from the
+         * header type nibble. All three fields are carried together so the caller does not
+         * need a destructuring `Triple`.
+         */
+        private class HeaderClassification(
+            val type: AddressType,
+            val paymentKind: CredentialKind?,
+            val stakeKind: CredentialKind?,
+        )
+
+        /**
+         * Maps the header type nibble to its [HeaderClassification], or returns null for
+         * unsupported type nibbles (Byron, reserved). The caller is responsible for
+         * converting null to [AddressError.UnsupportedAddressType].
+         */
+        private fun classifyHeader(typeNibble: Int): HeaderClassification? = when (typeNibble) {
+            BASE_KEY_KEY, BASE_SCRIPT_KEY, BASE_KEY_SCRIPT, BASE_SCRIPT_SCRIPT ->
+                HeaderClassification(
+                    AddressType.BASE,
+                    if (typeNibble and PAYMENT_SCRIPT_BIT != 0) CredentialKind.SCRIPT else CredentialKind.KEY,
+                    if (typeNibble and DELEGATION_SCRIPT_BIT != 0) CredentialKind.SCRIPT else CredentialKind.KEY,
+                )
+            POINTER_KEY_TYPE -> HeaderClassification(AddressType.POINTER, CredentialKind.KEY, null)
+            POINTER_SCRIPT_TYPE -> HeaderClassification(AddressType.POINTER, CredentialKind.SCRIPT, null)
+            ENTERPRISE_KEY_TYPE -> HeaderClassification(AddressType.ENTERPRISE, CredentialKind.KEY, null)
+            ENTERPRISE_SCRIPT_TYPE -> HeaderClassification(AddressType.ENTERPRISE, CredentialKind.SCRIPT, null)
+            REWARD_KEY_TYPE -> HeaderClassification(AddressType.REWARD, null, CredentialKind.KEY)
+            REWARD_SCRIPT_TYPE -> HeaderClassification(AddressType.REWARD, null, CredentialKind.SCRIPT)
+            else -> null
+        }
+
+        /**
+         * Slices a 28-byte credential from [payload] starting at [start] and constructs an
+         * [AddressCredential] of [kind]. Delegates length validation to [AddressCredential.of].
+         */
+        private fun credentialAt(
+            kind: CredentialKind,
+            payload: ByteArray,
+            start: Int,
+        ): KardanoResult<AddressCredential, AddressError> =
+            AddressCredential.of(kind, payload.copyOfRange(start, start + AddressCredential.HASH_SIZE))
 
         /** Internal carrier for one decoded pointer coordinate and the offset just past it. */
         private class PointerFieldDecode(val value: Long, val nextOffset: Int)
