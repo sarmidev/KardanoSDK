@@ -32,6 +32,18 @@ Current project identity:
   reorganized `:core` into `org.sarmidev.kardano.primitives` and
   `org.sarmidev.kardano.encoding.{hex,bech32,cbor}` packages (architecture-only; no behavior
   change, no new Gradle modules; `KardanoResult` and `Platform` stay at the root package).
+  Block 0.7 (Address Parsing And Structural Validation) is complete: it covers structural
+  CIP-19 parsing of the Shelley Bech32 address families — base (header types 0-3), pointer
+  (4-5), enterprise (6-7), and reward/stake (14-15) — across mainnet and testnet, decode-only,
+  via `Address.parse`. Step 1 added the `org.sarmidev.kardano.address` package (`Address`,
+  `AddressType`, `AddressCredential` / `CredentialKind`, `AddressError`) for the
+  single-credential types; Step 2 added the two-credential base types and the explicit nullable
+  `paymentCredential` / `stakeCredential` properties; Step 3 added the pointer types
+  (`AddressType.POINTER`): a payment credential plus a variable-length chain pointer
+  (`AddressPointer` with `slot` / `transactionIndex` / `certificateIndex`, plus `PointerField`),
+  exposed via a new nullable `Address.pointer` property and bounded variable-length-integer
+  decoding. Byron/Base58 addresses and raw-byte/hex `Address` constructors are deferred beyond
+  Block 0.7 (see `docs/ROADMAP.md`).
 
 Business goal:
 
@@ -115,11 +127,42 @@ Block status:
   Architecture-only package move: type names unchanged, fully qualified names/imports
   changed (pre-alpha), no new modules, no dependencies. Gradle module splits deferred. See
   `docs/DECISIONS/0003-core-package-structure.md`.
+- Block 0.7 Address Parsing And Structural Validation: complete (structural CIP-19 parsing of
+  the Shelley Bech32 families — base 0-3, pointer 4-5, enterprise 6-7, reward/stake 14-15 —
+  across mainnet/testnet, decode-only, via `Address.parse`). Step 1 added the
+  `org.sarmidev.kardano.address` package with `Address` / `Address.parse`, `AddressType`,
+  `AddressCredential` + `CredentialKind`, and `AddressError` for the single-credential
+  Shelley types (enterprise `addr`/`addr_test` types 6/7, reward `stake`/`stake_test` types
+  14/15). Step 2 added the two-credential **base** types (`addr`/`addr_test`, CIP-19 header
+  types 0-3, fixed 57-byte payload) as `AddressType.BASE`, and replaced the ambiguous single
+  `Address.credential` property with explicit nullable `paymentCredential` and
+  `stakeCredential` (enterprise → payment only; reward → stake only; base → both). Step 3
+  added the **pointer** types (`addr`/`addr_test`, CIP-19 header types 4-5) as
+  `AddressType.POINTER`: a payment credential plus a variable-length chain pointer
+  (`AddressPointer` = `slot`/`transactionIndex`/`certificateIndex` as non-negative `Long`,
+  with a `PointerField` enum) exposed via a new nullable `Address.pointer`; pointer → payment
+  + pointer (`stakeCredential` null). Parsing still decodes via `CardanoBech32`, does the
+  5→8-bit conversion (`pad = false`), reads the header byte, resolves `Network.fromId`, and
+  enforces HRP↔network + HRP↔family agreement (the `addr` family now accepts base, pointer,
+  and enterprise); base/enterprise/reward use a per-type fixed length (57/29) while pointer
+  uses a dedicated variable-length path. The pointer is three CIP-19 variable-length unsigned
+  integers, decoded with bounded named limits (`MAX_POINTER_FIELD_BYTES` = 9,
+  `MIN_POINTER_PAYLOAD_SIZE` = 32), an overflow check **before** each shift (no signed-`Long`
+  wraparound), and typed rejection of truncated/non-canonical/over-range/trailing-byte
+  encodings. Byron (8) and reserved types, bad lengths, checksums, and padding are rejected
+  with typed errors. `AddressCredential` / `CredentialKind` are unchanged; all bytes
+  defensively copied; structural-only KDoc. Tests use CIP-19 `type-00..07/14/15` vectors
+  verbatim plus labeled derived rule tests. Rejecting non-canonical (over-long) pointer
+  variable-length integers is an accepted Phase 0 parser decision (stricter than the lenient
+  ledger decoder; consistent with the reject-never-normalize guardrail). Byron/Base58 and
+  raw-byte/hex constructors are deferred beyond Block 0.7 (separate future work). No
+  dependencies or Gradle changes. See `docs/ROADMAP.md` Block 0.7 Outcome and closure.
 
-Next recommended task: Block 0.7 (Address Parsing And Structural Validation) per
-`docs/ROADMAP.md` — introduce the deferred `Address` value type with structural (CIP-19)
-validation on top of the existing `CardanoBech32` / `Cbor` codecs, preserving and checking the
-network id. No crypto, no signing, no dependencies; cite CIP-19 vectors.
+Next recommended task: Block 0.8 (Crypto Strategy Document) per `docs/ROADMAP.md` — a
+documentation/ADR-only block (candidate library/binding evaluation, target matrix, required
+external vectors). Byron/Base58 address support and an address encoding/round-trip ADR (for any
+future raw-byte/hex constructors) remain separate, independently-scheduled future work. No
+crypto, no signing, no keys, no dependencies.
 
 Current modules:
 
@@ -156,8 +199,8 @@ These should be resolved before or during Phase 0 implementation:
 
 1. Final module structure:
    - A UI-free `:core` module has been introduced (ADR-0002), and its internal package
-     layout is settled (ADR-0003: `primitives`, `encoding.{hex,bech32,cbor}`, with
-     `address` to follow in Block 0.7). The final *module* structure is still open:
+     layout is settled (ADR-0003: `primitives`, `encoding.{hex,bech32,cbor}`, plus the
+     `address` package added in Block 0.7). The final *module* structure is still open:
      whether/when to extract `:crypto`, `:wallet`, `:tx`, `:provider`, and whether
      `:shared` later becomes a dedicated `:sample:*` module. ADR-0003 records that these
      package seams are intended to ease future module extraction, but module splits are
@@ -217,6 +260,206 @@ Date: 2026-06-30
 
 Summary:
 
+- Block 0.7 (Address Parsing And Structural Validation), Step 3: extended `Address.parse` to
+  the Shelley **pointer** address types (CIP-19 header types 4-5, `addr` / `addr_test`),
+  adding `AddressType.POINTER`. A pointer address is a 28-byte payment credential (key for
+  type 4, script for type 5) plus a chain pointer instead of an inline delegation credential,
+  so its payload is variable length and uses a dedicated parse path.
+- New public API: `AddressPointer` (the three coordinates `slot` / `transactionIndex` /
+  `certificateIndex` as non-negative `Long`, range `0..Long.MAX_VALUE`, built only via a
+  range-validated internal `of(...)` factory), a `PointerField` enum (`SLOT` /
+  `TRANSACTION_INDEX` / `CERTIFICATE_INDEX`) used by the typed errors, and a new nullable
+  `Address.pointer` property. Presence contract: enterprise → payment only; reward → stake
+  only; base → payment + stake; pointer → payment + pointer (`stakeCredential` null). `equals`
+  / `hashCode` now include `pointer`.
+- Pointer decoding: three CIP-19 variable-length unsigned integers (big-endian base-128 with
+  continuation-bit framing). Named constants `MAX_POINTER_FIELD_BYTES` (9, = the 63-bit
+  non-negative `Long` range) and `MIN_POINTER_PAYLOAD_SIZE` (32) bound the decode; iteration is
+  over the already-bounded payload (no allocation from an untrusted length). The overflow guard
+  is checked **before** each 7-bit shift, so signed-`Long` wraparound is never relied on.
+  Rejected (never normalized) with typed errors: `TruncatedPointer` (field runs past the
+  payload), `NonCanonicalPointer` (over-long leading-zero group — stricter than the lenient
+  ledger decoder, per Phase 0 parser policy), `PointerValueOutOfRange(field)` (over-byte or
+  over-`Long`), `TrailingPointerBytes(consumed, actual)` (bytes after the third coordinate).
+  The `addr` / `addr_test` HRP family now accepts pointer in addition to base and enterprise.
+- Tests: added the CIP-19 `type-04/05` mainnet and testnet pointer vectors verbatim (cited),
+  asserting `AddressType.POINTER`, the payment credential kind, `stakeCredential == null`,
+  `pointer != null`, and the spec-documented coordinates `(2498243, 27, 3)`; added a pointer
+  presence test, pointer equality with equal `hashCode`, and a pointer `toString` no-bytes
+  test. Added labeled derived rule tests (decode → mutate → re-encode) for pointer HRP network
+  mismatch, pointer under a `stake` HRP, payload too short, truncated (continuation-at-end and
+  dropped-byte variants), non-canonical slot, over-limit slot, and trailing bytes. Removed the
+  now-invalid `rejectsUnsupportedPointerType` test (header type 4 is now valid); the Byron
+  type-8 unsupported test stays. No AI-invented vectors.
+- No dependencies, no Gradle changes, no crypto/signing/keys; structural-only KDoc throughout
+  (no ownership/existence/controllability/spendability/balance claims; a pointer is not checked
+  against any on-chain certificate).
+- Block 0.7 closure (KDoc/docs-only follow-up, no behavior change): Block 0.7 is now complete,
+  defined as structural CIP-19 parsing of the Shelley Bech32 address families (base 0-3,
+  pointer 4-5, enterprise 6-7, reward/stake 14-15) across mainnet/testnet via `Address.parse`.
+  Rejecting non-canonical (over-long) pointer variable-length integers is accepted as a Phase 0
+  parser decision. Byron/Base58 addresses and raw-byte/hex `Address` constructors are deferred
+  beyond Block 0.7 (Byron is a separate Base58 + Byron-CBOR block; raw/hex constructors await an
+  address encoding/round-trip ADR). KDoc on `Address` / `AddressType` / `AddressPointer` /
+  `AddressError` and `docs/ROADMAP.md`, `docs/HANDOFF.md`, `core/README.md`, and the address
+  fixtures README were updated to state this; `Address.parse` remains the only constructor.
+
+Files changed this step:
+
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/Address.kt`
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressType.kt`
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressPointer.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressError.kt`
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/address/AddressTest.kt`
+- `core/README.md`, `core/src/commonTest/resources/fixtures/address/README.md`,
+  `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile). iOS
+  simulator execution requires macOS/Xcode and was not run.
+
+Next recommended task:
+
+- Block 0.8 (Crypto Strategy Document) per `docs/ROADMAP.md` — a documentation/ADR-only block
+  (candidate library/binding evaluation, target support matrix, required external vectors). No
+  crypto, signing, keys, mnemonics, or dependencies. Byron/Base58 address support and an address
+  encoding/round-trip ADR (for any future raw-byte/hex constructors) remain separate,
+  independently-scheduled future work.
+
+### Previous Session Summary
+
+Date: 2026-06-30
+
+Summary:
+
+- Block 0.7 (Address Parsing And Structural Validation), Step 2: extended `Address.parse` to
+  the two-credential Shelley **base** address types (CIP-19 header types 0-3, `addr` /
+  `addr_test`, fixed 57-byte payload = 1 header + 28-byte payment credential + 28-byte
+  delegation/stake credential), adding `AddressType.BASE`.
+- Credential API evolution: replaced the ambiguous single `Address.credential` property with
+  two explicit nullable properties, `paymentCredential: AddressCredential?` and
+  `stakeCredential: AddressCredential?`. Presence follows the type — enterprise → payment
+  only; reward/stake → stake only; base → both. This is a breaking source-level change to the
+  Step 1 API, taken deliberately (rather than keeping an ambiguous "sometimes payment,
+  sometimes stake" accessor); acceptable in this pre-alpha SDK with no external consumers per
+  ADR-0003. `AddressCredential` and `CredentialKind` are unchanged.
+- Parser changes: the four base header types are distinguished by the two low type-nibble
+  bits (named `PAYMENT_SCRIPT_BIT = 0x1`, `DELEGATION_SCRIPT_BIT = 0x2`): bit 0 selects a
+  script (vs key) payment part, bit 1 selects a script (vs key) delegation part. The type
+  decode now resolves `(type, paymentKind, stakeKind)`; the `addr`/`addr_test` HRP family
+  accepts both base and enterprise; the length check expects `BASE_PAYLOAD_SIZE` = 57 for
+  base and 29 otherwise; payment is sliced from `[1,29)`, base stake from `[29,57)`, reward
+  stake from `[1,29)`. Pointer (4-5), Byron (8), reserved types, wrong lengths, and bad
+  checksums/padding stay rejected with typed errors; nothing is normalized.
+- `equals`/`hashCode` now include both `paymentCredential` and `stakeCredential`; all bytes
+  remain defensively copied (`contentEquals`/`contentHashCode`); `toString` still renders no
+  bytes; structural-only KDoc updated on `Address`, `AddressType.BASE`, and
+  `AddressError.UnsupportedAddressType` (no ownership/existence/spendability/balance claims).
+- Tests: added the CIP-19 `type-00/01/02/03` mainnet and testnet base vectors verbatim
+  (cited) covering all four payment/stake key/script combinations; added credential-presence
+  tests (enterprise payment-only, reward stake-only, base both), base equality with equal
+  `hashCode`, and a labeled derived rule object that shares the payment part but differs in
+  the stake part to prove the stake credential participates in equality; added labeled
+  derived rule tests for wrong base length (`InvalidPayloadLength(BASE, 57, 29)`), base under
+  a `stake` HRP (`HrpFamilyMismatch`), and base HRP/network mismatch. Migrated all Step 1
+  enterprise/reward assertions off the removed `credential` property to
+  `paymentCredential`/`stakeCredential`; removed the now-invalid `rejectsUnsupportedBaseType`
+  test (type 0 is now valid). No AI-invented vectors.
+- No dependencies, no Gradle changes, no crypto/signing/keys.
+
+Files changed this step:
+
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/Address.kt`
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressType.kt`
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressError.kt`
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/address/AddressTest.kt`
+- `core/README.md`, `core/src/commonTest/resources/fixtures/address/README.md`,
+  `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile). iOS
+  simulator execution requires macOS/Xcode and was not run.
+
+Next recommended task:
+
+- Block 0.7 Step 3: pointer addresses (CIP-19 header types 4-5) — a payment credential plus
+  a variable-length chain pointer (slot / tx-index / cert-index). Then, if/when justified,
+  Byron/Base58 and hex/raw-byte address constructors. No crypto, no signing, no dependencies;
+  cite CIP-19 vectors.
+
+### Earlier Session Summary
+
+Date: 2026-06-30
+
+Summary:
+
+- Block 0.7 (Address Parsing And Structural Validation), Step 1: added the
+  `org.sarmidev.kardano.address` package implementing structural CIP-19 parsing for the
+  single-credential Shelley address types only — enterprise (`addr` / `addr_test`, header
+  types 6/7) and reward/stake (`stake` / `stake_test`, header types 14/15).
+- New public API: `Address` with `Address.parse(bech32): KardanoResult<Address, AddressError>`
+  (never throws), `AddressType` (`ENTERPRISE`, `REWARD` only; KDoc states it is the Step 1
+  subset and more CIP-19 types may follow), `AddressCredential` + `CredentialKind`
+  (`KEY` / `SCRIPT`), and a sealed `AddressError`.
+- Parse pipeline: `CardanoBech32.decode` → internal `Bech32.convertBits(5, 8, pad = false)`
+  (rejects non-zero padding) → header byte → type/credential-kind mapping → `Network.fromId`
+  → HRP↔network agreement (`addr`/`stake` ⇒ mainnet, `addr_test`/`stake_test` ⇒ testnet) →
+  HRP↔family agreement (`addr*` ⇒ enterprise, `stake*` ⇒ reward) → fixed 29-byte length
+  check → `AddressCredential.of(28-byte slice)`. Unsupported types (base 0-3, pointer 4-5,
+  Byron 8, reserved), wrong lengths, bad checksums/padding all return typed errors; nothing
+  is normalized.
+- `AddressCredential` cannot be built with arbitrary bytes: private constructor + `internal`
+  length-validated `of(...)` returning `KardanoResult`, used only by `Address.parse`. All
+  byte arrays are copied on construction and on every accessor, use `contentEquals` /
+  `contentHashCode`, and `toString` renders no bytes. Structural-only KDoc on every public
+  declaration (no ownership/existence/spendability/balance claim); the network id is
+  preserved and exposed.
+- Why packages, not widening: `Bech32.convertBits` and `CardanoHrp.fromValue` are `internal`
+  and `:core` is one module, so the new `address` package uses them directly — no `internal`
+  was widened to `public`; `explicitApi()` still holds. No dependencies, no Gradle changes,
+  no crypto/signing/keys.
+- Tests (`core/src/commonTest/.../address/AddressTest.kt`): the CIP-19 "Test vectors"
+  `type-06/07/14/15` mainnet and testnet addresses are used verbatim (cited) for valid
+  parses; invalid/edge cases are labeled hand-written rule tests derived from a cited vector
+  (decode → mutate one field → re-encode) for bad checksum, Bech32m, non-allowlisted HRP,
+  network mismatch, family mismatch, unsupported type (base/pointer/Byron), too-long /
+  too-short payload, empty payload, defensive copies, and `toString`. No AI-invented vectors.
+- Deferred to later Block 0.7 steps: base addresses (types 0-3), pointer addresses
+  (types 4-5), Byron/Base58, and hex/raw-byte address constructors.
+
+Files changed this step:
+
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/Address.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressType.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressCredential.kt` (new)
+- `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressError.kt` (new)
+- `core/src/commonTest/kotlin/org/sarmidev/kardano/address/AddressTest.kt` (new)
+- `core/README.md`, `core/src/commonTest/resources/fixtures/address/README.md`,
+  `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile). iOS
+  simulator execution requires macOS/Xcode and was not run.
+
+Next recommended task:
+
+- Block 0.7 Step 2: base addresses (CIP-19 header types 0-3) — the two-credential composite
+  (payment + delegation, 57 bytes) on top of the Step 1 parser, adding `AddressType.BASE`
+  and a second credential accessor. Then pointer addresses, and Byron/Base58 only if/when
+  justified. No crypto, no signing, no dependencies; cite CIP-19 vectors.
+
+### Older Session Summary
+
+Date: 2026-06-30
+
+Summary:
+
 - Block 0.6.5 (Core Package Organization): reorganized the flat `org.sarmidev.kardano`
   package in `:core` into purpose-named packages, with no behavior change, no new Gradle
   modules, and no dependencies. This is an architecture-only package move done before
@@ -262,7 +505,7 @@ Next recommended task:
   validation on top of `CardanoBech32` / `Cbor`, preserving and checking the network id.
   No crypto, no signing, no dependencies; cite CIP-19 vectors.
 
-### Previous Session Summary
+### Oldest Session Summary
 
 Date: 2026-06-29
 
@@ -328,7 +571,7 @@ Next recommended task:
   value type with structural CIP-19 validation on top of `CardanoBech32` / `Cbor`, preserving
   and checking the network id. No crypto, no signing, no dependencies; cite CIP-19 vectors.
 
-### Earlier Session Summary
+### Earliest Session Summary
 
 Date: 2026-06-29
 
@@ -391,7 +634,7 @@ Next recommended task:
   `CBOR_MAX_COLLECTION_ELEMENTS`, enforce canonical map key ordering, reject duplicate keys,
   with RFC 8949 Appendix A vectors. No dependencies; no crypto or signing.
 
-### Older Session Summary
+### Initial Session Summary
 
 Date: 2026-06-29
 
@@ -425,7 +668,7 @@ Files changed this step:
 - `core/src/commonTest/kotlin/org/sarmidev/kardano/CardanoBech32Test.kt` (new)
 - `core/README.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`
 
-### Oldest Session Summary
+### First Session Summary
 
 Date: 2026-06-29
 

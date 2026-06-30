@@ -32,12 +32,12 @@ The SDK logic is organized into purpose-named packages (see
 - `org.sarmidev.kardano.encoding.bech32` — `Bech32`, `Bech32Variant`, `Bech32Decoded`,
   `Bech32Error`, `CardanoHrp`, `CardanoBech32`, `CardanoBech32Error`.
 - `org.sarmidev.kardano.encoding.cbor` — `Cbor`, `CborValue`, `CborError`.
+- `org.sarmidev.kardano.address` — `Address`, `AddressType`, `AddressCredential`,
+  `CredentialKind`, `AddressPointer`, `PointerField`, `AddressError`.
 
 These are packages within the single `:core` module, not separate Gradle modules; Gradle
 module splits are deferred (ADR-0003). This is a pre-alpha SDK: type names are stable across
 this reorganization, but fully qualified names and imports moved into the packages above.
-The `org.sarmidev.kardano.address` package is introduced in Block 0.7 with the `Address`
-value type and structural CIP-19 validation.
 
 ## In scope (current)
 
@@ -95,6 +95,34 @@ value type and structural CIP-19 validation.
   lengths, reserved additional info, non-canonical encodings, out-of-range integers/counts,
   over-deep nesting, over-large collections, malformed UTF-8, over-limit input, and trailing
   bytes are rejected with a typed `CborError`, never normalized.
+- `Address` — structural CIP-19 address parsing (Block 0.7). `Address.parse(bech32)`
+  returns a `KardanoResult<Address, AddressError>` (never throws) for the Shelley address
+  types parsed so far: base (`addr` / `addr_test`, CIP-19 header types 0-3), pointer
+  (`addr` / `addr_test`, header types 4/5), enterprise (`addr` / `addr_test`, header types
+  6/7), and reward/stake (`stake` / `stake_test`, header types 14/15). It decodes via
+  `CardanoBech32`, converts the 5-bit data to bytes, reads the header byte, resolves the
+  network id through `Network`, and rejects any disagreement between the HRP and the header
+  network nibble or address family, unsupported header types, bad lengths, and bad
+  checksums/padding with a typed `AddressError` — nothing is normalized. It exposes the
+  `Network`, `AddressType`, the `CardanoHrp`, two explicit nullable credentials
+  (`paymentCredential` and `stakeCredential`, each an `AddressCredential` — a `CredentialKind`,
+  `KEY` or `SCRIPT`, plus a 28-byte hash), and a nullable chain `pointer`. Which are non-null
+  depends on the type: enterprise has only `paymentCredential`, reward/stake has only
+  `stakeCredential`, base has both (for base, `stakeCredential` is the CIP-19 delegation
+  credential and may itself be a script hash), and pointer has `paymentCredential` plus
+  `pointer`. A pointer address's delegation part is a chain pointer (`AddressPointer`: the
+  three non-negative `Long` coordinates `slot` / `transactionIndex` / `certificateIndex`),
+  decoded from three CIP-19 variable-length unsigned integers; over-long (non-canonical),
+  truncated, out-of-range, and trailing-byte pointer encodings are rejected with a typed
+  `AddressError` (the pointer overflow check runs before each shift, so no signed-`Long`
+  wraparound is relied on). `AddressCredential` and `AddressPointer` have private constructors
+  and are built only by the parser through length/range-validated internal factories. All byte
+  arrays are defensively copied and use content equality; `toString` renders no credential
+  bytes. **Structural validation only**: it does not prove an address exists on-chain, is
+  owned, is controllable, or is spendable, it does not verify a credential is a real
+  key/script hash, and it does not check that a pointer refers to an on-chain certificate.
+  Byron (type 8) addresses, Base58, and raw-byte/hex constructors are deferred beyond Block
+  0.7 (`Address.parse` is the only constructor).
 
 ## Out of scope
 
@@ -103,14 +131,14 @@ value type and structural CIP-19 validation.
 - Network/IO, providers, or wallet behavior.
 - The CBOR subset above covers primitives plus definite-length arrays and maps only (no tags,
   bignums, floats, simple values, or indefinite lengths) and does not interpret Cardano
-  semantics. Address validation is not implemented yet; it is planned for a
-  later Phase 0 block (see [docs/ROADMAP.md](../docs/ROADMAP.md)). The `Bech32` codec is generic and does
-  not restrict the HRP to Cardano prefixes; the `CardanoBech32` wrappers add the HRP allowlist
-  but perform no address parsing or CIP-19 structural validation (that belongs to Block 0.7).
-  Primitive-specific hex helpers (e.g. `TxHash.fromHex`) are intentionally not added; use the
-  generic `Hex` utility.
-- `Address` is deferred to Block 0.7, where address parsing and structural (CIP-19)
-  validation belong.
+  semantics. The `Bech32` codec is generic and does not restrict the HRP to Cardano prefixes;
+  the `CardanoBech32` wrappers add the HRP allowlist but perform no address parsing or CIP-19
+  structural validation (that belongs to `Address`). Primitive-specific hex helpers (e.g.
+  `TxHash.fromHex`) are intentionally not added; use the generic `Hex` utility.
+- `Address` parsing covers the base, pointer, enterprise, and reward/stake Shelley CIP-19
+  Bech32 types — the settled Block 0.7 scope. Byron addresses, Base58 decoding, and
+  raw-byte/hex address constructors are deferred beyond Block 0.7 (see
+  [docs/ROADMAP.md](../docs/ROADMAP.md)).
 
 ## Consumers
 

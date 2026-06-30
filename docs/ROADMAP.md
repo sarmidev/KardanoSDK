@@ -419,6 +419,123 @@ Goal:
 Support structural validation of Cardano addresses. The `Address` value type (deferred
 from Block 0.4) is introduced here, alongside the parsing/validation it depends on.
 
+Status: complete. Block 0.7 covers structural CIP-19 parsing of the Shelley Bech32 address
+families — base (0-3), pointer (4-5), enterprise (6-7), and reward/stake (14-15) — across
+mainnet and testnet, decode-only, via `Address.parse`. It landed in three steps:
+single-credential Shelley addresses, base addresses, and pointer addresses.
+
+Outcome (first step — single-credential Shelley addresses):
+
+- Added the `org.sarmidev.kardano.address` package with `Address` (and `Address.parse`),
+  `AddressType` (`ENTERPRISE`, `REWARD` only — KDoc states this is the Step 1 subset and
+  more CIP-19 types may follow), `AddressCredential` + `CredentialKind` (`KEY` / `SCRIPT`),
+  and a typed `AddressError`. All return `KardanoResult`; nothing throws.
+- `Address.parse` covers the single-credential, fixed-length Shelley types only: enterprise
+  (`addr` / `addr_test`, CIP-19 header types 6/7) and reward/stake (`stake` / `stake_test`,
+  header types 14/15). It decodes through `CardanoBech32`, converts the 5-bit data to bytes
+  via the existing internal `Bech32.convertBits` (`pad = false`, so non-zero padding is
+  rejected), reads the header byte, resolves the network id through `Network`, and enforces
+  HRP↔network and HRP↔family agreement. Unsupported header types (base 0-3, pointer 4-5,
+  Byron 8, reserved), wrong payload/credential lengths, bad checksums, and bad padding are
+  rejected with typed errors — nothing is normalized.
+- `AddressCredential` has a private constructor and is built only by the parser through an
+  internal, length-validated `of(...)` factory returning `KardanoResult`; there is no public
+  unvalidated constructor. All byte arrays are defensively copied on construction and on
+  every accessor, use `contentEquals` / `contentHashCode`, and `toString` renders no bytes.
+- Structural only: KDoc states parsing does not prove an address exists on-chain, is owned,
+  is controllable, or is spendable, and does not verify the credential is a real key/script
+  hash. The network id is preserved and exposed; preview vs preprod is not distinguished
+  (both network id 0).
+- Tests in `core/src/commonTest` use the CIP-19 "Test vectors" `type-06/07/14/15` mainnet
+  and testnet addresses verbatim (cited) for valid cases; invalid/edge cases are labeled
+  hand-written rule tests derived from a cited vector (decode, mutate one field, re-encode)
+  for bad checksum, Bech32m, non-allowlisted HRP, network mismatch, family mismatch,
+  unsupported type (base/pointer/Byron), wrong length, empty payload, defensive copies, and
+  `toString`. No AI-invented vectors; no dependencies or Gradle changes.
+- Deferred to later steps: base addresses (types 0-3), pointer addresses (types 4-5),
+  Byron/Base58, and hex/raw-byte address constructors.
+
+Outcome (second step — base addresses):
+
+- Extended `Address.parse` to the two-credential Shelley **base** types (CIP-19 header
+  types 0-3, `addr` / `addr_test`, fixed 57-byte payload = 1 header + 28-byte payment
+  credential + 28-byte delegation/stake credential), adding `AddressType.BASE`. The four
+  header types are distinguished by the two low type-nibble bits: bit 0 selects a script
+  (vs key) payment part and bit 1 selects a script (vs key) delegation part. Pointer (4-5),
+  Byron (8), and reserved types are still rejected with `UnsupportedAddressType`.
+- Replaced the ambiguous single `Address.credential` property with two explicit nullable
+  properties, `paymentCredential: AddressCredential?` and `stakeCredential: AddressCredential?`.
+  Presence follows the type: enterprise → payment only; reward/stake → stake only; base →
+  both. This is a breaking source-level change to the Step 1 API, acceptable in this
+  pre-alpha SDK with no external consumers (ADR-0003); `AddressCredential` / `CredentialKind`
+  are unchanged, and equality/`hashCode` now include both credentials.
+- The `addr` / `addr_test` HRP family now accepts both base and enterprise; the per-type
+  length check expects 57 bytes for base and 29 for the single-credential types. All bytes
+  remain defensively copied; `toString` renders no bytes; structural-only KDoc is unchanged
+  in intent (no ownership/existence/spendability/balance claims).
+- Tests use the CIP-19 `type-00/01/02/03` mainnet and testnet base vectors verbatim (cited)
+  for valid parses across all four payment/stake key/script combinations, plus credential
+  presence tests, base equality (including a labeled derived rule object that differs only in
+  the stake credential), and labeled derived rule tests for wrong base length, base under a
+  `stake` HRP, and a base HRP/network mismatch. Step 1 enterprise/reward tests were migrated
+  to the new `paymentCredential` / `stakeCredential` accessors. No AI-invented vectors; no
+  dependencies or Gradle changes.
+
+Outcome (third step — pointer addresses):
+
+- Extended `Address.parse` to the Shelley **pointer** types (CIP-19 header types 4-5,
+  `addr` / `addr_test`), adding `AddressType.POINTER`. A pointer address is a 28-byte payment
+  credential (key for type 4, script for type 5) followed by a chain pointer instead of an
+  inline delegation credential, so its payload is variable length and uses a dedicated parse
+  path rather than the fixed-length check.
+- Added `AddressPointer` (the three non-negative `Long` coordinates `slot` /
+  `transactionIndex` / `certificateIndex`, built only via a range-validated internal factory),
+  a `PointerField` enum (`SLOT` / `TRANSACTION_INDEX` / `CERTIFICATE_INDEX`), and a new
+  nullable `Address.pointer` property. Presence now: enterprise → payment only; reward → stake
+  only; base → payment + stake; pointer → payment + pointer (`stakeCredential` null,
+  `pointer` non-null). `equals` / `hashCode` include `pointer`.
+- The pointer is decoded as three CIP-19 variable-length unsigned integers (big-endian
+  base-128, continuation-bit framing). Named constants bound the decode: `MAX_POINTER_FIELD_BYTES`
+  (9, = the 63-bit non-negative `Long` range), `MIN_POINTER_PAYLOAD_SIZE` (32). The decoder
+  iterates over the already-bounded payload (no allocation from an untrusted length), checks
+  the overflow guard **before** each 7-bit shift (so signed-`Long` wraparound is never relied
+  on), and rejects (never normalizes): truncated fields (`TruncatedPointer`), non-canonical
+  over-long leading-zero encodings (`NonCanonicalPointer`, stricter than the lenient ledger
+  decoder, per Phase 0 parser policy), over-byte/over-range fields (`PointerValueOutOfRange`),
+  and trailing bytes after the third coordinate (`TrailingPointerBytes`). The `addr` /
+  `addr_test` HRP family now accepts pointer in addition to base and enterprise.
+- Tests use the CIP-19 `type-04/05` mainnet and testnet pointer vectors verbatim (cited),
+  asserting `AddressType.POINTER`, the payment credential kind, `stakeCredential == null`,
+  `pointer != null`, and the spec-documented coordinates `(2498243, 27, 3)`; plus labeled
+  derived rule tests for pointer HRP network/family mismatch, payload too short, truncated
+  (continuation-at-end and dropped-byte), non-canonical, over-limit, and trailing bytes. The
+  Step-1/2 `rejectsUnsupportedPointerType` test was removed (type 4 is now valid); Byron type-8
+  stays unsupported. No AI-invented vectors; no dependencies or Gradle changes.
+
+Block 0.7 closure:
+
+- Block 0.7 covers structural CIP-19 parsing of the Shelley Bech32 address families — base
+  (0-3), pointer (4-5), enterprise (6-7), and reward/stake (14-15) — across mainnet and
+  testnet, decode-only, via `Address.parse` (the only constructor). Parsing is structural only
+  and never normalizes input.
+- Rejecting non-canonical (over-long, leading-zero) pointer variable-length integers is an
+  accepted Phase 0 parser decision. It is stricter than the historically lenient ledger
+  decoder, and is consistent with the Phase 0 guardrail "reject malformed, non-canonical, or
+  unsupported input — never normalize it" (and the CBOR/Bech32 precedent).
+
+Deferred beyond Block 0.7 (each is a separate future decision, not a Block 0.7 step):
+
+- Byron / bootstrap addresses (header type 8): Base58-encoded and Byron-specific (CRC, address
+  attributes, address-type tags, CBOR structure). These need a Base58 codec, CRC handling, and
+  Byron-specific CBOR (including tag handling the Phase 0 definite-length CBOR subset currently
+  rejects), so they form a distinct legacy parser/codec domain that warrants its own future
+  block, with its own verbatim vectors and any needed ADR/policy work.
+- Raw-byte / hex `Address` constructors (e.g. `Address.fromBytes` / `fromHex`): public-API and
+  round-trip design that implies an address encoding/round-trip policy (canonical re-encoding,
+  `toBech32`) Phase 0 has not defined. Deferred until an address encoding/round-trip ADR exists
+  (likely alongside transaction serialization). `Address.parse` remains the only constructor
+  for now.
+
 Acceptance criteria:
 
 - Network id is preserved.
