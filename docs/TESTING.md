@@ -63,8 +63,8 @@ core/src/commonTest/resources/fixtures/
 
 - One subfolder per spec/area. Each subfolder has a `README.md` naming the authoritative
   source for the vectors that will go there.
-- No protocol vectors exist yet. They are added only alongside the implementation of the
-  matching feature, in the same change, with the source cited.
+- Protocol vectors may live inline in tests or in fixture files. When added, they must land
+  alongside the implementation that uses them, with the authoritative source cited.
 - `:shared` carries no protocol fixtures; see
   `shared/src/commonTest/resources/fixtures/README.md`.
 
@@ -100,6 +100,8 @@ This policy is mandatory for any security-sensitive unit (checksums, CBOR, addre
 Run tests per module. iOS simulator tests require macOS with Xcode.
 
 - Core (JVM) tests: `./gradlew :core:jvmTest`
+- Core Android host (JVM-hosted) tests: `./gradlew :core:testAndroidHostTest`
+- Core iOS test sources compile: `./gradlew :core:compileTestKotlinIosSimulatorArm64`
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`
 - iOS simulator tests: `./gradlew :shared:iosSimulatorArm64Test`

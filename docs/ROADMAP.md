@@ -2,7 +2,11 @@
 
 ## Current Status
 
-The project has been created from the Kotlin Multiplatform wizard.
+Phase 0 (Core Foundation) is complete. Blocks 0.1 through 0.9 are done: governance/AI
+rules, the UI-free `:core` module structure, testing infrastructure, core primitives,
+encoding utilities (Hex, Bech32/Bech32m, Cardano HRP wrappers), the definite-length CBOR
+subset, core package organization, structural CIP-19 address parsing, the crypto strategy
+ADR, and the Phase 0 closure review.
 
 Selected targets:
 
@@ -12,7 +16,8 @@ Selected targets:
 
 Current priority:
 
-> Build a disciplined Phase 0 foundation before implementing wallet behavior, signing or transaction submission.
+> Phase 0 is closed. The next step is **Phase 1 planning** (scope, module extraction, and
+> per-algorithm crypto library selection) — not Phase 1 implementation.
 
 ## Phase 0 - Core Foundation
 
@@ -605,9 +610,39 @@ Acceptance criteria:
 
 ### 0.9 Phase 0 Closure Review
 
+Status: complete.
+
 Goal:
 
 Check that the project is ready to start Phase 1/MVP work.
+
+Outcome:
+
+- Review/documentation/verification block only — no new SDK features, no Kotlin behavior
+  changes, no Gradle or dependency changes, no crypto/signing/key/mnemonic code, no
+  validator relaxation.
+- Verification: `./gradlew :core:jvmTest`, `:core:testAndroidHostTest`, and
+  `:core:compileTestKotlinIosSimulatorArm64` all pass / compile (BUILD SUCCESSFUL). iOS
+  simulator *execution* is macOS/Xcode-gated and was not run; only the iOS test sources
+  were compiled.
+- Heuristic policy scans run and every hit manually classified. No `ByteArray ==` in
+  `:core`. The banned-word hits are all the banned-word lists themselves, negated/factual
+  disclaimers ("Not audited.", "Not for real funds."), or the "safe to test" round-trip
+  guidance — no new or misleading positive claims. The mnemonic/private-key and
+  crypto/signing hits are all policy text, non-goals, ADR-0004, out-of-scope notes, or
+  KDoc that describes a credential as a `blake2b-224` hash while stating it is **not**
+  verified — no implementation code, no real keys/mnemonics/funds.
+- Confirmed: `explicitApi()` holds; public failable APIs return `KardanoResult` / sealed
+  errors (`Address.parse`, `Cbor`/`Bech32`/`CardanoBech32`/`Hex` codecs, primitive `of` /
+  `fromId` factories); named parser limits and the strict "reject, never normalize" policy
+  are documented and implemented; tests cite BIP-173/350, RFC 8949 Appendix A, and CIP-19
+  vectors verbatim. No Byron/Base58 or raw-byte/hex `Address` constructor exists
+  (`Address.parse` is the only constructor); no dependency or Gradle drift (clean working
+  tree; no dynamic versions).
+- Docs reconciled: this "Current Status" header and `docs/HANDOFF.md` updated to "Phase 0
+  complete"; `docs/TESTING.md` gained the two `:core` verification commands it had omitted
+  (an omission, not a contradiction). No standalone closure document was created —
+  `docs/ROADMAP.md` (this Outcome) and `docs/HANDOFF.md` are the closure record.
 
 Acceptance criteria:
 
@@ -620,6 +655,11 @@ Acceptance criteria:
 - No transaction signing or real wallet flow exists yet.
 
 ## Phase 1 - MVP Transaction Flow
+
+Next step (immediately after Phase 0 closure): **Phase 1 planning, not implementation.**
+Before any wallet/tx/provider code, plan the scope and resolve the decisions Phase 0
+deliberately left open — per-algorithm crypto library/binding selection (ADR-0004) and the
+module-extraction structure (`:crypto` / `:wallet` / `:tx` / `:provider`; ADR-0002/0003).
 
 Goal:
 

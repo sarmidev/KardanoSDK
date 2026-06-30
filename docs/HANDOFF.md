@@ -15,7 +15,9 @@ Current project identity:
 - Name: Kardano SDK.
 - Package/group: `org.sarmidev.kardano`.
 - Main targets: Android, iOS, JVM/Desktop.
-- Current status: Phase 0 in progress. Blocks 0.1 (Project Governance And AI Rules),
+- Current status: **Phase 0 (Core Foundation) is complete** (Blocks 0.1 through 0.9). The
+  Block 0.9 closure review verified the foundation; the next step is Phase 1 *planning*,
+  not implementation. Block-by-block detail follows. Blocks 0.1 (Project Governance And AI Rules),
   0.2 (SDK-Oriented Module Structure), and 0.3 (Testing Infrastructure) are complete: a
   UI-free `:core` module exists, `:shared` depends on it, and the testing foundation
   (test source-set strategy, fixture layout, test-vector policy in `docs/TESTING.md`) is
@@ -169,11 +171,24 @@ Block status:
   ledger decoder; consistent with the reject-never-normalize guardrail). Byron/Base58 and
   raw-byte/hex constructors are deferred beyond Block 0.7 (separate future work). No
   dependencies or Gradle changes. See `docs/ROADMAP.md` Block 0.7 Outcome and closure.
+- Block 0.9 Phase 0 Closure Review: complete. Review/documentation/verification block only
+  (no new features, no Kotlin behavior changes, no Gradle/dependency changes, no
+  crypto/signing/key/mnemonic code, no validator relaxation). Verification passed
+  (`:core:jvmTest`, `:core:testAndroidHostTest`, `:core:compileTestKotlinIosSimulatorArm64`;
+  iOS simulator execution macOS/Xcode-gated, compile-only). Heuristic scans run and every hit
+  classified as policy/ADR/disclaimer/structural-KDoc — no implementation crypto/signing, no
+  real keys/mnemonics, no `ByteArray ==`, no Byron/Base58/raw `Address` constructor, no
+  Gradle/dependency drift. `explicitApi()` holds; failable APIs return `KardanoResult`/sealed
+  errors; parser limits + reject-never-normalize policy documented and implemented; tests cite
+  official vectors verbatim. Docs reconciled (ROADMAP "Current Status" + this file set to
+  "Phase 0 complete"; `docs/TESTING.md` gained the two omitted `:core` commands). No standalone
+  closure document was created. See `docs/ROADMAP.md` Block 0.9 Outcome.
 
-Next recommended task: Block 0.9 (Phase 0 Closure Review) per `docs/ROADMAP.md` — verify
-all Phase 0 docs are consistent, tests pass on available targets, public APIs have KDoc,
-security docs are up to date, `docs/HANDOFF.md` reflects the current state, open decisions
-are listed, and no signing or wallet flow exists. Byron/Base58 address support and an address
+Next recommended task: **Phase 1 planning, not implementation.** Phase 0 is closed. Before
+writing any wallet/tx/provider code, plan Phase 1 scope and resolve the decisions Phase 0
+deliberately left open: per-algorithm crypto library/binding selection (ADR-0004, all
+candidates `Needs investigation`) and the module-extraction structure (`:crypto` / `:wallet`
+/ `:tx` / `:provider`; ADR-0002/0003). Byron/Base58 address support and an address
 encoding/round-trip ADR remain separate, independently-scheduled future work.
 
 Current modules:
@@ -188,7 +203,9 @@ Current priority:
 - Avoid custom crypto.
 - Avoid transaction signing.
 - Build tests and docs from the start.
-- Work through the Phase 0 blocks in `docs/ROADMAP.md` from 0.3 through 0.9.
+- Phase 0 (Blocks 0.1–0.9) is complete; the next step is Phase 1 *planning* in
+  `docs/ROADMAP.md` (scope, module extraction, per-algorithm crypto library selection) —
+  not Phase 1 implementation.
 
 ## Decisions Already Made
 
@@ -271,6 +288,64 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-06-30
+
+Summary:
+
+- Block 0.9 (Phase 0 Closure Review): review/documentation/verification block only. No new
+  SDK features, no Kotlin behavior changes, no Gradle/dependency changes, no
+  crypto/signing/key/mnemonic code, no validator relaxation. Declared Phase 0 complete.
+- Verification (all passed / compiled, BUILD SUCCESSFUL): `./gradlew :core:jvmTest`,
+  `./gradlew :core:testAndroidHostTest`, `./gradlew :core:compileTestKotlinIosSimulatorArm64`.
+  iOS simulator *execution* requires macOS/Xcode and was not run (compile-only). Working tree
+  is clean — no Gradle / version-catalog drift; no dynamic (`+`) versions.
+- Heuristic policy scans run, every hit manually classified (scans are heuristics, not gates):
+  - `ByteArray ==` in `core/src`: no matches.
+  - Banned words across READMEs/docs: all hits are the banned-word lists themselves, negated/
+    factual disclaimers ("Not audited.", "Not for real funds.", "pre-alpha", "experimental"),
+    or the "safe to test" round-trip guidance — no new or misleading positive claims; all
+    disclaimers left intact. (Pre-existing general-engineering "safe foundation" wording in
+    `docs/PROJECT_BRIEF.md` was left unchanged; out of scope for this block and not a security
+    claim about funds/crypto.)
+  - mnemonic/private-key patterns: only policy text, non-goals, ADR-0004, out-of-scope notes,
+    and the fixtures policy README — no real secrets.
+  - crypto/signing in `core/src`: only `blake2b-224` mentions in `AddressCredential` KDoc,
+    which explicitly state the bytes are **not** verified as a digest — no implementation.
+- Confirmed: `explicitApi()` holds; public failable APIs return `KardanoResult` / sealed
+  errors (`Address.parse`, the `Cbor` / `Bech32` / `CardanoBech32` / `Hex` codecs, and the
+  `TxHash` / `PolicyId` / `AssetName` / `Network` factories); named parser limits and the
+  strict "reject, never normalize" policy are documented and implemented; tests cite
+  BIP-173/350, RFC 8949 Appendix A, and CIP-19 vectors verbatim. `Address.parse` is the only
+  address constructor — no Byron/Base58 or raw-byte/hex constructor exists.
+- Deferred work / open decisions carried into Phase 1 planning: final module extraction
+  (`:crypto` / `:wallet` / `:tx` / `:provider`; ADR-0002/0003); concrete crypto library/binding
+  selection per algorithm (ADR-0004, all candidates `Needs investigation`); Byron/Base58
+  addresses + an address encoding/round-trip ADR; CBOR map ordering for Cardano tx
+  serialization (RFC 8949 §4.2.1 used now; possible RFC 7049 length-first deferred).
+
+Files changed this step:
+
+- `docs/ROADMAP.md` (Current Status header refreshed; Block 0.9 marked complete + Outcome;
+  Phase 1 planning-first note)
+- `docs/HANDOFF.md` (Phase 0 complete; Block 0.9 status entry; this session summary; next
+  task = Phase 1 planning)
+- `docs/TESTING.md` (added the two omitted `:core` verification commands)
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile). iOS
+  simulator execution requires macOS/Xcode and was not run.
+
+Next recommended task:
+
+- **Phase 1 planning, not implementation.** Plan Phase 1 scope and resolve the open Phase 0
+  decisions (per-algorithm crypto library selection per ADR-0004; module extraction per
+  ADR-0002/0003) before writing any wallet/tx/provider code. No standalone closure document
+  was created — `docs/ROADMAP.md` and this file are the closure record.
+
+### Previous Session Summary
 
 Date: 2026-06-30
 
