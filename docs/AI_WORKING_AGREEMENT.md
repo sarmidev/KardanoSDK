@@ -80,11 +80,14 @@ Extra care, test vectors, and review required for:
 - `encoding/cbor/` — see Parser anti-DoS rules below; never crash on attacker-controlled
   bytes.
 - `address/` — CIP-19 header, network-id, and length validation.
-- `crypto/` — `expect` surface and strategy only in Phase 0; no `actual` bodies.
+- `crypto/` — strategy and seam declarations only in Phase 0; no implementation bodies.
+  See `docs/DECISIONS/0004-crypto-strategy.md`.
 
-When crypto arrives (later phases), wrap **vetted, peer-reviewed** libraries via
-`expect`/`actual` (e.g. BouncyCastle on JVM/Android, libsodium via cinterop on iOS).
-Never reimplement primitives.
+When crypto arrives (later phases), delegate to externally maintained libraries or
+platform bindings selected through documented evaluation (per ADR-0004). The seam may
+be `expect`/`actual` for per-platform libraries, or a common interface backed by a
+KMP-capable library's own `commonMain` API — the choice is made per algorithm during
+evaluation. Never reimplement cryptographic primitives.
 
 ---
 

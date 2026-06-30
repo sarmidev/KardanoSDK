@@ -127,6 +127,18 @@ Block status:
   Architecture-only package move: type names unchanged, fully qualified names/imports
   changed (pre-alpha), no new modules, no dependencies. Gradle module splits deferred. See
   `docs/DECISIONS/0003-core-package-structure.md`.
+- Block 0.8 Crypto Strategy Document: complete. ADR-0004 (`docs/DECISIONS/0004-crypto-strategy.md`,
+  Accepted) records the cryptography strategy before any implementation lands. Policies recorded:
+  no handwritten crypto; all future crypto delegated to externally maintained libraries or
+  platform bindings selected through documented evaluation per algorithm; crypto isolated from
+  `:core`; likely end state a separate module (`:crypto`, not final); seam pattern
+  (expect/actual vs. common interface) chosen per algorithm; key-material lifecycle policy;
+  typed-error / `KardanoResult` API policy; test-vector policy (official only, no vectors in
+  this block). Algorithm scope, four candidate categories + evaluation template (all
+  `Needs investigation` / `Unverified`), target matrix, platform-specific concerns, and seven
+  open questions also documented. Fixed two existing governance docs that had named concrete
+  libraries as if selected (`docs/SECURITY.md` principle 1 and `docs/AI_WORKING_AGREEMENT.md`
+  crypto lines). No Kotlin, Gradle, dependency, or test changes.
 - Block 0.7 Address Parsing And Structural Validation: complete (structural CIP-19 parsing of
   the Shelley Bech32 families — base 0-3, pointer 4-5, enterprise 6-7, reward/stake 14-15 —
   across mainnet/testnet, decode-only, via `Address.parse`). Step 1 added the
@@ -158,11 +170,11 @@ Block status:
   raw-byte/hex constructors are deferred beyond Block 0.7 (separate future work). No
   dependencies or Gradle changes. See `docs/ROADMAP.md` Block 0.7 Outcome and closure.
 
-Next recommended task: Block 0.8 (Crypto Strategy Document) per `docs/ROADMAP.md` — a
-documentation/ADR-only block (candidate library/binding evaluation, target matrix, required
-external vectors). Byron/Base58 address support and an address encoding/round-trip ADR (for any
-future raw-byte/hex constructors) remain separate, independently-scheduled future work. No
-crypto, no signing, no keys, no dependencies.
+Next recommended task: Block 0.9 (Phase 0 Closure Review) per `docs/ROADMAP.md` — verify
+all Phase 0 docs are consistent, tests pass on available targets, public APIs have KDoc,
+security docs are up to date, `docs/HANDOFF.md` reflects the current state, open decisions
+are listed, and no signing or wallet flow exists. Byron/Base58 address support and an address
+encoding/round-trip ADR remain separate, independently-scheduled future work.
 
 Current modules:
 
@@ -219,9 +231,13 @@ These should be resolved before or during Phase 0 implementation:
    no external dependency, plus the Cardano HRP allowlist wrappers (`CardanoBech32`). Block 0.5
    is complete.
 
-4. Crypto strategy:
-   - Which library or binding will eventually support Ed25519/BIP32/CIP-1852?
-   - What targets are supported?
+4. Crypto strategy: **Strategy documented** (ADR-0004 Accepted) — the selection policy,
+   module boundary (likely `:crypto`, not final), seam options (expect/actual or common
+   interface), key-material lifecycle, error policy, algorithm scope, and test-vector
+   policy are recorded. Concrete library and binding choices remain open: each algorithm
+   is evaluated in its own future implementation block, which updates ADR-0004's candidate
+   matrix from `Needs investigation` to `Accepted`/`Rejected`. See
+   `docs/DECISIONS/0004-crypto-strategy.md` for the open questions list.
 
 5. Test vector sources:
    - The authoritative spec sources are now documented in `docs/TESTING.md` (Bech32/Bech32m
@@ -255,6 +271,63 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-06-30
+
+Summary:
+
+- Block 0.8 (Crypto Strategy Document): documentation/ADR-only block. Added
+  `docs/DECISIONS/0004-crypto-strategy.md` (ADR-0004, Accepted), establishing the
+  cryptography strategy before any implementation lands.
+- ADR-0004 records: (1) no handwritten crypto (restates the hard rule); (2) all future
+  crypto delegated to externally maintained libraries or platform bindings selected through
+  documented evaluation per algorithm — no candidate is selected in this block; (3) crypto
+  isolated from the dependency-free `:core`; likely end state a separate Gradle module
+  (candidate name `:crypto`, not final), consistent with ADR-0002/ADR-0003; (4) seam
+  pattern (platform `expect`/`actual` or common interface / strategy seam) chosen per
+  algorithm during evaluation — neither mandated in advance; (5) key-material lifecycle
+  policy (defensive copies, opaque handles, best-effort memory clearing — documented with
+  no guarantee about compiler/runtime/GC behavior); (6) typed-error / `KardanoResult`
+  policy for failable crypto APIs; (7) test-vector policy (official vectors only, cited
+  verbatim, none added in this block). Future algorithm scope documented: Ed25519,
+  Ed25519-BIP32, BIP-32 derivation, CIP-1852 paths, BIP-39 / CIP-3,
+  PBKDF2-HMAC-SHA-512, HMAC-SHA-512, SHA-256, SHA-512, Blake2b-224, Blake2b-256,
+  platform randomness (CSPRNG), key-material lifecycle. VRF / KES and Plutus hash
+  builtins (keccak-256 / sha3-256) marked out of scope. Four candidate categories
+  (JVM/Android JCA provider; C library via cinterop; pure-Kotlin / KMP-native; Cardano-
+  specific binding) recorded with a reusable evaluation template; all fields `Unverified`;
+  all `Decision status: Needs investigation`. Target support matrix and platform-specific
+  concerns (randomness sourcing, JVM best-effort clearing, iOS/Swift interop, JCA
+  provider variance for Blake2b) documented. Seven open questions listed.
+- Fixed `docs/SECURITY.md` principle 1: previously named BouncyCastle on JVM/Android and
+  libsodium on iOS as if already selected; reworded to point to ADR-0004 with no library
+  named; crypto scope row now links to ADR-0004.
+- Fixed `docs/AI_WORKING_AGREEMENT.md` crypto lines (~lines 83-87): previously named the
+  same concrete libraries and mandated `expect`/`actual`; reworded to reference ADR-0004
+  and allow either seam pattern (expect/actual or common interface) per algorithm.
+- No Kotlin, Gradle, dependency, fixture, or test changes.
+
+Files changed this step:
+
+- `docs/DECISIONS/0004-crypto-strategy.md` (new)
+- `docs/SECURITY.md` (principle 1 reworded; crypto scope row cross-linked to ADR-0004)
+- `docs/AI_WORKING_AGREEMENT.md` (crypto lines reworded; reference to ADR-0004 added)
+- `docs/ROADMAP.md` (Block 0.8 status: complete; Outcome added)
+- `docs/HANDOFF.md`
+
+Tests run:
+
+- None — documentation-only block. No Kotlin or Gradle changes.
+
+Next recommended task:
+
+- Block 0.9 (Phase 0 Closure Review): verify all Phase 0 docs are consistent, tests pass
+  on available targets, public APIs have KDoc, security docs are up to date,
+  `docs/HANDOFF.md` reflects current state, open decisions are listed, and no signing or
+  wallet flow exists. Byron/Base58 address support and an address encoding/round-trip ADR
+  remain separate, independently-scheduled future work.
+
+### Previous Session Summary
 
 Date: 2026-06-30
 

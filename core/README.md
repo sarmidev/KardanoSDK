@@ -127,7 +127,9 @@ this reorganization, but fully qualified names and imports moved into the packag
 ## Out of scope
 
 - UI / Compose.
-- Cryptography, key handling, mnemonics, or transaction signing.
+- Cryptography, key handling, mnemonics, or transaction signing. See
+  [docs/DECISIONS/0004-crypto-strategy.md](../docs/DECISIONS/0004-crypto-strategy.md) for
+  the future cryptography strategy.
 - Network/IO, providers, or wallet behavior.
 - The CBOR subset above covers primitives plus definite-length arrays and maps only (no tags,
   bignums, floats, simple values, or indefinite lengths) and does not interpret Cardano

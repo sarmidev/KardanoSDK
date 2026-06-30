@@ -546,6 +546,8 @@ Acceptance criteria:
 
 ### 0.8 Crypto Strategy Document
 
+Status: complete.
+
 Goal:
 
 Document the future cryptography approach before implementing any crypto behavior.
@@ -553,6 +555,38 @@ Document the future cryptography approach before implementing any crypto behavio
 Important:
 
 No custom cryptography in Phase 0.
+
+Outcome:
+
+- Added `docs/DECISIONS/0004-crypto-strategy.md` (ADR-0004, Accepted): records the
+  crypto strategy before any implementation lands.
+- Strategy decisions recorded: no handwritten crypto; all future crypto delegated to
+  externally maintained libraries or platform bindings selected through documented
+  evaluation per algorithm; crypto isolated from the dependency-free `:core`; likely
+  end state is a separate module (candidate name `:crypto`, not final, extracted when
+  justified per ADR-0002/ADR-0003); seam pattern (expect/actual vs. common interface)
+  chosen per algorithm during evaluation; key-material lifecycle policy (defensive copies,
+  opaque handles, best-effort clearing — no guarantee); typed-error / `KardanoResult`
+  policy for failable APIs; test-vector policy (official vectors only, cited verbatim;
+  no vectors added in this block).
+- Future algorithm scope enumerated: Ed25519, Ed25519-BIP32 (Cardano extended-key
+  scheme), BIP-32 derivation, CIP-1852 paths, BIP-39 / CIP-3, PBKDF2-HMAC-SHA-512,
+  HMAC-SHA-512, SHA-256 / SHA-512, Blake2b-224, Blake2b-256, platform randomness (CSPRNG),
+  and key-material lifecycle. VRF / KES and Plutus keccak / sha3 marked out of scope.
+- Candidate evaluation: four candidate categories (JVM/Android JCA-style provider;
+  C library via cinterop; pure-Kotlin / KMP-native provider; Cardano-specific binding)
+  with a reusable evaluation template. All candidate fields are `Unverified`; all
+  `Decision status` entries are `Needs investigation`. No candidate is selected.
+- Target support matrix (Android, iOS, JVM/Desktop — Web/Wasm deferred) and
+  platform-specific concerns (randomness sourcing, JVM/GC clearing limitations,
+  iOS/Swift interop, JCA provider variance for Blake2b) documented.
+- Seven open questions listed.
+- Fixed `docs/SECURITY.md` principle 1 (previously named BouncyCastle/libsodium as if
+  selected; now points to ADR-0004 with no library named) and the crypto scope row
+  (now links to ADR-0004).
+- Fixed `docs/AI_WORKING_AGREEMENT.md` crypto lines (previously named concrete libraries
+  and mandated expect/actual; now references ADR-0004 and allows either seam).
+- No Kotlin, Gradle, dependency, fixture, or test changes.
 
 Deliverables:
 

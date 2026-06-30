@@ -17,7 +17,7 @@ handling, or transaction signing is implemented.
 | Bech32 / Bech32m | In scope | Checksum only (BCH polymod) |
 | CBOR subset | In scope | Structural decode/encode |
 | CIP-19 address validation | In scope | Structural only |
-| Cryptographic primitives | **Not implemented** | Strategy doc only |
+| Cryptographic primitives | **Not implemented** | Strategy: see [ADR-0004](DECISIONS/0004-crypto-strategy.md) |
 | Transaction signing | **Not implemented** | Phase 1+ |
 | Key / mnemonic handling | **Not implemented** | Phase 1+ |
 
@@ -49,7 +49,9 @@ timeline with you.
 These principles govern implementation from Phase 0 onward:
 
 1. **No handwritten cryptography.** Cryptographic primitives are always delegated to
-   vetted, peer-reviewed libraries (BouncyCastle on JVM/Android, libsodium on iOS).
+   externally maintained libraries or platform bindings. Concrete libraries and bindings
+   are selected per implementation block through documented evaluation. See
+   `docs/DECISIONS/0004-crypto-strategy.md`.
 2. **Parser safety.** Parsers never allocate from untrusted length fields; all inputs
    are bounded by named constants; malformed input is rejected, not normalized.
 3. **No silent failures.** Parsers and validators return typed errors; they do not
