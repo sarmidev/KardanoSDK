@@ -1,5 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.primitives
 
+import org.sarmidev.kardano.KardanoResult
 import kotlin.jvm.JvmInline
 
 /**

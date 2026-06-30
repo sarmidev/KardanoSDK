@@ -1,4 +1,4 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.bech32
 
 /**
  * The two checksum variants of the Bech32 family of encodings.

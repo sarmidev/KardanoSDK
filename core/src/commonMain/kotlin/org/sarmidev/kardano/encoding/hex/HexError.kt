@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.hex
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A typed error produced when [Hex.decode] rejects a candidate hex string.

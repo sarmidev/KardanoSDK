@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.primitives
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A structural reference to a transaction output: a [txHash] plus a non-negative

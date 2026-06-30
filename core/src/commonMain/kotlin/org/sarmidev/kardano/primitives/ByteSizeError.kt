@@ -1,4 +1,4 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.primitives
 
 /**
  * A typed error produced when a byte-backed value type rejects an input `ByteArray`

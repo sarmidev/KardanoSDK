@@ -1,4 +1,4 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.bech32
 
 /**
  * The result of decoding a Bech32 or Bech32m string with [Bech32.decode].

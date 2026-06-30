@@ -1,5 +1,7 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.cbor
 
+import org.sarmidev.kardano.KardanoResult
+import org.sarmidev.kardano.encoding.hex.Hex
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

@@ -1,5 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.hex
 
+import org.sarmidev.kardano.KardanoResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

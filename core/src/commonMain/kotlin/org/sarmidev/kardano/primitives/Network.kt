@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.primitives
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A Cardano network, identified by its protocol network id.

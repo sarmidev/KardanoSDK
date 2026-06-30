@@ -1,4 +1,4 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.bech32
 
 /**
  * The Cardano Bech32 human-readable parts (HRPs) that [CardanoBech32] accepts.

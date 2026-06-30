@@ -20,6 +20,25 @@ Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
 - JVM/Desktop
 - iosArm64, iosSimulatorArm64
 
+## Package layout
+
+The SDK logic is organized into purpose-named packages (see
+[docs/DECISIONS/0003-core-package-structure.md](../docs/DECISIONS/0003-core-package-structure.md)):
+
+- `org.sarmidev.kardano` — cross-cutting types: `KardanoResult`, `Platform` / `getPlatform`.
+- `org.sarmidev.kardano.primitives` — `Network`, `Lovelace`, `TxHash`, `PolicyId`,
+  `AssetName`, `UtxoRef`, `UtxoRefError`, `ByteSizeError`.
+- `org.sarmidev.kardano.encoding.hex` — `Hex`, `HexError`.
+- `org.sarmidev.kardano.encoding.bech32` — `Bech32`, `Bech32Variant`, `Bech32Decoded`,
+  `Bech32Error`, `CardanoHrp`, `CardanoBech32`, `CardanoBech32Error`.
+- `org.sarmidev.kardano.encoding.cbor` — `Cbor`, `CborValue`, `CborError`.
+
+These are packages within the single `:core` module, not separate Gradle modules; Gradle
+module splits are deferred (ADR-0003). This is a pre-alpha SDK: type names are stable across
+this reorganization, but fully qualified names and imports moved into the packages above.
+The `org.sarmidev.kardano.address` package is introduced in Block 0.7 with the `Address`
+value type and structural CIP-19 validation.
+
 ## In scope (current)
 
 - `Platform` / `getPlatform()` — a UI-free platform descriptor (`expect`/`actual`).

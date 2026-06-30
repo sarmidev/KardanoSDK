@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.cbor
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A typed error produced when [Cbor.decode] or [Cbor.encode] rejects its input.

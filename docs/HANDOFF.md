@@ -28,7 +28,10 @@ Current project identity:
   `CardanoHrp` / `CardanoBech32Error`) have landed in `:core`. Block 0.6 (CBOR subset) is
   complete: the definite-length subset (`Cbor` / `CborValue` / `CborError`) covers the
   primitives plus definite-length arrays and maps, with named nesting/element limits and the
-  Phase 0 deterministic map-ordering rule.
+  Phase 0 deterministic map-ordering rule. Block 0.6.5 (Core Package Organization) then
+  reorganized `:core` into `org.sarmidev.kardano.primitives` and
+  `org.sarmidev.kardano.encoding.{hex,bech32,cbor}` packages (architecture-only; no behavior
+  change, no new Gradle modules; `KardanoResult` and `Platform` stay at the root package).
 
 Business goal:
 
@@ -104,8 +107,14 @@ Block status:
   list sizing from an untrusted declared length or count. Maps enforce the Phase 0
   deterministic rule (ADR-0001 / RFC 8949 §4.2.1: strictly ascending canonical key bytes, no
   duplicates) on both decode and encode; the encoder rejects rather than sorting. Tags/
-  bignums/floats/indefinite/non-canonical/out-of-range/over-limit/over-deep/trailing all
+  bignums/floats/indefinite/non-canonical/out-of-range/over-limit/  over-deep/trailing all
   rejected with typed errors. See `docs/ROADMAP.md` Block 0.6 Outcome.
+- Block 0.6.5 Core Package Organization: complete. Reorganized the flat
+  `org.sarmidev.kardano` package in `:core` into `primitives`, `encoding.hex`,
+  `encoding.bech32`, and `encoding.cbor`; `KardanoResult` and `Platform` stay at the root.
+  Architecture-only package move: type names unchanged, fully qualified names/imports
+  changed (pre-alpha), no new modules, no dependencies. Gradle module splits deferred. See
+  `docs/DECISIONS/0003-core-package-structure.md`.
 
 Next recommended task: Block 0.7 (Address Parsing And Structural Validation) per
 `docs/ROADMAP.md` — introduce the deferred `Address` value type with structural (CIP-19)
@@ -146,9 +155,13 @@ Current priority:
 These should be resolved before or during Phase 0 implementation:
 
 1. Final module structure:
-   - A UI-free `:core` module has been introduced (ADR-0002). The final structure is still
-     open: whether/when to add `:crypto`, `:wallet`, `:tx`, `:provider`, and whether
-     `:shared` later becomes a dedicated `:sample:*` module.
+   - A UI-free `:core` module has been introduced (ADR-0002), and its internal package
+     layout is settled (ADR-0003: `primitives`, `encoding.{hex,bech32,cbor}`, with
+     `address` to follow in Block 0.7). The final *module* structure is still open:
+     whether/when to extract `:crypto`, `:wallet`, `:tx`, `:provider`, and whether
+     `:shared` later becomes a dedicated `:sample:*` module. ADR-0003 records that these
+     package seams are intended to ease future module extraction, but module splits are
+     deferred until code and dependency pressure justify them.
 
 2. CBOR strategy: **Resolved and implemented** (ADR-0001 Accepted) — constrained internal
    CBOR subset (definite-length only), no external dependency. The definite-length subset
@@ -199,6 +212,57 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-06-30
+
+Summary:
+
+- Block 0.6.5 (Core Package Organization): reorganized the flat `org.sarmidev.kardano`
+  package in `:core` into purpose-named packages, with no behavior change, no new Gradle
+  modules, and no dependencies. This is an architecture-only package move done before
+  Block 0.7 so the upcoming `Address` / CIP-19 code lands in the right place.
+- New layout: `org.sarmidev.kardano.primitives` (`Network`, `Lovelace`, `TxHash`,
+  `PolicyId`, `AssetName`, `UtxoRef`, `UtxoRefError`, `ByteSizeError`),
+  `org.sarmidev.kardano.encoding.hex` (`Hex`, `HexError`),
+  `org.sarmidev.kardano.encoding.bech32` (`Bech32`, `Bech32Variant`, `Bech32Decoded`,
+  `Bech32Error`, `CardanoHrp`, `CardanoBech32`, `CardanoBech32Error`), and
+  `org.sarmidev.kardano.encoding.cbor` (`Cbor`, `CborValue`, `CborError`). `KardanoResult`
+  and `Platform` / `getPlatform` (+ actuals) stay at the root package, so `:shared` and the
+  sample apps are untouched.
+- Honest API note: class/type names are unchanged, but because public declarations moved
+  into subpackages, their fully qualified names and imports changed. Acceptable in this
+  pre-alpha SDK with no external consumers; recorded explicitly rather than called "no
+  public API change". `org.sarmidev.kardano.address` was deliberately not created or stubbed
+  yet — it arrives with real code in Block 0.7.
+- Why packages and not modules: Kotlin `internal` is module-scoped, so the existing
+  module-internal seams (`Bech32Variant.checksumConstant`, `Bech32.convertBits`,
+  `Bech32Decoded`'s `internal` constructor, `CardanoHrp.fromValue`) keep working across
+  subpackages without being widened to `public`. Gradle module splits are deferred until
+  code and dependency pressure justify them. See `docs/DECISIONS/0003-core-package-structure.md`.
+- Files moved (with updated `package` lines and added `import org.sarmidev.kardano.KardanoResult`
+  / `...encoding.hex.Hex` where needed); `Cbor.kt`'s nested-type imports were repointed to
+  `org.sarmidev.kardano.encoding.cbor`. Tests were moved to mirror the new packages.
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass), `./gradlew :core:testAndroidHostTest` (pass),
+  `./gradlew :core:compileTestKotlinIosSimulatorArm64` (iOS test sources compile),
+  `./gradlew :shared:jvmTest :shared:compileKotlinIosSimulatorArm64` (pass; `:shared` and
+  sample apps build with no source changes).
+
+Docs updated:
+
+- `docs/DECISIONS/0003-core-package-structure.md` (new), `core/README.md` (package layout),
+  `docs/ROADMAP.md` (Block 0.6.5), `docs/HANDOFF.md`.
+
+Next recommended task:
+
+- Block 0.7 (Address Parsing And Structural Validation): introduce the deferred `Address`
+  value type and the new `org.sarmidev.kardano.address` package with structural CIP-19
+  validation on top of `CardanoBech32` / `Cbor`, preserving and checking the network id.
+  No crypto, no signing, no dependencies; cite CIP-19 vectors.
+
+### Previous Session Summary
 
 Date: 2026-06-29
 
@@ -264,7 +328,7 @@ Next recommended task:
   value type with structural CIP-19 validation on top of `CardanoBech32` / `Cbor`, preserving
   and checking the network id. No crypto, no signing, no dependencies; cite CIP-19 vectors.
 
-### Previous Session Summary
+### Earlier Session Summary
 
 Date: 2026-06-29
 
@@ -327,7 +391,7 @@ Next recommended task:
   `CBOR_MAX_COLLECTION_ELEMENTS`, enforce canonical map key ordering, reject duplicate keys,
   with RFC 8949 Appendix A vectors. No dependencies; no crypto or signing.
 
-### Earlier Session Summary
+### Older Session Summary
 
 Date: 2026-06-29
 
@@ -361,7 +425,7 @@ Files changed this step:
 - `core/src/commonTest/kotlin/org/sarmidev/kardano/CardanoBech32Test.kt` (new)
 - `core/README.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`
 
-### Older Session Summary
+### Oldest Session Summary
 
 Date: 2026-06-29
 

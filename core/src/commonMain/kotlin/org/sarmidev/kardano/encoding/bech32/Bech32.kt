@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.bech32
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A bounded, UI-free generic Bech32 and Bech32m codec.

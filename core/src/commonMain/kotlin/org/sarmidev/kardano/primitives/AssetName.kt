@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.primitives
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A structural container for a Cardano asset name of [MIN_SIZE]..[MAX_SIZE] bytes.

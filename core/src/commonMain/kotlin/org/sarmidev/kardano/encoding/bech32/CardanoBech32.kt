@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.bech32
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A bounded, UI-free Cardano-facing wrapper over the generic [Bech32] codec.

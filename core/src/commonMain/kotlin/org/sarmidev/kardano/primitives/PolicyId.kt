@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.primitives
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A structural container for a 28-byte Cardano policy id (a minting-policy script hash).

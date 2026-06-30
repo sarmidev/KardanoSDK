@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.hex
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A bounded, UI-free hexadecimal (base-16) encoder and decoder.

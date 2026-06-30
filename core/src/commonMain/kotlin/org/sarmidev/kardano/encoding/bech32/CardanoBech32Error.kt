@@ -1,4 +1,6 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.bech32
+
+import org.sarmidev.kardano.KardanoResult
 
 /**
  * A typed error produced when [CardanoBech32.encode] or [CardanoBech32.decode] rejects its

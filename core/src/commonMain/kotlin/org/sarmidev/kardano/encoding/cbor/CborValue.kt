@@ -1,4 +1,4 @@
-package org.sarmidev.kardano
+package org.sarmidev.kardano.encoding.cbor
 
 /**
  * A decoded or to-be-encoded CBOR value from the Phase 0 definite-length subset.

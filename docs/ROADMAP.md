@@ -382,6 +382,36 @@ Acceptance criteria:
 - Bignum/BigInteger support is explicitly in or out of Phase 0. (Out — rejected per ADR-0001.)
 - Tests use RFC 8949 Appendix A vectors for supported types; no AI-invented protocol vectors.
 
+### 0.6.5 Core Package Organization
+
+Status: complete.
+
+Goal:
+
+Reorganize the flat `org.sarmidev.kardano` package in `:core` into purpose-named packages
+before Block 0.7, with no behavior change.
+
+Outcome:
+
+- Moved the existing `:core` sources into `org.sarmidev.kardano.primitives`,
+  `org.sarmidev.kardano.encoding.hex`, `org.sarmidev.kardano.encoding.bech32`, and
+  `org.sarmidev.kardano.encoding.cbor`. `KardanoResult` and `Platform` / `getPlatform`
+  stay at the root package; `:shared` and the sample apps are untouched.
+- This is a package move only (no new Gradle modules, no dependencies, no behavior change).
+  Class/type names are unchanged; in this pre-alpha SDK the fully qualified names and
+  imports changed. Gradle module splits are deferred. See
+  `docs/DECISIONS/0003-core-package-structure.md`.
+- `org.sarmidev.kardano.address` is intentionally not created yet; it arrives with the real
+  code in Block 0.7.
+
+Acceptance criteria:
+
+- `:core` compiles on common, JVM, Android, and iOS simulator test sources.
+- `:core:jvmTest` and `:core:testAndroidHostTest` pass; `:shared` builds with no source
+  changes.
+- No `internal` API was widened to `public`; `explicitApi()` still holds.
+- No dependencies or Gradle module changes.
+
 ### 0.7 Address Parsing And Structural Validation
 
 Goal:
