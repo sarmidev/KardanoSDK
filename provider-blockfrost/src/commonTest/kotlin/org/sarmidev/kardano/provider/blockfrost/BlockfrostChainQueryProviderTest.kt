@@ -1,0 +1,194 @@
+package org.sarmidev.kardano.provider.blockfrost
+
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.request.HttpRequestData
+import io.ktor.client.request.HttpResponseData
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import kotlinx.coroutines.test.runTest
+import org.sarmidev.kardano.KardanoResult
+import org.sarmidev.kardano.address.Address
+import org.sarmidev.kardano.provider.ProviderError
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * Tests for [BlockfrostChainQueryProvider] using a Ktor [MockEngine] and the sanitized
+ * [BlockfrostFixtures]. No real network, no keys.
+ *
+ * Addresses use CIP-19 test vectors (verbatim from the spec): a testnet enterprise address
+ * for the preprod-bound provider and a mainnet enterprise address for the network-mismatch
+ * case.
+ */
+class BlockfrostChainQueryProviderTest {
+
+    private companion object {
+        // CIP-19 "Test vectors" (verbatim).
+        const val TESTNET_ADDRESS =
+            "addr_test1vz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerspjrlsz"
+        const val MAINNET_ADDRESS =
+            "addr1vx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzers66hrl8"
+    }
+
+    // ----- getUtxos -----
+
+    @Test
+    fun getUtxosMapsSinglePageAndKeepsOnlyLovelace() = runTest {
+        val provider = providerReturning(BlockfrostFixtures.UTXOS_SINGLE_PAGE)
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertEquals(2, utxos.size)
+        assertEquals(0L, utxos[0].ref.outputIndex)
+        assertEquals(5_000_000L, utxos[0].value.coin.value)
+        // Second entry carried a native asset; only the lovelace component is mapped.
+        assertEquals(1L, utxos[1].ref.outputIndex)
+        assertEquals(2_000_000L, utxos[1].value.coin.value)
+    }
+
+    @Test
+    fun getUtxosPaginatesUntilShortPage() = runTest {
+        // Page 1 is a full page (100), page 2 is short (1), so paging stops after page 2.
+        val provider = provider { request ->
+            when (request.url.parameters["page"]) {
+                "1" -> json(BlockfrostFixtures.utxoPage(100))
+                "2" -> json(BlockfrostFixtures.utxoPage(1))
+                else -> json("[]")
+            }
+        }
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertEquals(101, utxos.size)
+    }
+
+    @Test
+    fun getUtxosTreats404AsEmpty() = runTest {
+        val provider = provider { json("{\"status_code\":404}", HttpStatusCode.NotFound) }
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertTrue(utxos.isEmpty())
+    }
+
+    @Test
+    fun getUtxosFailsOnNetworkMismatchWithoutCallingBackend() = runTest {
+        var called = false
+        val provider = provider {
+            called = true
+            json("[]")
+        }
+        val error = err(provider.getUtxos(address(MAINNET_ADDRESS)))
+        assertTrue(error is ProviderError.NetworkMismatch)
+        assertEquals(false, called)
+    }
+
+    @Test
+    fun getUtxosMapsBadHashToDeserialization() = runTest {
+        val provider = providerReturning(BlockfrostFixtures.UTXOS_BAD_HASH)
+        val error = err(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertTrue(error is ProviderError.Deserialization)
+    }
+
+    // ----- getProtocolParameters -----
+
+    @Test
+    fun getProtocolParametersMapsFields() = runTest {
+        val provider = providerReturning(BlockfrostFixtures.EPOCH_PARAMETERS)
+        val params = ok(provider.getProtocolParameters())
+        assertEquals(44L, params.minFeeCoefficient)
+        assertEquals(155_381L, params.minFeeConstant)
+        assertEquals(2_000_000L, params.keyDeposit)
+        assertEquals(500_000_000L, params.poolDeposit)
+        assertEquals(16_384L, params.maxTxSize)
+        assertEquals(4_310L, params.coinsPerUtxoByte)
+    }
+
+    @Test
+    fun getProtocolParametersMapsMalformedNumberToDeserialization() = runTest {
+        val provider = providerReturning(BlockfrostFixtures.EPOCH_PARAMETERS_MALFORMED)
+        val error = err(provider.getProtocolParameters())
+        assertTrue(error is ProviderError.Deserialization)
+    }
+
+    @Test
+    fun getProtocolParametersMapsInvalidJsonToDeserialization() = runTest {
+        val provider = providerReturning("not json at all")
+        val error = err(provider.getProtocolParameters())
+        assertTrue(error is ProviderError.Deserialization)
+    }
+
+    // ----- getTip -----
+
+    @Test
+    fun getTipMapsBlock() = runTest {
+        val provider = providerReturning(BlockfrostFixtures.BLOCK_LATEST)
+        val tip = ok(provider.getTip())
+        assertEquals(50_000_000L, tip.slot)
+        assertEquals(2_000_000L, tip.blockHeight)
+    }
+
+    @Test
+    fun getTipMaps404ToNotFound() = runTest {
+        val provider = provider { json("{}", HttpStatusCode.NotFound) }
+        val error = err(provider.getTip())
+        assertTrue(error is ProviderError.NotFound)
+    }
+
+    // ----- error mapping -----
+
+    @Test
+    fun maps429ToRateLimited() = runTest {
+        val provider = provider { json("{}", HttpStatusCode.TooManyRequests) }
+        val error = err(provider.getTip())
+        assertTrue(error is ProviderError.RateLimited)
+    }
+
+    @Test
+    fun mapsForbiddenToRemoteStatus() = runTest {
+        val provider = provider { json("{}", HttpStatusCode.Forbidden) }
+        val error = err(provider.getProtocolParameters())
+        assertTrue(error is ProviderError.RemoteStatus)
+        assertEquals(403, error.code)
+    }
+
+    // ----- helpers -----
+
+    private fun address(bech32: String): Address {
+        val result = Address.parse(bech32)
+        assertTrue(result is KardanoResult.Ok, "test address vector must parse: $bech32")
+        return result.value
+    }
+
+    private fun MockRequestHandleScope.json(
+        body: String,
+        status: HttpStatusCode = HttpStatusCode.OK,
+    ): HttpResponseData =
+        respond(body, status, headersOf(HttpHeaders.ContentType, "application/json"))
+
+    private fun provider(
+        network: BlockfrostNetwork = BlockfrostNetwork.PREPROD,
+        handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
+    ): BlockfrostChainQueryProvider {
+        val config = BlockfrostConfig(projectId = "test-project-id", network = network)
+        val client = HttpClient(MockEngine) {
+            configureBlockfrost(config)
+            engine { addHandler(handler) }
+        }
+        return BlockfrostChainQueryProvider(config, client)
+    }
+
+    private fun providerReturning(
+        body: String,
+        status: HttpStatusCode = HttpStatusCode.OK,
+    ): BlockfrostChainQueryProvider = provider { json(body, status) }
+
+    private fun <T> ok(result: KardanoResult<T, ProviderError>): T {
+        assertTrue(result is KardanoResult.Ok, "expected Ok but was $result")
+        return result.value
+    }
+
+    private fun err(result: KardanoResult<*, ProviderError>): ProviderError {
+        assertTrue(result is KardanoResult.Err, "expected Err but was $result")
+        return result.error
+    }
+}

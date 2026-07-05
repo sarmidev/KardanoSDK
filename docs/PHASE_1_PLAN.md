@@ -208,19 +208,92 @@ Solo se usan vectores publicos de CIP-19 — sin fondos reales ni datos privados
 
 ### 1.3 Provider Read-Only Boundary
 
-Definir y probar la capa de consulta de red antes de crear wallets.
+Definir y probar la capa de consulta de red antes de crear wallets. El bloque se divide en
+1.3a (interfaz + modelos + mock, sin red ni secrets) y 1.3b (Blockfrost preprod real,
+diferido). Ver `docs/DECISIONS/0006-provider-boundary-and-strategy.md` (ADR-0006, Accepted).
 
 Objetivo:
 
-- Definir una interfaz de provider para consultas read-only.
+- Definir una interfaz de provider para consultas read-only, neutral respecto al backend.
 - Consultar UTxOs de una direccion.
-- Consultar parametros necesarios para transacciones futuras, si se decide incluirlos ya.
-- Modelar errores de red con tipos claros.
-- Implementar el primer provider de preprod o una capa mock/stub si se decide por fases.
+- Consultar parametros de protocolo necesarios para el fee/build futuro.
+- Modelar errores con tipos claros y neutrales (sin filtrar formas de Blockfrost).
+- Empezar con una implementacion mock/stub; el provider real de Blockfrost queda para 1.3b.
 
-Checkpoint Android:
+#### 1.3a Interfaz + modelos + mock (este bloque)
 
-- Pegar una direccion preprod y ver sus UTxOs o un estado "sin UTxOs" desde la app.
+Status: complete.
+
+Outcome:
+
+- Nuevo modulo Gradle KMP `:provider` (Android library + JVM + iosArm64 + iosSimulatorArm64,
+  `explicitApi()`), que depende solo de `:core`. Justificado por *ownership* (el provider no
+  puede vivir en `:core`, que es dependency-free, ni quedarse en `:shared`, host de
+  muestra/UI). `:provider` `commonMain` no agrega dependencias; solo `commonTest` usa
+  `kotlinx-coroutines-test` (pinneado en el catalogo).
+- Paquete `org.sarmidev.kardano.provider`:
+  - `ChainQueryProvider`: interfaz read-only con `val network: Network` y funciones `suspend`
+    `getUtxos(Address)`, `getProtocolParameters()`, `getTip()`, todas devolviendo
+    `KardanoResult` (nunca lanzan). Submit **no** esta aqui: ADR-0006 refina ADR-0005 §5
+    separando la consulta read-only de un futuro `TxSubmitProvider` (Bloque 1.11).
+  - Modelos ADA-only y neutrales: `Utxo` (`UtxoRef` de `:core` + `Value`), `Value` (envuelve
+    `Lovelace`, deja espacio para multiasset futuro sin prometer compatibilidad), `ProtocolParameters`
+    (campos de fee/build como `Long`), `ChainTip`. `ProviderError` sellado (`Transport`,
+    `RemoteStatus(code)` transport-agnostico —no `HttpStatus`—, `NotFound`, `Deserialization`,
+    `RateLimited`, `NetworkMismatch`, `Unknown`).
+  - `InMemoryChainQueryProvider`: doble de muestra/test con datos **fake / solo de prueba**
+    (sin red, sin fondos, sin secrets, no son fixtures de cadena). Reconoce dos direcciones
+    seed documentadas (vectores CIP-19 testnet publicos): una con UTxOs
+    (`SEED_ADDRESS_WITH_UTXOS`) y otra vacia (`SEED_ADDRESS_EMPTY`). Devuelve `NetworkMismatch`
+    si la red de la direccion no coincide con la del provider (`Network.TESTNET` por defecto;
+    `TESTNET` no identifica preprod frente a preview por si solo).
+- Playground (`:shared` depende de `:provider`): nueva seccion "Provider (mock)" con campo de
+  direccion, botones para rellenar las direcciones seed, "Load UTxOs (mock)" y "Load protocol
+  params (mock)"; muestra filas de UTxO, el estado "sin UTxOs", parametros y errores tipados,
+  todo etiquetado como fake/test-only. Las llamadas `suspend` se disparan con `LaunchedEffect`
+  (sin dependencias de coroutines nuevas en `:shared`). El mapeo puro se extrajo a funciones
+  `internal` no-suspend (`mapUtxosResult`, `mapParamsResult`, `presentProviderError`) para
+  poder testear sin coroutines.
+- Tests: `:provider` `commonTest` (con `runTest`) cubre UTxOs seed, estado vacio,
+  `NetworkMismatch`, parametros y tip. `:shared` `commonTest` cubre el mapeo del presenter
+  (success/empty/failure/params y las siete variantes de `ProviderError`).
+- Verificacion: `./gradlew :core:jvmTest :provider:jvmTest :provider:testAndroidHostTest
+  :provider:compileKotlinIosSimulatorArm64 :shared:jvmTest :shared:testAndroidHostTest
+  :shared:compileKotlinIosSimulatorArm64 :androidApp:assembleDebug` — todos BUILD SUCCESSFUL.
+
+#### 1.3b-pre Address source-string microchange (completado)
+
+- Cambio aditivo minimo en `:core`: `Address` expone `public val bech32`, el string validado
+  exacto pasado a `Address.parse`, hilado por los caminos fixed-size y pointer y excluido de
+  `equals`/`hashCode`/`toString`. Es la representacion fuente validada, no un `toBech32`
+  (el encoding/roundtrip sigue diferido a 1.7). Desbloquea los endpoints de Blockfrost
+  indexados por direccion sin anadir un encoder. Se landeo aparte por tocar API publica.
+
+#### 1.3b Blockfrost preprod real (completado)
+
+- Modulo `:provider-blockfrost` (depende de `:provider` + `:core`) con `BlockfrostChainQueryProvider`,
+  cliente HTTP Ktor (engines OkHttp/CIO/Darwin) y kotlinx-serialization, todo aislado en el
+  modulo (`:core` y `:provider` siguen sin HTTP). DTOs `internal @Serializable`; mapeo a los
+  modelos neutrales (UTxOs con paginacion y suma ADA-only, parametros, tip, `404`-como-vacio en
+  `getUtxos`, mapeo de errores a `Transport`/`RateLimited`/`RemoteStatus`/`NotFound`/`Deserialization`).
+  `BlockfrostNetwork { PREPROD, PREVIEW, MAINNET }` mapea a `Network`. API key en runtime/env/
+  `local.properties` (sin secrets en el repo). Tests con `MockEngine` + fixtures sanitizadas;
+  test de integracion real opt-in condicionado a `BLOCKFROST_PROJECT_ID` (omitido por defecto).
+  Consume el `Address.bech32` ya landeado (1.3b-pre); no lo introduce. Submit sigue en 1.11
+  (ADR-0006). Ver ADR-0007.
+
+Checkpoint Android (1.3a, mock):
+
+- Abrir la app, ir a "Provider"; con la direccion seed con UTxOs -> lista de UTxOs
+  (`txHash#index -> lovelace`); con la direccion seed vacia -> estado "sin UTxOs"; direccion
+  invalida -> error tipado sin crash; "Load protocol params" -> filas de parametros.
+  Todo con la etiqueta fake/test-only, sin red ni secrets.
+
+Checkpoint Android (1.3b, live) — a ejecutar por el owner con su propia key:
+
+- Activar "Use live Blockfrost (preprod)", pegar un `project_id` de preprod y un `addr_test1...`
+  real -> UTxOs/parametros reales; key invalida -> `RemoteStatus`/`Transport` tipado sin crash;
+  direccion sin uso -> estado vacio. La key no se persiste.
 
 ### 1.4 Crypto Evaluation And Module Decision
 
@@ -393,9 +466,10 @@ Abrir la app Android y comprobar funcionalidad despues de:
 
 ## Siguiente paso
 
-`1.1 Phase 1 Scope And Architecture Plan` y `1.2 Android SDK Playground` estan completos.
-El siguiente paso es `1.3 Provider Read-Only Boundary`: definir la interfaz de provider
-read-only, una implementacion mock/stub, y el primer wiring real con Blockfrost en preprod,
-manteniendo `:core` libre de dependencias. Este bloque es probable disparador de un modulo
-Gradle nuevo (necesita dependencia HTTP).
+`1.1`, `1.2`, `1.3a` (interfaz + modelos + mock + Playground en `:provider`), `1.3b-pre`
+(`Address.bech32` en `:core`) y `1.3b` (`:provider-blockfrost`: `BlockfrostChainQueryProvider`
+con Ktor + kotlinx-serialization, mapeo a modelos neutrales, toggle live en el Playground y
+ADR-0007) estan completos. El siguiente paso es la pista de crypto: `1.4 Crypto Evaluation And
+Module Decision` (evaluar librerias/bindings contra ADR-0004 y decidir `:crypto`), que
+desbloquea wallet y signing. No hay wallet, crypto, tx ni signing todavia.
 

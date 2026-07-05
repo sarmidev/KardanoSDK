@@ -74,8 +74,8 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 1 - MVP Transaction Flow (Blocks 1.1 and 1.2 complete; Block 1.3 is next). Phase 0 - Core
-  Foundation closed below for reference.
+- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, and 1.3a complete; Block 1.3b is next).
+  Phase 0 - Core Foundation closed below for reference.
 
 Block status:
 
@@ -196,6 +196,26 @@ Block status:
   input test, and 1 Empty-state test. All
   build/test commands pass (BUILD SUCCESSFUL). `:core` untouched; no new Gradle modules or
   dependencies. Manual Android checkpoint documented in `docs/PHASE_1_PLAN.md` Block 1.2.
+- Block 1.3a Provider Read-Only Boundary (interface + models + mock): complete. Added a new
+  KMP Gradle module `:provider` (Android library + JVM + iosArm64 + iosSimulatorArm64,
+  `explicitApi()`) depending only on `:core`; justified by ownership (provider logic must not
+  live in dependency-free `:core` nor stay permanently in the `:shared` sample host).
+  `:provider` `commonMain` adds no dependency; only `commonTest` uses `kotlinx-coroutines-test`
+  (pinned in the catalog). Package `org.sarmidev.kardano.provider`: `ChainQueryProvider`
+  (read-only; `val network: Network`; suspend `getUtxos` / `getProtocolParameters` / `getTip`;
+  all return `KardanoResult`, never throw), provider-neutral ADA-only models (`Utxo`, `Value`,
+  `ProtocolParameters`, `ChainTip`) and a sealed `ProviderError` (`Transport`,
+  `RemoteStatus(code)` — transport-agnostic, not `HttpStatus` — `NotFound`, `Deserialization`,
+  `RateLimited`, `NetworkMismatch`, `Unknown`), and `InMemoryChainQueryProvider` (a documented
+  fake/test-only mock with two seed addresses: `SEED_ADDRESS_WITH_UTXOS`, `SEED_ADDRESS_EMPTY`,
+  both public CIP-19 testnet vectors). Submit is deliberately not in the read-only interface:
+  ADR-0006 refines ADR-0005 §5 by splitting query from a future `TxSubmitProvider` (Block
+  1.11). The Playground gained a "Provider (mock)" section (`:shared` now depends on
+  `:provider`), wired via `LaunchedEffect` (no new coroutine dep in `:shared`); pure mapping
+  extracted to `internal` non-suspend functions for coroutine-free tests. Tests: `:provider`
+  `commonTest` (`runTest`) + `:shared` presenter mapping tests. ADR-0006 added; ADR-0005 §5
+  carries a one-line refinement cross-reference. All builds/tests pass. See
+  `docs/DECISIONS/0006-provider-boundary-and-strategy.md` and `docs/PHASE_1_PLAN.md` Block 1.3.
 - Block 1.1 Phase 1 Scope And Architecture Plan: complete (previous session).
   Recorded in `docs/PHASE_1_PLAN.md` ("Decisiones del Bloque 1.1") and
   `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted): the MVP
@@ -216,21 +236,43 @@ Block status:
   (`./gradlew :androidApp:assembleDebug :core:jvmTest`); no app-launch claim made from that
   command alone. See `docs/ROADMAP.md` Phase 1 block sequence, Block 1.1 outcome.
 
-Next recommended task: **Block 1.3 (Provider Read-Only Boundary)** — define a minimal
-read-only provider interface, a mock/stub implementation, and the first Blockfrost preprod
-wiring. This is the likely trigger for a new Gradle module (needs an HTTP client dependency)
-and a provider-selection ADR (candidate ADR-0006). No wallet, crypto, or tx code yet. See
-`docs/PHASE_1_PLAN.md` Block 1.3 and `docs/ROADMAP.md` Phase 1 block sequence.
+**Block 1.3 is complete (1.3a + 1.3b-pre + 1.3b).** 1.3b-pre landed `Address.bech32` in
+`:core` (the exact validated `Address.parse` input string, threaded through the fixed-size and
+pointer paths, excluded from `equals`/`hashCode`/`toString`; it is the validated source
+representation, not a `toBech32` re-encoder — encoding/round-trip stays deferred to Block 1.7).
+1.3b then landed `:provider-blockfrost`: `BlockfrostChainQueryProvider` over Ktor (OkHttp/CIO/
+Darwin engines) + kotlinx-serialization, with `internal @Serializable` DTOs mapped to the
+neutral `:provider` models (UTxO pagination + ADA-only summation, protocol params, tip,
+`404`-as-empty in `getUtxos`, and error mapping to `Transport`/`RateLimited`/`RemoteStatus`/
+`NotFound`/`Deserialization`). `BlockfrostNetwork { PREPROD, PREVIEW, MAINNET }` maps to
+`Network`. HTTP status codes are mapped to `RemoteStatus` only inside `:provider-blockfrost`;
+`:core` and `:provider` stay HTTP-free. Tests use a Ktor `MockEngine` + sanitized fixtures; a
+live preprod test is opt-in via `BLOCKFROST_PROJECT_ID` and skipped by default. The Playground
+gained a "Use live Blockfrost (preprod)" toggle and a `project_id` field held in non-persistent
+Compose state (`remember`, never stored/logged); Android got the `INTERNET` permission. No
+secrets are committed. See `docs/DECISIONS/0007-http-client-and-blockfrost-provider.md`.
+
+Next recommended task: **Block 1.4 (Crypto Evaluation And Module Decision)** — evaluate
+concrete crypto libraries/bindings against ADR-0004 and decide whether to create `:crypto` now
+or start with an isolated package. This unblocks wallet (Block 1.8) and signing. No wallet,
+crypto, tx, or signing code yet. See `docs/DECISIONS/0004-crypto-strategy.md`,
+`docs/PHASE_1_PLAN.md` Block 1.4, and `docs/ROADMAP.md` Phase 1 block sequence.
 
 Current modules:
 
 - `:core` (UI-free SDK core seed)
-- `:shared` (sample/UI host; builds the iOS `Shared` framework)
+- `:provider` (read-only chain query boundary + in-memory mock; added in Block 1.3a; depends
+  only on `:core`, no third-party `commonMain` dependency)
+- `:provider-blockfrost` (Blockfrost preprod provider: Ktor + kotlinx-serialization; added in
+  Block 1.3b; depends on `:provider` + `:core`; the only module with an HTTP dependency)
+- `:shared` (sample/UI host; builds the iOS `Shared` framework; depends on `:core`,
+  `:provider`, and `:provider-blockfrost`)
 - `:androidApp`, `:desktopApp`, and `iosApp` (Xcode entry point)
 
-No new Gradle module was created by Block 1.1; module/package strategy criteria are recorded
-in ADR-0005 (see above), and actual module creation is deferred to the first implementation
-block that introduces crypto/provider/network dependencies.
+`:provider` was created in Block 1.3a and `:provider-blockfrost` in Block 1.3b, each justified
+by the ownership/dependency boundary in ADR-0005/ADR-0006/ADR-0007. Further module splits
+(`:crypto`, `:wallet`, `:tx`) remain deferred to the block that introduces their dependency/ownership
+pressure.
 
 Current priority:
 
@@ -341,6 +383,87 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-05
+
+Summary:
+
+- Block 1.3a (Provider Read-Only Boundary — interface + models + mock): first Gradle module
+  extraction of Phase 1. Created `:provider` (KMP: Android library + JVM + iosArm64 +
+  iosSimulatorArm64, `explicitApi()`), depending only on `:core`. `commonMain` adds no
+  dependency; `commonTest` adds `kotlinx-coroutines-test` (pinned in the version catalog).
+- Package `org.sarmidev.kardano.provider`:
+  - `ChainQueryProvider` — read-only interface: `val network: Network`; suspend `getUtxos`,
+    `getProtocolParameters`, `getTip`; all return `KardanoResult` and never throw (compatible
+    with Swift/ObjC interop). Submit is intentionally excluded (ADR-0006 refines ADR-0005 §5;
+    a future `TxSubmitProvider` lands in Block 1.11).
+  - Provider-neutral ADA-only models: `Utxo` (`UtxoRef` + `Value`), `Value` (wraps `Lovelace`;
+    leaves room for future multiasset without promising compatibility), `ProtocolParameters`
+    (fee/build `Long` fields), `ChainTip`. Sealed `ProviderError` with a transport-agnostic
+    `RemoteStatus(code)` (not `HttpStatus`), plus `Transport`, `NotFound`, `Deserialization`,
+    `RateLimited`, `NetworkMismatch`, `Unknown`. No Blockfrost-specific shapes.
+  - `InMemoryChainQueryProvider` — a documented sample/test double with hardcoded fake,
+    test-only data (no network, no funds, no secrets, not chain fixtures). Two documented seed
+    addresses (public CIP-19 testnet vectors): `SEED_ADDRESS_WITH_UTXOS` (returns fake UTxOs)
+    and `SEED_ADDRESS_EMPTY` (returns an empty list). Returns `NetworkMismatch` when the
+    address network differs from the bound network (default `Network.TESTNET`).
+- Playground: `:shared` now depends on `:provider`; added a "Provider (mock)" section
+  (address field, seed-fill buttons, "Load UTxOs (mock)", "Load protocol params (mock)")
+  labeled fake/test-only. Suspend calls run via `LaunchedEffect` keyed on a request token, so
+  no coroutine dependency was added to `:shared`. Pure result mapping was extracted to
+  `internal` non-suspend functions (`mapUtxosResult`, `mapParamsResult`, `presentProviderError`)
+  so `:shared` tests stay coroutine-free.
+- Tests: `:provider` `commonTest` (`runTest`) — seeded UTxOs, empty state, `NetworkMismatch`,
+  protocol params, tip. `:shared` `commonTest` — presenter mapping (success/empty/failure/
+  params + all seven `ProviderError` variants).
+- Docs: added ADR-0006 (`docs/DECISIONS/0006-provider-boundary-and-strategy.md`, Accepted);
+  added a one-line refinement cross-reference to ADR-0005 §5; expanded `docs/PHASE_1_PLAN.md`
+  Block 1.3 into 1.3a (complete) / 1.3b (deferred); updated `docs/ROADMAP.md` (status + module
+  list); added `provider/README.md`; updated `shared/README.md` (Provider mock section + seed
+  addresses).
+
+Files changed this step:
+
+- `settings.gradle.kts` (include `:provider`)
+- `gradle/libs.versions.toml` (`kotlinx-coroutinesTest` library)
+- `provider/build.gradle.kts` (new)
+- `provider/src/commonMain/kotlin/org/sarmidev/kardano/provider/` — `ChainQueryProvider.kt`,
+  `Utxo.kt`, `Value.kt`, `ProtocolParameters.kt`, `ChainTip.kt`, `ProviderError.kt`,
+  `InMemoryChainQueryProvider.kt` (all new)
+- `provider/src/commonTest/kotlin/org/sarmidev/kardano/provider/InMemoryChainQueryProviderTest.kt` (new)
+- `provider/README.md` (new)
+- `shared/build.gradle.kts` (`implementation(projects.provider)`)
+- `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenter.kt`,
+  `PlaygroundScreen.kt` (provider section)
+- `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundProviderPresenterTest.kt` (new)
+- `docs/DECISIONS/0006-provider-boundary-and-strategy.md` (new),
+  `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (refinement cross-ref),
+  `docs/PHASE_1_PLAN.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`, `shared/README.md`
+
+Tests run:
+
+- `./gradlew :provider:jvmTest` (pass)
+- `./gradlew :shared:jvmTest :shared:testAndroidHostTest :shared:compileKotlinIosSimulatorArm64
+  :provider:testAndroidHostTest :provider:compileKotlinIosSimulatorArm64` (pass / compile)
+- `./gradlew :core:jvmTest :provider:jvmTest :androidApp:assembleDebug` (pass / APK built)
+
+Manual Android checkpoint — to be run and recorded by the owner:
+
+1. Open the app, scroll to "Provider (mock)".
+2. Tap "Seed: has UTxOs", then "Load UTxOs (mock)" → a list of fake UTxO rows
+   (`txHash#index → lovelace`).
+3. Tap "Seed: empty", then "Load UTxOs (mock)" → "No UTxOs" state (not an error).
+4. Enter an invalid address → typed error message, no crash.
+5. Tap "Load protocol params (mock)" → protocol parameter rows.
+
+Next recommended task:
+
+- **Block 1.3b (Blockfrost preprod provider)**: `:provider-blockfrost` with an HTTP client,
+  an API-key config strategy (no secrets committed), sanitized fixtures, and error-mapping
+  tests. Alternatively advance the crypto track (Blocks 1.4/1.5) in parallel. See
+  `docs/DECISIONS/0006-provider-boundary-and-strategy.md`.
+
+### Previous Session Summary
 
 Date: 2026-07-05
 

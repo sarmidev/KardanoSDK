@@ -42,6 +42,8 @@ kotlin {
         }
         commonMain.dependencies {
             implementation(projects.core)
+            implementation(projects.provider)
+            implementation(projects.providerBlockfrost)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)

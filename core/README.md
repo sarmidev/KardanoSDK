@@ -118,7 +118,10 @@ this reorganization, but fully qualified names and imports moved into the packag
   wraparound is relied on). `AddressCredential` and `AddressPointer` have private constructors
   and are built only by the parser through length/range-validated internal factories. All byte
   arrays are defensively copied and use content equality; `toString` renders no credential
-  bytes. **Structural validation only**: it does not prove an address exists on-chain, is
+  bytes. It also exposes `bech32`, the validated source string exactly as passed to
+  `Address.parse` (not an independently encoded value and not a `toBech32` re-encoder, which
+  stays deferred to Block 1.7); `bech32` is excluded from `equals`/`hashCode`/`toString` so the
+  structural equality contract is unchanged. **Structural validation only**: it does not prove an address exists on-chain, is
   owned, is controllable, or is spendable, it does not verify a credential is a real
   key/script hash, and it does not check that a pointer refers to an on-chain certificate.
   Byron (type 8) addresses, Base58, and raw-byte/hex constructors are deferred beyond Block

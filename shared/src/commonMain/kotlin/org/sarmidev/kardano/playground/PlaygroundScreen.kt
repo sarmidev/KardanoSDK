@@ -13,8 +13,10 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,14 +26,23 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.sarmidev.kardano.Greeting
 import org.sarmidev.kardano.address.Address
+import org.sarmidev.kardano.provider.ChainQueryProvider
+import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
+import org.sarmidev.kardano.provider.blockfrost.BlockfrostChainQueryProvider
+import org.sarmidev.kardano.provider.blockfrost.BlockfrostConfig
 
 /**
  * The SDK Playground screen: a diagnostic surface for visually verifying existing `:core`
  * SDK behavior on Android (Block 1.2).
  *
  * Covers [Address.parse] with typed [org.sarmidev.kardano.address.AddressError] display,
- * a Hex decoder, and a CBOR decoder. This is sample/diagnostic code in `:shared` and is
- * not part of the SDK public API. No wallet, crypto, provider, or transaction logic.
+ * a Hex decoder, a CBOR decoder, and a read-only Provider section. The provider section
+ * defaults to the in-memory mock ([InMemoryChainQueryProvider], fake/test-only, no network);
+ * a "Use live Blockfrost (preprod)" toggle switches to a live
+ * [BlockfrostChainQueryProvider] built from a runtime `project_id`. That key is held only in
+ * non-persistent Compose state (never stored or logged) and live calls hit real preprod (test
+ * funds). This is sample/diagnostic code in `:shared` and is not part of the SDK public API.
+ * No wallet, crypto, or transaction logic.
  */
 @Composable
 internal fun PlaygroundScreen() {
@@ -45,6 +56,45 @@ internal fun PlaygroundScreen() {
 
     var cborInput by remember { mutableStateOf("") }
     var cborResult by remember { mutableStateOf<CborPresentation?>(null) }
+
+    val mockProvider = remember { InMemoryChainQueryProvider() }
+    var providerAddressInput by remember {
+        mutableStateOf(InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS)
+    }
+    // Live-Blockfrost toggle and key. The key is held only in non-persistent Compose state
+    // (remember, not rememberSaveable): it is never persisted, saved, or logged.
+    var useLive by remember { mutableStateOf(false) }
+    var projectId by remember { mutableStateOf("") }
+    val liveProvider = remember(projectId) {
+        projectId.trim().takeIf { it.isNotBlank() }?.let { key ->
+            BlockfrostChainQueryProvider.create(BlockfrostConfig(projectId = key))
+        }
+    }
+    val activeProvider: ChainQueryProvider =
+        if (useLive && liveProvider != null) liveProvider else mockProvider
+
+    var utxosResult by remember {
+        mutableStateOf<ProviderUtxosPresentation>(ProviderUtxosPresentation.Empty)
+    }
+    var utxosRequest by remember { mutableStateOf(0) }
+    var paramsResult by remember {
+        mutableStateOf<ProviderParamsPresentation>(ProviderParamsPresentation.Empty)
+    }
+    var paramsRequest by remember { mutableStateOf(0) }
+
+    // One-shot suspend loads triggered by incrementing a request token. Using LaunchedEffect
+    // keeps the screen dependent only on the Compose runtime (no extra coroutine artifact).
+    // The effect reads the currently active provider (mock or live) at launch.
+    LaunchedEffect(utxosRequest) {
+        if (utxosRequest == 0) return@LaunchedEffect
+        utxosResult = ProviderUtxosPresentation.Loading
+        utxosResult = PlaygroundPresenter.presentProviderUtxos(activeProvider, providerAddressInput)
+    }
+    LaunchedEffect(paramsRequest) {
+        if (paramsRequest == 0) return@LaunchedEffect
+        paramsResult = ProviderParamsPresentation.Loading
+        paramsResult = PlaygroundPresenter.presentProviderParams(activeProvider)
+    }
 
     Column(
         modifier = Modifier
@@ -131,6 +181,85 @@ internal fun PlaygroundScreen() {
             Text("Decode")
         }
         cborResult?.let { CborResultCard(it) }
+
+        // --- Provider (read-only: mock or live Blockfrost) ---
+        HorizontalDivider()
+        Text("Provider", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = if (useLive) {
+                "Live Blockfrost preprod — real network calls. Your project_id is used only " +
+                    "for these requests and is not stored. Preprod uses test funds."
+            } else {
+                "Read-only query boundary backed by an in-memory mock. Data is " +
+                    "fake/test-only — no network, no funds, no secrets."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Use live Blockfrost (preprod)",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(checked = useLive, onCheckedChange = { useLive = it })
+        }
+        if (useLive) {
+            OutlinedTextField(
+                value = projectId,
+                onValueChange = { projectId = it },
+                label = { Text("Blockfrost project_id (preprod, not stored)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+        }
+        OutlinedTextField(
+            value = providerAddressInput,
+            onValueChange = { providerAddressInput = it },
+            label = { Text("Preprod address (addr_test1…)") },
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 4,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button(
+                onClick = {
+                    providerAddressInput = InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS
+                },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Seed: has UTxOs")
+            }
+            Button(
+                onClick = {
+                    providerAddressInput = InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY
+                },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Seed: empty")
+            }
+        }
+        Button(
+            onClick = { utxosRequest += 1 },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Load UTxOs")
+        }
+        ProviderUtxosCard(utxosResult)
+
+        Button(
+            onClick = { paramsRequest += 1 },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Load protocol params")
+        }
+        ProviderParamsCard(paramsResult)
     }
 }
 
@@ -182,6 +311,69 @@ private fun CborResultCard(presentation: CborPresentation) {
             }
         }
         is CborPresentation.Failure -> ErrorCard(presentation.message)
+    }
+}
+
+@Composable
+private fun ProviderUtxosCard(presentation: ProviderUtxosPresentation) {
+    when (presentation) {
+        is ProviderUtxosPresentation.Empty -> Unit
+        is ProviderUtxosPresentation.Loading -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Loading…",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        is ProviderUtxosPresentation.Success -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "${presentation.rows.size} UTxO(s)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                presentation.rows.forEach { row -> ResultRow(row.label, row.value) }
+            }
+        }
+        is ProviderUtxosPresentation.NoUtxos -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = presentation.message,
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        is ProviderUtxosPresentation.Failure -> ErrorCard(presentation.message)
+    }
+}
+
+@Composable
+private fun ProviderParamsCard(presentation: ProviderParamsPresentation) {
+    when (presentation) {
+        is ProviderParamsPresentation.Empty -> Unit
+        is ProviderParamsPresentation.Loading -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Loading…",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        is ProviderParamsPresentation.Success -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "Protocol params",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                presentation.rows.forEach { row -> ResultRow(row.label, row.value) }
+            }
+        }
+        is ProviderParamsPresentation.Failure -> ErrorCard(presentation.message)
     }
 }
 

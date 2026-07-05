@@ -448,6 +448,45 @@ class AddressTest {
         assertFalse(rendered.contains("2fxv"))
     }
 
+    // ----- Source string (bech32) -----
+
+    @Test
+    fun bech32PreservesFixedSizeSourceString() {
+        // Fixed-size path (enterprise, type 6): the validated source string is preserved
+        // verbatim, exactly as passed to parse.
+        assertEquals(MAINNET_TYPE_06, ok(Address.parse(MAINNET_TYPE_06)).bech32)
+    }
+
+    @Test
+    fun bech32PreservesBaseSourceString() {
+        // Fixed-size path (base, type 0): another fixed-size family for coverage.
+        assertEquals(TESTNET_TYPE_00, ok(Address.parse(TESTNET_TYPE_00)).bech32)
+    }
+
+    @Test
+    fun bech32PreservesPointerSourceString() {
+        // Pointer path (type 4): the variable-length path also threads the source string.
+        assertEquals(MAINNET_TYPE_04, ok(Address.parse(MAINNET_TYPE_04)).bech32)
+        assertEquals(TESTNET_TYPE_05, ok(Address.parse(TESTNET_TYPE_05)).bech32)
+    }
+
+    @Test
+    fun bech32DoesNotAffectEquality() {
+        // bech32 is excluded from equals/hashCode (see Address KDoc). Proving that two
+        // *different* source strings decoding to the *same* Address are still equal is not
+        // constructible through the public API: Bech32 has a unique canonical encoding and
+        // :core has no address encoder yet (deferred to Block 1.7), so no second, differing
+        // source string exists. We therefore assert only that parsing the same string twice
+        // yields equal addresses with equal hash codes and equal source strings; the
+        // exclusion itself is enforced in code and by KDoc and is revisited once an encoder
+        // exists.
+        val a = ok(Address.parse(MAINNET_TYPE_06))
+        val b = ok(Address.parse(MAINNET_TYPE_06))
+        assertEquals(a, b)
+        assertEquals(a.hashCode(), b.hashCode())
+        assertEquals(a.bech32, b.bech32)
+    }
+
     // ----- Invalid / edge cases -----
     // Hand-written rule tests. Each derives its input from a cited CIP-19 vector by
     // decoding, mutating one field, and re-encoding. These are NOT CIP-19 vectors.

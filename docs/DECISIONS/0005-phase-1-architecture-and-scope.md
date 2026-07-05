@@ -113,6 +113,13 @@ minimal in Block 1.3 to avoid locking its shape around Blockfrost's specific res
 before a second provider is evaluated. A concrete provider-selection ADR (candidate ADR-0006)
 is expected when Block 1.3 records its evaluation — not created here.
 
+> **Refinement (ADR-0006, Block 1.3a):** ADR-0006 refines this section by splitting the
+> read-only query boundary (`ChainQueryProvider`: UTxOs, protocol parameters, optional chain
+> tip) from transaction submission. Submit is not part of the read-only interface; it moves to
+> a separate `TxSubmitProvider` in Block 1.11, once local signing exists and a submit-result
+> model is meaningful. The MVP still needs submit; it is only resequenced, not removed. See
+> `docs/DECISIONS/0006-provider-boundary-and-strategy.md`.
+
 ### 6. Transaction strategy
 
 "Minimal ADA transaction" means: one or more inputs selected from the wallet's UTxOs, one

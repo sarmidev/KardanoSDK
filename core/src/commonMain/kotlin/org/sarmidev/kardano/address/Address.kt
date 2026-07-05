@@ -45,6 +45,12 @@ import org.sarmidev.kardano.primitives.Network
  * @property network the network resolved from the header network nibble.
  * @property type the structural address type.
  * @property hrp the human-readable part the address was encoded with.
+ * @property bech32 the validated source representation: the exact Bech32 string that was
+ *   passed to [parse] and accepted. This is the original input that structural validation
+ *   confirmed, not an independently encoded value, and it is deliberately **not** a
+ *   `toBech32` re-encoder: address encoding/round-trip is deferred to a later block (Block
+ *   1.7). It is excluded from [equals], [hashCode], and [toString] so the structural
+ *   equality contract is unchanged.
  * @property paymentCredential the payment credential (CIP-19 payment part), or null for a
  *   reward/stake address. Non-null for base, pointer, and enterprise addresses.
  * @property stakeCredential the stake credential (CIP-19 delegation part), or null for an
@@ -63,6 +69,7 @@ public class Address private constructor(
     public val paymentCredential: AddressCredential?,
     public val stakeCredential: AddressCredential?,
     public val pointer: AddressPointer?,
+    public val bech32: String,
     rawBytes: ByteArray,
 ) {
 
@@ -233,7 +240,7 @@ public class Address private constructor(
             // variable-length chain pointer), so they use a dedicated path instead of the
             // fixed-size check below. paymentKind is non-null (KEY or SCRIPT) for pointer.
             if (type == AddressType.POINTER && paymentKind != null) {
-                return parsePointer(network, hrp, paymentKind, payload)
+                return parsePointer(network, hrp, paymentKind, payload, bech32)
             }
 
             val expectedSize =
@@ -267,7 +274,16 @@ public class Address private constructor(
             }
 
             return KardanoResult.Ok(
-                Address(network, type, hrp, paymentCredential, stakeCredential, null, payload),
+                Address(
+                    network,
+                    type,
+                    hrp,
+                    paymentCredential,
+                    stakeCredential,
+                    null,
+                    bech32,
+                    payload,
+                ),
             )
         }
 
@@ -281,6 +297,7 @@ public class Address private constructor(
             hrp: CardanoHrp,
             paymentKind: CredentialKind,
             payload: ByteArray,
+            bech32: String,
         ): KardanoResult<Address, AddressError> {
             if (payload.size < MIN_POINTER_PAYLOAD_SIZE) {
                 return KardanoResult.Err(AddressError.TruncatedPointer)
@@ -331,6 +348,7 @@ public class Address private constructor(
                     paymentCredential,
                     null,
                     pointer,
+                    bech32,
                     payload,
                 ),
             )

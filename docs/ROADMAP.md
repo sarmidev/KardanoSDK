@@ -16,9 +16,11 @@ Selected targets:
 
 Current priority:
 
-> Phase 0 is closed. Phase 1 Block 1.1 (planning) and Block 1.2 (Android SDK Playground —
-> the first implementation block) are complete. The next step is **Block 1.3 (Provider
-> Read-Only Boundary)**.
+> Phase 0 is closed. Phase 1 Block 1.1 (planning), Block 1.2 (Android SDK Playground),
+> Block 1.3a (Provider Read-Only Boundary — interface, models, and mock in `:provider`),
+> Block 1.3b-pre (`Address.bech32` source string in `:core`), and Block 1.3b (Blockfrost
+> preprod provider in `:provider-blockfrost`, with a live Playground toggle) are complete. The
+> next step is the crypto track (Block 1.4 Crypto Evaluation And Module Decision).
 
 ## Phase 0 - Core Foundation
 
@@ -83,6 +85,9 @@ Outcome:
 Current modules:
 
 - `:core` (UI-free SDK core seed)
+- `:provider` (read-only chain query boundary + in-memory mock; added in Block 1.3a)
+- `:provider-blockfrost` (Blockfrost preprod provider: Ktor + kotlinx-serialization; added in
+  Block 1.3b; depends on `:provider` + `:core`)
 - `:shared` (sample/UI host; builds the iOS `Shared` framework)
 - `:androidApp`
 - `:desktopApp`
@@ -93,7 +98,6 @@ Deferred candidate future modules (names are not final; do not create yet):
 - `:crypto`
 - `:wallet`
 - `:tx`
-- `:provider`
 - `:sample:android`
 - `:sample:ios`
 - `:sample:desktop`
@@ -701,8 +705,20 @@ Proposed block sequence:
   (type-06 enterprise testnet, type-14 reward testnet), 1 invalid input test, and 1
   Empty-state test; the protocol test-vector suite stays in `:core`. All build and test
   commands pass; manual Android checkpoint verified (see `docs/PHASE_1_PLAN.md` Block 1.2 outcome).
-- `1.3` Provider Read-Only Boundary — **Next recommended block.** Define/read UTxOs and
-  network data before wallet behavior.
+- `1.3` Provider Read-Only Boundary — **complete (1.3a + 1.3b-pre + 1.3b).** 1.3a added the
+  `:provider` module (KMP, depends only on `:core`) with a read-only `ChainQueryProvider`
+  (suspend + `KardanoResult`), provider-neutral ADA-only models (`Utxo`, `Value`,
+  `ProtocolParameters`, `ChainTip`, sealed `ProviderError` with a transport-agnostic
+  `RemoteStatus`), and an `InMemoryChainQueryProvider` mock with fake/test-only seed data,
+  wired into the Playground "Provider" section. 1.3b-pre added `Address.bech32` (the validated
+  source string) to `:core`. 1.3b added `:provider-blockfrost` (`BlockfrostChainQueryProvider`,
+  Ktor + kotlinx-serialization, internal DTOs, ADA-only + 404-as-empty mapping, error mapping,
+  MockEngine fixture tests, opt-in live test) and a live-Blockfrost Playground toggle (ADR-0007;
+  no secrets committed). Submit is split out and deferred to Block 1.11 (ADR-0006 refines
+  ADR-0005 §5). The real Blockfrost preprod provider lives in `:provider-blockfrost` (HTTP client
+  + API-key config + sanitized fixtures + opt-in live test). See
+  `docs/DECISIONS/0006-provider-boundary-and-strategy.md` and
+  `docs/DECISIONS/0007-http-client-and-blockfrost-provider.md`.
 - `1.4` Crypto Evaluation And Module Decision — choose the first concrete crypto
   evaluation path following ADR-0004.
 - `1.5` Crypto Primitives Needed For Wallet — implement only the primitives needed by the

@@ -11,12 +11,37 @@ Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
 
 - Hosts the SDK Playground (`playground/PlaygroundScreen.kt`, `playground/PlaygroundPresenter.kt`),
   introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core` SDK
-  behavior (address parsing, Hex, CBOR).
+  behavior (address parsing, Hex, CBOR) and, from Block 1.3a, a read-only "Provider" section
+  (mock by default, with an optional live-Blockfrost toggle added in Block 1.3b).
 - Hosts `App.kt` (theme wrapper that renders `PlaygroundScreen`) and the iOS UI entry point
   (`MainViewController.kt`).
 - Retains the sample glue (`Greeting.kt`, `GreetingUtil.kt`) used by `PlaygroundScreen` to
   show the platform name.
-- Depends on `:core` for all SDK logic (`Address.parse`, `Hex`, `Cbor`, `Platform`).
+- Depends on `:core` for encoding/address SDK logic (`Address.parse`, `Hex`, `Cbor`,
+  `Platform`), on `:provider` for the read-only query boundary (`ChainQueryProvider`) and its
+  in-memory mock, and on `:provider-blockfrost` for the live Blockfrost provider.
+
+### Provider section
+
+The "Provider" section exercises `:provider`'s read-only `ChainQueryProvider`. It defaults to
+`InMemoryChainQueryProvider`, whose data is **fake and test-only** — no real network, no funds,
+no secrets, no committed chain fixtures. Two documented seed addresses (both valid public
+CIP-19 testnet vectors) drive the mock checkpoint:
+
+- Has UTxOs: `addr_test1vz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerspjrlsz`
+  (`InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS`).
+- Empty: `addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs68faae`
+  (`InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY`).
+
+The screen provides one-tap buttons to fill either seed address.
+
+A "Use live Blockfrost (preprod)" toggle (Block 1.3b) switches the same section to a live
+`BlockfrostChainQueryProvider` (`:provider-blockfrost`) built from a `project_id` you paste in.
+That key is held only in non-persistent Compose state (`remember`, not `rememberSaveable`) — it
+is never stored, saved, or logged — and live calls hit the real preprod network (test funds).
+No key is committed to the repo. See
+[docs/DECISIONS/0006-provider-boundary-and-strategy.md](../docs/DECISIONS/0006-provider-boundary-and-strategy.md)
+and [docs/DECISIONS/0007-http-client-and-blockfrost-provider.md](../docs/DECISIONS/0007-http-client-and-blockfrost-provider.md).
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
   `iosApp` via `MainViewControllerKt.MainViewController()`.
 
