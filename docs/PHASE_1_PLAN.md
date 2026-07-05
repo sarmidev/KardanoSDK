@@ -154,7 +154,7 @@ Checkpoint Android:
 
 ### 1.2 Android SDK Playground
 
-Crear una pantalla o seccion de pruebas en Android para invocar funcionalidades del SDK.
+Status: complete.
 
 Objetivo:
 
@@ -164,9 +164,47 @@ Objetivo:
 - Probar errores tipados de direccion de forma comprensible.
 - Opcionalmente exponer checks simples de Hex, Bech32 y CBOR.
 
-Checkpoint Android:
+Outcome:
 
-- Abrir la app, pegar una direccion testnet y ver el resultado estructural en pantalla.
+- Nuevo paquete `org.sarmidev.kardano.playground` en `:shared` `commonMain`:
+  - `PlaygroundPresenter`: objeto puro sin imports de Compose que mapea
+    `KardanoResult<Address, AddressError>` a filas etiquetadas (network, type, hrp,
+    credential kind, hash corto de 6 bytes con caption "structural only") o a un mensaje
+    de error legible por variante. Incluye `internal fun presentAddressError(error)` para
+    que los tests puedan construir variantes de `AddressError` directamente sin depender
+    de inputs concretos. Tambien expone `presentHexDecode` y `presentCbor` (hex -> CBOR
+    decode + re-encode round-trip).
+  - `PlaygroundScreen`: `@Composable internal` con estado local (`remember mutableStateOf`),
+    sin ViewModel ni framework de navegacion. Secciones: parseador de direcciones con
+    visualizacion de errores tipados, decodificador Hex, decodificador CBOR.
+  - `App.kt` reemplazado para renderizar `PlaygroundScreen()` dentro de `MaterialTheme`.
+    `:core` no se modifica; `:androidApp` no se modifica; sin nuevas dependencias ni modulos
+    Gradle; `:shared` no replica la suite de vectores de protocolo de `:core`; solo usa
+    un numero minimo de vectores CIP-19 citados para comprobar el wiring del presenter.
+- Tests en `shared/src/commonTest`: `PlaygroundPresenterTest` cubre 11 variantes de
+  `AddressError` construidas directamente, 2 happy paths CIP-19 citados (`type-06`
+  enterprise testnet y `type-14` reward testnet), 1 input invalido simple y 1 test de
+  estado Empty. No se replica la suite de vectores de protocolo de `:core`.
+- Verificacion: `./gradlew :core:jvmTest`, `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+  `:shared:compileKotlinIosSimulatorArm64`, `:androidApp:assembleDebug` — todos BUILD
+  SUCCESSFUL.
+- UI tests / Compose UI / Espresso diferidos; el checkpoint manual es la verificacion del
+  bloque.
+
+Checkpoint Android (verificado por el owner el 2026-07-05):
+
+1. `./gradlew :androidApp:assembleDebug` — APK instalado y app abierta.
+2. La pantalla del Playground se renderiza (titulo, campo de entrada, area de resultado).
+3. Pegado `addr_test1vz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerspjrlsz` → visto
+   `Network: TESTNET`, `Type: ENTERPRISE`, `HRP: addr_test`, credential kind, y hash
+   prefijo corto con caption "structural only". ✓
+4. Pegado `stake_test1uqehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gssrtvn` → visto
+   `Type: REWARD`, `Network: TESTNET`, stake credential kind. ✓
+5. Input invalido → mensaje de `AddressError` legible, sin crash. ✓
+6. Hex decoder con `010203` → resultado correcto. ✓
+   CBOR decoder con `43010203` → `CborByteString` decodificado y round-trip ok. ✓
+
+Solo se usan vectores publicos de CIP-19 — sin fondos reales ni datos privados.
 
 ### 1.3 Provider Read-Only Boundary
 
@@ -355,9 +393,9 @@ Abrir la app Android y comprobar funcionalidad despues de:
 
 ## Siguiente paso
 
-`1.1 Phase 1 Scope And Architecture Plan` esta completo (ver "Decisiones del Bloque 1.1" y
-ADR-0005). El siguiente paso es `1.2 Android SDK Playground`: crear el playground en Android
-para parsear direcciones `addr_test` / `stake_test` y ejercitar el SDK existente (Hex,
-Bech32, CBOR), manteniendo `:core` libre de UI. Este es el primer bloque de implementacion de
-Phase 1; no implica crypto, wallet, provider ni transacciones.
+`1.1 Phase 1 Scope And Architecture Plan` y `1.2 Android SDK Playground` estan completos.
+El siguiente paso es `1.3 Provider Read-Only Boundary`: definir la interfaz de provider
+read-only, una implementacion mock/stub, y el primer wiring real con Blockfrost en preprod,
+manteniendo `:core` libre de dependencias. Este bloque es probable disparador de un modulo
+Gradle nuevo (necesita dependencia HTTP).
 

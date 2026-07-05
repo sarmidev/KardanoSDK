@@ -74,7 +74,7 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 1 - MVP Transaction Flow (Block 1.1 complete; Block 1.2 is next). Phase 0 - Core
+- Phase 1 - MVP Transaction Flow (Blocks 1.1 and 1.2 complete; Block 1.3 is next). Phase 0 - Core
   Foundation closed below for reference.
 
 Block status:
@@ -186,8 +186,17 @@ Block status:
   official vectors verbatim. Docs reconciled (ROADMAP "Current Status" + this file set to
   "Phase 0 complete"; `docs/TESTING.md` gained the two omitted `:core` commands). No standalone
   closure document was created. See `docs/ROADMAP.md` Block 0.9 Outcome.
-- Block 1.1 Phase 1 Scope And Architecture Plan: complete. Planning/documentation block only
-  — no wallet, crypto, provider, tx, or Android UI code; no Gradle or dependency changes.
+- Block 1.2 Android SDK Playground: complete. First Phase 1 implementation block. Added the
+  `org.sarmidev.kardano.playground` package in `:shared` `commonMain` with `PlaygroundPresenter`
+  (pure, UI-free; maps `:core` results to display models; `internal fun presentAddressError`
+  directly unit-testable), `PlaygroundScreen` (Compose; address parser + typed error display +
+  Hex + CBOR sections), and replaced `App.kt` to render the screen. Presenter tests in
+  `:shared` `commonTest` exercise `AddressError` variants directly (no fragile input-dependent
+  construction) plus 2 cited CIP-19 happy-path vectors (type-06/type-14 testnet), 1 invalid
+  input test, and 1 Empty-state test. All
+  build/test commands pass (BUILD SUCCESSFUL). `:core` untouched; no new Gradle modules or
+  dependencies. Manual Android checkpoint documented in `docs/PHASE_1_PLAN.md` Block 1.2.
+- Block 1.1 Phase 1 Scope And Architecture Plan: complete (previous session).
   Recorded in `docs/PHASE_1_PLAN.md` ("Decisiones del Bloque 1.1") and
   `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted): the MVP
   preprod flow (create/restore test wallet, derive address, query UTxOs, build a minimal
@@ -207,12 +216,11 @@ Block status:
   (`./gradlew :androidApp:assembleDebug :core:jvmTest`); no app-launch claim made from that
   command alone. See `docs/ROADMAP.md` Phase 1 block sequence, Block 1.1 outcome.
 
-Next recommended task: **Block 1.2 (Android SDK Playground)** — the first Phase 1
-implementation block. Add an Android-facing playground to parse `addr_test` / `stake_test`
-addresses and exercise existing SDK behavior (Hex, Bech32, CBOR checks), keeping `:core`
-UI-free. No wallet, crypto, provider, or tx code in this block. Byron/Base58 address support
-and the address encoding/round-trip ADR (needed before Block 1.7) remain separate,
-independently-scheduled future work.
+Next recommended task: **Block 1.3 (Provider Read-Only Boundary)** — define a minimal
+read-only provider interface, a mock/stub implementation, and the first Blockfrost preprod
+wiring. This is the likely trigger for a new Gradle module (needs an HTTP client dependency)
+and a provider-selection ADR (candidate ADR-0006). No wallet, crypto, or tx code yet. See
+`docs/PHASE_1_PLAN.md` Block 1.3 and `docs/ROADMAP.md` Phase 1 block sequence.
 
 Current modules:
 
@@ -333,6 +341,76 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-05
+
+Summary:
+
+- Block 1.2 (Android SDK Playground): first Phase 1 implementation block. Added the
+  `org.sarmidev.kardano.playground` package in `:shared` `commonMain`:
+  - `PlaygroundPresenter` (internal object, no Compose imports): maps `Address.parse` /
+    `Hex` / `Cbor` results to display models (`AddressPresentation`, `HexPresentation`,
+    `CborPresentation`). `internal fun presentAddressError(error: AddressError)` is
+    directly unit-testable without needing a specific input string per variant. Credential
+    hashes shown as a 6-byte short hex prefix with "structural only" caption; no full
+    28-byte hash by default. No protocol logic reimplemented.
+  - `PlaygroundScreen` (internal `@Composable`): address parser with typed `AddressError`
+    display, Hex decoder, CBOR decoder. Local `remember { mutableStateOf }` state; no
+    ViewModel or navigation framework.
+  - `App.kt` replaced: now a thin `MaterialTheme { PlaygroundScreen() }` wrapper; `Greeting`
+    and `GreetingUtil` are unchanged and `PlaygroundScreen` shows the platform name via
+    `Greeting().greet()`.
+- `:core` is not modified. No new Gradle modules. No new dependencies. `:androidApp` is
+  not modified.
+- Tests in `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenterTest.kt`:
+  11 `AddressError` variants constructed directly (not via parsed strings), 2 cited CIP-19
+  happy-path vectors (type-06 enterprise testnet and type-14 reward testnet, cited to CIP-19),
+  1 invalid input test, and 1 Empty-state test. The protocol test-vector suite is not replicated
+  from `:core`.
+- Fix applied mid-session: a compiler warning-as-error about always-false `is` checks on a
+  sealed type in the test was resolved by replacing the test with a non-redundant check.
+
+Files changed this step:
+
+- `shared/src/commonMain/kotlin/org/sarmidev/kardano/App.kt` (replaced)
+- `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenter.kt` (new)
+- `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/PlaygroundScreen.kt` (new)
+- `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenterTest.kt` (new)
+- `docs/PHASE_1_PLAN.md` (Block 1.2 status/outcome; "Siguiente paso" → Block 1.3)
+- `docs/ROADMAP.md` (Current Status; Block 1.2 outcome; Block 1.3 as next)
+- `docs/HANDOFF.md` (Block 1.2 status entry; this session summary; next task updated)
+- `shared/README.md` (Playground role; SDK logic stays in `:core`)
+
+Tests run:
+
+- `./gradlew :core:jvmTest` (pass — sanity, `:core` unchanged)
+- `./gradlew :shared:jvmTest` (pass — presenter tests)
+- `./gradlew :shared:testAndroidHostTest` (pass)
+- `./gradlew :shared:compileKotlinIosSimulatorArm64` (pass — iOS compile guard)
+- `./gradlew :androidApp:assembleDebug` (pass — Android APK build)
+
+Manual Android checkpoint — verified by owner on 2026-07-05 (emulator/device):
+
+1. Playground opens and renders correctly.
+2. `addr_test1vz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerspjrlsz` (CIP-19 type-06
+   enterprise testnet) → TESTNET / ENTERPRISE / addr_test / KEY / short hash prefix with
+   "structural only" caption. ✓
+3. `stake_test1uqehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gssrtvn` (CIP-19 type-14
+   reward testnet) → TESTNET / REWARD / stake_test / KEY. ✓
+4. Invalid address → typed `AddressError` message, no crash. ✓
+5. Hex decoder with `010203` → correct result. ✓
+6. CBOR decoder with `43010203` → `CborByteString` decoded, round-trip ok. ✓
+   round-trip ok. ✓
+
+Next recommended task:
+
+- **Block 1.3 (Provider Read-Only Boundary)**: define a minimal read-only provider
+  interface, a mock/stub implementation, and the first Blockfrost preprod wiring. This is
+  the likely trigger for a new Gradle module (needs an HTTP client dependency) and for a
+  provider-selection ADR (candidate ADR-0006). No wallet, crypto, or tx code yet. See
+  `docs/PHASE_1_PLAN.md` Block 1.3.
+
+### Previous Session Summary
 
 Date: 2026-07-05
 

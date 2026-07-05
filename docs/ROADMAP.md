@@ -16,10 +16,9 @@ Selected targets:
 
 Current priority:
 
-> Phase 0 is closed. Phase 1 Block 1.1 (planning: scope, module/package strategy, provider
-> strategy, and the crypto decision path) is complete — see `docs/PHASE_1_PLAN.md` and
-> `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005). The next step is
-> **Block 1.2 (Android SDK Playground)**, the first Phase 1 implementation block.
+> Phase 0 is closed. Phase 1 Block 1.1 (planning) and Block 1.2 (Android SDK Playground —
+> the first implementation block) are complete. The next step is **Block 1.3 (Provider
+> Read-Only Boundary)**.
 
 ## Phase 0 - Core Foundation
 
@@ -690,10 +689,20 @@ Proposed block sequence:
   `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted). No Kotlin,
   Gradle, or dependency changes; Android baseline build verified
   (`./gradlew :androidApp:assembleDebug :core:jvmTest`).
-- `1.2` Android SDK Playground — add an Android-facing playground for parsing addresses
-  and exercising existing SDK behavior. **Next recommended block.**
-- `1.3` Provider Read-Only Boundary — define/read UTxOs and network data before wallet
-  behavior.
+- `1.2` Android SDK Playground — **Status: complete.** Outcome: added the
+  `org.sarmidev.kardano.playground` package in `:shared` `commonMain` with a pure
+  UI-free `PlaygroundPresenter` (maps `Address.parse` / `Hex` / `Cbor` results to display
+  models; `presentAddressError` is `internal` for direct unit testing) and a
+  `PlaygroundScreen` Composable (address parser with typed `AddressError` display, Hex
+  decoder, CBOR decoder). `App.kt` replaced to render `PlaygroundScreen` inside
+  `MaterialTheme`; `:core` is unchanged; `:androidApp` is unchanged; no new dependencies
+  or Gradle modules. Tests in `:shared` `commonTest` cover `presentAddressError` with
+  directly-constructed `AddressError` variants plus 2 cited CIP-19 happy-path vectors
+  (type-06 enterprise testnet, type-14 reward testnet), 1 invalid input test, and 1
+  Empty-state test; the protocol test-vector suite stays in `:core`. All build and test
+  commands pass; manual Android checkpoint verified (see `docs/PHASE_1_PLAN.md` Block 1.2 outcome).
+- `1.3` Provider Read-Only Boundary — **Next recommended block.** Define/read UTxOs and
+  network data before wallet behavior.
 - `1.4` Crypto Evaluation And Module Decision — choose the first concrete crypto
   evaluation path following ADR-0004.
 - `1.5` Crypto Primitives Needed For Wallet — implement only the primitives needed by the

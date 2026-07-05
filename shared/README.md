@@ -9,12 +9,21 @@ Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
 
 ## Role today
 
-- Hosts the wizard-derived sample UI (`App.kt`) and the iOS UI entry point
+- Hosts the SDK Playground (`playground/PlaygroundScreen.kt`, `playground/PlaygroundPresenter.kt`),
+  introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core` SDK
+  behavior (address parsing, Hex, CBOR).
+- Hosts `App.kt` (theme wrapper that renders `PlaygroundScreen`) and the iOS UI entry point
   (`MainViewController.kt`).
-- Holds the sample glue (`Greeting.kt`, `GreetingUtil.kt`).
-- Depends on `:core` for the UI-free `Platform` descriptor.
+- Retains the sample glue (`Greeting.kt`, `GreetingUtil.kt`) used by `PlaygroundScreen` to
+  show the platform name.
+- Depends on `:core` for all SDK logic (`Address.parse`, `Hex`, `Cbor`, `Platform`).
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
   `iosApp` via `MainViewControllerKt.MainViewController()`.
+
+**SDK logic and the protocol test-vector suite belong in `:core`, not here.** `:shared` only
+calls `:core` APIs and formats/displays results. `PlaygroundPresenter` is a display-only
+mapping layer with no protocol rules of its own. `:shared` tests use a minimum of cited
+CIP-19 vectors to verify presenter wiring, but do not replicate the `:core` test-vector suite.
 
 ## Why it still contains UI
 
@@ -36,8 +45,9 @@ project. See [docs/DECISIONS/0002-module-structure.md](../docs/DECISIONS/0002-mo
 ## Testing
 
 `:shared` carries example tests in `commonTest`, `jvmTest`, `androidHostTest`, and `iosTest`
-that demonstrate the wiring per target. Protocol vectors and SDK-logic tests belong in
-`:core`, not here. See [docs/TESTING.md](../docs/TESTING.md) for the testing strategy and
+that demonstrate the wiring per target. The protocol test-vector suite and SDK-logic tests
+belong in `:core`; `:shared` uses only a minimum of cited CIP-19 vectors for presenter-wiring
+verification. See [docs/TESTING.md](../docs/TESTING.md) for the testing strategy and
 test-vector policy.
 
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
