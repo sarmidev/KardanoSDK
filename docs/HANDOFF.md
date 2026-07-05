@@ -15,9 +15,11 @@ Current project identity:
 - Name: Kardano SDK.
 - Package/group: `org.sarmidev.kardano`.
 - Main targets: Android, iOS, JVM/Desktop.
-- Current status: **Phase 0 (Core Foundation) is complete** (Blocks 0.1 through 0.9). The
-  Block 0.9 closure review verified the foundation; the next step is Phase 1 *planning*,
-  not implementation. Block-by-block detail follows. Blocks 0.1 (Project Governance And AI Rules),
+- Current status: **Phase 0 (Core Foundation) is complete** (Blocks 0.1 through 0.9).
+  **Phase 1 Block 1.1 (Scope And Architecture Plan) is also complete** — a
+  planning/documentation block with no wallet, crypto, provider, tx, or Android UI code, no
+  Gradle or dependency changes. The next step is **Block 1.2 (Android SDK Playground)**, the
+  first Phase 1 implementation block. Block-by-block detail follows. Blocks 0.1 (Project Governance And AI Rules),
   0.2 (SDK-Oriented Module Structure), and 0.3 (Testing Infrastructure) are complete: a
   UI-free `:core` module exists, `:shared` depends on it, and the testing foundation
   (test source-set strategy, fixture layout, test-vector policy in `docs/TESTING.md`) is
@@ -72,7 +74,8 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 0 - Core Foundation.
+- Phase 1 - MVP Transaction Flow (Block 1.1 complete; Block 1.2 is next). Phase 0 - Core
+  Foundation closed below for reference.
 
 Block status:
 
@@ -183,13 +186,33 @@ Block status:
   official vectors verbatim. Docs reconciled (ROADMAP "Current Status" + this file set to
   "Phase 0 complete"; `docs/TESTING.md` gained the two omitted `:core` commands). No standalone
   closure document was created. See `docs/ROADMAP.md` Block 0.9 Outcome.
+- Block 1.1 Phase 1 Scope And Architecture Plan: complete. Planning/documentation block only
+  — no wallet, crypto, provider, tx, or Android UI code; no Gradle or dependency changes.
+  Recorded in `docs/PHASE_1_PLAN.md` ("Decisiones del Bloque 1.1") and
+  `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted): the MVP
+  preprod flow (create/restore test wallet, derive address, query UTxOs, build a minimal
+  ADA-only tx, sign locally, submit to preprod, show result in Android); native assets placed
+  out of the first MVP; Android set as the primary Phase 1 validation target, iOS/JVM-Desktop
+  compile-only unless explicitly revisited; module/package strategy recorded as decision
+  criteria only (packages first while dependency-free and ownership is exploratory; a
+  crypto/provider/network dependency is the likely Gradle-module trigger; `:core` stays
+  dependency-free; `:shared` stays the sample/UI host, not the SDK's long-term home — no
+  module created and no home asserted for crypto/provider packages); provider strategy set
+  to mock/stub first with Blockfrost as the first real preprod target and a minimal API
+  (concrete selection deferred to Block 1.3); crypto decision path kept at Block 1.4/1.5
+  against ADR-0004 (no library selected here); the address encoding/round-trip prerequisite
+  (before Block 1.7) and the CBOR tx map-ordering prerequisite (before Block 1.9) recorded as
+  deferred, each resolved in its own block. `docs/ROADMAP.md` Phase 1 acceptance criteria
+  reconciled to Android-primary. Android baseline build verified
+  (`./gradlew :androidApp:assembleDebug :core:jvmTest`); no app-launch claim made from that
+  command alone. See `docs/ROADMAP.md` Phase 1 block sequence, Block 1.1 outcome.
 
-Next recommended task: **Phase 1 planning, not implementation.** Phase 0 is closed. Before
-writing any wallet/tx/provider code, plan Phase 1 scope and resolve the decisions Phase 0
-deliberately left open: per-algorithm crypto library/binding selection (ADR-0004, all
-candidates `Needs investigation`) and the module-extraction structure (`:crypto` / `:wallet`
-/ `:tx` / `:provider`; ADR-0002/0003). Byron/Base58 address support and an address
-encoding/round-trip ADR remain separate, independently-scheduled future work.
+Next recommended task: **Block 1.2 (Android SDK Playground)** — the first Phase 1
+implementation block. Add an Android-facing playground to parse `addr_test` / `stake_test`
+addresses and exercise existing SDK behavior (Hex, Bech32, CBOR checks), keeping `:core`
+UI-free. No wallet, crypto, provider, or tx code in this block. Byron/Base58 address support
+and the address encoding/round-trip ADR (needed before Block 1.7) remain separate,
+independently-scheduled future work.
 
 Current modules:
 
@@ -197,15 +220,20 @@ Current modules:
 - `:shared` (sample/UI host; builds the iOS `Shared` framework)
 - `:androidApp`, `:desktopApp`, and `iosApp` (Xcode entry point)
 
+No new Gradle module was created by Block 1.1; module/package strategy criteria are recorded
+in ADR-0005 (see above), and actual module creation is deferred to the first implementation
+block that introduces crypto/provider/network dependencies.
+
 Current priority:
 
 - Keep scope tight.
 - Avoid custom crypto.
-- Avoid transaction signing.
+- Do not implement transaction signing before crypto, provider, and transaction-builder
+  scope are each implemented and reviewed at their respective blocks (per ADR-0005).
 - Build tests and docs from the start.
-- Phase 0 (Blocks 0.1–0.9) is complete; the next step is Phase 1 *planning* in
-  `docs/ROADMAP.md` (scope, module extraction, per-algorithm crypto library selection) —
-  not Phase 1 implementation.
+- Phase 0 (Blocks 0.1–0.9) and Phase 1 Block 1.1 are complete; the next step is Phase 1
+  *implementation* starting at Block 1.2 (`docs/PHASE_1_PLAN.md`, `docs/ROADMAP.md`) — Android
+  SDK Playground, no wallet/crypto/provider/tx code yet.
 
 ## Decisions Already Made
 
@@ -221,19 +249,32 @@ Current priority:
 - Parser limits and anti-DoS behavior must be explicit.
 - Address validation must preserve and check network id.
 - iOS/Swift error handling must be considered from the beginning.
+- Phase 1 MVP is Android-primary; iOS and JVM/Desktop are compile-only in Phase 1 unless a
+  future block explicitly revisits this (Block 1.1 / ADR-0005).
+- Phase 1's first MVP transaction flow is ADA-only; native assets are deferred out of the
+  first MVP (Block 1.1 / ADR-0005).
+- Phase 1 provider strategy is mock/stub first, with Blockfrost as the first real preprod
+  target and a minimal public API; concrete provider selection is deferred to Block 1.3
+  (Block 1.1 / ADR-0005).
+- Phase 1 module/package strategy is decision criteria, not a committed structure: packages
+  first where the work is dependency-free and ownership is still exploratory; a
+  crypto/provider/network dependency is the likely trigger for a real Gradle module; `:core`
+  stays dependency-free; `:shared` stays the sample/UI host, not the long-term SDK home
+  (Block 1.1 / ADR-0005).
 
 ## Open Decisions
 
-These should be resolved before or during Phase 0 implementation:
+These should be resolved before or during Phase 0/Phase 1 implementation:
 
 1. Final module structure:
    - A UI-free `:core` module has been introduced (ADR-0002), and its internal package
      layout is settled (ADR-0003: `primitives`, `encoding.{hex,bech32,cbor}`, plus the
-     `address` package added in Block 0.7). The final *module* structure is still open:
-     whether/when to extract `:crypto`, `:wallet`, `:tx`, `:provider`, and whether
-     `:shared` later becomes a dedicated `:sample:*` module. ADR-0003 records that these
-     package seams are intended to ease future module extraction, but module splits are
-     deferred until code and dependency pressure justify them.
+     `address` package added in Block 0.7). Block 1.1 (ADR-0005) recorded the *decision
+     criteria* for when packages become Gradle modules (see "Decisions Already Made" above),
+     but the final *module* structure is still open: whether/when to extract `:crypto`,
+     `:wallet`, `:tx`, `:provider`, and whether `:shared` later becomes a dedicated
+     `:sample:*` module. The likely trigger is Block 1.3 (provider, needs an HTTP client) or
+     Block 1.4/1.5 (crypto, needs a crypto library/binding); no module is created until then.
 
 2. CBOR strategy: **Resolved and implemented** (ADR-0001 Accepted) — constrained internal
    CBOR subset (definite-length only), no external dependency. The definite-length subset
@@ -251,9 +292,13 @@ These should be resolved before or during Phase 0 implementation:
 4. Crypto strategy: **Strategy documented** (ADR-0004 Accepted) — the selection policy,
    module boundary (likely `:crypto`, not final), seam options (expect/actual or common
    interface), key-material lifecycle, error policy, algorithm scope, and test-vector
-   policy are recorded. Concrete library and binding choices remain open: each algorithm
-   is evaluated in its own future implementation block, which updates ADR-0004's candidate
-   matrix from `Needs investigation` to `Accepted`/`Rejected`. See
+   policy are recorded. Block 1.1 (ADR-0005) fixed the **sequencing**: crypto evaluation
+   stays at Block 1.4 (evaluation/module decision) and Block 1.5 (primitives), with
+   Ed25519-BIP32, BIP-32/CIP-1852, BIP-39/CIP-3, PBKDF2-HMAC-SHA-512, and Blake2b-224/256
+   resolved first; read-only Blocks 1.2/1.3 proceed in parallel since they need no crypto.
+   Concrete library and binding choices remain open: each algorithm is evaluated in its own
+   future implementation block, which updates ADR-0004's candidate matrix from
+   `Needs investigation` to `Accepted`/`Rejected`. See
    `docs/DECISIONS/0004-crypto-strategy.md` for the open questions list.
 
 5. Test vector sources:
@@ -288,6 +333,74 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-05
+
+Summary:
+
+- Block 1.1 (Phase 1 Scope And Architecture Plan): planning/documentation block only. No
+  wallet, crypto, provider, tx, or Android UI code. No Kotlin, Gradle, or dependency changes.
+  Declared Block 1.1 complete; implementation starts at Block 1.2.
+- Recorded decisions (see `docs/PHASE_1_PLAN.md` "Decisiones del Bloque 1.1" and
+  `docs/DECISIONS/0005-phase-1-architecture-and-scope.md`, ADR-0005, Accepted):
+  - MVP preprod flow: create/restore test wallet, derive one address, query UTxOs, build a
+    minimal ADA-only tx, sign locally, submit to preprod, show the result in Android.
+  - Native assets placed out of the first MVP.
+  - Android set as the primary Phase 1 validation target; iOS and JVM/Desktop stay
+    compile-only in Phase 1 unless a future block explicitly revisits this.
+  - Module/package strategy recorded as decision criteria only, not a committed structure:
+    packages first where dependency-free and ownership is exploratory; a crypto/provider/
+    network dependency is the likely Gradle-module trigger; `:core` stays dependency-free;
+    `:shared` stays the sample/UI host and is not the SDK's long-term home. No module was
+    created, and no home is asserted for future crypto/provider packages.
+  - Provider strategy: mock/stub first, Blockfrost as the first real preprod target, minimal
+    public API; concrete selection deferred to Block 1.3. MVP data scope: UTxOs, protocol
+    parameters, submit endpoint.
+  - Crypto decision path: kept at Block 1.4 (evaluation) / 1.5 (primitives) against ADR-0004;
+    no library selected and no crypto code in this block; read-only Blocks 1.2/1.3 proceed in
+    parallel.
+  - "Minimal ADA transaction" defined; two prerequisites recorded as deferred to their own
+    blocks: an address encoding/round-trip ADR before Block 1.7, and a CBOR tx map-ordering
+    decision (RFC 8949 §4.2.1 vs RFC 7049 length-first) before Block 1.9.
+  - Scope/risk boundaries restated: no mainnet, no real keys/mnemonics/funds, no handwritten
+    crypto, no signing before crypto+provider+tx scope is implemented and reviewed, no
+    validator weakening, no new dependencies in this block.
+- `docs/ROADMAP.md`: Block 1.1 marked `Status: complete` with an Outcome; Block 1.2 set as
+  the next recommended block; Phase 1 acceptance criteria and expected capabilities
+  reconciled to Android-primary / ADA-only-first (native assets and additional providers
+  moved to an explicit "Deferred out of the first MVP" list); "Expected modules" reworded to
+  "Expected packages/modules (candidate names, not committed)".
+- Android baseline build verified: `./gradlew :androidApp:assembleDebug :core:jvmTest`. This
+  confirms the sample Android app and `:core` still build with no code changes; it does not
+  confirm the app launches — no app-launch claim is made from this command alone.
+- No banned words (`secure`, `safe`, `hardened`, `audited`, `production-ready`, `guaranteed`)
+  or misleading/readiness claims introduced; "Scope / risk boundaries" wording used instead
+  of "safety" in the new plan/ADR text.
+
+Files changed this step:
+
+- `docs/PHASE_1_PLAN.md` (new "Decisiones del Bloque 1.1" section; Block 1.1 marked
+  complete with an outcome summary; "Siguiente paso" now points to Block 1.2)
+- `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (new, ADR-0005, Accepted)
+- `docs/ROADMAP.md` (Current Status header; Phase 1 section — Block 1.1 outcome, Block 1.2
+  marked next, acceptance criteria and expected capabilities reconciled to Android-primary)
+- `docs/HANDOFF.md` (Block 1.1 status entry; this session summary; Open Decisions and
+  Decisions Already Made updated; next task = Block 1.2)
+
+Tests run:
+
+- `./gradlew :androidApp:assembleDebug :core:jvmTest` (build verification only; confirms the
+  Android baseline and `:core` still build with no code changes — does not confirm app
+  launch).
+
+Next recommended task:
+
+- **Block 1.2 (Android SDK Playground)**: add an Android-facing playground to parse
+  `addr_test` / `stake_test` addresses and exercise existing SDK behavior (Hex, Bech32, CBOR
+  checks), keeping `:core` UI-free. No wallet, crypto, provider, or tx code. See
+  `docs/PHASE_1_PLAN.md` Block 1.2 and `docs/ROADMAP.md` Phase 1 block sequence.
+
+### Previous Session Summary
 
 Date: 2026-06-30
 

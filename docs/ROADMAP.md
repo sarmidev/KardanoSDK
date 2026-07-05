@@ -16,8 +16,10 @@ Selected targets:
 
 Current priority:
 
-> Phase 0 is closed. The next step is **Phase 1 planning** (scope, module extraction, and
-> per-algorithm crypto library selection) — not Phase 1 implementation.
+> Phase 0 is closed. Phase 1 Block 1.1 (planning: scope, module/package strategy, provider
+> strategy, and the crypto decision path) is complete — see `docs/PHASE_1_PLAN.md` and
+> `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005). The next step is
+> **Block 1.2 (Android SDK Playground)**, the first Phase 1 implementation block.
 
 ## Phase 0 - Core Foundation
 
@@ -656,17 +658,61 @@ Acceptance criteria:
 
 ## Phase 1 - MVP Transaction Flow
 
-Next step (immediately after Phase 0 closure): **Phase 1 planning, not implementation.**
-Before any wallet/tx/provider code, plan the scope and resolve the decisions Phase 0
-deliberately left open — per-algorithm crypto library/binding selection (ADR-0004) and the
-module-extraction structure (`:crypto` / `:wallet` / `:tx` / `:provider`; ADR-0002/0003).
+Block 1.1 (Phase 1 Scope And Architecture Plan) is complete. It was a planning/documentation
+block — no wallet, crypto, provider, tx, or Android UI code, no Gradle or dependency changes.
+Implementation starts at **Block 1.2**, not in Block 1.1. The working Phase 1 block plan is
+recorded in `docs/PHASE_1_PLAN.md`.
 
 Goal:
 
 Enable a native mobile app to create or restore a wallet, query UTxOs, build a simple transaction, sign locally and submit to Cardano preprod.
 
-Expected modules:
+Planning principle:
 
+Phase 1 should progress through small blocks with Android checkpoints. The Android app
+must become a recurring validation surface, not something checked only at the end.
+
+Proposed block sequence:
+
+- `1.1` Phase 1 Scope And Architecture Plan — **Status: complete.** Outcome: MVP flow fixed
+  (create/restore test wallet, derive address, query UTxOs, build a minimal ADA-only tx, sign
+  locally, submit to preprod, show result in Android); native assets placed out of the first
+  MVP; Android set as the primary Phase 1 validation target with iOS/JVM-Desktop compile-only
+  unless explicitly revisited; module/package strategy recorded as decision criteria only (no
+  Gradle module created; crypto/provider/network dependencies are the likely trigger; `:core`
+  stays dependency-free; `:shared` stays the sample/UI host, not the SDK's long-term home);
+  provider strategy set to mock/stub first with Blockfrost as the first real preprod target
+  and a minimal API (concrete selection deferred to Block 1.3); crypto decision path kept at
+  Block 1.4/1.5 against ADR-0004 with no library selected here; the address
+  encoding/round-trip prerequisite (before Block 1.7) and the CBOR tx map-ordering
+  prerequisite (before Block 1.9) recorded as deferred, each resolved in its own block. See
+  `docs/PHASE_1_PLAN.md` ("Decisiones del Bloque 1.1") and
+  `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted). No Kotlin,
+  Gradle, or dependency changes; Android baseline build verified
+  (`./gradlew :androidApp:assembleDebug :core:jvmTest`).
+- `1.2` Android SDK Playground — add an Android-facing playground for parsing addresses
+  and exercising existing SDK behavior. **Next recommended block.**
+- `1.3` Provider Read-Only Boundary — define/read UTxOs and network data before wallet
+  behavior.
+- `1.4` Crypto Evaluation And Module Decision — choose the first concrete crypto
+  evaluation path following ADR-0004.
+- `1.5` Crypto Primitives Needed For Wallet — implement only the primitives needed by the
+  MVP, with official vectors.
+- `1.6` Mnemonic / Seed / Key Derivation — create/restore a test wallet and derive keys.
+- `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
+  `Address.parse`.
+- `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance.
+- `1.9` Transaction Builder Minimal — build a simple ADA transaction draft.
+- `1.10` Transaction Signing — sign a testnet/preprod transaction locally.
+- `1.11` Submit Transaction — submit a signed transaction to preprod.
+- `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
+  remaining limitations.
+
+Expected packages/modules (candidate names, not committed; per Block 1.1 / ADR-0005 these
+start as packages and are extracted into Gradle modules only when a block introduces
+dependency or ownership pressure that justifies the split — see ADR-0002/0003):
+
+- `crypto`
 - `wallet`
 - `tx`
 - `provider`
@@ -678,19 +724,24 @@ Expected capabilities:
 - Address generation.
 - UTxO fetching.
 - Protocol parameter fetching.
-- ADA transaction builder.
-- Native asset transaction builder.
+- ADA-only transaction builder.
 - Fee and change calculation.
 - Local signing.
 - CBOR serialization.
 - Submit transaction.
 
-Acceptance criteria:
+Deferred out of the first MVP (per Block 1.1 / ADR-0005):
 
-- End-to-end preprod transaction works.
-- Android sample works.
-- iOS sample works.
-- JVM/Desktop demo or CLI works.
+- Native asset transaction builder.
+- Providers other than the first preprod target (Koios, Maestro, Ogmios, Kupo).
+- Byron/Base58 address support.
+
+Acceptance criteria (reconciled by Block 1.1 / ADR-0005 to Android-primary):
+
+- End-to-end ADA-only preprod transaction works, verified through the Android app.
+- Android sample works and is the primary Phase 1 validation surface.
+- iOS and JVM/Desktop targets compile; functional demos are deferred to Phase 1 closure
+  (Block 1.12) or Phase 2 unless a future block explicitly revisits this.
 - Tests and docs are updated.
 
 ## Phase 2 - Plutus Lite And Provider Expansion
