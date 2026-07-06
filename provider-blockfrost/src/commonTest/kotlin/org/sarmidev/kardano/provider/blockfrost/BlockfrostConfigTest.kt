@@ -9,7 +9,7 @@ class BlockfrostConfigTest {
 
     @Test
     fun toStringRedactsProjectIdButMentionsNetwork() {
-        val secret = "preprodSuperSecretProjectId"
+        val secret = "test-project-id-that-must-not-render"
         val rendered = BlockfrostConfig(projectId = secret, network = BlockfrostNetwork.PREPROD)
             .toString()
         assertFalse(rendered.contains(secret), "toString must not expose the project id")
