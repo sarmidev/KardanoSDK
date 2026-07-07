@@ -74,8 +74,8 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, and 1.3a complete; Block 1.3b is next).
-  Phase 0 - Core Foundation closed below for reference.
+- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, and 1.4 complete; Block 1.5a — a
+  crypto compatibility spike — is next). Phase 0 - Core Foundation closed below for reference.
 
 Block status:
 
@@ -252,11 +252,29 @@ gained a "Use live Blockfrost (preprod)" toggle and a `project_id` field held in
 Compose state (`remember`, never stored/logged); Android got the `INTERNET` permission. No
 secrets are committed. See `docs/DECISIONS/0007-http-client-and-blockfrost-provider.md`.
 
-Next recommended task: **Block 1.4 (Crypto Evaluation And Module Decision)** — evaluate
-concrete crypto libraries/bindings against ADR-0004 and decide whether to create `:crypto` now
-or start with an isolated package. This unblocks wallet (Block 1.8) and signing. No wallet,
-crypto, tx, or signing code yet. See `docs/DECISIONS/0004-crypto-strategy.md`,
-`docs/PHASE_1_PLAN.md` Block 1.4, and `docs/ROADMAP.md` Phase 1 block sequence.
+**Block 1.4 (Crypto Evaluation And Module Decision) is complete (docs-only).** ADR-0008
+(`docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`) is `Accepted` for
+the module/seam/process decisions only and makes no final dependency-fitness claim while
+compatibility is untested. Decided now: `:crypto` deferred to Block 1.5; the seam is a
+`commonMain` common interface/adapter (`Hashing`, later `KeyDerivation`/`Signing`) returning
+`KardanoResult` (no throwing across Swift/ObjC), with `expect`/`actual` as fallback; the first
+algorithm boundary in Block 1.5 is Blake2b-224/256 behind `Hashing` with official cited vectors
+(RFC 7693 / Cardano context), no invented vectors. Provisional: candidate selection is
+provisional, with Hyperledger Identus Apollo + `bip32-ed25519` as the provisional lead (Kotlin
+2.4.0 compatibility marked `To verify in 1.5a`); cryptography-kotlin (whyoleg) and ionspin
+libsodium are the composition fallback; bloxbean cardano-client-lib is rejected as a shipped
+dependency (JVM-only, no iOS) and retained only as a JVM vector oracle. The candidate matrix is
+source-cited with unknowns marked `Unverified` / `To verify in 1.5a` and neutral review fields
+(`External review`, `Public review notes`). ADR-0004 carries a one-line cross-reference to
+ADR-0008. No Kotlin/Gradle/dependency/module changes.
+
+Next recommended task: **Block 1.5a (crypto compatibility spike)** — on a throwaway branch, add
+the provisional candidate (Apollo + `bip32-ed25519`, plus companions like `secp256k1-kmp`) and
+confirm it resolves and compiles on Android + JVM + iosSimulatorArm64 under Kotlin 2.4.0. If it
+fails, fall back per ADR-0008 §4 and re-run 1.5a. Only after 1.5a passes does Block 1.5b create
+`:crypto`, wire the chosen dependency behind `Hashing`, and add official Blake2b vectors. No
+dependency is committed to the build before 1.5a passes. See ADR-0008,
+`docs/PHASE_1_PLAN.md` Block 1.5, and `docs/ROADMAP.md`.
 
 Current modules:
 
@@ -339,17 +357,17 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
    no external dependency, plus the Cardano HRP allowlist wrappers (`CardanoBech32`). Block 0.5
    is complete.
 
-4. Crypto strategy: **Strategy documented** (ADR-0004 Accepted) — the selection policy,
-   module boundary (likely `:crypto`, not final), seam options (expect/actual or common
-   interface), key-material lifecycle, error policy, algorithm scope, and test-vector
-   policy are recorded. Block 1.1 (ADR-0005) fixed the **sequencing**: crypto evaluation
-   stays at Block 1.4 (evaluation/module decision) and Block 1.5 (primitives), with
-   Ed25519-BIP32, BIP-32/CIP-1852, BIP-39/CIP-3, PBKDF2-HMAC-SHA-512, and Blake2b-224/256
-   resolved first; read-only Blocks 1.2/1.3 proceed in parallel since they need no crypto.
-   Concrete library and binding choices remain open: each algorithm is evaluated in its own
-   future implementation block, which updates ADR-0004's candidate matrix from
-   `Needs investigation` to `Accepted`/`Rejected`. See
-   `docs/DECISIONS/0004-crypto-strategy.md` for the open questions list.
+4. Crypto strategy: **Strategy documented (ADR-0004) and Block 1.4 decision recorded
+   (ADR-0008).** ADR-0004 (Accepted) holds the selection policy, key-material lifecycle, error
+   policy, algorithm scope, and test-vector policy. Block 1.4 / ADR-0008 (Accepted for
+   module/seam/process only) then decided: `:crypto` deferred to Block 1.5; the seam is a
+   `commonMain` common interface/adapter (`Hashing` first) returning `KardanoResult`; the first
+   algorithm boundary is Blake2b-224/256 with official cited vectors. **Still open:** the
+   concrete dependency is provisional (Apollo + `bip32-ed25519` is the provisional lead) and is
+   selected only after the Block 1.5a Kotlin-2.4.0 compatibility spike; per-algorithm library
+   choices for derivation/signing follow in Blocks 1.6/1.10, each updating ADR-0004's matrix.
+   See `docs/DECISIONS/0004-crypto-strategy.md` (open questions) and
+   `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`.
 
 5. Test vector sources:
    - The authoritative spec sources are now documented in `docs/TESTING.md` (Bech32/Bech32m
@@ -383,6 +401,59 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-07
+
+Summary:
+
+- Block 1.4 (Crypto Evaluation And Module Decision): docs-only decision block. No Kotlin,
+  Gradle, dependency, or module changes; only Markdown edited.
+- Added `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md` (ADR-0008),
+  `Accepted` for the module/seam/process decisions only, with an explicit "Scope of this
+  Accepted status" note that it makes no final dependency-fitness claim while compatibility is
+  untested.
+- Decided now (Accepted): (1) `:crypto` deferred to Block 1.5 (the block that adds the first
+  crypto dependency), per ADR-0002/0005; (2) seam = a `commonMain` common interface/adapter
+  (`Hashing`, later `KeyDerivation`/`Signing`) returning `KardanoResult`, no throwing across
+  Swift/ObjC, with `expect`/`actual` as fallback; (3) first algorithm boundary in Block 1.5 =
+  Blake2b-224/256 behind `Hashing`, using official cited vectors (RFC 7693 / Cardano context),
+  no invented vectors.
+- Provisional: candidate selection is provisional. Hyperledger Identus Apollo +
+  `dev.allain:bip32-ed25519` is the provisional lead (only evaluated candidate covering all
+  targets and the full set incl. Ed25519-BIP32), gated on a Block 1.5a Kotlin-2.4.0
+  compatibility spike (recent Apollo releases target Kotlin 1.9.x). Fallbacks: a multi-library
+  composition (cryptography-kotlin (whyoleg) for SHA-512/HMAC/PBKDF2/standard-Ed25519 + a
+  Blake2b source such as ionspin libsodium + an Ed25519-BIP32 library), then the ADR-0004 A+B
+  platform seam. bloxbean cardano-client-lib rejected as a shipped dependency (JVM-only, no
+  iOS/KMP); retained only as a JVM vector oracle.
+- Process: Block 1.5 split into 1.5a (throwaway compatibility spike; no committed dependency)
+  and 1.5b (create `:crypto`, wire the chosen dependency behind `Hashing`, add Blake2b vectors).
+- Matrix facts are source-cited; unknowns marked `Unverified` / `To verify in 1.5a`; third-party
+  review status uses neutral fields (`External review`, `Public review notes`) with no fitness
+  claim. No banned words in new text except when quoting the policy list.
+- ADR-0004 got a one-line cross-reference to ADR-0008 (matrix advanced, not replaced).
+  Updated `docs/PHASE_1_PLAN.md` (Block 1.4 complete + outcome; Block 1.5 split into 1.5a/1.5b;
+  Siguiente paso -> 1.5a), `docs/ROADMAP.md` (Current Status; Block 1.4 complete; Block 1.5
+  split), and this file (Block 1.4 status, Open Decisions #4, next task = 1.5a).
+
+Files changed this step:
+
+- `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md` (new)
+- `docs/DECISIONS/0004-crypto-strategy.md` (one-line cross-reference to ADR-0008)
+- `docs/PHASE_1_PLAN.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- None required (docs-only). Optional sanity build (no code changed): see verification note.
+
+Next recommended task:
+
+- **Block 1.5a (crypto compatibility spike)**: add the provisional candidate (Apollo +
+  `bip32-ed25519`, plus `secp256k1-kmp`) on a throwaway branch and confirm resolve/compile on
+  Android + JVM + iosSimulatorArm64 under Kotlin 2.4.0. Fall back per ADR-0008 §4 if it fails.
+  Only after it passes does 1.5b create `:crypto` and wire the dependency behind `Hashing`.
+
+### Previous Session Summary
 
 Date: 2026-07-05
 

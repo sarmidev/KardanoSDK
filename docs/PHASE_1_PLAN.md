@@ -297,7 +297,8 @@ Checkpoint Android (1.3b, live) — a ejecutar por el owner con su propia key:
 
 ### 1.4 Crypto Evaluation And Module Decision
 
-Bloque de decision/evaluacion, basado en ADR-0004.
+Status: complete. Bloque de decision/evaluacion (solo docs), basado en ADR-0004. Ver
+`docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md` (ADR-0008).
 
 Objetivo:
 
@@ -306,6 +307,26 @@ Objetivo:
 - Registrar decisiones en ADR-0004 o en un ADR nuevo si hace falta.
 - No implementar wallet completa en este bloque.
 
+Outcome:
+
+- Se anadio ADR-0008 (`Accepted` solo para las decisiones de modulo/seam/proceso; sin afirmar
+  idoneidad final de ninguna dependencia mientras la compatibilidad no se pruebe). Sin cambios
+  de Kotlin, Gradle, dependencias ni modulos en este bloque; solo docs.
+- **Decidido ahora:** (1) `:crypto` se difiere al Bloque 1.5 (el bloque que anade la primera
+  dependencia de crypto), consistente con ADR-0002/0005; (2) el seam es una interfaz comun /
+  adapter en `commonMain` (`Hashing`, luego `KeyDerivation` / `Signing`) que devuelve
+  `KardanoResult` y no lanza a traves de Swift/ObjC, con `expect`/`actual` solo como fallback;
+  (3) el primer limite algoritmico en 1.5 es Blake2b-224/256 detras de `Hashing`, con vectores
+  oficiales citados (RFC 7693 / contexto Cardano) — sin inventar vectores.
+- **Provisional:** la seleccion de dependencia es provisional. Hyperledger Identus Apollo +
+  `bip32-ed25519` es el lider provisional (unico candidato evaluado que cubre todos los targets
+  y el set completo incluyendo Ed25519-BIP32), pero su compatibilidad con Kotlin 2.4.0 esta sin
+  probar. Matriz de candidatos con hechos citados por fuente y desconocidos marcados
+  `Unverified` / `To verify in 1.5a`; estado de revision de terceros con campos neutrales
+  (`External review`, `Public review notes`), sin claim de idoneidad.
+- **Rechazado como dependencia enviada:** bloxbean cardano-client-lib (JVM/Java, sin iOS/KMP);
+  se conserva solo como oraculo de vectores en JVM.
+
 Checkpoint Android:
 
 - Mantener la app compilando. Este bloque desbloquea los siguientes, aunque no tenga una
@@ -313,13 +334,31 @@ Checkpoint Android:
 
 ### 1.5 Crypto Primitives Needed For Wallet
 
-Implementar solo las primitivas necesarias para el MVP de wallet, siguiendo ADR-0004.
+Implementar solo las primitivas necesarias para el MVP de wallet, siguiendo ADR-0004 y las
+decisiones de ADR-0008. Se divide para no comprometer una dependencia sin probarla primero.
+
+#### 1.5a Compatibility spike (antes de cualquier dependencia comprometida)
+
+- En una rama desechable, anadir el candidato provisional (Apollo + `bip32-ed25519`, y sus
+  companions transitivos, p. ej. `secp256k1-kmp`) a un modulo scratch.
+- Confirmar que resuelve y compila en Android + JVM + iosSimulatorArm64 bajo la version de
+  Kotlin del repo (hoy `2.4.0`).
+- Si falla, descartar la rama y repetir 1.5a con el siguiente fallback (composicion
+  multi-libreria: cryptography-kotlin + fuente Blake2b + libreria Ed25519-BIP32; luego el
+  platform seam A+B de ADR-0004).
+- Registrar el resultado (candidato, targets, versiones) en ADR-0008 o en una nota de
+  seguimiento corta. No se compromete ninguna dependencia al build antes de que 1.5a pase.
+
+#### 1.5b Wire + test (solo tras pasar 1.5a)
 
 Objetivo:
 
+- Crear `:crypto` y anadir la dependencia elegida (pineada, sin versiones dinamicas).
+- Cablear el primer limite algoritmico: Blake2b-224/256 detras de la interfaz `Hashing`.
 - Implementar wrappers/bindings de los algoritmos elegidos.
-- Cubrirlos con vectores oficiales.
-- Mantener errores tipados.
+- Cubrirlos con vectores oficiales citados (Blake2b: RFC 7693 / contexto Cardano); sin inventar
+  vectores.
+- Mantener errores tipados (`KardanoResult`, sin lanzar a traves de Swift/ObjC).
 - Evitar exponer bytes mutables internos.
 - No firmar transacciones todavia si se puede separar.
 
@@ -467,9 +506,12 @@ Abrir la app Android y comprobar funcionalidad despues de:
 ## Siguiente paso
 
 `1.1`, `1.2`, `1.3a` (interfaz + modelos + mock + Playground en `:provider`), `1.3b-pre`
-(`Address.bech32` en `:core`) y `1.3b` (`:provider-blockfrost`: `BlockfrostChainQueryProvider`
+(`Address.bech32` en `:core`), `1.3b` (`:provider-blockfrost`: `BlockfrostChainQueryProvider`
 con Ktor + kotlinx-serialization, mapeo a modelos neutrales, toggle live en el Playground y
-ADR-0007) estan completos. El siguiente paso es la pista de crypto: `1.4 Crypto Evaluation And
-Module Decision` (evaluar librerias/bindings contra ADR-0004 y decidir `:crypto`), que
-desbloquea wallet y signing. No hay wallet, crypto, tx ni signing todavia.
+ADR-0007) y `1.4` (Crypto Evaluation And Module Decision, solo docs; ADR-0008) estan completos.
+El siguiente paso es `1.5a`: el spike de compatibilidad del candidato provisional (Apollo +
+`bip32-ed25519`) bajo Kotlin 2.4.0 en Android + JVM + iosSimulatorArm64, antes de comprometer
+ninguna dependencia; solo si pasa se procede a `1.5b` (crear `:crypto`, cablear la dependencia
+elegida detras de `Hashing` y anadir vectores Blake2b oficiales). No hay wallet, crypto, tx ni
+signing todavia.
 

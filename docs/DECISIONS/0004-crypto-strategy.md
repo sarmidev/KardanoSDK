@@ -235,6 +235,11 @@ verified conclusion.
 The matrix is structured by **candidate category**. Concrete library names within each
 category are examples only — not selections.
 
+> **Update (ADR-0008, Block 1.4):** ADR-0008 advances this matrix for specific evaluated
+> candidates from `Needs investigation` to "source-cited with open items" and records the
+> module/seam/process decisions this ADR left to the implementing block. It does not replace
+> this ADR. See `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`.
+
 ---
 
 ### Category A: JVM / Android JCA-style provider

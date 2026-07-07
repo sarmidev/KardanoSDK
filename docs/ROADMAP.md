@@ -18,9 +18,11 @@ Current priority:
 
 > Phase 0 is closed. Phase 1 Block 1.1 (planning), Block 1.2 (Android SDK Playground),
 > Block 1.3a (Provider Read-Only Boundary — interface, models, and mock in `:provider`),
-> Block 1.3b-pre (`Address.bech32` source string in `:core`), and Block 1.3b (Blockfrost
-> preprod provider in `:provider-blockfrost`, with a live Playground toggle) are complete. The
-> next step is the crypto track (Block 1.4 Crypto Evaluation And Module Decision).
+> Block 1.3b-pre (`Address.bech32` source string in `:core`), Block 1.3b (Blockfrost
+> preprod provider in `:provider-blockfrost`, with a live Playground toggle), and Block 1.4
+> (Crypto Evaluation And Module Decision, docs-only; ADR-0008) are complete. The next step is
+> Block 1.5a — a Kotlin-2.4.0 compatibility spike for the provisional crypto candidate before
+> any dependency is committed.
 
 ## Phase 0 - Core Foundation
 
@@ -719,10 +721,21 @@ Proposed block sequence:
   + API-key config + sanitized fixtures + opt-in live test). See
   `docs/DECISIONS/0006-provider-boundary-and-strategy.md` and
   `docs/DECISIONS/0007-http-client-and-blockfrost-provider.md`.
-- `1.4` Crypto Evaluation And Module Decision — choose the first concrete crypto
-  evaluation path following ADR-0004.
-- `1.5` Crypto Primitives Needed For Wallet — implement only the primitives needed by the
-  MVP, with official vectors.
+- `1.4` Crypto Evaluation And Module Decision — **Status: complete (docs-only).** Outcome:
+  added ADR-0008 (`Accepted` for module/seam/process only; no final dependency-fitness claim
+  while compatibility is untested). Decided now: `:crypto` deferred to Block 1.5; the seam is a
+  `commonMain` common interface/adapter (`Hashing`, later `KeyDerivation`/`Signing`) returning
+  `KardanoResult`, with `expect`/`actual` as fallback; the first algorithm boundary in 1.5 is
+  Blake2b-224/256 behind `Hashing` with official cited vectors (RFC 7693 / Cardano context).
+  Provisional: candidate selection is provisional, with Hyperledger Identus Apollo +
+  `bip32-ed25519` as the provisional lead (Kotlin 2.4.0 compatibility To verify in 1.5a);
+  bloxbean cardano-client-lib rejected as a shipped dependency (no iOS/KMP), retained as a
+  JVM-only vector oracle. Source-cited matrix; unknowns marked `Unverified`/`To verify in 1.5a`;
+  neutral review fields. No Kotlin/Gradle/dependency/module changes. See
+  `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`.
+- `1.5` Crypto Primitives Needed For Wallet — split into `1.5a` (a throwaway Kotlin-2.4.0
+  compatibility spike gating any dependency commit) and `1.5b` (create `:crypto`, wire the
+  chosen dependency behind `Hashing`, add Blake2b-224/256 with official cited vectors).
 - `1.6` Mnemonic / Seed / Key Derivation — create/restore a test wallet and derive keys.
 - `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
   `Address.parse`.
