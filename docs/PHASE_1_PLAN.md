@@ -364,28 +364,38 @@ runtime. La adopcion/cableado concretos se deciden en 1.5b. Detalle en ADR-0008 
 
 Antes de crear `:crypto` o escribir el API de hashing, un gate bloqueante busca vectores
 oficiales, citados y exactos (bytes de entrada + digest exacto + URL/commit) para ambos
-tamanos. Resultado (2026-07-11):
+tamanos. Resultado (2026-07-11): ambos tamanos **PASS**.
 
 - Blake2b-224: **PASS.** Par oficial de CIP-19 (CC-BY-4.0): clave de verificacion
   `addr_vk1w0l2sr2zgfm26ztc6nl9xy8ghsk5sh6ldwemlpmp9xylzy4dtf7st80zhd` (decodificable por
   bech32 a 32 bytes) + los 28 bytes de payment credential extraibles de la direccion CIP-19
   completa `addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x`
   via `Address.parse` de `:core`.
-- Blake2b-256: **ABIERTO (bloqueante).** No se encontro un KAT oficial fijo de IOG/Intersect
-  (input concreto + digest de 32 bytes). RFC 7693 App. A solo trae 512-bit/BLAKE2s; el KAT
-  oficial de BLAKE2 es keyed/64 bytes; los tests de `cardano-crypto-class`
-  (`testlib/Test/Crypto/Hash.hs`) son basados en propiedades, sin KAT fijo; los valores
-  conocidos (`0e5751c0…`/`bddd813c…`) solo aparecen en un repo Rust de terceros, no oficial.
+- Blake2b-256: **PASS.** Goldens de conformance de Plutus para el builtin sin clave
+  `blake2b_256` (Apache-2.0), repo `IntersectMBO/plutus`, commit
+  `5e18824e2e0e30656c81d182e0ca512b75e7e57c`, prefijo de ruta
+  `plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/blake2b_256/`.
+  Vector 1 (`blake2b_256-empty`): input `#` (0 bytes) → `0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8`.
+  Vector 2 (`blake2b_256-length-200`): input `2e7ea84da4bc4d7cfb463e3f2c8647057afff3fbececa1d200`
+  (25 bytes) → `91c60f99b33303c02b39ed93b713e3915a180c3747f3b31e05727618ee401624`.
+  Validacion: cada fixture es `equalsByteString (blake2b_256 (con bytestring #INPUT)) (con bytestring #EXPECTED)`
+  con `.uplc.expected` = `(con bool True)`; el builtin se aplica solo a los bytes crudos del
+  literal UPLC (sin envoltura CBOR/UPLC), `#` = vacio y `#2e7e…1d200` = exactamente 25 bytes. El
+  digest de entrada vacia `0e5751c0…`, antes rechazado por aparecer solo en un repo Rust de
+  terceros, queda confirmado literalmente en esta fuente oficial de Intersect.
 
-Consecuencia: se difiere `1.5b` hasta fijar una fuente oficial exacta de Blake2b-256.
+Consecuencia: con ambos tamanos fijados, el gate `1.5b-pre` pasa y `1.5b` queda desbloqueado.
 `1.5b-pre` no crea modulo, dependencia ni cambios de Kotlin/Gradle; solo docs. Detalle en
 ADR-0008 §7.
 
-#### 1.5b Wire + test (solo tras fijar los vectores en 1.5b-pre)
+#### 1.5b Wire + test (desbloqueado; vectores ya fijados en 1.5b-pre)
 
 Objetivo:
 
-- Crear `:crypto` y anadir la dependencia elegida (pineada, sin versiones dinamicas).
+- Crear `:crypto` y anadir la dependencia elegida (pineada, sin versiones dinamicas). Para este
+  bloque solo-hashing la dependencia es Apollo 1.8.8 unicamente (mas lo que Apollo arrastre
+  transitivamente); `bip32-ed25519` no se necesita para hashing y se reserva para los bloques
+  posteriores de derivacion de claves (1.6 / 1.10).
 - Cablear el primer limite algoritmico: Blake2b-224/256 detras de la interfaz `Hashing`.
 - Implementar wrappers/bindings de los algoritmos elegidos.
 - Cubrirlos con vectores oficiales citados (Blake2b: RFC 7693 / contexto Cardano); sin inventar
@@ -544,9 +554,10 @@ ADR-0007), `1.4` (Crypto Evaluation And Module Decision, solo docs; ADR-0008) y 
 compatibilidad, **PASS**) estan completos. `1.5a` confirmo que el candidato provisional
 (Apollo 1.8.8 + `bip32-ed25519` 2.3.0) resuelve y compila en Android + JVM + iosSimulatorArm64
 bajo Kotlin 2.4.0 (ADR-0008 §6); no se comprometio ninguna dependencia al build (el modulo scratch
-se descarto). `1.5b-pre` (gate de vectores, solo docs) esta hecho: el vector de Blake2b-224
-queda fijado con CIP-19, pero el de Blake2b-256 sigue **abierto** por falta de un KAT oficial
-exacto de IOG/Intersect (ADR-0008 §7). El siguiente paso es fijar la fuente oficial exacta de
-Blake2b-256 y luego ejecutar `1.5b`: crear `:crypto`, cablear la dependencia elegida detras de
-`Hashing` y anadir los vectores Blake2b citados. No hay wallet, crypto, tx ni signing todavia.
+se descarto). `1.5b-pre` (gate de vectores, solo docs) esta hecho y **pasa para ambos tamanos**:
+Blake2b-224 fijado con CIP-19 y Blake2b-256 fijado con los goldens de conformance de Plutus
+(`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008 §7). El siguiente paso es ejecutar
+`1.5b` (desbloqueado): crear `:crypto`, anadir Apollo 1.8.8 (solo hashing; sin `bip32-ed25519`),
+cablear Blake2b-224/256 detras de `Hashing` y anadir los vectores Blake2b citados verbatim. No
+hay wallet, crypto, tx ni signing todavia.
 

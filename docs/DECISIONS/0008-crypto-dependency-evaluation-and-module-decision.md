@@ -294,22 +294,37 @@ ADR-0004 remain in force. ADR-0004 carries a one-line cross-reference to this AD
   test), because the first-boundary test-vector policy (ADR-0004 §7) requires exact, cited
   vectors before any hashing code lands, and one of the two required vectors was not cleanly
   available. See §7 below.
-- Block 1.5b (deferred): create `:crypto`, wire the selected dependency behind `Hashing`, add
-  Blake2b-224/256 with the pinned cited vectors — executed only after the Blake2b-256 source
-  is pinned (§7).
+- Block 1.5b (unblocked): create `:crypto`, wire the selected dependency behind `Hashing`, add
+  Blake2b-224/256 with the pinned cited vectors. The Blake2b-256 source is now pinned (§7), so
+  the 1.5b-pre gate passes for both digest sizes. For this hashing-only block the dependency is
+  Apollo 1.8.8 only (plus whatever Apollo pulls transitively); `bip32-ed25519` is not needed for
+  hashing and is reserved for the later key-derivation blocks (1.6 / 1.10).
 
-#### 7. Block 1.5b-pre vector-source gate result — 224 PASS, 256 OPEN
+#### 7. Block 1.5b-pre vector-source gate result — 224 PASS, 256 PASS
 
 Before creating `:crypto` or writing any hashing code, a blocking gate searched for exact,
 official, citable known-answer vectors (concrete input bytes + exact digest + source
-URL/commit) for both digest sizes. Outcome on 2026-07-11:
+URL/commit) for both digest sizes. Outcome on 2026-07-11 (Blake2b-256 pinned in a follow-up
+search the same day; see below the table):
 
 | Size | Result | Source |
 |------|--------|--------|
 | Blake2b-224 | **PASS** | CIP-19 test vectors (CC-BY-4.0). Input: verification key `addr_vk1w0l2sr2zgfm26ztc6nl9xy8ghsk5sh6ldwemlpmp9xylzy4dtf7st80zhd` (bech32-decodable to a 32-byte Ed25519 key). Expected: the 28-byte payment credential extractable from the full CIP-19 address `addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x` (type-00) via `:core` `Address.parse`. Source: https://cips.cardano.org/cip/CIP-19 |
-| Blake2b-256 | **OPEN (blocking)** | No exact official IOG/Intersect fixed KAT (input + 32-byte digest) found. |
+| Blake2b-256 | **PASS** | IntersectMBO Plutus conformance goldens for the unkeyed `blake2b_256` builtin (Apache-2.0), repo `IntersectMBO/plutus`, commit `5e18824e2e0e30656c81d182e0ca512b75e7e57c`, path prefix `plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/blake2b_256/`. Vector 1 (`blake2b_256-empty`): input `#` (0 bytes) → `0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8`. Vector 2 (`blake2b_256-length-200`): input `2e7ea84da4bc4d7cfb463e3f2c8647057afff3fbececa1d200` (25 bytes) → `91c60f99b33303c02b39ed93b713e3915a180c3747f3b31e05727618ee401624`. |
 
-Sources searched for Blake2b-256 and why each failed the gate:
+Blake2b-256 source validation (why these goldens satisfy the gate): each fixture is a UPLC program
+`equalsByteString (blake2b_256 (con bytestring #INPUT)) (con bytestring #EXPECTED)` whose
+`.uplc.expected` is `(con bool True)`. The builtin `blake2b_256` is applied to the raw UPLC
+bytestring constant `#INPUT` only — no CBOR/UPLC envelope bytes enter the hash input — where `#`
+is the empty byte string and `#2e7e…1d200` is exactly the 25-byte input. The Plutus `blake2b_256`
+builtin is the same unkeyed Blake2b with a 32-byte digest that Cardano uses for its 32-byte hashes;
+Blake2b is deterministic (empty key/salt/personalization), so these digests are
+implementation-independent and apply to the selected dependency. This is the
+"Cardano spec / official test/golden file" acceptable-source category. Notably, the empty-input
+digest `0e5751c0…` — previously rejected because it was found only in a third-party Rust repo — is
+now confirmed verbatim in an official Intersect source, which resolves the earlier gap.
+
+Sources originally searched for Blake2b-256 (recorded for history), and how the gap was closed:
 
 - RFC 7693 Appendix A — only BLAKE2b-512 ("abc") and BLAKE2s-256; no unkeyed BLAKE2b-256.
 - Official BLAKE2 KAT `github.com/BLAKE2/BLAKE2/testvectors/blake2b-kat.txt` — keyed and
@@ -320,13 +335,18 @@ Sources searched for Blake2b-256 and why each failed the gate:
 - `input-output-hk/cardano-crypto` — no golden/KAT located.
 - `cardano-ledger` goldens — only complex constitution-hash CBOR, not a clean small
   Blake2b-256 input/digest pair.
-- The frequently quoted values `0e5751c0…` (empty) / `bddd813c…` ("abc") were located only in
-  a third-party Rust repo (`DaJo-Code/cardano-crypto`), which is not an official IOG/Intersect
-  source, so they fail the gate. Generating an "official" digest with another library (Apollo,
-  Python, BouncyCastle, libsodium) is prohibited by ADR-0004 §7; cross-checks are secondary only.
+- The frequently quoted value `0e5751c0…` (empty) was initially located only in a third-party
+  Rust repo (`DaJo-Code/cardano-crypto`), which is not an official IOG/Intersect source; on its
+  own it failed the gate. It is now confirmed verbatim in the official `IntersectMBO/plutus`
+  conformance golden above, which is what closes the gap. Generating an "official" digest with
+  another library (Apollo, Python, BouncyCastle, libsodium) is prohibited by ADR-0004 §7;
+  cross-checks are secondary only.
+- Gap closed by the `IntersectMBO/plutus` conformance goldens for the unkeyed `blake2b_256`
+  builtin (see the table row and the validation paragraph above): official Intersect repo,
+  concrete input bytes, exact 32-byte digests, pinned commit, Apache-2.0.
 
-Consequence: 1.5b implementation is deferred until an exact official Blake2b-256 vector source
-is pinned. 1.5b-pre commits no module, dependency, API, or Kotlin/Gradle change.
+Consequence: with both digest sizes pinned, the 1.5b-pre gate passes and 1.5b is unblocked.
+1.5b-pre itself commits no module, dependency, API, or Kotlin/Gradle change.
 - Blocks 1.6 / 1.10: seed/key derivation and signing, each citing CIP-1852 / CIP-3 / BIP-39 /
   RFC 8032 vectors verbatim in the implementing block.
 - ADR-0004 (`docs/DECISIONS/0004-crypto-strategy.md`) and ADR-0005

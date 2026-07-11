@@ -75,10 +75,11 @@ If paths differ, locate files by name.
 Current phase:
 
 - Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, 1.5a, and 1.5b-pre complete;
-  Block 1.5b — create `:crypto` and wire the dependency behind `Hashing` — is blocked pending an
-  exact official Blake2b-256 test vector). Block 1.5b-pre ran the vector-source gate: Blake2b-224
-  is pinned to CIP-19, but no exact official IOG/Intersect Blake2b-256 known-answer vector was
-  found, so 1.5b is deferred (ADR-0008 §7). Phase 0 - Core Foundation closed below for reference.
+  Block 1.5b — create `:crypto` and wire the dependency behind `Hashing` — is now unblocked).
+  Block 1.5b-pre ran the vector-source gate and it **passes for both digest sizes**: Blake2b-224
+  is pinned to CIP-19 and Blake2b-256 is pinned to the IntersectMBO Plutus `blake2b_256`
+  conformance goldens (`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008 §7). Phase 0 -
+  Core Foundation closed below for reference.
 
 Block status:
 
@@ -286,22 +287,28 @@ compilation/typecheck (including the iOS-simulator klib) only, not runtime crypt
 correctness or native-binary linkage. No dependency was committed to the build; the scratch module
 and its `settings.gradle.kts` entry were discarded. See ADR-0008 §6.
 
-**Block 1.5b-pre (vector-source gate) is complete (docs-only).** Before creating `:crypto` or
-writing any hashing code, a blocking gate searched for exact, official, citable Blake2b
-known-answer vectors (input bytes + exact digest + source URL/commit). Result: Blake2b-224 PASS
-(CIP-19: verification key `addr_vk1w0l2sr…` + the 28-byte payment credential from the full
-CIP-19 address `addr1qx2fxv2umyhttk…`, extractable via `:core` `Address.parse`); Blake2b-256
-OPEN — no exact official IOG/Intersect fixed KAT found (RFC 7693 has only 512-bit/BLAKE2s; the
-BLAKE2 KAT is keyed/64-byte; `cardano-crypto-class` hash tests are property-based; the quoted
-`0e5751c0…`/`bddd813c…` values appear only in a non-official third-party repo). No module,
-dependency, API, or Kotlin/Gradle change landed. See ADR-0008 §7.
+**Block 1.5b-pre (vector-source gate) is complete (docs-only); it passes for both digest
+sizes.** Before creating `:crypto` or writing any hashing code, a blocking gate searched for
+exact, official, citable Blake2b known-answer vectors (input bytes + exact digest + source
+URL/commit). Result: Blake2b-224 PASS (CIP-19: verification key `addr_vk1w0l2sr…` + the 28-byte
+payment credential from the full CIP-19 address `addr1qx2fxv2umyhttk…`, extractable via `:core`
+`Address.parse`); Blake2b-256 PASS — IntersectMBO Plutus `blake2b_256` conformance goldens
+(`IntersectMBO/plutus` @`5e18824e2e0e30656c81d182e0ca512b75e7e57c`, Apache-2.0, path prefix
+`plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/blake2b_256/`): input `#`
+(empty) → `0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8`, input
+`2e7ea84da4bc4d7cfb463e3f2c8647057afff3fbececa1d200` (25 bytes) →
+`91c60f99b33303c02b39ed93b713e3915a180c3747f3b31e05727618ee401624`. Each fixture is
+`equalsByteString (blake2b_256 (con bytestring #INPUT)) (con bytestring #EXPECTED)` → `True`, so
+the builtin hashes the raw UPLC bytestring literal only (no CBOR/UPLC envelope); the empty-input
+digest previously seen only in a non-official third-party repo is now confirmed in this official
+Intersect source. No module, dependency, API, or Kotlin/Gradle change landed. See ADR-0008 §7.
 
-Next recommended task: **pin an exact official Blake2b-256 vector source, then Block 1.5b
-(create `:crypto` + wire behind `Hashing`)** — once a citable IOG/Intersect (or equivalent
-approved) Blake2b-256 input/digest pair is fixed, create the `:crypto` KMP module, add the
-selected dependency pinned (no dynamic versions), wire Blake2b-224/256 behind the `Hashing`
-interface returning `KardanoResult`, and add the cited vectors verbatim. See ADR-0008 §7,
-`docs/PHASE_1_PLAN.md` Blocks 1.5b-pre/1.5b, and `docs/ROADMAP.md`.
+Next recommended task: **Block 1.5b (create `:crypto` + wire behind `Hashing`)** — now that both
+Blake2b vector sources are pinned, create the `:crypto` KMP module, add Apollo 1.8.8 only (plus
+whatever Apollo pulls transitively; do NOT add `bip32-ed25519` in this hashing-only block — it is
+reserved for the later key-derivation blocks), pinned (no dynamic versions), wire Blake2b-224/256
+behind the `Hashing` interface returning `KardanoResult`, and add the cited vectors verbatim. See
+ADR-0008 §7, `docs/PHASE_1_PLAN.md` Blocks 1.5b-pre/1.5b, and `docs/ROADMAP.md`.
 
 Current modules:
 
@@ -470,9 +477,12 @@ Tests run:
 
 Next recommended task:
 
-- **Block 1.5b**: create `:crypto`, add the selected dependency pinned, wire Blake2b-224/256
-  behind the `Hashing` interface (returning `KardanoResult`, no throwing across Swift/ObjC), and
-  add official cited Blake2b vectors (RFC 7693 / Cardano context).
+- **Block 1.5b** (now unblocked — both Blake2b vector sources pinned in 1.5b-pre): create
+  `:crypto`, add Apollo 1.8.8 only (plus whatever Apollo pulls transitively; do NOT add
+  `bip32-ed25519` in this hashing-only block — it is reserved for the later key-derivation
+  blocks), pinned, wire Blake2b-224/256 behind the `Hashing` interface (returning `KardanoResult`,
+  no throwing across Swift/ObjC), and add the cited Blake2b vectors verbatim (Blake2b-224 =
+  CIP-19; Blake2b-256 = IntersectMBO Plutus `blake2b_256` conformance goldens @`5e18824e`).
 
 ### Previous Session Summary
 
