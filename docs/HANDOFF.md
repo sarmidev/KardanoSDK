@@ -234,7 +234,7 @@ Block status:
   carries a one-line refinement cross-reference. All builds/tests pass. See
   `docs/DECISIONS/0006-provider-boundary-and-strategy.md` and `docs/PHASE_1_PLAN.md` Block 1.3.
 - Block 1.1 Phase 1 Scope And Architecture Plan: complete (previous session).
-  Recorded in `docs/PHASE_1_PLAN.md` ("Decisiones del Bloque 1.1") and
+  Recorded in `docs/PHASE_1_PLAN.md` ("Block 1.1 Decisions") and
   `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted): the MVP
   preprod flow (create/restore test wallet, derive address, query UTxOs, build a minimal
   ADA-only tx, sign locally, submit to preprod, show result in Android); native assets placed
@@ -502,7 +502,7 @@ Summary:
   only: path + Blake2b-224 fingerprint + typed state; no raw/hex public key display).
 - Docs updated: new ADR-0009; ADR-0008 follow-up cross-reference note (Apollo matrix
   correction for 1.6); `docs/PHASE_1_PLAN.md` (1.6 split into 1.6a–1.6d with gates,
-  "Siguiente paso" → 1.6b); `docs/ROADMAP.md` (Current Status + Block 1.6 entry); this
+  "Next step" → 1.6b); `docs/ROADMAP.md` (Current Status + Block 1.6 entry); this
   file. No Kotlin, Gradle, dependency, or module changes; no compile probe was needed (all
   checks ran against published artifacts and pinned source tags outside the repo).
 
@@ -551,7 +551,7 @@ Summary:
   1.5b via official cited vectors.
 - Docs-only update this session: ADR-0008 (new §6 spike result; Candidate 3 matrix rows updated
   from `To verify in 1.5a`; §4 provisional text; follow-up work), `docs/PHASE_1_PLAN.md` (1.5a
-  Resultado + "Siguiente paso" → 1.5b), `docs/ROADMAP.md` (Current Status + Block 1.5 entry), and
+  Outcome + "Next step" → 1.5b), `docs/ROADMAP.md` (Current Status + Block 1.5 entry), and
   this file. No Kotlin, Gradle, dependency, or module changes remain; only Markdown changed.
 
 Files changed this step:
@@ -634,7 +634,7 @@ Summary:
   claim. No banned words in new text except when quoting the policy list.
 - ADR-0004 got a one-line cross-reference to ADR-0008 (matrix advanced, not replaced).
   Updated `docs/PHASE_1_PLAN.md` (Block 1.4 complete + outcome; Block 1.5 split into 1.5a/1.5b;
-  Siguiente paso -> 1.5a), `docs/ROADMAP.md` (Current Status; Block 1.4 complete; Block 1.5
+  Next step -> 1.5a), `docs/ROADMAP.md` (Current Status; Block 1.4 complete; Block 1.5
   split), and this file (Block 1.4 status, Open Decisions #4, next task = 1.5a).
 
 Files changed this step:
@@ -771,7 +771,7 @@ Files changed this step:
 - `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenter.kt` (new)
 - `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/PlaygroundScreen.kt` (new)
 - `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenterTest.kt` (new)
-- `docs/PHASE_1_PLAN.md` (Block 1.2 status/outcome; "Siguiente paso" → Block 1.3)
+- `docs/PHASE_1_PLAN.md` (Block 1.2 status/outcome; "Next step" → Block 1.3)
 - `docs/ROADMAP.md` (Current Status; Block 1.2 outcome; Block 1.3 as next)
 - `docs/HANDOFF.md` (Block 1.2 status entry; this session summary; next task updated)
 - `shared/README.md` (Playground role; SDK logic stays in `:core`)
@@ -814,7 +814,7 @@ Summary:
 - Block 1.1 (Phase 1 Scope And Architecture Plan): planning/documentation block only. No
   wallet, crypto, provider, tx, or Android UI code. No Kotlin, Gradle, or dependency changes.
   Declared Block 1.1 complete; implementation starts at Block 1.2.
-- Recorded decisions (see `docs/PHASE_1_PLAN.md` "Decisiones del Bloque 1.1" and
+- Recorded decisions (see `docs/PHASE_1_PLAN.md` "Block 1.1 Decisions" and
   `docs/DECISIONS/0005-phase-1-architecture-and-scope.md`, ADR-0005, Accepted):
   - MVP preprod flow: create/restore test wallet, derive one address, query UTxOs, build a
     minimal ADA-only tx, sign locally, submit to preprod, show the result in Android.
@@ -852,8 +852,8 @@ Summary:
 
 Files changed this step:
 
-- `docs/PHASE_1_PLAN.md` (new "Decisiones del Bloque 1.1" section; Block 1.1 marked
-  complete with an outcome summary; "Siguiente paso" now points to Block 1.2)
+- `docs/PHASE_1_PLAN.md` (new "Block 1.1 Decisions" section; Block 1.1 marked
+  complete with an outcome summary; "Next step" now points to Block 1.2)
 - `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (new, ADR-0005, Accepted)
 - `docs/ROADMAP.md` (Current Status header; Phase 1 section — Block 1.1 outcome, Block 1.2
   marked next, acceptance criteria and expected capabilities reconciled to Android-primary)

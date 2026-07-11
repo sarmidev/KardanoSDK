@@ -159,7 +159,7 @@ simple change strategy (Block 1.9). Advanced coin selection is out of scope for 
 
 ## Consequences
 
-- `docs/PHASE_1_PLAN.md` gained a "Decisiones del Bloque 1.1" section recording this ADR's
+- `docs/PHASE_1_PLAN.md` gained a "Block 1.1 Decisions" section recording this ADR's
   decisions in the plan's working language; the existing 1.1-1.12 block list is unchanged.
 - `docs/ROADMAP.md` marks Block 1.1 complete and reconciles the Phase 1 acceptance criteria
   to Android-primary, with iOS/Desktop functional demos deferred.

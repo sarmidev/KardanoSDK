@@ -1,673 +1,671 @@
 # Kardano SDK - Phase 1 Plan
 
-## Objetivo
+## Objective
 
-Phase 1 convierte la base de Phase 0 en un primer flujo MVP verificable en una app
-Android. La prioridad no es construir todo de golpe, sino avanzar por bloques pequenos
-con checkpoints donde se pueda abrir la app y comprobar que la funcionalidad integrada
-realmente responde.
+Phase 1 turns the Phase 0 foundation into a first verifiable MVP flow in an
+Android app. The priority is not to build everything at once, but to progress in small
+blocks with checkpoints where the app can be opened to confirm that the integrated
+functionality actually responds.
 
-El objetivo final de Phase 1 es un flujo preprod/testnet:
+The final objective of Phase 1 is a preprod/testnet flow:
 
-1. Crear o restaurar una wallet de prueba.
-2. Derivar una direccion.
-3. Consultar UTxOs.
-4. Construir una transaccion ADA simple.
-5. Firmarla localmente.
-6. Enviarla a preprod.
-7. Ver el resultado desde la app Android.
+1. Create or restore a test wallet.
+2. Derive an address.
+3. Query UTxOs.
+4. Build a simple ADA transaction.
+5. Sign it locally.
+6. Submit it to preprod.
+7. See the result from the Android app.
 
-No se usan mainnet ni fondos reales en esta fase.
+No mainnet or real funds are used in this phase.
 
-## Principio de trabajo
+## Working principle
 
-Cada bloque debe tener una frontera clara:
+Each block must have a clear boundary:
 
-- Que se implementa.
-- Que no se implementa.
-- Que se puede probar en Android.
-- Que tests/docs quedan actualizados.
-- Que decisiones quedan abiertas para el siguiente bloque.
+- What is implemented.
+- What is not implemented.
+- What can be tested on Android.
+- What tests/docs remain updated.
+- What decisions remain open for the next block.
 
-Los checkpoints Android son parte del plan, no un extra al final. Si una funcionalidad no
-puede verse todavia en Android, debe quedar claro por que y que desbloquea.
+Android checkpoints are part of the plan, not an extra at the end. If a feature
+cannot yet be seen on Android, it must be clear why and what it unblocks.
 
-## Decisiones del Bloque 1.1
+## Block 1.1 Decisions
 
-Bloque 1.1 (planificacion/documentacion, sin codigo) deja registradas las siguientes
-decisiones antes de tocar wallet, crypto, provider, tx o UI de Android. Ver tambien
+Block 1.1 (planning/documentation, no code) records the following
+decisions before touching wallet, crypto, provider, tx, or Android UI. See also
 `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005).
 
-Decisiones tomadas ahora:
+Decisions made now:
 
-- **Flujo MVP (preprod, verificado en Android):** crear/restaurar wallet de prueba ->
-  derivar una direccion -> consultar UTxOs -> construir una tx ADA-only minima -> firmar
-  localmente -> enviar a preprod -> mostrar el resultado. Corresponde a los bloques 1.6-1.11.
-- **Native assets: fuera del primer MVP.** Solo ADA (pago + change). Se reconsideran despues
-  del cierre de Phase 1 o en Phase 2.
-- **Android es el objetivo primario de Phase 1.** iOS/Desktop se mantienen solo en modo
-  compilacion durante Phase 1 (salvo que se decida explicitamente lo contrario); sus
-  checkpoints funcionales quedan para el cierre de Phase 1 (1.12) o Phase 2. Esto reduce el
-  alcance frente a los criterios de aceptacion de Phase 1 en `docs/ROADMAP.md`, que hoy piden
-  demos de iOS y JVM/Desktop; ese documento se actualiza junto con este bloque.
-- **Estrategia de modulos/paquetes: solo criterios de decision, no se crea ningun modulo en
-  este bloque.**
-  - Paquetes primero, unicamente donde el trabajo sea libre de dependencias y los limites de
-    propiedad ("ownership") todavia esten en exploracion.
-  - Cualquier implementacion que introduzca dependencias de crypto, provider o red es un
-    disparador probable para crear un modulo Gradle real.
-  - `:core` se mantiene libre de dependencias y estructural.
-  - `:shared` se mantiene como host de muestra/UI y no debe convertirse en el hogar
-    definitivo de la logica de crypto/wallet/tx/provider del SDK.
-  - La creacion real de modulos queda diferida al primer bloque de implementacion que
-    necesite separacion de dependencias/ownership (segun ADR-0002/ADR-0003).
-  - No se afirma que los paquetes de crypto/provider vayan a vivir en `:core` ni en
-    `:shared`; su hogar se decide cuando corra el bloque que dispare esa separacion.
-- **Provider: mock/stub primero, Blockfrost como primer provider real de preprod.** Se
-  define una interfaz de provider en el Bloque 1.3 junto con una implementacion mock, para
-  que el trabajo de wallet/tx pueda avanzar sin depender de red real; despues se conecta
-  Blockfrost en preprod. Koios, Maestro, Ogmios y Kupo quedan diferidos (Phase 2). La API
-  publica del provider se mantiene minima para evitar bloquear el diseño futuro.
-- **Alcance de datos del provider para el MVP:** UTxOs por direccion, parametros de
-  protocolo, endpoint de submit. Cualquier otro dato (historial de tx, metadata) queda
-  diferido.
-- **Ruta de decision de crypto:** la evaluacion de librerias/bindings de ADR-0004 sigue
-  siendo el bloqueante real para wallet; se mantiene como Bloque 1.4 (evaluacion) y 1.5
-  (primitivas), pero los bloques read-only 1.2 y 1.3 pueden avanzar en paralelo porque no
-  requieren crypto. Algoritmos a resolver primero: Ed25519-BIP32, derivacion BIP-32/CIP-1852,
-  BIP-39/CIP-3, PBKDF2-HMAC-SHA-512, HMAC-SHA-512, Blake2b-224/256. La matriz de candidatos de
-  ADR-0004 se actualiza en 1.4/1.5, no en este bloque; aqui no se selecciona ninguna libreria.
-- **Definicion de "transaccion ADA minima":** una o mas entradas seleccionadas de los UTxOs
-  de la wallet, una salida de pago a una direccion `addr_test` destino, una salida de change,
-  una fee calculada, y un intervalo de validez solo si resulta necesario. Sin native assets,
-  metadata, certificados ni scripts.
-- **Prerrequisitos de CBOR/serializacion antes de construir transacciones:** queda pendiente
-  decidir si la serializacion de tx de Cardano necesita el orden de mapas RFC 7049
-  "length-first" en vez de la regla bytewise de RFC 8949 §4.2.1 usada en Phase 0 (item
-  abierto de ADR-0001); y queda pendiente una politica de encoding/roundtrip de direcciones
-  (`Address.parse` hoy es solo decode; generar direcciones en 1.7 necesita `toBech32` o
-  equivalente, lo cual requiere su propio ADR). Ambos se resuelven en sus propios bloques
-  (CBOR en 1.9, direcciones antes/en 1.7), no aqui.
-- **Alcance de fee/change:** un calculo de fee directo a partir de los parametros de
-  protocolo mas una estrategia de change simple en el Bloque 1.9; sin coin selection
-  avanzada.
+- **MVP flow (preprod, verified on Android):** create/restore test wallet ->
+  derive an address -> query UTxOs -> build a minimal ADA-only tx -> sign
+  locally -> submit to preprod -> show the result. Corresponds to blocks 1.6-1.11.
+- **Native assets: out of scope for the first MVP.** ADA only (payment + change). Reconsidered after
+  Phase 1 closes or in Phase 2.
+- **Android is the primary target of Phase 1.** iOS/Desktop are kept only in
+  compile mode during Phase 1 (unless explicitly decided otherwise); their
+  functional checkpoints are deferred to the close of Phase 1 (1.12) or Phase 2. This reduces the
+  scope relative to the Phase 1 acceptance criteria in `docs/ROADMAP.md`, which currently ask for
+  iOS and JVM/Desktop demos; that document is updated together with this block.
+- **Module/package strategy: decision criteria only, no module is created in
+  this block.**
+  - Packages first, only where the work is dependency-free and the ownership
+    boundaries are still under exploration.
+  - Any implementation that introduces crypto, provider, or network dependencies is a
+    likely trigger for creating a real Gradle module.
+  - `:core` remains dependency-free and structural.
+  - `:shared` remains the sample/UI host and must not become the definitive
+    home of the SDK's crypto/wallet/tx/provider logic.
+  - The actual creation of modules is deferred to the first implementation block that
+    needs dependency/ownership separation (per ADR-0002/ADR-0003).
+  - It is **not** claimed that the crypto/provider packages will live in `:core` or in
+    `:shared`; their home is decided when the block that triggers that separation runs.
+- **Provider: mock/stub first, Blockfrost as the first real preprod provider.** A
+  provider interface is defined in Block 1.3 together with a mock implementation, so
+  that wallet/tx work can proceed without depending on a real network; Blockfrost is
+  connected afterward on preprod. Koios, Maestro, Ogmios, and Kupo are deferred (Phase 2). The provider's
+  public API stays minimal to avoid blocking future design.
+- **Provider data scope for the MVP:** UTxOs by address, protocol
+  parameters, submit endpoint. Any other data (tx history, metadata) is
+  deferred.
+- **Crypto decision path:** the library/binding evaluation from ADR-0004 remains
+  the real blocker for the wallet; it stays as Block 1.4 (evaluation) and 1.5
+  (primitives), but the read-only blocks 1.2 and 1.3 can proceed in parallel because they do
+  not require crypto. Algorithms to resolve first: Ed25519-BIP32, BIP-32/CIP-1852
+  derivation, BIP-39/CIP-3, PBKDF2-HMAC-SHA-512, HMAC-SHA-512, Blake2b-224/256. The candidate matrix from
+  ADR-0004 is updated in 1.4/1.5, not in this block; no library is selected here.
+- **Definition of a "minimal ADA transaction":** one or more inputs selected from the
+  wallet's UTxOs, one payment output to a destination `addr_test` address, one change
+  output, a computed fee, and a validity interval only if it turns out to be necessary. No native assets,
+  metadata, certificates, or scripts.
+- **CBOR/serialization prerequisites before building transactions:** it remains
+  pending to decide whether Cardano tx serialization needs the RFC 7049 map
+  ordering "length-first" instead of the bytewise rule from RFC 8949 §4.2.1 used in Phase 0 (open
+  item from ADR-0001); and an address encoding/roundtrip policy remains
+  pending (`Address.parse` today is decode-only; generating addresses in 1.7 needs `toBech32`
+  or equivalent, which requires its own ADR). Both are resolved in their own blocks
+  (CBOR in 1.9, addresses before/in 1.7), not here.
+- **Fee/change scope:** a direct fee calculation from the protocol
+  parameters plus a simple change strategy in Block 1.9; no advanced coin
+  selection.
 
-Decisiones diferidas explicitamente (no se resuelven en 1.1):
+Decisions explicitly deferred (not resolved in 1.1):
 
-- Libreria/binding concreto de crypto por algoritmo -> Bloque 1.4/1.5 (actualiza la matriz de
-  ADR-0004).
-- Limites finales de modulos Gradle y su momento exacto -> cuando aparezca presion de
-  dependencias (probablemente en 1.3/1.4).
-- ADR de encoding/roundtrip de direcciones (necesario para la generacion en 1.7) -> ADR propio
-  antes de/en 1.7.
-- Orden de mapas CBOR para serializacion de tx -> trabajo de serializacion de tx (1.9).
-- Modelo de persistencia de wallet -> no se improvisa junto con signing; decision separada.
-- Native assets, Byron/Base58, flujos funcionales de iOS/Desktop, providers adicionales ->
-  stretch de Phase 1 o Phase 2.
+- Concrete crypto library/binding per algorithm -> Block 1.4/1.5 (updates the
+  ADR-0004 matrix).
+- Final Gradle module boundaries and their exact timing -> when dependency
+  pressure appears (probably in 1.3/1.4).
+- Address encoding/roundtrip ADR (needed for generation in 1.7) -> its own ADR
+  before/in 1.7.
+- CBOR map ordering for tx serialization -> tx serialization work (1.9).
+- Wallet persistence model -> not improvised alongside signing; a separate decision.
+- Native assets, Byron/Base58, functional iOS/Desktop flows, additional providers ->
+  Phase 1 stretch or Phase 2.
 
-Limites de alcance / riesgo (se repiten en ADR-0005):
+Scope/risk boundaries (repeated in ADR-0005):
 
-No mainnet; no claves privadas, mnemonics ni fondos reales en ningun lugar; no crypto
-escrita a mano; no firma de transacciones antes de aprobar el alcance de crypto + provider +
-tx; no se debilitan validadores; no se agregan dependencias nuevas en este bloque
-(las dependencias solo se justifican en un bloque de implementacion posterior); `:core` se
-mantiene libre de UI y de dependencias; `:shared` se mantiene como host de muestra/UI y no es
-el hogar definitivo de la logica de crypto/wallet/tx/provider del SDK.
+No mainnet; no private keys, mnemonics, or real funds anywhere; no handwritten
+crypto; no transaction signing before approving the crypto + provider +
+tx scope; validators are not weakened; no new dependencies are added in this block
+(dependencies are only justified in a later implementation block); `:core`
+remains free of UI and dependencies; `:shared` remains the sample/UI host and is not
+the definitive home of the SDK's crypto/wallet/tx/provider logic.
 
-## Bloques propuestos
+## Proposed blocks
 
 ### 1.1 Phase 1 Scope And Architecture Plan
 
 Status: complete.
 
-Bloque de planificacion. No implementa crypto, wallet, provider ni transacciones.
+Planning block. Does not implement crypto, wallet, provider, or transactions.
 
-Objetivo:
+Objective:
 
-- Definir el alcance exacto del MVP de Phase 1.
-- Decidir que modulos se crean ahora y cuales se aplazan.
-- Definir los boundaries iniciales entre `:core`, posible `:crypto`, `:wallet`, `:tx`,
-  `:provider` y apps de ejemplo.
-- Elegir el primer provider objetivo para preprod, o dejar una decision concreta pendiente.
-- Definir las pantallas minimas de Android para validar cada bloque.
-- Definir que datos son solo de prueba.
+- Define the exact MVP scope for Phase 1.
+- Decide which modules are created now and which are deferred.
+- Define the initial boundaries between `:core`, possible `:crypto`, `:wallet`, `:tx`,
+  `:provider`, and sample apps.
+- Choose the first target provider for preprod, or leave a concrete decision pending.
+- Define the minimal Android screens to validate each block.
+- Define which data is test-only.
 
 Outcome:
 
-- Vease la seccion "Decisiones del Bloque 1.1" arriba y
-  `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted) para el
-  detalle completo. Resumen: flujo MVP ADA-only definido (1.6-1.11); native assets fuera del
-  primer MVP; Android como objetivo primario, iOS/Desktop solo compilacion en Phase 1; la
-  estrategia de modulos/paquetes queda como criterios de decision (sin crear modulos ahora,
-  sin asumir que crypto/provider viven en `:core` o `:shared`); provider mock/stub primero
-  con Blockfrost como primer candidato real de preprod; ruta de decision de crypto delegada a
-  ADR-0004 en los Bloques 1.4/1.5; y los prerrequisitos de direcciones (ADR de
-  encoding/roundtrip) y de CBOR (orden de mapas para tx) quedan explicitamente diferidos a
-  sus propios bloques. Sin cambios de Kotlin, Gradle o dependencias en este bloque.
+- See the "Block 1.1 Decisions" section above and
+  `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted) for the
+  full detail. Summary: the ADA-only MVP flow is defined (1.6-1.11); native assets are out of the
+  first MVP; Android is the primary target, iOS/Desktop are compile-only in Phase 1; the
+  module/package strategy stays as decision criteria (no modules created now,
+  no assumption that crypto/provider live in `:core` or `:shared`); provider mock/stub first
+  with Blockfrost as the first real preprod candidate; the crypto decision path delegated to
+  ADR-0004 in Blocks 1.4/1.5; and the address prerequisites (encoding/roundtrip
+  ADR) and CBOR (map ordering for tx) are explicitly deferred to
+  their own blocks. No Kotlin, Gradle, or dependency changes in this block.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Baseline verificado por compilacion: `./gradlew :androidApp:assembleDebug :core:jvmTest`
-  compila la app Android de muestra y `:core` sin cambios de codigo. Esto confirma que la APK
-  se ensambla, no que se abrio manualmente; una verificacion manual de apertura es opcional y,
-  si se realiza, la registra el owner por separado.
+- Verified by compilation baseline: `./gradlew :androidApp:assembleDebug :core:jvmTest`
+  compiles the sample Android app and `:core` with no code changes. This confirms that the APK
+  assembles, not that it was opened manually; a manual open verification is optional and,
+  if performed, is recorded separately by the owner.
 
 ### 1.2 Android SDK Playground
 
 Status: complete.
 
-Objetivo:
+Objective:
 
-- Tener un sitio visible donde probar el SDK durante toda Phase 1.
-- Parsear direcciones `addr_test` / `stake_test`.
-- Mostrar `network`, `AddressType`, credentials y pointer cuando aplique.
-- Probar errores tipados de direccion de forma comprensible.
-- Opcionalmente exponer checks simples de Hex, Bech32 y CBOR.
+- Have a visible place to try out the SDK throughout Phase 1.
+- Parse `addr_test` / `stake_test` addresses.
+- Show `network`, `AddressType`, credentials, and pointer when applicable.
+- Exercise typed address errors in a comprehensible way.
+- Optionally expose simple Hex, Bech32, and CBOR checks.
 
 Outcome:
 
-- Nuevo paquete `org.sarmidev.kardano.playground` en `:shared` `commonMain`:
-  - `PlaygroundPresenter`: objeto puro sin imports de Compose que mapea
-    `KardanoResult<Address, AddressError>` a filas etiquetadas (network, type, hrp,
-    credential kind, hash corto de 6 bytes con caption "structural only") o a un mensaje
-    de error legible por variante. Incluye `internal fun presentAddressError(error)` para
-    que los tests puedan construir variantes de `AddressError` directamente sin depender
-    de inputs concretos. Tambien expone `presentHexDecode` y `presentCbor` (hex -> CBOR
+- New package `org.sarmidev.kardano.playground` in `:shared` `commonMain`:
+  - `PlaygroundPresenter`: a pure object with no Compose imports that maps
+    `KardanoResult<Address, AddressError>` to labeled rows (network, type, hrp,
+    credential kind, a short 6-byte hash with caption "structural only") or to a
+    readable error message per variant. Includes `internal fun presentAddressError(error)` so
+    that tests can build `AddressError` variants directly without depending
+    on concrete inputs. Also exposes `presentHexDecode` and `presentCbor` (hex -> CBOR
     decode + re-encode round-trip).
-  - `PlaygroundScreen`: `@Composable internal` con estado local (`remember mutableStateOf`),
-    sin ViewModel ni framework de navegacion. Secciones: parseador de direcciones con
-    visualizacion de errores tipados, decodificador Hex, decodificador CBOR.
-  - `App.kt` reemplazado para renderizar `PlaygroundScreen()` dentro de `MaterialTheme`.
-    `:core` no se modifica; `:androidApp` no se modifica; sin nuevas dependencias ni modulos
-    Gradle; `:shared` no replica la suite de vectores de protocolo de `:core`; solo usa
-    un numero minimo de vectores CIP-19 citados para comprobar el wiring del presenter.
-- Tests en `shared/src/commonTest`: `PlaygroundPresenterTest` cubre 11 variantes de
-  `AddressError` construidas directamente, 2 happy paths CIP-19 citados (`type-06`
-  enterprise testnet y `type-14` reward testnet), 1 input invalido simple y 1 test de
-  estado Empty. No se replica la suite de vectores de protocolo de `:core`.
-- Verificacion: `./gradlew :core:jvmTest`, `:shared:jvmTest`, `:shared:testAndroidHostTest`,
-  `:shared:compileKotlinIosSimulatorArm64`, `:androidApp:assembleDebug` — todos BUILD
+  - `PlaygroundScreen`: `@Composable internal` with local state (`remember mutableStateOf`),
+    no ViewModel or navigation framework. Sections: address parser with
+    typed-error display, Hex decoder, CBOR decoder.
+  - `App.kt` replaced to render `PlaygroundScreen()` inside `MaterialTheme`.
+    `:core` is not modified; `:androidApp` is not modified; no new dependencies or Gradle
+    modules; `:shared` does not replicate `:core`'s protocol vector suite; it only uses
+    a minimal number of cited CIP-19 vectors to verify the presenter's wiring.
+- Tests in `shared/src/commonTest`: `PlaygroundPresenterTest` covers 11
+  `AddressError` variants constructed directly, 2 cited CIP-19 happy paths (`type-06`
+  enterprise testnet and `type-14` reward testnet), 1 simple invalid input, and 1 test of the
+  Empty state. `:core`'s protocol vector suite is not replicated.
+- Verification: `./gradlew :core:jvmTest`, `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+  `:shared:compileKotlinIosSimulatorArm64`, `:androidApp:assembleDebug` — all BUILD
   SUCCESSFUL.
-- UI tests / Compose UI / Espresso diferidos; el checkpoint manual es la verificacion del
-  bloque.
+- UI tests / Compose UI / Espresso are deferred; the manual checkpoint is the block's
+  verification.
 
-Checkpoint Android (verificado por el owner el 2026-07-05):
+Android checkpoint (verified by the owner on 2026-07-05):
 
-1. `./gradlew :androidApp:assembleDebug` — APK instalado y app abierta.
-2. La pantalla del Playground se renderiza (titulo, campo de entrada, area de resultado).
-3. Pegado `addr_test1vz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerspjrlsz` → visto
-   `Network: TESTNET`, `Type: ENTERPRISE`, `HRP: addr_test`, credential kind, y hash
-   prefijo corto con caption "structural only". ✓
-4. Pegado `stake_test1uqehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gssrtvn` → visto
+1. `./gradlew :androidApp:assembleDebug` — APK installed and app opened.
+2. The Playground screen renders (title, input field, result area).
+3. Pasted `addr_test1vz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerspjrlsz` -> saw
+   `Network: TESTNET`, `Type: ENTERPRISE`, `HRP: addr_test`, credential kind, and short hash
+   prefix with caption "structural only". ✓
+4. Pasted `stake_test1uqehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gssrtvn` -> saw
    `Type: REWARD`, `Network: TESTNET`, stake credential kind. ✓
-5. Input invalido → mensaje de `AddressError` legible, sin crash. ✓
-6. Hex decoder con `010203` → resultado correcto. ✓
-   CBOR decoder con `43010203` → `CborByteString` decodificado y round-trip ok. ✓
+5. Invalid input -> readable `AddressError` message, no crash. ✓
+6. Hex decoder with `010203` -> correct result. ✓
+   CBOR decoder with `43010203` -> `CborByteString` decoded and round-trip ok. ✓
 
-Solo se usan vectores publicos de CIP-19 — sin fondos reales ni datos privados.
+Only public CIP-19 vectors are used — no real funds or private data.
 
 ### 1.3 Provider Read-Only Boundary
 
-Definir y probar la capa de consulta de red antes de crear wallets. El bloque se divide en
-1.3a (interfaz + modelos + mock, sin red ni secrets) y 1.3b (Blockfrost preprod real,
-diferido). Ver `docs/DECISIONS/0006-provider-boundary-and-strategy.md` (ADR-0006, Accepted).
+Define and test the network query layer before creating wallets. The block is split into
+1.3a (interface + models + mock, no network or secrets) and 1.3b (real Blockfrost preprod,
+deferred). See `docs/DECISIONS/0006-provider-boundary-and-strategy.md` (ADR-0006, Accepted).
 
-Objetivo:
+Objective:
 
-- Definir una interfaz de provider para consultas read-only, neutral respecto al backend.
-- Consultar UTxOs de una direccion.
-- Consultar parametros de protocolo necesarios para el fee/build futuro.
-- Modelar errores con tipos claros y neutrales (sin filtrar formas de Blockfrost).
-- Empezar con una implementacion mock/stub; el provider real de Blockfrost queda para 1.3b.
+- Define a provider interface for read-only queries, neutral with respect to the backend.
+- Query UTxOs for an address.
+- Query protocol parameters needed for future fee/build.
+- Model errors with clear, neutral types (without leaking Blockfrost shapes).
+- Start with a mock/stub implementation; the real Blockfrost provider is left for 1.3b.
 
-#### 1.3a Interfaz + modelos + mock (este bloque)
+#### 1.3a Interface + models + mock (this block)
 
 Status: complete.
 
 Outcome:
 
-- Nuevo modulo Gradle KMP `:provider` (Android library + JVM + iosArm64 + iosSimulatorArm64,
-  `explicitApi()`), que depende solo de `:core`. Justificado por *ownership* (el provider no
-  puede vivir en `:core`, que es dependency-free, ni quedarse en `:shared`, host de
-  muestra/UI). `:provider` `commonMain` no agrega dependencias; solo `commonTest` usa
-  `kotlinx-coroutines-test` (pinneado en el catalogo).
-- Paquete `org.sarmidev.kardano.provider`:
-  - `ChainQueryProvider`: interfaz read-only con `val network: Network` y funciones `suspend`
-    `getUtxos(Address)`, `getProtocolParameters()`, `getTip()`, todas devolviendo
-    `KardanoResult` (nunca lanzan). Submit **no** esta aqui: ADR-0006 refina ADR-0005 §5
-    separando la consulta read-only de un futuro `TxSubmitProvider` (Bloque 1.11).
-  - Modelos ADA-only y neutrales: `Utxo` (`UtxoRef` de `:core` + `Value`), `Value` (envuelve
-    `Lovelace`, deja espacio para multiasset futuro sin prometer compatibilidad), `ProtocolParameters`
-    (campos de fee/build como `Long`), `ChainTip`. `ProviderError` sellado (`Transport`,
-    `RemoteStatus(code)` transport-agnostico —no `HttpStatus`—, `NotFound`, `Deserialization`,
+- New Gradle KMP module `:provider` (Android library + JVM + iosArm64 + iosSimulatorArm64,
+  `explicitApi()`), which depends only on `:core`. Justified by *ownership* (the provider cannot
+  live in `:core`, which is dependency-free, nor stay in `:shared`, the sample/UI
+  host). `:provider` `commonMain` adds no dependencies; only `commonTest` uses
+  `kotlinx-coroutines-test` (pinned in the catalog).
+- Package `org.sarmidev.kardano.provider`:
+  - `ChainQueryProvider`: read-only interface with `val network: Network` and `suspend` functions
+    `getUtxos(Address)`, `getProtocolParameters()`, `getTip()`, all returning
+    `KardanoResult` (never throwing). Submit is **not** here: ADR-0006 refines ADR-0005 §5
+    by separating the read-only query from a future `TxSubmitProvider` (Block 1.11).
+  - ADA-only, neutral models: `Utxo` (`:core`'s `UtxoRef` + `Value`), `Value` (wraps
+    `Lovelace`, leaves room for a future multiasset without promising compatibility), `ProtocolParameters`
+    (fee/build fields as `Long`), `ChainTip`. Sealed `ProviderError` (`Transport`,
+    `RemoteStatus(code)` transport-agnostic — not `HttpStatus` —, `NotFound`, `Deserialization`,
     `RateLimited`, `NetworkMismatch`, `Unknown`).
-  - `InMemoryChainQueryProvider`: doble de muestra/test con datos **fake / solo de prueba**
-    (sin red, sin fondos, sin secrets, no son fixtures de cadena). Reconoce dos direcciones
-    seed documentadas (vectores CIP-19 testnet publicos): una con UTxOs
-    (`SEED_ADDRESS_WITH_UTXOS`) y otra vacia (`SEED_ADDRESS_EMPTY`). Devuelve `NetworkMismatch`
-    si la red de la direccion no coincide con la del provider (`Network.TESTNET` por defecto;
-    `TESTNET` no identifica preprod frente a preview por si solo).
-- Playground (`:shared` depende de `:provider`): nueva seccion "Provider (mock)" con campo de
-  direccion, botones para rellenar las direcciones seed, "Load UTxOs (mock)" y "Load protocol
-  params (mock)"; muestra filas de UTxO, el estado "sin UTxOs", parametros y errores tipados,
-  todo etiquetado como fake/test-only. Las llamadas `suspend` se disparan con `LaunchedEffect`
-  (sin dependencias de coroutines nuevas en `:shared`). El mapeo puro se extrajo a funciones
-  `internal` no-suspend (`mapUtxosResult`, `mapParamsResult`, `presentProviderError`) para
-  poder testear sin coroutines.
-- Tests: `:provider` `commonTest` (con `runTest`) cubre UTxOs seed, estado vacio,
-  `NetworkMismatch`, parametros y tip. `:shared` `commonTest` cubre el mapeo del presenter
-  (success/empty/failure/params y las siete variantes de `ProviderError`).
-- Verificacion: `./gradlew :core:jvmTest :provider:jvmTest :provider:testAndroidHostTest
+  - `InMemoryChainQueryProvider`: a sample/test double with **fake / test-only** data
+    (no network, no funds, no secrets, not chain fixtures). Recognizes two documented seed
+    addresses (public testnet CIP-19 vectors): one with UTxOs
+    (`SEED_ADDRESS_WITH_UTXOS`) and one empty (`SEED_ADDRESS_EMPTY`). Returns `NetworkMismatch`
+    if the address's network does not match the provider's (`Network.TESTNET` by default;
+    `TESTNET` alone does not identify preprod versus preview).
+- Playground (`:shared` depends on `:provider`): new "Provider (mock)" section with an address
+  field, buttons to fill in the seed addresses, "Load UTxOs (mock)" and "Load protocol
+  params (mock)"; shows UTxO rows, the "no UTxOs" state, parameters, and typed errors,
+  all labeled as fake/test-only. The `suspend` calls are triggered via `LaunchedEffect`
+  (no new coroutines dependencies in `:shared`). The pure mapping was extracted into
+  non-suspend `internal` functions (`mapUtxosResult`, `mapParamsResult`, `presentProviderError`) so
+  they can be tested without coroutines.
+- Tests: `:provider` `commonTest` (with `runTest`) covers the seed UTxOs, the empty state,
+  `NetworkMismatch`, parameters, and tip. `:shared` `commonTest` covers the presenter mapping
+  (success/empty/failure/params and the seven `ProviderError` variants).
+- Verification: `./gradlew :core:jvmTest :provider:jvmTest :provider:testAndroidHostTest
   :provider:compileKotlinIosSimulatorArm64 :shared:jvmTest :shared:testAndroidHostTest
-  :shared:compileKotlinIosSimulatorArm64 :androidApp:assembleDebug` — todos BUILD SUCCESSFUL.
+  :shared:compileKotlinIosSimulatorArm64 :androidApp:assembleDebug` — all BUILD SUCCESSFUL.
 
-#### 1.3b-pre Address source-string microchange (completado)
+#### 1.3b-pre Address source-string microchange (completed)
 
-- Cambio aditivo minimo en `:core`: `Address` expone `public val bech32`, el string validado
-  exacto pasado a `Address.parse`, hilado por los caminos fixed-size y pointer y excluido de
-  `equals`/`hashCode`/`toString`. Es la representacion fuente validada, no un `toBech32`
-  (el encoding/roundtrip sigue diferido a 1.7). Desbloquea los endpoints de Blockfrost
-  indexados por direccion sin anadir un encoder. Se landeo aparte por tocar API publica.
+- Minimal additive change in `:core`: `Address` exposes `public val bech32`, the exact validated
+  string passed to `Address.parse`, threaded through the fixed-size and pointer paths and excluded from
+  `equals`/`hashCode`/`toString`. It is the validated source representation, not a `toBech32`
+  (encoding/roundtrip remains deferred to 1.7). Unblocks the Blockfrost endpoints
+  indexed by address without adding an encoder. Landed separately because it touches the public API.
 
-#### 1.3b Blockfrost preprod real (completado)
+#### 1.3b Real Blockfrost preprod (completed)
 
-- Modulo `:provider-blockfrost` (depende de `:provider` + `:core`) con `BlockfrostChainQueryProvider`,
-  cliente HTTP Ktor (engines OkHttp/CIO/Darwin) y kotlinx-serialization, todo aislado en el
-  modulo (`:core` y `:provider` siguen sin HTTP). DTOs `internal @Serializable`; mapeo a los
-  modelos neutrales (UTxOs con paginacion y suma ADA-only, parametros, tip, `404`-como-vacio en
-  `getUtxos`, mapeo de errores a `Transport`/`RateLimited`/`RemoteStatus`/`NotFound`/`Deserialization`).
-  `BlockfrostNetwork { PREPROD, PREVIEW, MAINNET }` mapea a `Network`. API key en runtime/env/
-  `local.properties` (sin secrets en el repo). Tests con `MockEngine` + fixtures sanitizadas;
-  test de integracion real opt-in condicionado a `BLOCKFROST_PROJECT_ID` (omitido por defecto).
-  Consume el `Address.bech32` ya landeado (1.3b-pre); no lo introduce. Submit sigue en 1.11
-  (ADR-0006). Ver ADR-0007.
+- Module `:provider-blockfrost` (depends on `:provider` + `:core`) with `BlockfrostChainQueryProvider`,
+  an HTTP Ktor client (OkHttp/CIO/Darwin engines), and kotlinx-serialization, all isolated in the
+  module (`:core` and `:provider` remain HTTP-free). Internal `@Serializable` DTOs; mapping to the
+  neutral models (UTxOs with pagination and ADA-only sum, parameters, tip, `404`-as-empty in
+  `getUtxos`, error mapping to `Transport`/`RateLimited`/`RemoteStatus`/`NotFound`/`Deserialization`).
+  `BlockfrostNetwork { PREPROD, PREVIEW, MAINNET }` maps to `Network`. API key at runtime/env/
+  `local.properties` (no secrets in the repo). Tests with `MockEngine` + sanitized fixtures;
+  an opt-in real integration test gated on `BLOCKFROST_PROJECT_ID` (skipped by default).
+  Consumes the already-landed `Address.bech32` (1.3b-pre); does not introduce it. Submit remains in 1.11
+  (ADR-0006). See ADR-0007.
 
-Checkpoint Android (1.3a, mock):
+Android checkpoint (1.3a, mock):
 
-- Abrir la app, ir a "Provider"; con la direccion seed con UTxOs -> lista de UTxOs
-  (`txHash#index -> lovelace`); con la direccion seed vacia -> estado "sin UTxOs"; direccion
-  invalida -> error tipado sin crash; "Load protocol params" -> filas de parametros.
-  Todo con la etiqueta fake/test-only, sin red ni secrets.
+- Open the app, go to "Provider"; with the seed address that has UTxOs -> a list of UTxOs
+  (`txHash#index -> lovelace`); with the empty seed address -> "no UTxOs" state; invalid
+  address -> typed error without crash; "Load protocol params" -> parameter rows.
+  All labeled fake/test-only, no network or secrets.
 
-Checkpoint Android (1.3b, live) — a ejecutar por el owner con su propia key:
+Android checkpoint (1.3b, live) — to be run by the owner with their own key:
 
-- Activar "Use live Blockfrost (preprod)", pegar un `project_id` de preprod y un `addr_test1...`
-  real -> UTxOs/parametros reales; key invalida -> `RemoteStatus`/`Transport` tipado sin crash;
-  direccion sin uso -> estado vacio. La key no se persiste.
+- Enable "Use live Blockfrost (preprod)", paste a preprod `project_id` and a real
+  `addr_test1...` -> real UTxOs/parameters; invalid key -> typed `RemoteStatus`/`Transport` without crash;
+  unused address -> empty state. The key is not persisted.
 
 ### 1.4 Crypto Evaluation And Module Decision
 
-Status: complete. Bloque de decision/evaluacion (solo docs), basado en ADR-0004. Ver
+Status: complete. Decision/evaluation block (docs only), based on ADR-0004. See
 `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md` (ADR-0008).
 
-Objetivo:
+Objective:
 
-- Evaluar librerias/bindings concretos para los algoritmos que Phase 1 necesita.
-- Decidir si se crea `:crypto` ahora o si se empieza con un paquete aislado.
-- Registrar decisiones en ADR-0004 o en un ADR nuevo si hace falta.
-- No implementar wallet completa en este bloque.
+- Evaluate concrete libraries/bindings for the algorithms Phase 1 needs.
+- Decide whether to create `:crypto` now or start with an isolated package.
+- Record decisions in ADR-0004 or a new ADR if needed.
+- Do not implement the full wallet in this block.
 
 Outcome:
 
-- Se anadio ADR-0008 (`Accepted` solo para las decisiones de modulo/seam/proceso; sin afirmar
-  idoneidad final de ninguna dependencia mientras la compatibilidad no se pruebe). Sin cambios
-  de Kotlin, Gradle, dependencias ni modulos en este bloque; solo docs.
-- **Decidido ahora:** (1) `:crypto` se difiere al Bloque 1.5 (el bloque que anade la primera
-  dependencia de crypto), consistente con ADR-0002/0005; (2) el seam es una interfaz comun /
-  adapter en `commonMain` (`Hashing`, luego `KeyDerivation` / `Signing`) que devuelve
-  `KardanoResult` y no lanza a traves de Swift/ObjC, con `expect`/`actual` solo como fallback;
-  (3) el primer limite algoritmico en 1.5 es Blake2b-224/256 detras de `Hashing`, con vectores
-  oficiales citados (RFC 7693 / contexto Cardano) — sin inventar vectores.
-- **Provisional:** la seleccion de dependencia es provisional. Hyperledger Identus Apollo +
-  `bip32-ed25519` es el lider provisional (unico candidato evaluado que cubre todos los targets
-  y el set completo incluyendo Ed25519-BIP32), pero su compatibilidad con Kotlin 2.4.0 esta sin
-  probar. Matriz de candidatos con hechos citados por fuente y desconocidos marcados
-  `Unverified` / `To verify in 1.5a`; estado de revision de terceros con campos neutrales
-  (`External review`, `Public review notes`), sin claim de idoneidad.
-- **Rechazado como dependencia enviada:** bloxbean cardano-client-lib (JVM/Java, sin iOS/KMP);
-  se conserva solo como oraculo de vectores en JVM.
+- Added ADR-0008 (`Accepted` only for the module/seam/process decisions; without claiming
+  final fitness for any dependency while compatibility remains untested). No Kotlin,
+  Gradle, dependency, or module changes in this block; docs only.
+- **Decided now:** (1) `:crypto` is deferred to Block 1.5 (the block that adds the first
+  crypto dependency), consistent with ADR-0002/0005; (2) the seam is a common
+  interface/adapter in `commonMain` (`Hashing`, later `KeyDerivation` / `Signing`) that returns
+  `KardanoResult` and does not throw across Swift/ObjC, with `expect`/`actual` only as a fallback;
+  (3) the first algorithmic boundary in 1.5 is Blake2b-224/256 behind `Hashing`, with cited
+  official vectors (RFC 7693 / Cardano context) — no invented vectors.
+- **Provisional:** the dependency selection is provisional. Hyperledger Identus Apollo +
+  `bip32-ed25519` is the provisional lead (the only evaluated candidate that covers all targets
+  and the full set including Ed25519-BIP32), but its compatibility with Kotlin 2.4.0 is
+  untested. A candidate matrix with facts cited by source and unknowns marked
+  `Unverified` / `To verify in 1.5a`; third-party review status uses neutral fields
+  (`External review`, `Public review notes`), with no fitness claim.
+- **Rejected as a shipped dependency:** bloxbean cardano-client-lib (JVM/Java, no iOS/KMP);
+  retained only as a JVM vector oracle.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Mantener la app compilando. Este bloque desbloquea los siguientes, aunque no tenga una
-  pantalla funcional nueva.
+- Keep the app compiling. This block unblocks the following ones, even without a
+  new functional screen.
 
 ### 1.5 Crypto Primitives Needed For Wallet
 
-Implementar solo las primitivas necesarias para el MVP de wallet, siguiendo ADR-0004 y las
-decisiones de ADR-0008. Se divide para no comprometer una dependencia sin probarla primero.
+Implement only the primitives needed for the wallet MVP, following ADR-0004 and the
+decisions in ADR-0008. It is split so as not to commit to a dependency without testing it first.
 
-#### 1.5a Compatibility spike (antes de cualquier dependencia comprometida)
+#### 1.5a Compatibility spike (before committing to any dependency)
 
-- En una rama desechable, anadir el candidato provisional (Apollo + `bip32-ed25519`, y sus
-  companions transitivos, p. ej. `secp256k1-kmp`) a un modulo scratch.
-- Confirmar que resuelve y compila en Android + JVM + iosSimulatorArm64 bajo la version de
-  Kotlin del repo (hoy `2.4.0`).
-- Si falla, descartar la rama y repetir 1.5a con el siguiente fallback (composicion
-  multi-libreria: cryptography-kotlin + fuente Blake2b + libreria Ed25519-BIP32; luego el
-  platform seam A+B de ADR-0004).
-- Registrar el resultado (candidato, targets, versiones) en ADR-0008 o en una nota de
-  seguimiento corta. No se compromete ninguna dependencia al build antes de que 1.5a pase.
+- On a disposable branch, add the provisional candidate (Apollo + `bip32-ed25519`, and its
+  transitive companions, e.g. `secp256k1-kmp`) to a scratch module.
+- Confirm it resolves and compiles on Android + JVM + iosSimulatorArm64 under the repo's
+  Kotlin version (currently `2.4.0`).
+- If it fails, discard the branch and repeat 1.5a with the next fallback (multi-library
+  composition: cryptography-kotlin + a Blake2b source + an Ed25519-BIP32 library; then the
+  platform seam A+B from ADR-0004).
+- Record the result (candidate, targets, versions) in ADR-0008 or a short follow-up
+  note. No dependency is committed to the build before 1.5a passes.
 
-Resultado (2026-07-11): **PASS.** En una rama desechable (`spike/1.5a-apollo-kotlin24`, ya
-descartada) con un modulo scratch `:crypto-spike` que dependia solo de los dos artefactos
-candidatos, el candidato **resolvio y compilo** en los tres targets bajo Kotlin 2.4.0 / AGP 9.0.1:
-`:crypto-spike:compileKotlinJvm`, `:crypto-spike:compileKotlinIosSimulatorArm64` y
-`:crypto-spike:testAndroidHostTest` (`compileAndroidMain`). Versiones resueltas:
-`org.hyperledger.identus:apollo:1.8.8` y `dev.allain:bip32-ed25519:2.3.0`. Correccion: no hizo
-falta `org.hyperledger.identus:secp256k1-kmp:1.8.8`; Apollo arrastra
-`fr.acinq.secp256k1:secp256k1-kmp:0.16.0` transitivamente. Esto prueba resolucion +
-compilacion/typecheck (incluido el klib de iOS sim), no correccion criptografica ni ejecucion en
-runtime. La adopcion/cableado concretos se deciden en 1.5b. Detalle en ADR-0008 §6.
+Outcome (2026-07-11): **PASS.** On a disposable branch (`spike/1.5a-apollo-kotlin24`, already
+discarded) with a scratch module `:crypto-spike` that depended only on the two candidate
+artifacts, the candidate **resolved and compiled** on all three targets under Kotlin 2.4.0 / AGP 9.0.1:
+`:crypto-spike:compileKotlinJvm`, `:crypto-spike:compileKotlinIosSimulatorArm64`, and
+`:crypto-spike:testAndroidHostTest` (`compileAndroidMain`). Resolved versions:
+`org.hyperledger.identus:apollo:1.8.8` and `dev.allain:bip32-ed25519:2.3.0`. Correction: there was no
+need for `org.hyperledger.identus:secp256k1-kmp:1.8.8`; Apollo transitively pulls in
+`fr.acinq.secp256k1:secp256k1-kmp:0.16.0`. This proves resolution +
+compilation/typecheck (including the iOS sim klib), not cryptographic correctness or runtime
+execution. The concrete adoption/wiring is decided in 1.5b. Detail in ADR-0008 §6.
 
-#### 1.5b-pre Gate de vectores (docs-only, antes de crear `:crypto`)
+#### 1.5b-pre Vector gate (docs-only, before creating `:crypto`)
 
-Antes de crear `:crypto` o escribir el API de hashing, un gate bloqueante busca vectores
-oficiales, citados y exactos (bytes de entrada + digest exacto + URL/commit) para ambos
-tamanos. Resultado (2026-07-11): ambos tamanos **PASS**.
+Before creating `:crypto` or writing the hashing API, a blocking gate looks for
+official, cited, exact vectors (input bytes + exact digest + URL/commit) for both
+sizes. Outcome (2026-07-11): both sizes **PASS**.
 
-- Blake2b-224: **PASS.** Par oficial de CIP-19 (CC-BY-4.0): clave de verificacion
-  `addr_vk1w0l2sr2zgfm26ztc6nl9xy8ghsk5sh6ldwemlpmp9xylzy4dtf7st80zhd` (decodificable por
-  bech32 a 32 bytes) + los 28 bytes de payment credential extraibles de la direccion CIP-19
-  completa `addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x`
-  via `Address.parse` de `:core`.
-- Blake2b-256: **PASS.** Goldens de conformance de Plutus para el builtin sin clave
+- Blake2b-224: **PASS.** Official CIP-19 pair (CC-BY-4.0): verification key
+  `addr_vk1w0l2sr2zgfm26ztc6nl9xy8ghsk5sh6ldwemlpmp9xylzy4dtf7st80zhd` (bech32-decodable
+  to 32 bytes) + the 28 bytes of payment credential extractable from the full CIP-19
+  address `addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x`
+  via `:core`'s `Address.parse`.
+- Blake2b-256: **PASS.** Plutus conformance goldens for the unkeyed builtin
   `blake2b_256` (Apache-2.0), repo `IntersectMBO/plutus`, commit
-  `5e18824e2e0e30656c81d182e0ca512b75e7e57c`, prefijo de ruta
+  `5e18824e2e0e30656c81d182e0ca512b75e7e57c`, path prefix
   `plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/blake2b_256/`.
-  Vector 1 (`blake2b_256-empty`): input `#` (0 bytes) → `0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8`.
+  Vector 1 (`blake2b_256-empty`): input `#` (0 bytes) -> `0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8`.
   Vector 2 (`blake2b_256-length-200`): input `2e7ea84da4bc4d7cfb463e3f2c8647057afff3fbececa1d200`
-  (25 bytes) → `91c60f99b33303c02b39ed93b713e3915a180c3747f3b31e05727618ee401624`.
-  Validacion: cada fixture es `equalsByteString (blake2b_256 (con bytestring #INPUT)) (con bytestring #EXPECTED)`
-  con `.uplc.expected` = `(con bool True)`; el builtin se aplica solo a los bytes crudos del
-  literal UPLC (sin envoltura CBOR/UPLC), `#` = vacio y `#2e7e…1d200` = exactamente 25 bytes. El
-  digest de entrada vacia `0e5751c0…`, antes rechazado por aparecer solo en un repo Rust de
-  terceros, queda confirmado literalmente en esta fuente oficial de Intersect.
+  (25 bytes) -> `91c60f99b33303c02b39ed93b713e3915a180c3747f3b31e05727618ee401624`.
+  Validation: each fixture is `equalsByteString (blake2b_256 (con bytestring #INPUT)) (con bytestring #EXPECTED)`
+  with `.uplc.expected` = `(con bool True)`; the builtin is applied only to the raw bytes of the
+  UPLC literal (no CBOR/UPLC envelope), `#` = empty and `#2e7e…1d200` = exactly 25 bytes. The
+  empty-input digest `0e5751c0…`, previously rejected for appearing only in a third-party Rust
+  repo, is now confirmed verbatim in this official Intersect source.
 
-Consecuencia: con ambos tamanos fijados, el gate `1.5b-pre` pasa y `1.5b` queda desbloqueado.
-`1.5b-pre` no crea modulo, dependencia ni cambios de Kotlin/Gradle; solo docs. Detalle en
+Consequence: with both sizes fixed, the `1.5b-pre` gate passes and `1.5b` is unblocked.
+`1.5b-pre` creates no module, dependency, or Kotlin/Gradle change; docs only. Detail in
 ADR-0008 §7.
 
-#### 1.5b Wire + test (desbloqueado; vectores ya fijados en 1.5b-pre)
+#### 1.5b Wire + test (unblocked; vectors already fixed in 1.5b-pre)
 
 Status: complete.
 
-Objetivo:
+Objective:
 
-- Crear `:crypto` y anadir la dependencia elegida (pineada, sin versiones dinamicas).
-- Cablear el primer limite algoritmico: Blake2b-224/256 detras de la interfaz `Hashing`.
-- Implementar wrappers/bindings de los algoritmos elegidos.
-- Cubrirlos con vectores oficiales citados (Blake2b-224 CIP-19, Blake2b-256 IntersectMBO/plutus);
-  sin inventar vectores.
-- Mantener errores tipados (`KardanoResult`, sin lanzar a traves de Swift/ObjC).
-- Evitar exponer bytes mutables internos.
-- No firmar transacciones todavia si se puede separar.
+- Create `:crypto` and add the chosen dependency (pinned, no dynamic versions).
+- Wire the first algorithmic boundary: Blake2b-224/256 behind the `Hashing` interface.
+- Implement wrappers/bindings for the chosen algorithms.
+- Cover them with cited official vectors (Blake2b-224 CIP-19, Blake2b-256 IntersectMBO/plutus);
+  no invented vectors.
+- Keep errors typed (`KardanoResult`, no throwing across Swift/ObjC).
+- Avoid exposing mutable internal bytes.
+- Do not sign transactions yet, if it can be kept separate.
 
 Outcome:
 
-- Nuevo modulo KMP `:crypto` (Android library + JVM + iosArm64 + iosSimulatorArm64,
-  `explicitApi()`) que depende solo de `:core`. `:core` no depende de `:crypto`.
-- Paquete `org.sarmidev.kardano.crypto`: `Hashing` (`blake2b224`/`blake2b256`, ambos devuelven
-  `KardanoResult<HashDigest, CryptoError>`, nunca lanzan) con `Hashing.default()`; `HashDigest`
-  (clase regular, constructor privado, factory interna que valida tamano, copias defensivas,
-  igualdad por contenido, `toString` estructural, constantes `SIZE_224`/`SIZE_256`); `CryptoError`
-  sellado y neutral respecto al backend (`HashingFailed`, `InvalidDigestLength`). Adapter interno
-  `Blake2bHashing`; ningun tipo del backend aparece en la API publica.
-- **Correccion de dependencia:** al cablear se comprobo que **Apollo 1.8.8 no incluye Blake2b**
-  (verificado en el `apollo-jvm-1.8.8.jar` publicado —su paquete `hashing` solo trae
-  `PBKDF2SHA512`— y en los tags de fuente `v1.7.2`–`v1.8.7`). Como ADR-0004 prohibe crypto escrita
-  a mano, el backend de este bloque solo-hashing es **KotlinCrypto `org.kotlincrypto.hash:blake2`
-  `0.8.0`** (Apache-2.0), fijado en el catalogo. Apollo **no** se anade en este bloque y
-  `bip32-ed25519` tampoco; el valor de Apollo (Ed25519-BIP32) se reserva para 1.6 / 1.10. La API
-  publica es neutral respecto al backend, asi que un bloque posterior puede adoptar Apollo sin
-  tocar esta superficie. Detalle en ADR-0008 §8.
-- Tests en `crypto/commonTest` con solo los vectores citados de 1.5b-pre, copiados verbatim y sin
-  generar digests: Blake2b-224 contra la payment credential de CIP-19 (leida estructuralmente del
-  address citado via `:core` `Address.parse`) y Blake2b-256 contra los dos goldens de conformance
-  de IntersectMBO/plutus. Tests estructurales de `HashDigest` (copia defensiva en construccion y en
-  lectura, `toString` estructural, igualdad por contenido, `InvalidDigestLength`).
-- Verificacion: `./gradlew :crypto:jvmTest :crypto:testAndroidHostTest
-  :crypto:compileKotlinIosSimulatorArm64 :core:jvmTest` — todos BUILD SUCCESSFUL.
+- New KMP module `:crypto` (Android library + JVM + iosArm64 + iosSimulatorArm64,
+  `explicitApi()`) that depends only on `:core`. `:core` does not depend on `:crypto`.
+- Package `org.sarmidev.kardano.crypto`: `Hashing` (`blake2b224`/`blake2b256`, both return
+  `KardanoResult<HashDigest, CryptoError>`, never throwing) with `Hashing.default()`; `HashDigest`
+  (a regular class, private constructor, internal factory that validates size, defensive copies,
+  content-based equality, structural `toString`, `SIZE_224`/`SIZE_256` constants); a sealed,
+  backend-neutral `CryptoError` (`HashingFailed`, `InvalidDigestLength`). Internal adapter
+  `Blake2bHashing`; no backend type appears in the public API.
+- **Dependency correction:** while wiring it up, it was confirmed that **Apollo 1.8.8 does not include Blake2b**
+  (verified in the published `apollo-jvm-1.8.8.jar` — its `hashing` package contains only
+  `PBKDF2SHA512` — and in source tags `v1.7.2`–`v1.8.7`). Since ADR-0004 prohibits handwritten
+  crypto, the backend for this hashing-only block is **KotlinCrypto `org.kotlincrypto.hash:blake2`
+  `0.8.0`** (Apache-2.0), pinned in the catalog. Apollo is **not** added in this block, and
+  neither is `bip32-ed25519`; Apollo's value (Ed25519-BIP32) is reserved for 1.6 / 1.10. The
+  public API is backend-neutral, so a later block can adopt Apollo without touching this
+  surface. Detail in ADR-0008 §8.
+- Tests in `crypto/commonTest` using only the vectors cited in 1.5b-pre, copied verbatim without
+  generating digests: Blake2b-224 against the CIP-19 payment credential (read structurally from
+  the cited address via `:core`'s `Address.parse`) and Blake2b-256 against the two
+  IntersectMBO/plutus conformance goldens. Structural `HashDigest` tests (defensive copy on
+  construction and on read, structural `toString`, content-based equality, `InvalidDigestLength`).
+- Verification: `./gradlew :crypto:jvmTest :crypto:testAndroidHostTest
+  :crypto:compileKotlinIosSimulatorArm64 :core:jvmTest` — all BUILD SUCCESSFUL.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Pantalla de diagnostico que ejecute checks de vectores conocidos y muestre resultado
-  sin usar claves reales.
+- A diagnostics screen that runs checks against known vectors and shows the result
+  without using real keys.
 
 ### 1.6 Mnemonic / Seed / Key Derivation
 
-Implementar la restauracion de una wallet de prueba y la derivacion de claves. El bloque se
-divide en cuatro subfases con gates bloqueantes, cada una su propio diff. Ver
-`docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md` (ADR-0009). Phase 1 cubre solo la
-ruta de restauracion Icarus/CIP-3 para la wallet de prueba del MVP; las variantes Byron,
-Ledger y Trezor quedan diferidas. Bloque 1.6 es solo-restauracion: la generacion de mnemonics
-(y la decision de CSPRNG por plataforma) queda fuera del bloque.
+Implement restoration of a test wallet and key derivation. The block is
+split into four sub-phases with blocking gates, each its own diff. See
+`docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md` (ADR-0009). Phase 1 covers only the
+Icarus/CIP-3 restoration path for the MVP test wallet; the Byron,
+Ledger, and Trezor variants are deferred. Block 1.6 is restoration-only: mnemonic generation
+(and the per-platform CSPRNG decision) is out of scope for this block.
 
-#### 1.6a Decision de API, dependencias y fuentes de vectores (solo docs)
+#### 1.6a API, dependencies, and vector-source decision (docs only)
 
 Status: complete.
 
 Outcome:
 
-- Se anadio ADR-0009 con las ocho areas de decision: (1) todo 1.6 vive en `:crypto` (sin
-  modulo `:wallet`; trigger de extraccion registrado para 1.7/1.8); (2) esquema fijado a
-  Icarus/CIP-3 (PBKDF2-HMAC-SHA-512 sobre la **entropia**, 4096 iteraciones, 96 bytes, bit
-  tweaks de CIP-3; la seed BIP-39 plana no se expone; wordlist ingles solamente, se acepta
-  input ASCII en minusculas de la wordlist inglesa; input no conforme (no-ASCII / mayusculas
-  / fuera de la wordlist) se rechaza, no se normaliza); (3) tabla dependencia-por-algoritmo verificada
-  contra artefactos publicados (metodo `javap` + tags de fuente, como en 1.5b); (4) gate de
-  vectores con PASS en las tres familias; (5) boceto de API publica (firmas solamente);
-  (6) modelo de errores (`MnemonicError`, `KeyDerivationError`, sellados y neutrales);
-  (7) reglas de key material (handles opacos, sin accessor de bytes privados, mnemonics
-  input-only nunca ecoados, `clear()` best-effort); (8) generacion diferida.
-- **Correccion tipo 1.5b:** el artefacto principal de Apollo **no entra en 1.6** — su API
-  de mnemonics valida solo pertenencia a la wordlist (sin checksum ni word count) y su
-  `PBKDF2SHA512.derive` toma salt `String` (la salt de Icarus son bytes de entropia). El
-  valor Ed25519-BIP32 llega via el modulo independiente `dev.allain:bip32-ed25519:2.3.0`
-  (verificado: `deriveBytes` / `deriveBytesPub` / `fromNonextended`). Candidatura de Apollo
-  reducida al Bloque 1.10 (signing).
-- Dependencias por subfase: 1.6b = `org.kotlincrypto.hash:sha2:0.8.0` (checksum SHA-256) +
-  cryptography-kotlin 0.6.0 (PBKDF2 con salt `ByteArray`; cobertura por target y el tema
-  JCA API 26+ vs minSdk 24 marcados `To verify in 1.6b`, con fallback de platform seam
-  documentado); 1.6c = `dev.allain:bip32-ed25519:2.3.0`; 1.6d = ninguna (solo wiring
-  `:shared` → `:crypto`). HMAC-SHA-512 no necesita dependencia directa en 1.6.
-- Gate de vectores (todas PASS, con URL + commit + licencia en ADR-0009 §4): BIP-39 →
-  `trezor/python-mnemonic` `vectors.json` (MIT, commit `b57a5ad7`); CIP-3/Icarus →
+- Added ADR-0009 with eight decision areas: (1) all of 1.6 lives in `:crypto` (no
+  `:wallet` module; an extraction trigger is recorded for 1.7/1.8); (2) the scheme is fixed to
+  Icarus/CIP-3 (PBKDF2-HMAC-SHA-512 over the **entropy**, 4096 iterations, 96 bytes, CIP-3
+  bit tweaks; the plain BIP-39 seed is not exposed; English wordlist only, accepting
+  lowercase ASCII input from the English wordlist; non-conforming input (non-ASCII / uppercase
+  / out of the wordlist) is rejected, not normalized); (3) a dependency-per-algorithm table verified
+  against published artifacts (`javap` method + source tags, as in 1.5b); (4) a vector
+  gate with PASS across all three families; (5) a public API sketch (signatures only);
+  (6) an error model (`MnemonicError`, `KeyDerivationError`, sealed and neutral);
+  (7) key-material rules (opaque handles, no private-byte accessor, input-only mnemonics
+  never echoed, best-effort `clear()`); (8) generation deferred.
+- **1.5b-style correction:** Apollo's main artifact is **not used in 1.6** — its mnemonic
+  API only validates wordlist membership (no checksum or word count) and its
+  `PBKDF2SHA512.derive` takes a `String` salt (Icarus's salt is entropy bytes). The
+  Ed25519-BIP32 value comes via the independent module `dev.allain:bip32-ed25519:2.3.0`
+  (verified: `deriveBytes` / `deriveBytesPub` / `fromNonextended`). Apollo's candidacy is
+  reduced to Block 1.10 (signing).
+- Dependencies per sub-phase: 1.6b = `org.kotlincrypto.hash:sha2:0.8.0` (SHA-256 checksum) +
+  cryptography-kotlin 0.6.0 (PBKDF2 with `ByteArray` salt; per-target coverage and the
+  JCA API 26+ vs minSdk 24 topic marked `To verify in 1.6b`, with a documented platform-seam
+  fallback); 1.6c = `dev.allain:bip32-ed25519:2.3.0`; 1.6d = none (only
+  `:shared` -> `:crypto` wiring). HMAC-SHA-512 needs no direct dependency in 1.6.
+- Vector gate (all PASS, with URL + commit + license in ADR-0009 §4): BIP-39 ->
+  `trezor/python-mnemonic` `vectors.json` (MIT, commit `b57a5ad7`); CIP-3/Icarus ->
   `cardano-foundation/CIPs` `CIP-0003/Icarus.md` (CC-BY-4.0, commit `a36e1ebc`);
-  Ed25519-BIP32/CIP-1852 → goldens Shelley de `IntersectMBO/cardano-addresses`
-  (`test/golden/addresses_5574d91d/golden`, Apache-2.0, commit `46d01319`; mapeo
-  nombre↔mnemonic confirmado recomputando el `shortHex` SHA3-256 del spec). Cross-link: el
-  `addrXPub0` del golden lleva los mismos 32 bytes de clave publica que el
-  `addr_vk1w0l2sr…` de CIP-19 ya fijado en 1.5b-pre.
-- Sin cambios de Kotlin, Gradle, dependencias ni modulos; solo docs. No hizo falta probe de
-  compilacion (todas las verificaciones corrieron contra artefactos publicados fuera del
-  repo).
+  Ed25519-BIP32/CIP-1852 -> Shelley goldens from `IntersectMBO/cardano-addresses`
+  (`test/golden/addresses_5574d91d/golden`, Apache-2.0, commit `46d01319`; name<->mnemonic
+  mapping confirmed by recomputing the spec's SHA3-256 `shortHex`). Cross-link: the golden's
+  `addrXPub0` carries the same 32 public-key bytes as CIP-19's
+  `addr_vk1w0l2sr…`, already fixed in 1.5b-pre.
+- No Kotlin, Gradle, dependency, or module changes; docs only. No compile probe was needed
+  (all checks ran against artifacts published outside the repo).
 
-#### 1.6b BIP-39 / CIP-3 mnemonic-to-master-key (bloqueado por los gates de ADR-0009)
+#### 1.6b BIP-39 / CIP-3 mnemonic-to-master-key (blocked by the ADR-0009 gates)
 
-- Alcance: parseo de mnemonic (word count, wordlist, checksum), extraccion de entropia y
-  master key Icarus (96 bytes) solamente. Sin paths de derivacion, sin direcciones, sin
-  signing, sin generacion.
-- Anade solo las dependencias asignadas en ADR-0009 (pineadas en el catalogo). Antes de
-  aceptar el wiring debe cerrar el item `To verify in 1.6b` (cobertura PBKDF2-SHA-512 por
-  target, incl. Android API 24/25); si falla, usar el fallback de platform seam — nunca
-  PBKDF2 a mano.
-- Tests en `crypto/commonTest` con los vectores citados verbatim (Trezor + CIP-3), mas
-  invalid/edge derivados etiquetados y tests estructurales de key material.
+- Scope: mnemonic parsing (word count, wordlist, checksum), entropy extraction, and the
+  Icarus master key (96 bytes) only. No derivation paths, no addresses, no
+  signing, no generation.
+- Adds only the dependencies assigned in ADR-0009 (pinned in the catalog). Before
+  accepting the wiring it must close the `To verify in 1.6b` item (PBKDF2-SHA-512 coverage per
+  target, including Android API 24/25); if it fails, use the platform-seam fallback — never
+  handwritten PBKDF2.
+- Tests in `crypto/commonTest` with the cited vectors verbatim (Trezor + CIP-3), plus
+  labeled derived invalid/edge cases and structural key-material tests.
 
-#### 1.6c Ed25519-BIP32 + CIP-1852 (bloqueado hasta cerrar 1.6b)
+#### 1.6c Ed25519-BIP32 + CIP-1852 (blocked until 1.6b closes)
 
-- Alcance: seam `KeyDerivation` sobre `bip32-ed25519` (derivacion privada y publica/soft),
-  tipos de path CIP-1852 (`account'`/`role`/`index`) propios del SDK. Sin signing; sin
-  generacion de direcciones (eso es 1.7, que ademas requiere el ADR de encoding).
-- Debe cerrar el item `To verify in 1.6c`: layouts de bytes y esquema V2 confirmados contra
-  los goldens; carga nativa en Android; compile **y link** de iosSimulatorArm64 (1.5a probo
-  solo compile). Un fallo de link iOS reabre la decision de dependencia (fallback ADR-0008
-  §4).
-- Tests contra los goldens de cardano-addresses (decodificados con el `Bech32.decode`
-  generico de `:core`; los HRPs CIP-5 estan fuera del allowlist de `CardanoBech32` a
-  proposito).
+- Scope: a `KeyDerivation` seam over `bip32-ed25519` (private and public/soft derivation),
+  SDK-owned CIP-1852 path types (`account'`/`role`/`index`). No signing; no
+  address generation (that is 1.7, which also requires the encoding ADR).
+- Must close the `To verify in 1.6c` item: byte layouts and V2 scheme confirmed against
+  the goldens; native loading on Android; iosSimulatorArm64 compile **and link** (1.5a only proved
+  compile). An iOS link failure reopens the dependency decision (ADR-0008 §4
+  fallback).
+- Tests against the cardano-addresses goldens (decoded with `:core`'s generic
+  `Bech32.decode`; the CIP-5 HRPs are intentionally outside `CardanoBech32`'s
+  allowlist).
 
-#### 1.6d Fixture de wallet de prueba / checkpoint Android (bloqueado hasta cerrar 1.6c)
+#### 1.6d Test-wallet fixture / Android checkpoint (blocked until 1.6c closes)
 
-- Fixture construida exclusivamente con el vector publico citado (`test walk nut …`),
-  etiquetada test-only. Sin fondos reales, sin mnemonics reales.
-- Playground: `:shared` gana dependencia de proyecto sobre `:crypto` (sin dependencia
-  externa nueva). Muestra **solo metadata publica derivada**: el path CIP-1852 usado, el
-  fingerprint Blake2b-224 de la clave publica derivada (via `Hashing` existente, que debe
-  coincidir con la payment credential CIP-19 fijada en 1.5b) y el estado tipado
-  success/error. **No** se muestra la clave publica cruda ni en hex salvo que un plan
-  posterior lo justifique; nada de bytes privados, seed ni palabras. Las direcciones son
-  del checkpoint de 1.7.
+- A fixture built exclusively from the cited public vector (`test walk nut …`),
+  labeled test-only. No real funds, no real mnemonics.
+- Playground: `:shared` gains a project dependency on `:crypto` (no new
+  external dependency). Shows **only publicly derived metadata**: the CIP-1852 path used, the
+  Blake2b-224 fingerprint of the derived public key (via the existing `Hashing`, which must
+  match the CIP-19 payment credential fixed in 1.5b), and the typed
+  success/error state. **No** raw public key or hex is shown unless a later plan
+  justifies it; nothing about private bytes, seed, or words. Addresses are
+  part of the 1.7 checkpoint.
 
-Checkpoint Android (1.6d):
+Android checkpoint (1.6d):
 
-- Restaurar la wallet de prueba fixture y ver el path de derivacion + fingerprint
-  Blake2b-224 coincidiendo con el vector citado; input de mnemonic invalido → error tipado
-  sin crash.
+- Restore the fixture test wallet and see the derivation path + Blake2b-224
+  fingerprint matching the cited vector; invalid mnemonic input -> typed error
+  without crash.
 
 ### 1.7 Address Generation
 
-Generar direcciones Shelley desde claves derivadas.
+Generate Shelley addresses from derived keys.
 
-Objetivo:
+Objective:
 
-- Crear payment credential y stake credential desde claves.
-- Generar base address testnet.
-- Producir Bech32.
-- Comprobar roundtrip con `Address.parse`.
-- Definir la politica de encoding/roundtrip de direcciones si todavia no existe.
+- Create the payment credential and stake credential from keys.
+- Generate a testnet base address.
+- Produce Bech32.
+- Verify roundtrip with `Address.parse`.
+- Define the address encoding/roundtrip policy if it does not already exist.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Generar una direccion `addr_test` en la app y parsearla inmediatamente mostrando su
-  estructura.
+- Generate an `addr_test` address in the app and parse it immediately, showing its
+  structure.
 
 ### 1.8 Wallet State Read-Only
 
-Conectar wallet + provider sin construir transacciones todavia.
+Connect wallet + provider without building transactions yet.
 
-Objetivo:
+Objective:
 
-- Mostrar direccion generada.
-- Consultar UTxOs para esa direccion.
-- Mostrar balance ADA de prueba.
-- Permitir refresco manual.
+- Show the generated address.
+- Query UTxOs for that address.
+- Show the test ADA balance.
+- Allow a manual refresh.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Recibir ADA de faucet/preprod en la direccion generada y ver balance/UTxOs en la app.
+- Receive ADA from a preprod faucet at the generated address and see balance/UTxOs in the app.
 
 ### 1.9 Transaction Builder Minimal
 
-Construir una transaccion ADA simple.
+Build a simple ADA transaction.
 
-Objetivo:
+Objective:
 
-- Seleccionar inputs.
-- Crear output destino.
-- Calcular change.
-- Calcular fee.
-- Incluir parametros minimos de validez si aplican.
-- Generar el cuerpo de transaccion / CBOR necesario para firma futura.
+- Select inputs.
+- Create the destination output.
+- Compute change.
+- Compute the fee.
+- Include minimal validity parameters if applicable.
+- Generate the transaction body / CBOR needed for future signing.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Introducir direccion destino + cantidad, construir un borrador de transaccion y ver un
-  resumen antes de firmar.
+- Enter a destination address + amount, build a draft transaction, and see a
+  summary before signing.
 
 ### 1.10 Transaction Signing
 
-Firmar localmente una transaccion testnet/preprod.
+Sign a testnet/preprod transaction locally.
 
-Objetivo:
+Objective:
 
-- Usar solo claves de prueba.
-- Firmar el cuerpo de transaccion.
-- Producir witness / transaccion firmada segun el formato elegido.
-- Mantener tests con vectores oficiales o referencias verificadas cuando existan.
+- Use only test keys.
+- Sign the transaction body.
+- Produce a witness / signed transaction according to the chosen format.
+- Keep tests backed by official vectors or verified references when available.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Construir y firmar una transaccion, mostrando tx id o CBOR firmado sin enviarlo aun.
+- Build and sign a transaction, showing the tx id or signed CBOR without submitting it yet.
 
 ### 1.11 Submit Transaction
 
-Enviar la transaccion firmada a preprod.
+Submit the signed transaction to preprod.
 
-Objetivo:
+Objective:
 
-- Implementar submit via provider.
-- Manejar errores de submit.
-- Mostrar tx id o error comprensible.
-- Opcionalmente permitir polling simple o link externo.
+- Implement submit via the provider.
+- Handle submit errors.
+- Show the tx id or a comprehensible error.
+- Optionally allow simple polling or an external link.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Enviar una transaccion preprod desde la app y ver un resultado aceptado o un error
-  explicable.
+- Submit a preprod transaction from the app and see either an accepted result or an
+  explainable error.
 
 ### 1.12 Phase 1 Closure / MVP Review
 
-Cerrar Phase 1 con una revision del flujo completo.
+Close Phase 1 with a review of the full flow.
 
-Objetivo:
+Objective:
 
-- Verificar que el flujo Android completo funciona en preprod.
-- Confirmar tests y docs actualizados.
-- Confirmar que no se ha mezclado UI dentro de `:core`.
-- Documentar limitaciones conocidas.
-- Definir el siguiente alcance.
+- Verify that the full Android flow works on preprod.
+- Confirm tests and docs are updated.
+- Confirm that no UI has been mixed into `:core`.
+- Document known limitations.
+- Define the next scope.
 
-Checkpoint Android:
+Android checkpoint:
 
-- Demo completa: crear/restaurar wallet de prueba, ver direccion, recibir ADA de prueba,
-  consultar UTxOs, construir, firmar y enviar una transaccion.
+- Full demo: create/restore a test wallet, see the address, receive test ADA,
+  query UTxOs, build, sign, and submit a transaction.
 
-## Checkpoints Android obligatorios
+## Mandatory Android checkpoints
 
-Abrir la app Android y comprobar funcionalidad despues de:
+Open the Android app and verify functionality after:
 
-- `1.2`: playground parseando direcciones.
-- `1.3`: consulta read-only de UTxOs.
-- `1.6`: wallet de prueba genera material derivado.
-- `1.7`: direccion testnet generada y parseada.
-- `1.8`: balance/UTxOs visibles.
-- `1.9`: borrador de transaccion visible.
-- `1.10`: transaccion firmada visible.
-- `1.11`: transaccion enviada a preprod.
+- `1.2`: playground parsing addresses.
+- `1.3`: read-only UTxO query.
+- `1.6`: test wallet generates derived material.
+- `1.7`: testnet address generated and parsed.
+- `1.8`: balance/UTxOs visible.
+- `1.9`: transaction draft visible.
+- `1.10`: signed transaction visible.
+- `1.11`: transaction submitted to preprod.
 
-## Trabajo diferido o condicionado
+## Deferred or conditional work
 
-- Byron/Base58 address support sigue separado de Phase 1 salvo decision explicita.
-- Address raw/hex constructors requieren politica de encoding/roundtrip.
-- Native assets pueden quedar fuera del primer MVP si el scope se aprieta.
-- Persistencia de wallet puede empezar simple o quedar para otro bloque, pero no debe
-  improvisarse junto con signing.
-- Providers adicionales (Koios, Maestro, Ogmios, Kupo) quedan despues del primer provider.
+- Byron/Base58 address support remains separate from Phase 1 unless explicitly decided otherwise.
+- Address raw/hex constructors require an encoding/roundtrip policy.
+- Native assets may stay out of the first MVP if the scope is tightened.
+- Wallet persistence can start simple or be left for another block, but must not
+  be improvised alongside signing.
+- Additional providers (Koios, Maestro, Ogmios, Kupo) come after the first provider.
 
-## Siguiente paso
+## Next step
 
-`1.1`, `1.2`, `1.3a` (interfaz + modelos + mock + Playground en `:provider`), `1.3b-pre`
-(`Address.bech32` en `:core`), `1.3b` (`:provider-blockfrost`: `BlockfrostChainQueryProvider`
-con Ktor + kotlinx-serialization, mapeo a modelos neutrales, toggle live en el Playground y
-ADR-0007), `1.4` (Crypto Evaluation And Module Decision, solo docs; ADR-0008) y `1.5a` (spike de
-compatibilidad, **PASS**) estan completos. `1.5a` confirmo que el candidato provisional
-(Apollo 1.8.8 + `bip32-ed25519` 2.3.0) resuelve y compila en Android + JVM + iosSimulatorArm64
-bajo Kotlin 2.4.0 (ADR-0008 §6); no se comprometio ninguna dependencia al build (el modulo scratch
-se descarto). `1.5b-pre` (gate de vectores, solo docs) esta hecho y **pasa para ambos tamanos**:
-Blake2b-224 fijado con CIP-19 y Blake2b-256 fijado con los goldens de conformance de Plutus
-(`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008 §7). `1.5b` esta **completo**: se creo
-`:crypto` y se cablearon Blake2b-224/256 detras de `Hashing`. Al cablear se comprobo que Apollo
-1.8.8 no incluye Blake2b, asi que el backend solo-hashing es KotlinCrypto
-`org.kotlincrypto.hash:blake2` `0.8.0` (Apollo y `bip32-ed25519` no se anaden en este bloque; se
-reservan para 1.6 / 1.10; ADR-0008 §8). `1.6a` (decision de API, dependencias y vectores para
-mnemonic/seed/derivacion, solo docs) esta **completo**: ADR-0009 fija el esquema Icarus/CIP-3
-(solo restauracion, wordlist ingles), la tabla dependencia-por-algoritmo verificada contra
-artefactos publicados (Apollo no entra en 1.6; `dev.allain:bip32-ed25519:2.3.0` para 1.6c;
-cryptography-kotlin PBKDF2 + KotlinCrypto `sha2` para 1.6b), el gate de vectores (PASS en las
-tres familias: Trezor `vectors.json`, CIP-3 `Icarus.md`, goldens de
-`IntersectMBO/cardano-addresses`), el boceto de API, el modelo de errores y las reglas de key
-material. El siguiente paso es `1.6b` (mnemonic-to-master-key), que antes de aceptar su wiring
-debe cerrar el item `To verify in 1.6b` de ADR-0009. No hay wallet, tx ni signing todavia.
-
+`1.1`, `1.2`, `1.3a` (interface + models + mock + Playground in `:provider`), `1.3b-pre`
+(`Address.bech32` in `:core`), `1.3b` (`:provider-blockfrost`: `BlockfrostChainQueryProvider`
+with Ktor + kotlinx-serialization, mapping to neutral models, a live toggle in the Playground, and
+ADR-0007), `1.4` (Crypto Evaluation And Module Decision, docs only; ADR-0008), and `1.5a` (compatibility
+spike, **PASS**) are complete. `1.5a` confirmed that the provisional candidate
+(Apollo 1.8.8 + `bip32-ed25519` 2.3.0) resolves and compiles on Android + JVM + iosSimulatorArm64
+under Kotlin 2.4.0 (ADR-0008 §6); no dependency was committed to the build (the scratch module
+was discarded). `1.5b-pre` (vector gate, docs only) is done and **passes for both sizes**:
+Blake2b-224 fixed with CIP-19 and Blake2b-256 fixed with the Plutus conformance goldens
+(`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008 §7). `1.5b` is **complete**: `:crypto`
+was created and Blake2b-224/256 were wired behind `Hashing`. While wiring it, it was confirmed that Apollo
+1.8.8 does not include Blake2b, so the hashing-only backend is KotlinCrypto
+`org.kotlincrypto.hash:blake2` `0.8.0` (Apollo and `bip32-ed25519` are not added in this block; they are
+reserved for 1.6 / 1.10; ADR-0008 §8). `1.6a` (API, dependency, and vector decision for
+mnemonic/seed/derivation, docs only) is **complete**: ADR-0009 fixes the Icarus/CIP-3 scheme
+(restoration only, English wordlist), the dependency-per-algorithm table verified against
+published artifacts (Apollo is not used in 1.6; `dev.allain:bip32-ed25519:2.3.0` for 1.6c;
+cryptography-kotlin PBKDF2 + KotlinCrypto `sha2` for 1.6b), the vector gate (PASS across all
+three families: Trezor `vectors.json`, CIP-3 `Icarus.md`, `IntersectMBO/cardano-addresses`
+goldens), the API sketch, the error model, and the key-material rules. The next step is `1.6b`
+(mnemonic-to-master-key), which before accepting its wiring must close the `To verify in 1.6b` item
+from ADR-0009. There is no wallet, tx, or signing yet.

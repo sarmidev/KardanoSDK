@@ -708,7 +708,7 @@ Proposed block sequence:
   Block 1.4/1.5 against ADR-0004 with no library selected here; the address
   encoding/round-trip prerequisite (before Block 1.7) and the CBOR tx map-ordering
   prerequisite (before Block 1.9) recorded as deferred, each resolved in its own block. See
-  `docs/PHASE_1_PLAN.md` ("Decisiones del Bloque 1.1") and
+  `docs/PHASE_1_PLAN.md` ("Block 1.1 Decisions") and
   `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted). No Kotlin,
   Gradle, or dependency changes; Android baseline build verified
   (`./gradlew :androidApp:assembleDebug :core:jvmTest`).
