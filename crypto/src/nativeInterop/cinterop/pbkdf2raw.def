@@ -1,0 +1,58 @@
+# Custom cinterop binding for Apple CommonCrypto's CCKeyDerivationPBKDF, used instead of the
+# shipped `platform.CoreCrypto` binding.
+#
+# Why this file exists (ADR-0009 Block 1.6b): CommonKeyDerivation.h declares
+# `CCKeyDerivationPBKDF`'s `password` parameter as `const char *`. Kotlin/Native's default
+# cinterop heuristic maps every `const char*` parameter to a Kotlin `String` (see
+# https://kotlinlang.org/docs/native-c-interop.html, "Working with the strings"), which is lossy
+# for a raw passphrase byte buffer (embedded NUL bytes truncate at the interop boundary; non-UTF-8
+# byte sequences are not representable without conversion).
+#
+# A `noStringConversion` binding directly on `CCKeyDerivationPBKDF` (via `modules = CommonCrypto`)
+# was tried first, matching JetBrains' own shipped `platformLibs/src/platform/ios/CommonCrypto.def`
+# (kotlin-native, tag v2.4.0) plus `noStringConversion`. In this build environment that produced a
+# klib with the target package but zero declarations (confirmed with `klib dump-metadata`, and
+# reproduced even after removing `-fmodules` to match the shipped def exactly) — a toolchain/SDK
+# limitation of this environment, not a `.def`-syntax defect (an unrelated `stdio.h` control case
+# showed the same zero-declaration symptom outside CommonCrypto entirely).
+#
+# Fix: an inline C interop shim, defined below the `---` separator. `kardano_ccpbkdf2_hmac_sha512`
+# adapts the `password` parameter to a raw `const uint8_t *` and casts it to `const char *` only
+# at the call boundary to `CCKeyDerivationPBKDF` — it implements no PBKDF2 logic itself; it is a
+# signature adapter around the delegated Apple CommonCrypto primitive. `kCCPBKDF2` and
+# `kCCPRFHmacAlgSHA512` are fixed by CIP-3 (Icarus always uses PBKDF2 with HMAC-SHA-512) and are
+# baked into the shim rather than surfaced to Kotlin, so the shim's own declaration is the only
+# thing that needs to bind.
+depends = darwin posix
+language = Objective-C
+modules = CommonCrypto
+
+compilerOpts = -D_XOPEN_SOURCE
+
+---
+
+#include <stdint.h>
+#include <stddef.h>
+#include <CommonCrypto/CommonKeyDerivation.h>
+
+/*
+ * Interop shim only: adapts CCKeyDerivationPBKDF's `password` parameter to a raw byte pointer
+ * (const uint8_t *) instead of Kotlin/Native's default const-char*-to-String cinterop mapping,
+ * and fixes the algorithm/PRF to the CIP-3 Icarus combination (PBKDF2, HMAC-SHA-512). This
+ * function performs no cryptographic computation of its own: it casts the password pointer and
+ * calls straight through to Apple CommonCrypto's CCKeyDerivationPBKDF, which does the actual
+ * PBKDF2-HMAC-SHA-512 derivation.
+ */
+static int kardano_ccpbkdf2_hmac_sha512(
+    const uint8_t *password, size_t password_len,
+    const uint8_t *salt, size_t salt_len,
+    unsigned int rounds,
+    uint8_t *derived_key, size_t derived_key_len) {
+  return CCKeyDerivationPBKDF(
+      kCCPBKDF2,
+      (const char *)password, password_len,
+      salt, salt_len,
+      kCCPRFHmacAlgSHA512,
+      rounds,
+      derived_key, derived_key_len);
+}

@@ -338,6 +338,91 @@ cited golden vectors on JVM and Android.
 
 ---
 
+## Block 1.6b gate result — PBKDF2 platform-seam fallback (closes the `To verify in 1.6b` item)
+
+Before accepting any Icarus master-key wiring, §Blockers item 3 required verifying
+cryptography-kotlin `0.6.0`'s PBKDF2-HMAC-SHA-512 coverage on JVM, Android (including the
+API 24/25 vs JCA API-26+ concern), iosArm64, and iosSimulatorArm64 — against the published
+artifact, not documentation claims, per the 1.5b-style discipline this ADR's intro invokes.
+
+**Verification method:** direct read of the pinned `cryptography-kotlin` `0.6.0` source
+(`whyoleg/cryptography-kotlin`, tag `0.6.0`), not README/docs-site claims.
+
+**Findings:**
+
+- `PBKDF2.secretDerivation(digest, iterations, outputSize, salt: ByteArray)` takes a raw
+  `ByteArray` salt — the Icarus entropy-bytes salt is expressible. This part of the ADR's
+  provisional lead is confirmed.
+- JVM (`JdkPbkdf2`): calls `javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmac$digest")`
+  — i.e. JCA. `PBKDF2WithHmacSHA512` is present on desktop JDK 8+.
+- iOS (`CCPbkdf2`): calls `platform.CoreCrypto.CCKeyDerivationPBKDF` directly (no JCA
+  dependency). Compiles.
+- **Android — fails the gate.** The JDK provider is the only cryptography-kotlin provider
+  applicable to Android, and it routes through the same JCA
+  `SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")` call as the JVM path. Per the Android
+  `SecretKeyFactory` algorithm table, `PBKDF2withHmacSHA512` is available starting API level 26;
+  this repository's `minSdk = 24` (`gradle/libs.versions.toml`). On a real API 24/25 device this
+  call throws `NoSuchAlgorithmException`. **`:crypto:testAndroidHostTest` cannot detect this
+  failure**, because Android host tests run on the local host JVM (which does have the
+  algorithm) rather than an emulator/device at the target API level — a green host-test run
+  would give false confidence, not gate closure.
+- No `org.kotlincrypto.*` PBKDF2/KDF module exists (checked the Maven Central group listing) as
+  a same-family drop-in replacement.
+
+**Outcome: the cryptography-kotlin PBKDF2 path does not pass the gate for Android.** Per
+§Blockers item 3 and §3 ("If it fails, use the recorded platform-seam fallback (§3) — do not
+hand-write PBKDF2"), Block 1.6b adopts the documented platform-seam fallback instead of
+cryptography-kotlin:
+
+| Target | PBKDF2-HMAC-SHA-512 backend | Notes |
+|--------|------------------------------|-------|
+| JVM + Android | BouncyCastle `PKCS5S2ParametersGenerator` with `SHA512Digest` (`org.bouncycastle:bcprov-jdk18on`, pinned version) | Does not call JCA `SecretKeyFactory`; not subject to the Android API-26 `PBKDF2withHmacSHA512` restriction. Raw `ByteArray` password and salt. |
+| iosArm64 / iosSimulatorArm64 | Apple `CCKeyDerivationPBKDF` with `kCCPRFHmacAlgSHA512`, reached through the `kardano_ccpbkdf2_hmac_sha512` interop shim in `pbkdf2raw.def` (see the cinterop addendum below) | Raw-byte APIs; no JCA involved. |
+
+**Passphrase byte handling (all targets).** The Icarus PBKDF2 password is the raw passphrase
+bytes (§2); no target decodes the passphrase to or from `String`/UTF-8. On iOS the CommonCrypto
+binding is called with a pinned raw pointer to the passphrase `ByteArray`, not a `String`
+argument, so no platform-specific passphrase behavior is introduced across the seam.
+
+**Consequence.** Block 1.6b adds `org.bouncycastle:bcprov-jdk18on` (pinned, JVM+Android source
+sets only) instead of `dev.whyoleg.cryptography:cryptography-*`; `cryptography-kotlin` is not
+added to this repository. The SDK-owned data-handling classification (§3.1) is unchanged: PBKDF2
+itself remains delegated (now to BouncyCastle / Apple CommonCrypto rather than
+cryptography-kotlin), and the CIP-3 `tweakBits` bit-masking around it stays SDK-owned.
+
+### Addendum — iOS cinterop: from `noStringConversion` to an inline C shim
+
+The shipped Kotlin/Native `platform.CoreCrypto.CCKeyDerivationPBKDF` binding maps its
+`password` parameter to `String` (the default cinterop heuristic for `const char *`), which
+cannot carry raw, possibly non-UTF-8 passphrase bytes. Two approaches were tried, in this
+order:
+
+1. **`noStringConversion` directly on `CCKeyDerivationPBKDF`** via a custom `.def`
+   (`modules = CommonCrypto`, mirroring JetBrains' own shipped
+   `platformLibs/src/platform/ios/CommonCrypto.def`). This produced a cinterop klib with the
+   target package but **zero declarations** in this repository's build environment — confirmed
+   with `klib dump-metadata`, and reproduced even after removing `-fmodules` to match the
+   shipped `.def` exactly.
+2. **An inline C interop shim**, defined in `pbkdf2raw.def`'s own glue block (below the `---`
+   separator): `kardano_ccpbkdf2_hmac_sha512(const uint8_t *password, size_t password_len,
+   const uint8_t *salt, size_t salt_len, unsigned int rounds, uint8_t *derived_key, size_t
+   derived_key_len)`, with explicit `<stdint.h>`, `<stddef.h>`, and
+   `<CommonCrypto/CommonKeyDerivation.h>` includes. It casts `password` to `const char *` only
+   at the call boundary to `CCKeyDerivationPBKDF` and delegates the entire derivation to it —
+   no PBKDF2 logic is implemented in the shim. This was the fix: `klib dump-metadata` confirmed
+   `kardano_ccpbkdf2_hmac_sha512` bound with `password` as `CValuesRef<UByteVarOf<UByte>>?`
+   (raw bytes, not `String`) before the `iosArm64Main`/`iosSimulatorArm64Main` actuals were
+   updated to call it with pinned pointers. The plain `static int` form of the shim bound
+   correctly; no escalation to `static inline int` or an explicit header-shim file was needed.
+
+**Result: `:crypto:compileKotlinIosSimulatorArm64` and `:crypto:compileKotlinIosArm64` both
+pass.** This closes the iOS *compile* gap only. **iOS runtime execution of the CIP-3/BIP-39
+vectors is still future verification** — no iOS-simulator/device test run has exercised this
+binding; only `:crypto:jvmTest` and `:crypto:testAndroidHostTest` have executed the cited
+vectors so far.
+
+---
+
 ## Relationship to ADR-0004 and ADR-0008
 
 - ADR-0004 remains the governing strategy: no handwritten crypto (§3.1 records the

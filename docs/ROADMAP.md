@@ -38,8 +38,16 @@ Current priority:
 > KotlinCrypto `sha2`), and the vector gate passed for all three families (Trezor
 > `vectors.json` @`b57a5ad7` MIT; CIP-3 `Icarus.md` @`a36e1ebc` CC-BY-4.0;
 > `IntersectMBO/cardano-addresses` golden `addresses_5574d91d` @`46d01319` Apache-2.0).
-> Next is Block 1.6b (mnemonic-to-master-key), gated on ADR-0009's `To verify in 1.6b`
-> item.
+> **Block 1.6b closed its `To verify in 1.6b` gate: cryptography-kotlin's PBKDF2 failed on
+> Android** (its JDK provider needs JCA `PBKDF2WithHmacSHA512`, API 26+, vs this repo's
+> `minSdk = 24`), so 1.6b adopted the ADR-0009 §3 platform-seam fallback instead — BouncyCastle
+> on JVM/Android, Apple CommonCrypto on iOS; no hand-written PBKDF2. `Mnemonic.parse` and
+> `IcarusMasterKey.fromMnemonic` are implemented and pass the cited Trezor/CIP-3 vectors on JVM
+> and Android. On iOS, an inline C interop shim (`kardano_ccpbkdf2_hmac_sha512` in
+> `pbkdf2raw.def`) adapts `CCKeyDerivationPBKDF`'s password to a raw byte pointer, and **both
+> iOS compile targets pass** (`:crypto:compileKotlinIosSimulatorArm64` and
+> `:crypto:compileKotlinIosArm64`). **iOS runtime execution of the vectors is still future
+> verification** — no iOS-simulator/device test run has exercised this binding.
 
 ## Phase 0 - Core Foundation
 
@@ -800,8 +808,32 @@ Proposed block sequence:
     `MnemonicError`/`KeyDerivationError` model, and the key-material rules (opaque handles,
     no private-key byte accessor, mnemonics input-only and never echoed). No Kotlin,
     Gradle, dependency, or module changes.
-  - `1.6b` BIP-39/CIP-3 mnemonic-to-master-key — blocked on ADR-0009's 1.6b gate.
-  - `1.6c` Ed25519-BIP32 + CIP-1852 derivation — blocked until 1.6b is complete.
+  - `1.6b` BIP-39/CIP-3 mnemonic-to-master-key — **Status: complete on JVM/Android with
+    executed vectors; iOS compile targets pass; iOS runtime vector execution still future
+    work.** Closed the `To verify in 1.6b` gate: cryptography-kotlin's PBKDF2 fails on
+    Android (its JDK provider requires JCA `PBKDF2WithHmacSHA512`, API 26+, vs `minSdk = 24`;
+    `testAndroidHostTest` cannot detect this since it runs on the host JVM). Adopted ADR-0009
+    §3's platform-seam fallback: BouncyCastle `PKCS5S2ParametersGenerator` (JVM + Android) and
+    Apple CommonCrypto `CCKeyDerivationPBKDF` (iOS); no hand-written PBKDF2. Implemented
+    `Mnemonic.parse` (word count, English wordlist, checksum, entropy) and
+    `IcarusMasterKey.fromMnemonic` (PBKDF2-HMAC-SHA-512 + CIP-3 bit tweaks). Tests pass the
+    cited Trezor `vectors.json` entropy round-trips and both CIP-3 `Icarus.md` vectors on JVM
+    and Android (`:crypto:jvmTest`, `:crypto:testAndroidHostTest`). **iOS cinterop resolved for
+    the compile target:** the shipped `platform.CoreCrypto.CCKeyDerivationPBKDF` binds
+    `password` as `String`; a first attempt used `noStringConversion` directly on it (same
+    delegated Apple primitive, no hand-written crypto) but produced a klib with zero
+    declarations in this build environment. The fix is an inline C interop shim
+    (`kardano_ccpbkdf2_hmac_sha512`) in `pbkdf2raw.def`'s glue block, adapting `password` to a
+    raw byte pointer and delegating verbatim to `CCKeyDerivationPBKDF` — verified bindable with
+    `klib dump-metadata` before the Kotlin actuals were updated to call it.
+    `:crypto:compileKotlinIosSimulatorArm64` and `:crypto:compileKotlinIosArm64` both pass.
+    **iOS runtime execution of the CIP-3/BIP-39 vectors has not been verified** — no
+    iOS-simulator/device test run has exercised this binding; that remains future work. Also
+    found and fixed during review: the checked-in BIP-39 English wordlist had transcription
+    errors versus the canonical `bitcoin/bips` source; regenerated and verified against a fresh
+    download of the pinned commit, with a structural test guarding wordlist shape going
+    forward.
+  - `1.6c` Ed25519-BIP32 + CIP-1852 derivation — not yet started.
   - `1.6d` test-wallet fixture + Android checkpoint (derived public metadata only: path,
     Blake2b-224 fingerprint, typed state; no raw/hex public key; addresses belong to 1.7)
     — blocked until 1.6c is complete.

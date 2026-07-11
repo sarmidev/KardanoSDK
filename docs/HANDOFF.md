@@ -75,8 +75,9 @@ If paths differ, locate files by name.
 Current phase:
 
 - Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, 1.5a, 1.5b-pre, 1.5b, and
-  1.6a complete; next is Block 1.6b — mnemonic-to-master-key). Block 1.5b created the
-  `:crypto` KMP module and wired Blake2b-224/256 behind the backend-neutral `Hashing`
+  1.6a complete; **1.6b complete on JVM/Android with executed vectors; iOS compile targets
+  pass, iOS runtime vector execution still future work** — see below). Block 1.5b created
+  the `:crypto` KMP module and wired Blake2b-224/256 behind the backend-neutral `Hashing`
   interface. It found that Apollo 1.8.8 ships no Blake2b (verified in `apollo-jvm-1.8.8.jar`
   and source tags `v1.7.2`–`v1.8.7`), so the hashing-only backend is KotlinCrypto
   `org.kotlincrypto.hash:blake2` `0.8.0`; Apollo and `bip32-ed25519` were not added this block
@@ -88,11 +89,26 @@ Current phase:
   restoration path only (restore-only; generation/CSPRNG deferred; Byron/Ledger/Trezor
   deferred); the main Apollo artifact does not enter 1.6 (published-artifact inspection: its
   mnemonic API has no checksum validation and its PBKDF2 takes a String salt while Icarus
-  needs entropy-bytes salt); 1.6b uses cryptography-kotlin PBKDF2 + KotlinCrypto `sha2`,
-  1.6c uses `dev.allain:bip32-ed25519:2.3.0`; the vector gate passed for all three families
-  (Trezor `vectors.json`, CIP-3 `Icarus.md`, `IntersectMBO/cardano-addresses` goldens — all
-  pinned by URL + commit + license in ADR-0009 §4). Phase 0 - Core Foundation closed below
-  for reference.
+  needs entropy-bytes salt); 1.6c uses `dev.allain:bip32-ed25519:2.3.0`; the vector gate passed
+  for all three families (Trezor `vectors.json`, CIP-3 `Icarus.md`,
+  `IntersectMBO/cardano-addresses` goldens — all pinned by URL + commit + license in ADR-0009
+  §4). **Block 1.6b implemented `Mnemonic.parse` and `IcarusMasterKey.fromMnemonic` in
+  `:crypto`.** Closing its `To verify in 1.6b` gate found that cryptography-kotlin's PBKDF2
+  fails on Android (JDK provider needs JCA `PBKDF2WithHmacSHA512`, API 26+, vs `minSdk = 24`;
+  `testAndroidHostTest` can't catch this — it runs on the host JVM), so 1.6b adopted the
+  ADR-0009 §3 platform-seam fallback instead: BouncyCastle on JVM/Android, Apple CommonCrypto
+  on iOS; no hand-written PBKDF2. Tests pass the cited Trezor/CIP-3 vectors on
+  `:crypto:jvmTest` and `:crypto:testAndroidHostTest`. **iOS compile targets pass**: an inline
+  C interop shim in `pbkdf2raw.def` (`kardano_ccpbkdf2_hmac_sha512`) adapts
+  `CCKeyDerivationPBKDF`'s password to a raw byte pointer and delegates the derivation to it
+  verbatim; `:crypto:compileKotlinIosSimulatorArm64` and `:crypto:compileKotlinIosArm64` both
+  succeed. **iOS runtime execution of the vectors is still future verification** — no
+  iOS-simulator/device test run has exercised this binding (see ADR-0009's Block 1.6b gate
+  result and `crypto/README.md` "iOS PBKDF2 cinterop"). A BIP-39 English wordlist transcription
+  error was also
+  found and fixed during review (regenerated against a fresh download of the pinned source
+  commit; the difference from the erroneous file is not reproduced here — see the ADR/plan
+  for the fix description). Phase 0 - Core Foundation closed below for reference.
 
 Block status:
 
@@ -323,8 +339,9 @@ ships no Blake2b, so the hashing-only backend is KotlinCrypto `org.kotlincrypto.
 See ADR-0008 §8, `docs/PHASE_1_PLAN.md` Block 1.5b, and `docs/ROADMAP.md`.
 
 Next recommended task: **Block 1.6 (mnemonic / seed / key derivation)** — create/restore a test
-wallet and derive keys per CIP-1852 / CIP-3 / BIP-39, citing vectors verbatim. This is the block
-that adopts Apollo (Ed25519-BIP32) and `bip32-ed25519`.
+wallet and derive keys per CIP-1852 / CIP-3 / BIP-39, citing vectors verbatim. Per ADR-0009, the
+main Apollo artifact does not enter Block 1.6; Ed25519-BIP32 derivation (1.6c) uses the
+standalone `dev.allain:bip32-ed25519` module instead.
 
 Current modules:
 
@@ -418,11 +435,15 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
    concrete dependency is provisional (Apollo + `bip32-ed25519` is the provisional lead) and is
    selected only after the Block 1.5a Kotlin-2.4.0 compatibility spike; per-algorithm library
    choices for derivation/signing follow in Blocks 1.6/1.10, each updating ADR-0004's matrix.
-   **Block 1.6a (ADR-0009) has since fixed the derivation choices:** hashing = KotlinCrypto
-   `blake2` (1.5b); mnemonic checksum = KotlinCrypto `sha2`, Icarus PBKDF2 =
-   cryptography-kotlin (both 1.6b, with a `To verify in 1.6b` provider-coverage item);
-   Ed25519-BIP32 = `dev.allain:bip32-ed25519:2.3.0` (1.6c). The main Apollo artifact enters
-   neither 1.5 nor 1.6; its remaining candidacy is Block 1.10 (signing).
+   **Block 1.6a (ADR-0009) fixed the derivation choices, and Block 1.6b closed the PBKDF2
+   provider-coverage gate:** hashing = KotlinCrypto `blake2` (1.5b); mnemonic checksum =
+   KotlinCrypto `sha2` (1.6b). Icarus PBKDF2 was originally a cryptography-kotlin lead, but
+   1.6b's gate check found it fails on Android (JCA `PBKDF2WithHmacSHA512` is API 26+, below
+   `minSdk = 24`), so 1.6b adopted the ADR-0009 §3 platform-seam fallback instead: BouncyCastle
+   on JVM/Android, Apple CommonCrypto on iOS (iOS wiring blocked in this environment — see the
+   Last Session Summary above). `cryptography-kotlin` is not added to this repository.
+   Ed25519-BIP32 = `dev.allain:bip32-ed25519:2.3.0` (1.6c, not yet implemented). The main Apollo
+   artifact enters neither 1.5 nor 1.6; its remaining candidacy is Block 1.10 (signing).
    See `docs/DECISIONS/0004-crypto-strategy.md` (open questions),
    `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`, and
    `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`.
@@ -459,6 +480,110 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-11
+
+Summary:
+
+- Block 1.6b (BIP-39 / CIP-3 mnemonic-to-master-key): implemented `Mnemonic.parse` and
+  `IcarusMasterKey.fromMnemonic` in `:crypto` per ADR-0009 §5. **Complete on JVM and Android
+  (executed CIP-3/BIP-39 vectors). On iOS, the compile targets now pass** via an interop shim
+  (see below); **iOS runtime execution of the vectors is still future verification.**
+- Closed the `To verify in 1.6b` gate — **cryptography-kotlin failed it.** Verified against
+  the pinned `cryptography-kotlin` 0.6.0 source directly (not docs): its JDK-backed provider
+  (used by both JVM and Android) calls JCA `SecretKeyFactory.getInstance
+  ("PBKDF2WithHmacSHA512")`, guaranteed only from Android API 26, while this repo's
+  `minSdk = 24`. `:crypto:testAndroidHostTest` cannot detect that gap (it runs on the host
+  JVM, which does have the algorithm). Per ADR-0009 §3's documented fallback, adopted a
+  platform seam instead: BouncyCastle `PKCS5S2ParametersGenerator` with `SHA512Digest`
+  (`org.bouncycastle:bcprov-jdk18on`, pinned) on JVM and Android — it does not call
+  `SecretKeyFactory`, so it is not subject to the API-26 restriction — and Apple CommonCrypto
+  `CCKeyDerivationPBKDF` on iOS. No PBKDF2 is hand-written anywhere; full write-up in
+  ADR-0009's new "Block 1.6b gate result" section.
+- **iOS cinterop, resolved for the compile target:** the shipped Kotlin/Native
+  `platform.CoreCrypto.CCKeyDerivationPBKDF` binding maps its `password` parameter to `String`,
+  which cannot carry raw passphrase bytes. A first attempt added a custom cinterop definition
+  (`crypto/src/nativeInterop/cinterop/pbkdf2raw.def`) using `noStringConversion` on
+  `CCKeyDerivationPBKDF` itself (`modules = CommonCrypto`, mirroring JetBrains' own shipped
+  `CommonCrypto.def`), but its generated klib came out with **zero declarations** in this
+  build environment — confirmed by comparing `klib dump-metadata` output against the shipped
+  `platform.CoreCrypto` klib, and reproduced even after removing `-fmodules` to match the
+  shipped `.def` exactly.
+  **Fix:** rewrote `pbkdf2raw.def` to add an inline C interop shim in the `.def`'s glue block —
+  `kardano_ccpbkdf2_hmac_sha512(const uint8_t *password, size_t password_len, const uint8_t
+  *salt, size_t salt_len, unsigned int rounds, uint8_t *derived_key, size_t derived_key_len)`
+  (explicit `<stdint.h>`/`<stddef.h>`/`<CommonCrypto/CommonKeyDerivation.h>` includes) — that
+  casts `password` to `const char *` only at the call boundary to `CCKeyDerivationPBKDF` and
+  delegates every byte of the derivation to it; the shim implements no PBKDF2 itself. Verified
+  bindable with `klib dump-metadata` before touching Kotlin: `kardano_ccpbkdf2_hmac_sha512`
+  appears with `password` as `CValuesRef<UByteVarOf<UByte>>?` (raw bytes, not `String`) — the
+  first rung of the planned fallback ladder (plain `static int`) worked, so no escalation to
+  `static inline int` or an explicit header-shim file was needed. The `iosArm64Main` /
+  `iosSimulatorArm64Main` actuals now call this shim with pinned raw pointers for both
+  `password` and `salt` on every target (never decoded to/from `String`).
+  **Verified: `:crypto:compileKotlinIosSimulatorArm64` and `:crypto:compileKotlinIosArm64` both
+  pass.** **Not yet verified: iOS runtime execution** — no iOS-simulator/device test run has
+  executed the CIP-3/BIP-39 vectors against this binding; only JVM and Android have executed
+  vectors so far. Confirming iOS runtime behavior is deferred to when device/simulator test
+  execution is wired up, and must not be read as proven by the compile-only result above.
+- **Correctness fix found during review:** the BIP-39 English wordlist file initially checked
+  in (`Bip39EnglishWordlist.kt`) had transcription errors relative to the canonical
+  `bitcoin/bips` `bip-0039/english.txt` source at the pinned commit (a handful of
+  wrong/duplicated words). Regenerated by diffing every one of the 2048 entries against a
+  fresh download of the pinned commit; confirmed an exact match. Added
+  `Bip39EnglishWordlistTest` (2048 unique entries, index-consistency check) as a guard against
+  future silent drift.
+- Tests added in `crypto/commonTest`, all passing on `:crypto:jvmTest` and
+  `:crypto:testAndroidHostTest`: known-answer tests against the cited vectors verbatim
+  (`trezor/python-mnemonic` `vectors.json` entropy↔mnemonic round-trips at 12/18/24 words;
+  both CIP-3 `Icarus.md` master-key vectors, with and without the `"foo"` passphrase — the
+  CIP-3 vectors were independently re-fetched from the pinned commit and matched byte-for-byte
+  before use), derived rule tests for every `MnemonicError` variant (each built by mutating one
+  property of a cited vector, per ADR-0009 §4's allowance), and structural tests (defensive
+  copies, `clear()`, non-leaking `toString()`) for both `Mnemonic` and `IcarusMasterKey`.
+- Docs updated: ADR-0009 (new "Block 1.6b gate result" section); `docs/PHASE_1_PLAN.md`
+  (1.6b Outcome, "Next step"); `docs/ROADMAP.md` (Current Status + Block 1.6b entry);
+  `crypto/README.md` (1.6b role/scope/boundaries + "iOS PBKDF2 cinterop"); this file. All
+  updated again once the iOS cinterop shim closed the compile blocker (see above).
+
+Files changed this step:
+
+- `gradle/libs.versions.toml`, `crypto/build.gradle.kts` (KotlinCrypto `sha2`, BouncyCastle,
+  iOS cinterop wiring)
+- `crypto/src/commonMain/kotlin/org/sarmidev/kardano/crypto/`: `Bip39EnglishWordlist.kt`,
+  `MnemonicError.kt`, `KeyDerivationError.kt`, `Mnemonic.kt`, `IcarusMasterKey.kt`,
+  `Pbkdf2HmacSha512.kt` (new)
+- `crypto/src/jvmMain/.../Pbkdf2HmacSha512.jvm.kt`,
+  `crypto/src/androidMain/.../Pbkdf2HmacSha512.android.kt` (new)
+- `crypto/src/nativeInterop/cinterop/pbkdf2raw.def` (inline C shim),
+  `crypto/src/iosArm64Main/.../Pbkdf2HmacSha512.ios.kt`,
+  `crypto/src/iosSimulatorArm64Main/.../Pbkdf2HmacSha512.ios.kt` (new; both iOS compile targets
+  pass — see Summary)
+- `crypto/src/commonTest/kotlin/org/sarmidev/kardano/crypto/`: `Bip39EnglishWordlistTest.kt`,
+  `MnemonicVectorsTest.kt`, `MnemonicRuleTest.kt`, `IcarusMasterKeyVectorsTest.kt`,
+  `IcarusMasterKeyTest.kt` (new)
+- `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`, `docs/PHASE_1_PLAN.md`,
+  `docs/ROADMAP.md`, `crypto/README.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- `./gradlew :crypto:jvmTest` — BUILD SUCCESSFUL (36 tests, including the BIP-39/CIP-3
+  vectors).
+- `./gradlew :crypto:testAndroidHostTest` — BUILD SUCCESSFUL.
+- `./gradlew :crypto:compileKotlinIosSimulatorArm64` — **BUILD SUCCESSFUL** (via the
+  `pbkdf2raw` interop shim; see Summary and `crypto/README.md`).
+- `./gradlew :crypto:compileKotlinIosArm64` — **BUILD SUCCESSFUL** (same shim, device target).
+
+Next recommended task:
+
+- **iOS runtime verification (future work, not yet started):** no iOS-simulator/device test
+  run has executed the CIP-3/BIP-39 vectors through the `pbkdf2raw` shim — only the compile
+  targets have been verified. Wiring up iOS test execution (simulator or device) and running
+  the existing `commonTest` vectors against it is the remaining iOS work item for 1.6b.
+  Block 1.6c (Ed25519-BIP32 + CIP-1852 derivation) has not been started in this session; its
+  timing relative to the iOS runtime item is a separate decision for the next session.
+
+### Session Summary (1.6a decision record)
 
 Date: 2026-07-11
 
@@ -568,8 +693,9 @@ Tests run:
 Next recommended task:
 
 - **Block 1.6** (mnemonic / seed / key derivation): create/restore a test wallet and derive keys
-  per CIP-1852 / CIP-3 / BIP-39, citing vectors verbatim. This is the block that adopts Apollo
-  (Ed25519-BIP32) and `bip32-ed25519`, deferred out of the hashing-only 1.5b.
+  per CIP-1852 / CIP-3 / BIP-39, citing vectors verbatim. Per ADR-0009, the main Apollo artifact
+  does not enter Block 1.6; Ed25519-BIP32 derivation (1.6c) uses the standalone
+  `dev.allain:bip32-ed25519` module instead, deferred out of the hashing-only 1.5b.
 
 ### Session Summary
 
