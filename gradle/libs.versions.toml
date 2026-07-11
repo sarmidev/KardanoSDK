@@ -17,6 +17,7 @@ kotlinx-serialization = "1.11.0"
 kotlincrypto-blake2 = "0.8.0"
 kotlincrypto-sha2 = "0.8.0"
 bouncycastle-bcprov = "1.84"
+bip32-ed25519 = "2.3.0"
 ktor = "3.5.1"
 material3 = "1.11.0-alpha07"
 
@@ -28,6 +29,7 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 kotlincrypto-blake2 = { module = "org.kotlincrypto.hash:blake2", version.ref = "kotlincrypto-blake2" }
 kotlincrypto-sha2 = { module = "org.kotlincrypto.hash:sha2", version.ref = "kotlincrypto-sha2" }
 bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle-bcprov" }
+bip32-ed25519 = { module = "dev.allain:bip32-ed25519", version.ref = "bip32-ed25519" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }

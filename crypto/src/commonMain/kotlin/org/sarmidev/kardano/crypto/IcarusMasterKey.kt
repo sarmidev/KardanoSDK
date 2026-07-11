@@ -32,6 +32,18 @@ public class IcarusMasterKey private constructor(rootKey: ByteArray) {
     internal fun rootKeyBytesForTesting(): ByteArray = rootKey.copyOf()
 
     /**
+     * Returns a defensive copy of the 96-byte root key, for use by the [KeyDerivation] backend
+     * adapter as the start of a derivation chain.
+     *
+     * Module-internal: there is no public byte accessor for the root key (ADR-0009 §7). Kept
+     * separate from [rootKeyBytesForTesting] to keep the production derivation path and the
+     * test-only accessor distinguishable by name.
+     *
+     * @return a fresh copy of the root-key bytes.
+     */
+    internal fun rootExtendedKeyBytes(): ByteArray = rootKey.copyOf()
+
+    /**
      * Best-effort wipe of the retained root-key bytes.
      *
      * This zeroes this instance's backing array, but gives no guarantee about compiler,

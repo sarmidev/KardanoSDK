@@ -49,6 +49,10 @@ kotlin {
             implementation(projects.core)
             implementation(libs.kotlincrypto.blake2)
             implementation(libs.kotlincrypto.sha2)
+            // Ed25519-BIP32 (CIP-1852) private derivation (ADR-0009 Block 1.6c gate result):
+            // the wrapper's deriveBytes/deriveBytesPub/fromNonextended are directly callable
+            // from commonMain on every target (Design A) — no expect/actual seam needed.
+            implementation(libs.bip32.ed25519)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
