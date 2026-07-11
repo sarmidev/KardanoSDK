@@ -290,8 +290,43 @@ ADR-0004 remain in force. ADR-0004 carries a one-line cross-reference to this AD
 - Block 1.5a: **complete (PASS).** Compatibility spike for the provisional lead
   (Apollo 1.8.8 + bip32-ed25519 2.3.0) confirmed resolve + compile on Android + JVM +
   iosSimulatorArm64 under Kotlin 2.4.0 (see §6). Fallback per §4 was not needed.
-- Block 1.5b (next): create `:crypto`, wire the selected dependency behind `Hashing`, add
-  Blake2b-224/256 with RFC 7693 (and Cardano-context) vectors.
+- Block 1.5b split into **1.5b-pre** (vector-source gate, docs-only) and **1.5b** (wire +
+  test), because the first-boundary test-vector policy (ADR-0004 §7) requires exact, cited
+  vectors before any hashing code lands, and one of the two required vectors was not cleanly
+  available. See §7 below.
+- Block 1.5b (deferred): create `:crypto`, wire the selected dependency behind `Hashing`, add
+  Blake2b-224/256 with the pinned cited vectors — executed only after the Blake2b-256 source
+  is pinned (§7).
+
+#### 7. Block 1.5b-pre vector-source gate result — 224 PASS, 256 OPEN
+
+Before creating `:crypto` or writing any hashing code, a blocking gate searched for exact,
+official, citable known-answer vectors (concrete input bytes + exact digest + source
+URL/commit) for both digest sizes. Outcome on 2026-07-11:
+
+| Size | Result | Source |
+|------|--------|--------|
+| Blake2b-224 | **PASS** | CIP-19 test vectors (CC-BY-4.0). Input: verification key `addr_vk1w0l2sr2zgfm26ztc6nl9xy8ghsk5sh6ldwemlpmp9xylzy4dtf7st80zhd` (bech32-decodable to a 32-byte Ed25519 key). Expected: the 28-byte payment credential extractable from the full CIP-19 address `addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x` (type-00) via `:core` `Address.parse`. Source: https://cips.cardano.org/cip/CIP-19 |
+| Blake2b-256 | **OPEN (blocking)** | No exact official IOG/Intersect fixed KAT (input + 32-byte digest) found. |
+
+Sources searched for Blake2b-256 and why each failed the gate:
+
+- RFC 7693 Appendix A — only BLAKE2b-512 ("abc") and BLAKE2s-256; no unkeyed BLAKE2b-256.
+- Official BLAKE2 KAT `github.com/BLAKE2/BLAKE2/testvectors/blake2b-kat.txt` — keyed and
+  full 64-byte output only; no unkeyed truncated 256 vector.
+- `IntersectMBO/cardano-base`, `cardano-crypto-class/testlib/Test/Crypto/Hash.hs` — hash tests
+  are property-based (roundtrip, MemPack, `hashFromStringAsHex`/`fromString`, `expected =
+  digest p bs`); no fixed known-answer vector with a concrete input and expected digest.
+- `input-output-hk/cardano-crypto` — no golden/KAT located.
+- `cardano-ledger` goldens — only complex constitution-hash CBOR, not a clean small
+  Blake2b-256 input/digest pair.
+- The frequently quoted values `0e5751c0…` (empty) / `bddd813c…` ("abc") were located only in
+  a third-party Rust repo (`DaJo-Code/cardano-crypto`), which is not an official IOG/Intersect
+  source, so they fail the gate. Generating an "official" digest with another library (Apollo,
+  Python, BouncyCastle, libsodium) is prohibited by ADR-0004 §7; cross-checks are secondary only.
+
+Consequence: 1.5b implementation is deferred until an exact official Blake2b-256 vector source
+is pinned. 1.5b-pre commits no module, dependency, API, or Kotlin/Gradle change.
 - Blocks 1.6 / 1.10: seed/key derivation and signing, each citing CIP-1852 / CIP-3 / BIP-39 /
   RFC 8032 vectors verbatim in the implementing block.
 - ADR-0004 (`docs/DECISIONS/0004-crypto-strategy.md`) and ADR-0005

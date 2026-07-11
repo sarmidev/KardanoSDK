@@ -20,9 +20,12 @@ Current priority:
 > Block 1.3a (Provider Read-Only Boundary — interface, models, and mock in `:provider`),
 > Block 1.3b-pre (`Address.bech32` source string in `:core`), Block 1.3b (Blockfrost
 > preprod provider in `:provider-blockfrost`, with a live Playground toggle), Block 1.4
-> (Crypto Evaluation And Module Decision, docs-only; ADR-0008), and Block 1.5a (Kotlin-2.4.0
-> compatibility spike, **PASS**) are complete. The next step is Block 1.5b — create `:crypto`,
-> wire the selected dependency behind `Hashing`, and add official Blake2b vectors.
+> (Crypto Evaluation And Module Decision, docs-only; ADR-0008), Block 1.5a (Kotlin-2.4.0
+> compatibility spike, **PASS**), and Block 1.5b-pre (crypto vector-source gate, docs-only) are
+> complete. Block 1.5b (create `:crypto`, wire the dependency behind `Hashing`, add Blake2b
+> vectors) is blocked: the gate pinned the Blake2b-224 vector (CIP-19) but found no exact
+> official IOG/Intersect Blake2b-256 known-answer vector, so the next step is to pin a Blake2b-256
+> source before implementing (ADR-0008 §7).
 
 ## Phase 0 - Core Foundation
 
@@ -742,8 +745,17 @@ Proposed block sequence:
     `fr.acinq.secp256k1:secp256k1-kmp:0.16.0`; the `org.hyperledger.identus` companion was not
     needed. Proves resolve + compile only, not runtime correctness. Scratch module discarded; no
     dependency committed. See ADR-0008 §6.
-  - `1.5b` (next) create `:crypto`, wire the chosen dependency behind `Hashing`, add
-    Blake2b-224/256 with official cited vectors.
+  - `1.5b-pre` crypto vector-source gate — **Status: complete (docs-only).** A blocking gate ran
+    before any module/code, searching for exact official cited Blake2b known-answer vectors.
+    Blake2b-224 **PASS** (CIP-19: `addr_vk1w0l2sr…` + the payment credential from the full CIP-19
+    address `addr1qx2fxv2umyhttk…`, via `:core` `Address.parse`). Blake2b-256 **OPEN** — no exact
+    official IOG/Intersect fixed KAT found (RFC 7693 has only 512-bit/BLAKE2s; the BLAKE2 KAT is
+    keyed/64-byte; `cardano-crypto-class` hash tests are property-based; the quoted `0e5751c0…`/
+    `bddd813c…` values appear only in a non-official third-party repo). No module/dependency/API/
+    Gradle change. See ADR-0008 §7.
+  - `1.5b` (blocked) create `:crypto`, wire the chosen dependency behind `Hashing`, add
+    Blake2b-224/256 with official cited vectors — deferred until an exact official Blake2b-256
+    vector source is pinned.
 - `1.6` Mnemonic / Seed / Key Derivation — create/restore a test wallet and derive keys.
 - `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
   `Address.parse`.

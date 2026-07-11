@@ -360,7 +360,28 @@ falta `org.hyperledger.identus:secp256k1-kmp:1.8.8`; Apollo arrastra
 compilacion/typecheck (incluido el klib de iOS sim), no correccion criptografica ni ejecucion en
 runtime. La adopcion/cableado concretos se deciden en 1.5b. Detalle en ADR-0008 §6.
 
-#### 1.5b Wire + test (solo tras pasar 1.5a)
+#### 1.5b-pre Gate de vectores (docs-only, antes de crear `:crypto`)
+
+Antes de crear `:crypto` o escribir el API de hashing, un gate bloqueante busca vectores
+oficiales, citados y exactos (bytes de entrada + digest exacto + URL/commit) para ambos
+tamanos. Resultado (2026-07-11):
+
+- Blake2b-224: **PASS.** Par oficial de CIP-19 (CC-BY-4.0): clave de verificacion
+  `addr_vk1w0l2sr2zgfm26ztc6nl9xy8ghsk5sh6ldwemlpmp9xylzy4dtf7st80zhd` (decodificable por
+  bech32 a 32 bytes) + los 28 bytes de payment credential extraibles de la direccion CIP-19
+  completa `addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x`
+  via `Address.parse` de `:core`.
+- Blake2b-256: **ABIERTO (bloqueante).** No se encontro un KAT oficial fijo de IOG/Intersect
+  (input concreto + digest de 32 bytes). RFC 7693 App. A solo trae 512-bit/BLAKE2s; el KAT
+  oficial de BLAKE2 es keyed/64 bytes; los tests de `cardano-crypto-class`
+  (`testlib/Test/Crypto/Hash.hs`) son basados en propiedades, sin KAT fijo; los valores
+  conocidos (`0e5751c0…`/`bddd813c…`) solo aparecen en un repo Rust de terceros, no oficial.
+
+Consecuencia: se difiere `1.5b` hasta fijar una fuente oficial exacta de Blake2b-256.
+`1.5b-pre` no crea modulo, dependencia ni cambios de Kotlin/Gradle; solo docs. Detalle en
+ADR-0008 §7.
+
+#### 1.5b Wire + test (solo tras fijar los vectores en 1.5b-pre)
 
 Objetivo:
 
@@ -523,7 +544,9 @@ ADR-0007), `1.4` (Crypto Evaluation And Module Decision, solo docs; ADR-0008) y 
 compatibilidad, **PASS**) estan completos. `1.5a` confirmo que el candidato provisional
 (Apollo 1.8.8 + `bip32-ed25519` 2.3.0) resuelve y compila en Android + JVM + iosSimulatorArm64
 bajo Kotlin 2.4.0 (ADR-0008 §6); no se comprometio ninguna dependencia al build (el modulo scratch
-se descarto). El siguiente paso es `1.5b`: crear `:crypto`, cablear la dependencia elegida detras
-de `Hashing` y anadir vectores Blake2b oficiales (RFC 7693 / contexto Cardano). No hay wallet,
-crypto, tx ni signing todavia.
+se descarto). `1.5b-pre` (gate de vectores, solo docs) esta hecho: el vector de Blake2b-224
+queda fijado con CIP-19, pero el de Blake2b-256 sigue **abierto** por falta de un KAT oficial
+exacto de IOG/Intersect (ADR-0008 §7). El siguiente paso es fijar la fuente oficial exacta de
+Blake2b-256 y luego ejecutar `1.5b`: crear `:crypto`, cablear la dependencia elegida detras de
+`Hashing` y anadir los vectores Blake2b citados. No hay wallet, crypto, tx ni signing todavia.
 

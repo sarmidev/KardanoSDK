@@ -74,9 +74,11 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, and 1.5a complete; Block 1.5b —
-  create `:crypto` and wire the dependency behind `Hashing` — is next). Phase 0 - Core Foundation
-  closed below for reference.
+- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, 1.5a, and 1.5b-pre complete;
+  Block 1.5b — create `:crypto` and wire the dependency behind `Hashing` — is blocked pending an
+  exact official Blake2b-256 test vector). Block 1.5b-pre ran the vector-source gate: Blake2b-224
+  is pinned to CIP-19, but no exact official IOG/Intersect Blake2b-256 known-answer vector was
+  found, so 1.5b is deferred (ADR-0008 §7). Phase 0 - Core Foundation closed below for reference.
 
 Block status:
 
@@ -284,11 +286,22 @@ compilation/typecheck (including the iOS-simulator klib) only, not runtime crypt
 correctness or native-binary linkage. No dependency was committed to the build; the scratch module
 and its `settings.gradle.kts` entry were discarded. See ADR-0008 §6.
 
-Next recommended task: **Block 1.5b (create `:crypto` + wire behind `Hashing`)** — create the
-`:crypto` KMP module, add the selected dependency pinned (no dynamic versions), wire the first
-algorithm boundary (Blake2b-224/256) behind the `Hashing` interface returning `KardanoResult`, and
-add official cited Blake2b vectors (RFC 7693 / Cardano context) verbatim. See ADR-0008,
-`docs/PHASE_1_PLAN.md` Block 1.5b, and `docs/ROADMAP.md`.
+**Block 1.5b-pre (vector-source gate) is complete (docs-only).** Before creating `:crypto` or
+writing any hashing code, a blocking gate searched for exact, official, citable Blake2b
+known-answer vectors (input bytes + exact digest + source URL/commit). Result: Blake2b-224 PASS
+(CIP-19: verification key `addr_vk1w0l2sr…` + the 28-byte payment credential from the full
+CIP-19 address `addr1qx2fxv2umyhttk…`, extractable via `:core` `Address.parse`); Blake2b-256
+OPEN — no exact official IOG/Intersect fixed KAT found (RFC 7693 has only 512-bit/BLAKE2s; the
+BLAKE2 KAT is keyed/64-byte; `cardano-crypto-class` hash tests are property-based; the quoted
+`0e5751c0…`/`bddd813c…` values appear only in a non-official third-party repo). No module,
+dependency, API, or Kotlin/Gradle change landed. See ADR-0008 §7.
+
+Next recommended task: **pin an exact official Blake2b-256 vector source, then Block 1.5b
+(create `:crypto` + wire behind `Hashing`)** — once a citable IOG/Intersect (or equivalent
+approved) Blake2b-256 input/digest pair is fixed, create the `:crypto` KMP module, add the
+selected dependency pinned (no dynamic versions), wire Blake2b-224/256 behind the `Hashing`
+interface returning `KardanoResult`, and add the cited vectors verbatim. See ADR-0008 §7,
+`docs/PHASE_1_PLAN.md` Blocks 1.5b-pre/1.5b, and `docs/ROADMAP.md`.
 
 Current modules:
 
