@@ -205,7 +205,7 @@ This advances ADR-0004's matrix from `Needs investigation`; it does not replace 
 | Identifier | `org.hyperledger.identus:apollo` v1.8.8 + `dev.allain:bip32-ed25519` v2.3.0; secp256k1 arrives transitively as `fr.acinq.secp256k1:secp256k1-kmp` v0.16.0 (confirmed in 1.5a — the `org.hyperledger.identus:secp256k1-kmp` companion was not required) |
 | Category (ADR-0004) | D (Cardano-adjacent binding/port) + C |
 | Source | github.com/hyperledger-identus/apollo (README); klibs.io/package/dev.allain/bip32-ed25519 (v2.3.0, listed 2025-07); Apollo PR #225 |
-| Supported algorithms | Ed25519, X25519, Secp256k1, Blake2b, SHA family; **Ed25519-BIP32 HD derivation** via the `bip32-ed25519` module (Rust `ed25519-bip32` under the hood) |
+| Supported algorithms | Ed25519, X25519, Secp256k1, PBKDF2-HMAC-SHA-512, SHA family (transitive KotlinCrypto `sha2`/`hmac-sha2`); **Ed25519-BIP32 HD derivation** via the `bip32-ed25519` module (Rust `ed25519-bip32` under the hood). **Correction (Block 1.5b):** Apollo does **not** ship a Blake2b implementation — verified in the published `apollo-jvm-1.8.8.jar` (its `hashing` package contains only `PBKDF2SHA512`) and across Apollo source tags `v1.7.2`–`v1.8.7`; its transitive deps expose no Blake2b either. The earlier "Blake2b" entry here was unverified and is retracted. Apollo remains the lead for Ed25519-BIP32 (Blocks 1.6 / 1.10), not for hashing |
 | KMP targets | Android, JVM, iosArm64, iosSimulatorArm64, macOS, JS (per README / klibs listing). 1.5a confirmed **compile** on Android + JVM + iosSimulatorArm64 under Kotlin 2.4.0 |
 | commonMain API | Yes |
 | Maintenance | Active (IOG/Identus maintainers) |
@@ -294,11 +294,11 @@ ADR-0004 remain in force. ADR-0004 carries a one-line cross-reference to this AD
   test), because the first-boundary test-vector policy (ADR-0004 §7) requires exact, cited
   vectors before any hashing code lands, and one of the two required vectors was not cleanly
   available. See §7 below.
-- Block 1.5b (unblocked): create `:crypto`, wire the selected dependency behind `Hashing`, add
-  Blake2b-224/256 with the pinned cited vectors. The Blake2b-256 source is now pinned (§7), so
-  the 1.5b-pre gate passes for both digest sizes. For this hashing-only block the dependency is
-  Apollo 1.8.8 only (plus whatever Apollo pulls transitively); `bip32-ed25519` is not needed for
-  hashing and is reserved for the later key-derivation blocks (1.6 / 1.10).
+- Block 1.5b: **complete.** `:crypto` created and Blake2b-224/256 wired behind `Hashing`
+  with the pinned cited vectors. See §8. During wiring it was found that Apollo 1.8.8 ships
+  **no Blake2b** (Candidate-3 correction above), so the hashing backend is KotlinCrypto
+  `org.kotlincrypto.hash:blake2` rather than Apollo. `bip32-ed25519` was not added and Apollo
+  was not added this block; both are reserved for the later key-derivation blocks (1.6 / 1.10).
 
 #### 7. Block 1.5b-pre vector-source gate result — 224 PASS, 256 PASS
 
@@ -352,3 +352,48 @@ Consequence: with both digest sizes pinned, the 1.5b-pre gate passes and 1.5b is
 - ADR-0004 (`docs/DECISIONS/0004-crypto-strategy.md`) and ADR-0005
   (`docs/DECISIONS/0005-phase-1-architecture-and-scope.md`) remain the governing decisions this
   ADR aligns with; this ADR does not supersede them.
+
+#### 8. Block 1.5b result — `:crypto` created; hashing backed by KotlinCrypto `blake2`
+
+Block 1.5b created the `:crypto` Kotlin Multiplatform module (Android library + JVM +
+iosArm64 + iosSimulatorArm64, `explicitApi()`), depending only on `:core`, and wired
+Blake2b-224/256 behind a backend-neutral `Hashing` interface.
+
+**Backend correction.** The seam design in §2 anticipated Apollo as the concrete
+implementation, but wiring this block established that **Apollo 1.8.8 provides no Blake2b**
+(verified in the published `apollo-jvm-1.8.8.jar`, whose `hashing` package contains only
+`PBKDF2SHA512`, and across Apollo source tags `v1.7.2`–`v1.8.7`; its transitive dependencies
+expose no Blake2b either). The 1.5a spike only established dependency resolution and Kotlin
+compilation, and 1.5b-pre only pinned test vectors — neither had verified that Apollo exposes
+a Blake2b API. Because ADR-0004 forbids handwritten cryptography, this hashing-only block is
+backed by **KotlinCrypto `org.kotlincrypto.hash:blake2` `0.8.0`** (Apache-2.0; from the same
+KotlinCrypto project whose `sha2`/`hmac-sha2` Apollo already depends on). Apollo is **not**
+added in this block, and `bip32-ed25519` is **not** added; Apollo's Ed25519-BIP32 value is
+reserved for Blocks 1.6 / 1.10. The seam held: the public API (`Hashing`, `HashDigest`,
+`CryptoError`) names no backend, so a later block can still adopt Apollo for derivation
+without touching this surface.
+
+**Wiring.**
+
+- Public API in `org.sarmidev.kardano.crypto`: `Hashing` (`blake2b224`/`blake2b256`, both
+  returning `KardanoResult<HashDigest, CryptoError>`, never throwing) with `Hashing.default()`;
+  `HashDigest` (regular class, private constructor, internal size-validating factory,
+  defensive copies, content-based equality, structural `toString`, `SIZE_224`/`SIZE_256`
+  constants); and the sealed, backend-neutral `CryptoError` (`HashingFailed`,
+  `InvalidDigestLength`). The internal adapter `Blake2bHashing` maps backend failures to
+  `CryptoError` and rethrows `CancellationException` before mapping other throwables.
+- Dependency pinned via the version catalog (`kotlincrypto-blake2 = "0.8.0"`); no dynamic
+  versions.
+- Availability note: `blake2` publishes `jvm` and iOS artifacts plus artifacts expected to be
+  usable by this repo's Android target; `:crypto:testAndroidHostTest` verifies Android target
+  resolution/compile (no unverified "Android-native" claim is made).
+
+**Tests.** `commonTest` uses only the pinned cited vectors from §7, copied verbatim with
+source comments, and generates no expected digest: Blake2b-224 against the CIP-19 payment
+credential (read structurally from the cited address via `:core` `Address.parse`), and
+Blake2b-256 against the two IntersectMBO/plutus conformance goldens. `HashDigest` structural
+tests (defensive copy on construction and on read, structural `toString`, content equality,
+`InvalidDigestLength`) exercise the module-internal factory directly.
+
+**Verification.** `./gradlew :crypto:jvmTest :crypto:testAndroidHostTest
+:crypto:compileKotlinIosSimulatorArm64 :core:jvmTest` — all BUILD SUCCESSFUL.

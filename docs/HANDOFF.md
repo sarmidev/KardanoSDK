@@ -74,12 +74,16 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, 1.5a, and 1.5b-pre complete;
-  Block 1.5b — create `:crypto` and wire the dependency behind `Hashing` — is now unblocked).
-  Block 1.5b-pre ran the vector-source gate and it **passes for both digest sizes**: Blake2b-224
-  is pinned to CIP-19 and Blake2b-256 is pinned to the IntersectMBO Plutus `blake2b_256`
-  conformance goldens (`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008 §7). Phase 0 -
-  Core Foundation closed below for reference.
+- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, 1.5a, 1.5b-pre, and 1.5b
+  complete; next is Block 1.6 — mnemonic / seed / key derivation). Block 1.5b created the
+  `:crypto` KMP module and wired Blake2b-224/256 behind the backend-neutral `Hashing`
+  interface. It found that Apollo 1.8.8 ships no Blake2b (verified in `apollo-jvm-1.8.8.jar`
+  and source tags `v1.7.2`–`v1.8.7`), so the hashing-only backend is KotlinCrypto
+  `org.kotlincrypto.hash:blake2` `0.8.0`; Apollo and `bip32-ed25519` were not added this block
+  and are reserved for 1.6 / 1.10 (ADR-0008 §8). The 1.5b-pre vector gate passed for both
+  digest sizes: Blake2b-224 pinned to CIP-19 and Blake2b-256 pinned to the IntersectMBO Plutus
+  `blake2b_256` conformance goldens (`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008
+  §7). Phase 0 - Core Foundation closed below for reference.
 
 Block status:
 
@@ -303,16 +307,21 @@ the builtin hashes the raw UPLC bytestring literal only (no CBOR/UPLC envelope);
 digest previously seen only in a non-official third-party repo is now confirmed in this official
 Intersect source. No module, dependency, API, or Kotlin/Gradle change landed. See ADR-0008 §7.
 
-Next recommended task: **Block 1.5b (create `:crypto` + wire behind `Hashing`)** — now that both
-Blake2b vector sources are pinned, create the `:crypto` KMP module, add Apollo 1.8.8 only (plus
-whatever Apollo pulls transitively; do NOT add `bip32-ed25519` in this hashing-only block — it is
-reserved for the later key-derivation blocks), pinned (no dynamic versions), wire Blake2b-224/256
-behind the `Hashing` interface returning `KardanoResult`, and add the cited vectors verbatim. See
-ADR-0008 §7, `docs/PHASE_1_PLAN.md` Blocks 1.5b-pre/1.5b, and `docs/ROADMAP.md`.
+Block 1.5b is **complete**: the `:crypto` KMP module was created and Blake2b-224/256 wired
+behind the backend-neutral `Hashing` interface. During wiring it was found that Apollo 1.8.8
+ships no Blake2b, so the hashing-only backend is KotlinCrypto `org.kotlincrypto.hash:blake2`
+`0.8.0` (pinned); Apollo and `bip32-ed25519` were not added and are reserved for 1.6 / 1.10.
+See ADR-0008 §8, `docs/PHASE_1_PLAN.md` Block 1.5b, and `docs/ROADMAP.md`.
+
+Next recommended task: **Block 1.6 (mnemonic / seed / key derivation)** — create/restore a test
+wallet and derive keys per CIP-1852 / CIP-3 / BIP-39, citing vectors verbatim. This is the block
+that adopts Apollo (Ed25519-BIP32) and `bip32-ed25519`.
 
 Current modules:
 
 - `:core` (UI-free SDK core seed)
+- `:crypto` (Blake2b hashing boundary; added in Block 1.5b; depends only on `:core`; backed by
+  KotlinCrypto `blake2`; no backend type in the public API)
 - `:provider` (read-only chain query boundary + in-memory mock; added in Block 1.3a; depends
   only on `:core`, no third-party `commonMain` dependency)
 - `:provider-blockfrost` (Blockfrost preprod provider: Ktor + kotlinx-serialization; added in
@@ -321,10 +330,10 @@ Current modules:
   `:provider`, and `:provider-blockfrost`)
 - `:androidApp`, `:desktopApp`, and `iosApp` (Xcode entry point)
 
-`:provider` was created in Block 1.3a and `:provider-blockfrost` in Block 1.3b, each justified
-by the ownership/dependency boundary in ADR-0005/ADR-0006/ADR-0007. Further module splits
-(`:crypto`, `:wallet`, `:tx`) remain deferred to the block that introduces their dependency/ownership
-pressure.
+`:provider` was created in Block 1.3a, `:provider-blockfrost` in Block 1.3b, and `:crypto` in
+Block 1.5b, each justified by the ownership/dependency boundary in
+ADR-0005/ADR-0006/ADR-0007/ADR-0008. Further module splits (`:wallet`, `:tx`) remain deferred to
+the block that introduces their dependency/ownership pressure.
 
 Current priority:
 
@@ -477,12 +486,39 @@ Tests run:
 
 Next recommended task:
 
-- **Block 1.5b** (now unblocked — both Blake2b vector sources pinned in 1.5b-pre): create
-  `:crypto`, add Apollo 1.8.8 only (plus whatever Apollo pulls transitively; do NOT add
-  `bip32-ed25519` in this hashing-only block — it is reserved for the later key-derivation
-  blocks), pinned, wire Blake2b-224/256 behind the `Hashing` interface (returning `KardanoResult`,
-  no throwing across Swift/ObjC), and add the cited Blake2b vectors verbatim (Blake2b-224 =
-  CIP-19; Blake2b-256 = IntersectMBO Plutus `blake2b_256` conformance goldens @`5e18824e`).
+- **Block 1.6** (mnemonic / seed / key derivation): create/restore a test wallet and derive keys
+  per CIP-1852 / CIP-3 / BIP-39, citing vectors verbatim. This is the block that adopts Apollo
+  (Ed25519-BIP32) and `bip32-ed25519`, deferred out of the hashing-only 1.5b.
+
+### Session Summary
+
+Date: 2026-07-11
+
+Summary:
+
+- Block 1.5b (crypto module + Blake2b hashing boundary): created the `:crypto` KMP module
+  (Android library + JVM + iosArm64 + iosSimulatorArm64, `explicitApi()`, depends only on
+  `:core`; `:core` does not depend on `:crypto`). Public API in `org.sarmidev.kardano.crypto`:
+  `Hashing` (`blake2b224`/`blake2b256` → `KardanoResult<HashDigest, CryptoError>`, never throw)
+  with `Hashing.default()`; `HashDigest` (regular class, private constructor, internal
+  size-validating factory, defensive copies, content equality, structural `toString`,
+  `SIZE_224`/`SIZE_256`); sealed backend-neutral `CryptoError` (`HashingFailed`,
+  `InvalidDigestLength`). Internal adapter `Blake2bHashing` maps backend failures to
+  `CryptoError` and rethrows `CancellationException` first.
+- Backend correction: **Apollo 1.8.8 ships no Blake2b** — verified in the published
+  `apollo-jvm-1.8.8.jar` (its `hashing` package holds only `PBKDF2SHA512`) and across Apollo
+  source tags `v1.7.2`–`v1.8.7`; transitive deps expose no Blake2b either. Since ADR-0004 forbids
+  handwritten crypto, the hashing-only backend is **KotlinCrypto `org.kotlincrypto.hash:blake2`
+  `0.8.0`** (Apache-2.0), pinned via the version catalog. Apollo and `bip32-ed25519` were **not**
+  added this block; both are reserved for 1.6 / 1.10. The backend-neutral public API is
+  unchanged by this substitution.
+- Tests (`crypto/commonTest`): only the pinned cited vectors, verbatim, no generated digests —
+  Blake2b-224 vs the CIP-19 payment credential (read structurally via `:core` `Address.parse`),
+  Blake2b-256 vs the two IntersectMBO/plutus conformance goldens; plus `HashDigest` structural
+  tests. Docs updated (ADR-0008 §8 + Candidate-3 correction, `docs/PHASE_1_PLAN.md`,
+  `docs/ROADMAP.md`, this file); added `crypto/README.md`.
+- Verification: `./gradlew :crypto:jvmTest :crypto:testAndroidHostTest
+  :crypto:compileKotlinIosSimulatorArm64 :core:jvmTest` — all BUILD SUCCESSFUL.
 
 ### Previous Session Summary
 

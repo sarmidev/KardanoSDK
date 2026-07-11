@@ -390,19 +390,44 @@ ADR-0008 §7.
 
 #### 1.5b Wire + test (desbloqueado; vectores ya fijados en 1.5b-pre)
 
+Status: complete.
+
 Objetivo:
 
-- Crear `:crypto` y anadir la dependencia elegida (pineada, sin versiones dinamicas). Para este
-  bloque solo-hashing la dependencia es Apollo 1.8.8 unicamente (mas lo que Apollo arrastre
-  transitivamente); `bip32-ed25519` no se necesita para hashing y se reserva para los bloques
-  posteriores de derivacion de claves (1.6 / 1.10).
+- Crear `:crypto` y anadir la dependencia elegida (pineada, sin versiones dinamicas).
 - Cablear el primer limite algoritmico: Blake2b-224/256 detras de la interfaz `Hashing`.
 - Implementar wrappers/bindings de los algoritmos elegidos.
-- Cubrirlos con vectores oficiales citados (Blake2b: RFC 7693 / contexto Cardano); sin inventar
-  vectores.
+- Cubrirlos con vectores oficiales citados (Blake2b-224 CIP-19, Blake2b-256 IntersectMBO/plutus);
+  sin inventar vectores.
 - Mantener errores tipados (`KardanoResult`, sin lanzar a traves de Swift/ObjC).
 - Evitar exponer bytes mutables internos.
 - No firmar transacciones todavia si se puede separar.
+
+Outcome:
+
+- Nuevo modulo KMP `:crypto` (Android library + JVM + iosArm64 + iosSimulatorArm64,
+  `explicitApi()`) que depende solo de `:core`. `:core` no depende de `:crypto`.
+- Paquete `org.sarmidev.kardano.crypto`: `Hashing` (`blake2b224`/`blake2b256`, ambos devuelven
+  `KardanoResult<HashDigest, CryptoError>`, nunca lanzan) con `Hashing.default()`; `HashDigest`
+  (clase regular, constructor privado, factory interna que valida tamano, copias defensivas,
+  igualdad por contenido, `toString` estructural, constantes `SIZE_224`/`SIZE_256`); `CryptoError`
+  sellado y neutral respecto al backend (`HashingFailed`, `InvalidDigestLength`). Adapter interno
+  `Blake2bHashing`; ningun tipo del backend aparece en la API publica.
+- **Correccion de dependencia:** al cablear se comprobo que **Apollo 1.8.8 no incluye Blake2b**
+  (verificado en el `apollo-jvm-1.8.8.jar` publicado —su paquete `hashing` solo trae
+  `PBKDF2SHA512`— y en los tags de fuente `v1.7.2`–`v1.8.7`). Como ADR-0004 prohibe crypto escrita
+  a mano, el backend de este bloque solo-hashing es **KotlinCrypto `org.kotlincrypto.hash:blake2`
+  `0.8.0`** (Apache-2.0), fijado en el catalogo. Apollo **no** se anade en este bloque y
+  `bip32-ed25519` tampoco; el valor de Apollo (Ed25519-BIP32) se reserva para 1.6 / 1.10. La API
+  publica es neutral respecto al backend, asi que un bloque posterior puede adoptar Apollo sin
+  tocar esta superficie. Detalle en ADR-0008 §8.
+- Tests en `crypto/commonTest` con solo los vectores citados de 1.5b-pre, copiados verbatim y sin
+  generar digests: Blake2b-224 contra la payment credential de CIP-19 (leida estructuralmente del
+  address citado via `:core` `Address.parse`) y Blake2b-256 contra los dos goldens de conformance
+  de IntersectMBO/plutus. Tests estructurales de `HashDigest` (copia defensiva en construccion y en
+  lectura, `toString` estructural, igualdad por contenido, `InvalidDigestLength`).
+- Verificacion: `./gradlew :crypto:jvmTest :crypto:testAndroidHostTest
+  :crypto:compileKotlinIosSimulatorArm64 :core:jvmTest` — todos BUILD SUCCESSFUL.
 
 Checkpoint Android:
 
@@ -556,8 +581,10 @@ compatibilidad, **PASS**) estan completos. `1.5a` confirmo que el candidato prov
 bajo Kotlin 2.4.0 (ADR-0008 §6); no se comprometio ninguna dependencia al build (el modulo scratch
 se descarto). `1.5b-pre` (gate de vectores, solo docs) esta hecho y **pasa para ambos tamanos**:
 Blake2b-224 fijado con CIP-19 y Blake2b-256 fijado con los goldens de conformance de Plutus
-(`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008 §7). El siguiente paso es ejecutar
-`1.5b` (desbloqueado): crear `:crypto`, anadir Apollo 1.8.8 (solo hashing; sin `bip32-ed25519`),
-cablear Blake2b-224/256 detras de `Hashing` y anadir los vectores Blake2b citados verbatim. No
-hay wallet, crypto, tx ni signing todavia.
+(`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008 §7). `1.5b` esta **completo**: se creo
+`:crypto` y se cablearon Blake2b-224/256 detras de `Hashing`. Al cablear se comprobo que Apollo
+1.8.8 no incluye Blake2b, asi que el backend solo-hashing es KotlinCrypto
+`org.kotlincrypto.hash:blake2` `0.8.0` (Apollo y `bip32-ed25519` no se anaden en este bloque; se
+reservan para 1.6 / 1.10; ADR-0008 §8). El siguiente paso es `1.6` (mnemonic / seed / derivacion
+de claves). No hay wallet, tx ni signing todavia.
 
