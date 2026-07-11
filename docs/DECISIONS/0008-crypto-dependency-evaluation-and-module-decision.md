@@ -349,6 +349,16 @@ Consequence: with both digest sizes pinned, the 1.5b-pre gate passes and 1.5b is
 1.5b-pre itself commits no module, dependency, API, or Kotlin/Gradle change.
 - Blocks 1.6 / 1.10: seed/key derivation and signing, each citing CIP-1852 / CIP-3 / BIP-39 /
   RFC 8032 vectors verbatim in the implementing block.
+  > **Update (ADR-0009, Block 1.6a):** the Block 1.6 decisions live in
+  > `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`. Matrix correction, found the
+  > same way as the §8 Blake2b correction (published-artifact inspection): the main
+  > `org.hyperledger.identus:apollo` artifact does **not** enter Block 1.6 — its mnemonic
+  > API validates wordlist membership only (no checksum/word-count validation) and its
+  > `PBKDF2SHA512.derive` takes a `String` salt, which cannot carry the raw entropy bytes
+  > the CIP-3 Icarus master key requires. The Ed25519-BIP32 capability arrives through the
+  > standalone `dev.allain:bip32-ed25519:2.3.0` module (verified to expose
+  > `deriveBytes` / `deriveBytesPub` / `fromNonextended`) in Block 1.6c. Apollo's remaining
+  > candidacy is narrowed to Block 1.10 (signing).
 - ADR-0004 (`docs/DECISIONS/0004-crypto-strategy.md`) and ADR-0005
   (`docs/DECISIONS/0005-phase-1-architecture-and-scope.md`) remain the governing decisions this
   ADR aligns with; this ADR does not supersede them.

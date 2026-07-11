@@ -27,8 +27,19 @@ Current priority:
 > pinned to the IntersectMBO Plutus `blake2b_256` conformance goldens (`IntersectMBO/plutus`
 > @`5e18824e`, Apache-2.0; ADR-0008 §7). Block 1.5b found that Apollo 1.8.8 ships no Blake2b,
 > so the hashing-only backend is KotlinCrypto `org.kotlincrypto.hash:blake2` `0.8.0` (Apollo
-> and `bip32-ed25519` not added this block; reserved for 1.6 / 1.10; ADR-0008 §8). Next is
-> Block 1.6 (mnemonic / seed / key derivation).
+> and `bip32-ed25519` not added this block; reserved for 1.6 / 1.10; ADR-0008 §8). Block 1.6
+> (mnemonic / seed / key derivation) is split into 1.6a–1.6d (ADR-0009). **Block 1.6a is
+> complete** (docs-only): the scheme is pinned to the Icarus/CIP-3 restoration path only
+> (Byron/Ledger/Trezor variants deferred; restore-only, generation deferred), the
+> per-algorithm dependency table is verified against published artifacts (the main Apollo
+> artifact does not enter 1.6 — its mnemonic API lacks checksum validation and its PBKDF2
+> takes a String salt; Ed25519-BIP32 arrives via the standalone
+> `dev.allain:bip32-ed25519:2.3.0` in 1.6c; 1.6b uses cryptography-kotlin PBKDF2 +
+> KotlinCrypto `sha2`), and the vector gate passed for all three families (Trezor
+> `vectors.json` @`b57a5ad7` MIT; CIP-3 `Icarus.md` @`a36e1ebc` CC-BY-4.0;
+> `IntersectMBO/cardano-addresses` golden `addresses_5574d91d` @`46d01319` Apache-2.0).
+> Next is Block 1.6b (mnemonic-to-master-key), gated on ADR-0009's `To verify in 1.6b`
+> item.
 
 ## Phase 0 - Core Foundation
 
@@ -769,7 +780,31 @@ Proposed block sequence:
     vectors (CIP-19 for 224; IntersectMBO/plutus goldens for 256), no generated digests.
     `./gradlew :crypto:jvmTest :crypto:testAndroidHostTest :crypto:compileKotlinIosSimulatorArm64
     :core:jvmTest` — all BUILD SUCCESSFUL. See ADR-0008 §8.
-- `1.6` Mnemonic / Seed / Key Derivation — create/restore a test wallet and derive keys.
+- `1.6` Mnemonic / Seed / Key Derivation — restore a test wallet and derive keys. Split into
+  four gated subphases (ADR-0009, `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`);
+  Icarus/CIP-3 restoration path only; restore-only (mnemonic generation and the CSPRNG
+  decision deferred).
+  - `1.6a` API / dependency / vector-source decision — **Status: complete (docs-only).**
+    ADR-0009 records: module placement (`:crypto`; no `:wallet` yet, extraction trigger
+    recorded); the Icarus/CIP-3 scheme (PBKDF2-HMAC-SHA-512 over the entropy, 4096
+    iterations, 96 bytes, CIP-3 bit tweaks; plain BIP-39 seed not exposed; English wordlist
+    only — lowercase ASCII English-wordlist input accepted; non-conforming input rejected,
+    not normalized); the verified dependency table (main Apollo
+    artifact rejected for 1.6 via published-artifact inspection — no checksum validation in
+    its mnemonic API, String-salt PBKDF2; `dev.allain:bip32-ed25519:2.3.0` verified to
+    expose `deriveBytes`/`deriveBytesPub`/`fromNonextended` for 1.6c; cryptography-kotlin
+    0.6.0 PBKDF2 + `org.kotlincrypto.hash:sha2:0.8.0` for 1.6b, with the Android
+    API-24/25 JCA item marked `To verify in 1.6b` and a platform-seam fallback recorded);
+    the vector gate (PASS ×3: Trezor `vectors.json`, CIP-3 `Icarus.md`, cardano-addresses
+    Shelley goldens — URL + commit + license pinned); the public API sketch, the sealed
+    `MnemonicError`/`KeyDerivationError` model, and the key-material rules (opaque handles,
+    no private-key byte accessor, mnemonics input-only and never echoed). No Kotlin,
+    Gradle, dependency, or module changes.
+  - `1.6b` BIP-39/CIP-3 mnemonic-to-master-key — blocked on ADR-0009's 1.6b gate.
+  - `1.6c` Ed25519-BIP32 + CIP-1852 derivation — blocked until 1.6b is complete.
+  - `1.6d` test-wallet fixture + Android checkpoint (derived public metadata only: path,
+    Blake2b-224 fingerprint, typed state; no raw/hex public key; addresses belong to 1.7)
+    — blocked until 1.6c is complete.
 - `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
   `Address.parse`.
 - `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance.

@@ -74,8 +74,8 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, 1.5a, 1.5b-pre, and 1.5b
-  complete; next is Block 1.6 — mnemonic / seed / key derivation). Block 1.5b created the
+- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, 1.5a, 1.5b-pre, 1.5b, and
+  1.6a complete; next is Block 1.6b — mnemonic-to-master-key). Block 1.5b created the
   `:crypto` KMP module and wired Blake2b-224/256 behind the backend-neutral `Hashing`
   interface. It found that Apollo 1.8.8 ships no Blake2b (verified in `apollo-jvm-1.8.8.jar`
   and source tags `v1.7.2`–`v1.8.7`), so the hashing-only backend is KotlinCrypto
@@ -83,7 +83,16 @@ Current phase:
   and are reserved for 1.6 / 1.10 (ADR-0008 §8). The 1.5b-pre vector gate passed for both
   digest sizes: Blake2b-224 pinned to CIP-19 and Blake2b-256 pinned to the IntersectMBO Plutus
   `blake2b_256` conformance goldens (`IntersectMBO/plutus` @`5e18824e`, Apache-2.0; ADR-0008
-  §7). Phase 0 - Core Foundation closed below for reference.
+  §7). Block 1.6 (mnemonic / seed / key derivation) is split into 1.6a–1.6d with blocking
+  gates (ADR-0009). Block 1.6a (docs-only decision block) is complete: Icarus/CIP-3
+  restoration path only (restore-only; generation/CSPRNG deferred; Byron/Ledger/Trezor
+  deferred); the main Apollo artifact does not enter 1.6 (published-artifact inspection: its
+  mnemonic API has no checksum validation and its PBKDF2 takes a String salt while Icarus
+  needs entropy-bytes salt); 1.6b uses cryptography-kotlin PBKDF2 + KotlinCrypto `sha2`,
+  1.6c uses `dev.allain:bip32-ed25519:2.3.0`; the vector gate passed for all three families
+  (Trezor `vectors.json`, CIP-3 `Icarus.md`, `IntersectMBO/cardano-addresses` goldens — all
+  pinned by URL + commit + license in ADR-0009 §4). Phase 0 - Core Foundation closed below
+  for reference.
 
 Block status:
 
@@ -409,8 +418,14 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
    concrete dependency is provisional (Apollo + `bip32-ed25519` is the provisional lead) and is
    selected only after the Block 1.5a Kotlin-2.4.0 compatibility spike; per-algorithm library
    choices for derivation/signing follow in Blocks 1.6/1.10, each updating ADR-0004's matrix.
-   See `docs/DECISIONS/0004-crypto-strategy.md` (open questions) and
-   `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`.
+   **Block 1.6a (ADR-0009) has since fixed the derivation choices:** hashing = KotlinCrypto
+   `blake2` (1.5b); mnemonic checksum = KotlinCrypto `sha2`, Icarus PBKDF2 =
+   cryptography-kotlin (both 1.6b, with a `To verify in 1.6b` provider-coverage item);
+   Ed25519-BIP32 = `dev.allain:bip32-ed25519:2.3.0` (1.6c). The main Apollo artifact enters
+   neither 1.5 nor 1.6; its remaining candidacy is Block 1.10 (signing).
+   See `docs/DECISIONS/0004-crypto-strategy.md` (open questions),
+   `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`, and
+   `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`.
 
 5. Test vector sources:
    - The authoritative spec sources are now documented in `docs/TESTING.md` (Bech32/Bech32m
@@ -444,6 +459,72 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-11
+
+Summary:
+
+- Block 1.6a (mnemonic / seed / key derivation — API, dependency, and vector-source
+  decision): docs-only. Added ADR-0009
+  (`docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`) splitting Block 1.6 into four
+  gated subphases (1.6a decision / 1.6b mnemonic-to-master-key / 1.6c Ed25519-BIP32 +
+  CIP-1852 / 1.6d test-wallet fixture + Android checkpoint), each its own diff.
+- Scheme decision: Phase 1 targets the Icarus/CIP-3 restoration path for the MVP test
+  wallet only; Byron, Ledger, Trezor variants deferred. Restore-only — mnemonic generation
+  and the platform CSPRNG decision are deferred out of Block 1.6. English wordlist only;
+  non-conforming input is rejected, not normalized (NFKD is the identity on that domain).
+  The plain BIP-39 seed function is not exposed (Cardano's Icarus path does not use it).
+- Dependency verification (published-artifact inspection, the 1.5b discipline): the main
+  `org.hyperledger.identus:apollo` artifact does **not** enter Block 1.6 — `javap` on
+  `apollo-jvm-1.8.8.jar` plus source reads showed its mnemonic API validates wordlist
+  membership only (no checksum / word-count validation; `createSeed` is the Identus path
+  with default passphrase "AtalaPrism", not BIP-39 or Icarus) and its `PBKDF2SHA512.derive`
+  takes a `String` salt (Icarus needs entropy-bytes salt). `dev.allain:bip32-ed25519:2.3.0`
+  verified to expose exactly the needed calls (`deriveBytes` / `deriveBytesPub` /
+  `fromNonextended`; typed `DerivationException`); enters in 1.6c. 1.6b uses
+  cryptography-kotlin 0.6.0 PBKDF2 (ByteArray salt) + `org.kotlincrypto.hash:sha2:0.8.0`
+  (checksum), with per-target PBKDF2 provider coverage and the Android API-24/25 JCA
+  question marked `To verify in 1.6b` (platform-seam fallback recorded). KotlinCrypto
+  publishes no PBKDF2 (group listing verified). HMAC-SHA-512 needs no direct dependency.
+- Vector gate: PASS for all three families, pinned by URL + commit + license in ADR-0009
+  §4 — BIP-39 → `trezor/python-mnemonic` `vectors.json` (MIT, `b57a5ad7`); CIP-3/Icarus →
+  `cardano-foundation/CIPs` `CIP-0003/Icarus.md` (CC-BY-4.0, `a36e1ebc`), both master-key
+  vectors copied verbatim into the ADR; Ed25519-BIP32/CIP-1852 →
+  `IntersectMBO/cardano-addresses` golden `addresses_5574d91d` (Apache-2.0, `46d01319`),
+  mnemonic↔filename mapping confirmed by recomputing the spec's SHA3-256 `shortHex`. The
+  golden's `addrXPub0` carries the same public-key bytes as the CIP-19 `addr_vk1w0l2sr…`
+  pinned in 1.5b-pre, so the 1.6d fingerprint checkpoint is corroborated by two sources.
+- Also recorded: public API sketch (opaque `Mnemonic` parse result, `IcarusMasterKey`,
+  `KeyDerivation` seam, `Cip1852Path`; all failable APIs return `KardanoResult`), sealed
+  `MnemonicError` / `KeyDerivationError` (payloads never carry words/entropy/key bytes),
+  key-material rules (no private-key byte accessor in 1.6; the only raw accessor is the
+  public key bytes needed by 1.7), and the 1.6d checkpoint scope (derived public metadata
+  only: path + Blake2b-224 fingerprint + typed state; no raw/hex public key display).
+- Docs updated: new ADR-0009; ADR-0008 follow-up cross-reference note (Apollo matrix
+  correction for 1.6); `docs/PHASE_1_PLAN.md` (1.6 split into 1.6a–1.6d with gates,
+  "Siguiente paso" → 1.6b); `docs/ROADMAP.md` (Current Status + Block 1.6 entry); this
+  file. No Kotlin, Gradle, dependency, or module changes; no compile probe was needed (all
+  checks ran against published artifacts and pinned source tags outside the repo).
+
+Files changed this step:
+
+- `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md` (new)
+- `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`
+- `docs/PHASE_1_PLAN.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- None — docs-only block; no build was run and no source/build files changed.
+
+Next recommended task:
+
+- **Block 1.6b** (BIP-39 / CIP-3 mnemonic-to-master-key): implement `Mnemonic.parse` +
+  `IcarusMasterKey.fromMnemonic` in `:crypto` per ADR-0009 §5, first closing the
+  `To verify in 1.6b` gate item (PBKDF2-SHA-512 provider coverage on all four targets,
+  including Android API 24/25); tests use the Trezor and CIP-3 vectors verbatim. No
+  derivation paths, no addresses, no signing, no generation.
+
+### Session Summary (1.5a spike record)
 
 Date: 2026-07-11
 

@@ -436,19 +436,95 @@ Checkpoint Android:
 
 ### 1.6 Mnemonic / Seed / Key Derivation
 
-Implementar creacion/restauracion de wallet de prueba.
+Implementar la restauracion de una wallet de prueba y la derivacion de claves. El bloque se
+divide en cuatro subfases con gates bloqueantes, cada una su propio diff. Ver
+`docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md` (ADR-0009). Phase 1 cubre solo la
+ruta de restauracion Icarus/CIP-3 para la wallet de prueba del MVP; las variantes Byron,
+Ledger y Trezor quedan diferidas. Bloque 1.6 es solo-restauracion: la generacion de mnemonics
+(y la decision de CSPRNG por plataforma) queda fuera del bloque.
 
-Objetivo:
+#### 1.6a Decision de API, dependencias y fuentes de vectores (solo docs)
 
-- Resolver BIP-39 / CIP-3 segun la decision tomada.
-- Implementar derivacion CIP-1852.
-- Modelar account / role / index.
-- Mantener el tratamiento de key material acotado.
-- Evitar persistencia definitiva hasta decidir el modelo.
+Status: complete.
 
-Checkpoint Android:
+Outcome:
 
-- Crear o restaurar una wallet de prueba y mostrar una primera direccion testnet derivada.
+- Se anadio ADR-0009 con las ocho areas de decision: (1) todo 1.6 vive en `:crypto` (sin
+  modulo `:wallet`; trigger de extraccion registrado para 1.7/1.8); (2) esquema fijado a
+  Icarus/CIP-3 (PBKDF2-HMAC-SHA-512 sobre la **entropia**, 4096 iteraciones, 96 bytes, bit
+  tweaks de CIP-3; la seed BIP-39 plana no se expone; wordlist ingles solamente, se acepta
+  input ASCII en minusculas de la wordlist inglesa; input no conforme (no-ASCII / mayusculas
+  / fuera de la wordlist) se rechaza, no se normaliza); (3) tabla dependencia-por-algoritmo verificada
+  contra artefactos publicados (metodo `javap` + tags de fuente, como en 1.5b); (4) gate de
+  vectores con PASS en las tres familias; (5) boceto de API publica (firmas solamente);
+  (6) modelo de errores (`MnemonicError`, `KeyDerivationError`, sellados y neutrales);
+  (7) reglas de key material (handles opacos, sin accessor de bytes privados, mnemonics
+  input-only nunca ecoados, `clear()` best-effort); (8) generacion diferida.
+- **Correccion tipo 1.5b:** el artefacto principal de Apollo **no entra en 1.6** — su API
+  de mnemonics valida solo pertenencia a la wordlist (sin checksum ni word count) y su
+  `PBKDF2SHA512.derive` toma salt `String` (la salt de Icarus son bytes de entropia). El
+  valor Ed25519-BIP32 llega via el modulo independiente `dev.allain:bip32-ed25519:2.3.0`
+  (verificado: `deriveBytes` / `deriveBytesPub` / `fromNonextended`). Candidatura de Apollo
+  reducida al Bloque 1.10 (signing).
+- Dependencias por subfase: 1.6b = `org.kotlincrypto.hash:sha2:0.8.0` (checksum SHA-256) +
+  cryptography-kotlin 0.6.0 (PBKDF2 con salt `ByteArray`; cobertura por target y el tema
+  JCA API 26+ vs minSdk 24 marcados `To verify in 1.6b`, con fallback de platform seam
+  documentado); 1.6c = `dev.allain:bip32-ed25519:2.3.0`; 1.6d = ninguna (solo wiring
+  `:shared` → `:crypto`). HMAC-SHA-512 no necesita dependencia directa en 1.6.
+- Gate de vectores (todas PASS, con URL + commit + licencia en ADR-0009 §4): BIP-39 →
+  `trezor/python-mnemonic` `vectors.json` (MIT, commit `b57a5ad7`); CIP-3/Icarus →
+  `cardano-foundation/CIPs` `CIP-0003/Icarus.md` (CC-BY-4.0, commit `a36e1ebc`);
+  Ed25519-BIP32/CIP-1852 → goldens Shelley de `IntersectMBO/cardano-addresses`
+  (`test/golden/addresses_5574d91d/golden`, Apache-2.0, commit `46d01319`; mapeo
+  nombre↔mnemonic confirmado recomputando el `shortHex` SHA3-256 del spec). Cross-link: el
+  `addrXPub0` del golden lleva los mismos 32 bytes de clave publica que el
+  `addr_vk1w0l2sr…` de CIP-19 ya fijado en 1.5b-pre.
+- Sin cambios de Kotlin, Gradle, dependencias ni modulos; solo docs. No hizo falta probe de
+  compilacion (todas las verificaciones corrieron contra artefactos publicados fuera del
+  repo).
+
+#### 1.6b BIP-39 / CIP-3 mnemonic-to-master-key (bloqueado por los gates de ADR-0009)
+
+- Alcance: parseo de mnemonic (word count, wordlist, checksum), extraccion de entropia y
+  master key Icarus (96 bytes) solamente. Sin paths de derivacion, sin direcciones, sin
+  signing, sin generacion.
+- Anade solo las dependencias asignadas en ADR-0009 (pineadas en el catalogo). Antes de
+  aceptar el wiring debe cerrar el item `To verify in 1.6b` (cobertura PBKDF2-SHA-512 por
+  target, incl. Android API 24/25); si falla, usar el fallback de platform seam — nunca
+  PBKDF2 a mano.
+- Tests en `crypto/commonTest` con los vectores citados verbatim (Trezor + CIP-3), mas
+  invalid/edge derivados etiquetados y tests estructurales de key material.
+
+#### 1.6c Ed25519-BIP32 + CIP-1852 (bloqueado hasta cerrar 1.6b)
+
+- Alcance: seam `KeyDerivation` sobre `bip32-ed25519` (derivacion privada y publica/soft),
+  tipos de path CIP-1852 (`account'`/`role`/`index`) propios del SDK. Sin signing; sin
+  generacion de direcciones (eso es 1.7, que ademas requiere el ADR de encoding).
+- Debe cerrar el item `To verify in 1.6c`: layouts de bytes y esquema V2 confirmados contra
+  los goldens; carga nativa en Android; compile **y link** de iosSimulatorArm64 (1.5a probo
+  solo compile). Un fallo de link iOS reabre la decision de dependencia (fallback ADR-0008
+  §4).
+- Tests contra los goldens de cardano-addresses (decodificados con el `Bech32.decode`
+  generico de `:core`; los HRPs CIP-5 estan fuera del allowlist de `CardanoBech32` a
+  proposito).
+
+#### 1.6d Fixture de wallet de prueba / checkpoint Android (bloqueado hasta cerrar 1.6c)
+
+- Fixture construida exclusivamente con el vector publico citado (`test walk nut …`),
+  etiquetada test-only. Sin fondos reales, sin mnemonics reales.
+- Playground: `:shared` gana dependencia de proyecto sobre `:crypto` (sin dependencia
+  externa nueva). Muestra **solo metadata publica derivada**: el path CIP-1852 usado, el
+  fingerprint Blake2b-224 de la clave publica derivada (via `Hashing` existente, que debe
+  coincidir con la payment credential CIP-19 fijada en 1.5b) y el estado tipado
+  success/error. **No** se muestra la clave publica cruda ni en hex salvo que un plan
+  posterior lo justifique; nada de bytes privados, seed ni palabras. Las direcciones son
+  del checkpoint de 1.7.
+
+Checkpoint Android (1.6d):
+
+- Restaurar la wallet de prueba fixture y ver el path de derivacion + fingerprint
+  Blake2b-224 coincidiendo con el vector citado; input de mnemonic invalido → error tipado
+  sin crash.
 
 ### 1.7 Address Generation
 
@@ -585,6 +661,13 @@ Blake2b-224 fijado con CIP-19 y Blake2b-256 fijado con los goldens de conformanc
 `:crypto` y se cablearon Blake2b-224/256 detras de `Hashing`. Al cablear se comprobo que Apollo
 1.8.8 no incluye Blake2b, asi que el backend solo-hashing es KotlinCrypto
 `org.kotlincrypto.hash:blake2` `0.8.0` (Apollo y `bip32-ed25519` no se anaden en este bloque; se
-reservan para 1.6 / 1.10; ADR-0008 §8). El siguiente paso es `1.6` (mnemonic / seed / derivacion
-de claves). No hay wallet, tx ni signing todavia.
+reservan para 1.6 / 1.10; ADR-0008 §8). `1.6a` (decision de API, dependencias y vectores para
+mnemonic/seed/derivacion, solo docs) esta **completo**: ADR-0009 fija el esquema Icarus/CIP-3
+(solo restauracion, wordlist ingles), la tabla dependencia-por-algoritmo verificada contra
+artefactos publicados (Apollo no entra en 1.6; `dev.allain:bip32-ed25519:2.3.0` para 1.6c;
+cryptography-kotlin PBKDF2 + KotlinCrypto `sha2` para 1.6b), el gate de vectores (PASS en las
+tres familias: Trezor `vectors.json`, CIP-3 `Icarus.md`, goldens de
+`IntersectMBO/cardano-addresses`), el boceto de API, el modelo de errores y las reglas de key
+material. El siguiente paso es `1.6b` (mnemonic-to-master-key), que antes de aceptar su wiring
+debe cerrar el item `To verify in 1.6b` de ADR-0009. No hay wallet, tx ni signing todavia.
 
