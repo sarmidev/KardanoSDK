@@ -5,7 +5,7 @@
 | Status  | **Accepted** (module / seam / process only — see "Scope of this Accepted status") |
 | Scope   | Phase 1 Block 1.4 crypto evaluation and module decision |
 | Phase   | Phase 1 (Block 1.4)                              |
-| Updated | 2026-07-07                                        |
+| Updated | 2026-07-11                                        |
 
 ---
 
@@ -90,11 +90,13 @@ and the Cardano context where relevant) copied verbatim, and must not invent vec
 The Hyperledger Identus Apollo stack (`org.hyperledger.identus:apollo` plus its
 `bip32-ed25519` module) is the current provisional lead because it is the only evaluated
 candidate that covers all required targets and the full algorithm set including Ed25519-BIP32.
-This is not a final selection: its compatibility with this repository's Kotlin version is
-untested (see the matrix and open risks). If it fails the Block 1.5a spike, the fallback order
-is (a) a multi-library composition (cryptography-kotlin for SHA-512/HMAC/PBKDF2/standard
-Ed25519 + a Blake2b source + a dedicated Ed25519-BIP32 library), then (b) the ADR-0004 A+B
-platform seam.
+This is not yet a final adoption: the concrete decision to adopt and wire it lands in 1.5b. Its
+compatibility with this repository's Kotlin version was untested when this ADR was first written;
+the Block 1.5a spike has since confirmed it **resolves and compiles** under Kotlin 2.4.0 on
+Android + JVM + iosSimulatorArm64 (see §6). Had it failed the Block 1.5a spike, the fallback order
+would have been (a) a multi-library composition (cryptography-kotlin for SHA-512/HMAC/PBKDF2/
+standard Ed25519 + a Blake2b source + a dedicated Ed25519-BIP32 library), then (b) the ADR-0004
+A+B platform seam.
 
 #### 5. Block 1.5 process: a compatibility spike (`1.5a`) gates any dependency commit
 
@@ -112,6 +114,34 @@ dependency is committed:
 Only after 1.5a passes does substep **1.5b** create `:crypto`, add the chosen dependency
 (pinned, no dynamic versions), wire it behind the `Hashing` interface, and add the official
 Blake2b vectors. No dependency is committed to the build before 1.5a passes.
+
+#### 6. Block 1.5a spike result — PASS (compile compatibility)
+
+The Block 1.5a throwaway spike ran on 2026-07-11 on a disposable branch
+(`spike/1.5a-apollo-kotlin24`, since discarded) using a scratch `:crypto-spike` module that
+depended only on the two candidate artifacts (versions pinned inline; no version-catalog change).
+The candidate **resolved and compiled** on all three required targets under this repository's
+Kotlin 2.4.0 / AGP 9.0.1 setup (the new `com.android.kotlin.multiplatform.library` plugin):
+
+| Target | Gradle task | Result |
+|--------|-------------|--------|
+| JVM | `:crypto-spike:compileKotlinJvm` | compiled |
+| iOS simulator (arm64) | `:crypto-spike:compileKotlinIosSimulatorArm64` | compiled (commonMain metadata + `iosSimulatorArm64` klib) |
+| Android | `:crypto-spike:testAndroidHostTest` (runs `compileAndroidMain`) | compiled |
+
+Exact resolved versions: `org.hyperledger.identus:apollo:1.8.8` and
+`dev.allain:bip32-ed25519:2.3.0`. **Correction to §4 and the matrix:** the spike did **not** need
+`org.hyperledger.identus:secp256k1-kmp:1.8.8`. Apollo pulls
+`fr.acinq.secp256k1:secp256k1-kmp:0.16.0` transitively, and the Kotlin stdlib versions the
+candidates declare (Apollo 1.9.25, secp256k1-kmp 1.9.22, bip32-ed25519 2.2.0) all upgrade to
+2.4.0 without conflict.
+
+Scope of this result: it establishes **dependency resolution and Kotlin compilation/typecheck**
+(including the iOS-simulator klib) only. It does **not** establish runtime cryptographic
+correctness, iOS-simulator/device execution, or native-binary linkage — those are validated in
+1.5b via official cited vectors. The concrete decision to adopt and wire the dependency is made
+in 1.5b, not here. No dependency was committed to the main build by the spike (the scratch module
+and its `settings.gradle.kts` entry were discarded).
 
 ### Explicitly deferred
 
@@ -172,11 +202,11 @@ This advances ADR-0004's matrix from `Needs investigation`; it does not replace 
 
 | Field | Value |
 |-------|-------|
-| Identifier | `org.hyperledger.identus:apollo` + `dev.allain:bip32-ed25519` v2.3.0 (`secp256k1-kmp` companion) |
+| Identifier | `org.hyperledger.identus:apollo` v1.8.8 + `dev.allain:bip32-ed25519` v2.3.0; secp256k1 arrives transitively as `fr.acinq.secp256k1:secp256k1-kmp` v0.16.0 (confirmed in 1.5a — the `org.hyperledger.identus:secp256k1-kmp` companion was not required) |
 | Category (ADR-0004) | D (Cardano-adjacent binding/port) + C |
 | Source | github.com/hyperledger-identus/apollo (README); klibs.io/package/dev.allain/bip32-ed25519 (v2.3.0, listed 2025-07); Apollo PR #225 |
 | Supported algorithms | Ed25519, X25519, Secp256k1, Blake2b, SHA family; **Ed25519-BIP32 HD derivation** via the `bip32-ed25519` module (Rust `ed25519-bip32` under the hood) |
-| KMP targets | Android, JVM, iosArm64, iosSimulatorArm64, macOS, JS (per README / klibs listing) |
+| KMP targets | Android, JVM, iosArm64, iosSimulatorArm64, macOS, JS (per README / klibs listing). 1.5a confirmed **compile** on Android + JVM + iosSimulatorArm64 under Kotlin 2.4.0 |
 | commonMain API | Yes |
 | Maintenance | Active (IOG/Identus maintainers) |
 | License | Unverified (Apache-2.0 expected; confirm SPDX in 1.5a) |
@@ -184,8 +214,8 @@ This advances ADR-0004's matrix from `Needs investigation`; it does not replace 
 | Public review notes | none located specific to crypto correctness |
 | Test vectors | Cardano-context Ed25519-BIP32/CIP-1852 vectors available from IOG/Intersect references (ADR-0004 §7); we cite verbatim in the implementing block |
 | KMP integration complexity | Medium/High (multiple artifacts; native `secp256k1-kmp` companion; Rust-derived native pieces) |
-| Risks / unknowns | **Kotlin version:** recent Apollo releases target Kotlin 1.9.x (Apollo PR #225) while this repo is on Kotlin 2.4.0 — **To verify in 1.5a**. Larger surface (Secp256k1/X25519) than the wallet MVP needs; companion artifact resolution — To verify in 1.5a |
-| Recommendation | Provisional lead — closest single-stack fit for Cardano. Selection is conditional on the Block 1.5a compatibility spike passing |
+| Risks / unknowns | **Kotlin version resolved in 1.5a:** Apollo 1.8.8 declares Kotlin 1.9.25 and bip32-ed25519 2.3.0 declares Kotlin 2.2.0, yet both resolve and compile under this repo's Kotlin 2.4.0 (stdlib coalesces to 2.4.0). Companion artifact resolution also resolved in 1.5a (ACINQ `secp256k1-kmp` 0.16.0, transitive). Remaining: larger surface (Secp256k1/X25519) than the wallet MVP needs; runtime correctness and native-binary linkage are still to be validated in 1.5b via cited vectors |
+| Recommendation | Provisional lead — closest single-stack fit for Cardano. **Block 1.5a compatibility spike passed** (resolve + compile on all three targets under Kotlin 2.4.0); adoption and wiring behind `Hashing` are decided in 1.5b |
 
 ### Candidate 4 — bloxbean cardano-client-lib (rejected as a shipped dependency)
 
@@ -257,11 +287,11 @@ ADR-0004 remain in force. ADR-0004 carries a one-line cross-reference to this AD
 
 ## Follow-up work
 
-- Block 1.5a: compatibility spike for the provisional lead (Apollo + bip32-ed25519) under
-  Kotlin 2.4.0 on Android + JVM + iosSimulatorArm64; fall back per §4 if it fails; record the
-  outcome here.
-- Block 1.5b: create `:crypto`, wire the selected dependency behind `Hashing`, add Blake2b-224/
-  256 with RFC 7693 (and Cardano-context) vectors.
+- Block 1.5a: **complete (PASS).** Compatibility spike for the provisional lead
+  (Apollo 1.8.8 + bip32-ed25519 2.3.0) confirmed resolve + compile on Android + JVM +
+  iosSimulatorArm64 under Kotlin 2.4.0 (see §6). Fallback per §4 was not needed.
+- Block 1.5b (next): create `:crypto`, wire the selected dependency behind `Hashing`, add
+  Blake2b-224/256 with RFC 7693 (and Cardano-context) vectors.
 - Blocks 1.6 / 1.10: seed/key derivation and signing, each citing CIP-1852 / CIP-3 / BIP-39 /
   RFC 8032 vectors verbatim in the implementing block.
 - ADR-0004 (`docs/DECISIONS/0004-crypto-strategy.md`) and ADR-0005

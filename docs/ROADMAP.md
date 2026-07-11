@@ -19,10 +19,10 @@ Current priority:
 > Phase 0 is closed. Phase 1 Block 1.1 (planning), Block 1.2 (Android SDK Playground),
 > Block 1.3a (Provider Read-Only Boundary — interface, models, and mock in `:provider`),
 > Block 1.3b-pre (`Address.bech32` source string in `:core`), Block 1.3b (Blockfrost
-> preprod provider in `:provider-blockfrost`, with a live Playground toggle), and Block 1.4
-> (Crypto Evaluation And Module Decision, docs-only; ADR-0008) are complete. The next step is
-> Block 1.5a — a Kotlin-2.4.0 compatibility spike for the provisional crypto candidate before
-> any dependency is committed.
+> preprod provider in `:provider-blockfrost`, with a live Playground toggle), Block 1.4
+> (Crypto Evaluation And Module Decision, docs-only; ADR-0008), and Block 1.5a (Kotlin-2.4.0
+> compatibility spike, **PASS**) are complete. The next step is Block 1.5b — create `:crypto`,
+> wire the selected dependency behind `Hashing`, and add official Blake2b vectors.
 
 ## Phase 0 - Core Foundation
 
@@ -733,9 +733,17 @@ Proposed block sequence:
   JVM-only vector oracle. Source-cited matrix; unknowns marked `Unverified`/`To verify in 1.5a`;
   neutral review fields. No Kotlin/Gradle/dependency/module changes. See
   `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`.
-- `1.5` Crypto Primitives Needed For Wallet — split into `1.5a` (a throwaway Kotlin-2.4.0
-  compatibility spike gating any dependency commit) and `1.5b` (create `:crypto`, wire the
-  chosen dependency behind `Hashing`, add Blake2b-224/256 with official cited vectors).
+- `1.5` Crypto Primitives Needed For Wallet — split into `1.5a` and `1.5b`.
+  - `1.5a` throwaway Kotlin-2.4.0 compatibility spike — **Status: complete (PASS).** The
+    provisional candidate (`org.hyperledger.identus:apollo:1.8.8` + `dev.allain:bip32-ed25519:2.3.0`)
+    resolved and compiled on Android + JVM + iosSimulatorArm64 under Kotlin 2.4.0 / AGP 9.0.1
+    (`:crypto-spike:compileKotlinJvm`, `:crypto-spike:compileKotlinIosSimulatorArm64`,
+    `:crypto-spike:testAndroidHostTest`). Correction: `secp256k1-kmp` arrives transitively as
+    `fr.acinq.secp256k1:secp256k1-kmp:0.16.0`; the `org.hyperledger.identus` companion was not
+    needed. Proves resolve + compile only, not runtime correctness. Scratch module discarded; no
+    dependency committed. See ADR-0008 §6.
+  - `1.5b` (next) create `:crypto`, wire the chosen dependency behind `Hashing`, add
+    Blake2b-224/256 with official cited vectors.
 - `1.6` Mnemonic / Seed / Key Derivation — create/restore a test wallet and derive keys.
 - `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
   `Address.parse`.

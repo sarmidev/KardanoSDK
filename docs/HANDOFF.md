@@ -74,8 +74,9 @@ If paths differ, locate files by name.
 
 Current phase:
 
-- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, and 1.4 complete; Block 1.5a — a
-  crypto compatibility spike — is next). Phase 0 - Core Foundation closed below for reference.
+- Phase 1 - MVP Transaction Flow (Blocks 1.1, 1.2, 1.3, 1.4, and 1.5a complete; Block 1.5b —
+  create `:crypto` and wire the dependency behind `Hashing` — is next). Phase 0 - Core Foundation
+  closed below for reference.
 
 Block status:
 
@@ -268,13 +269,26 @@ source-cited with unknowns marked `Unverified` / `To verify in 1.5a` and neutral
 (`External review`, `Public review notes`). ADR-0004 carries a one-line cross-reference to
 ADR-0008. No Kotlin/Gradle/dependency/module changes.
 
-Next recommended task: **Block 1.5a (crypto compatibility spike)** — on a throwaway branch, add
-the provisional candidate (Apollo + `bip32-ed25519`, plus companions like `secp256k1-kmp`) and
-confirm it resolves and compiles on Android + JVM + iosSimulatorArm64 under Kotlin 2.4.0. If it
-fails, fall back per ADR-0008 §4 and re-run 1.5a. Only after 1.5a passes does Block 1.5b create
-`:crypto`, wire the chosen dependency behind `Hashing`, and add official Blake2b vectors. No
-dependency is committed to the build before 1.5a passes. See ADR-0008,
-`docs/PHASE_1_PLAN.md` Block 1.5, and `docs/ROADMAP.md`.
+**Block 1.5a (crypto compatibility spike) is complete (PASS).** On a throwaway branch
+(`spike/1.5a-apollo-kotlin24`, since discarded) with a scratch `:crypto-spike` KMP module
+depending only on the two candidate artifacts, the provisional candidate resolved and compiled on
+all three required targets under this repo's Kotlin 2.4.0 / AGP 9.0.1 (new
+`com.android.kotlin.multiplatform.library` plugin): `:crypto-spike:compileKotlinJvm`,
+`:crypto-spike:compileKotlinIosSimulatorArm64`, and `:crypto-spike:testAndroidHostTest`
+(`compileAndroidMain`). Resolved versions: `org.hyperledger.identus:apollo:1.8.8` +
+`dev.allain:bip32-ed25519:2.3.0`. Correction to the prior plan: the
+`org.hyperledger.identus:secp256k1-kmp:1.8.8` companion was **not** needed — Apollo pulls
+`fr.acinq.secp256k1:secp256k1-kmp:0.16.0` transitively, and the candidates' declared stdlib
+versions (1.9.25 / 1.9.22 / 2.2.0) coalesce to 2.4.0 without conflict. This proves resolution +
+compilation/typecheck (including the iOS-simulator klib) only, not runtime cryptographic
+correctness or native-binary linkage. No dependency was committed to the build; the scratch module
+and its `settings.gradle.kts` entry were discarded. See ADR-0008 §6.
+
+Next recommended task: **Block 1.5b (create `:crypto` + wire behind `Hashing`)** — create the
+`:crypto` KMP module, add the selected dependency pinned (no dynamic versions), wire the first
+algorithm boundary (Blake2b-224/256) behind the `Hashing` interface returning `KardanoResult`, and
+add official cited Blake2b vectors (RFC 7693 / Cardano context) verbatim. See ADR-0008,
+`docs/PHASE_1_PLAN.md` Block 1.5b, and `docs/ROADMAP.md`.
 
 Current modules:
 
@@ -401,6 +415,53 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-11
+
+Summary:
+
+- Block 1.5a (crypto compatibility spike): executed the throwaway spike, then recorded the
+  result as a docs-only update. The spike itself added a scratch `:crypto-spike` KMP module (on
+  a disposable branch `spike/1.5a-apollo-kotlin24`) depending only on the two candidate
+  artifacts, with versions pinned inline (no version-catalog change). It was discarded after the
+  run; no dependency was committed to the build.
+- Result: **PASS.** The provisional candidate resolved and compiled on all three required targets
+  under this repo's Kotlin 2.4.0 / AGP 9.0.1 (new `com.android.kotlin.multiplatform.library`
+  plugin): `:crypto-spike:compileKotlinJvm`, `:crypto-spike:compileKotlinIosSimulatorArm64`
+  (commonMain metadata + iosSimulatorArm64 klib), and `:crypto-spike:testAndroidHostTest`
+  (`compileAndroidMain`).
+- Resolved versions: `org.hyperledger.identus:apollo:1.8.8` and `dev.allain:bip32-ed25519:2.3.0`.
+  Correction to the earlier plan/matrix: the `org.hyperledger.identus:secp256k1-kmp:1.8.8`
+  companion was **not** required; Apollo pulls `fr.acinq.secp256k1:secp256k1-kmp:0.16.0`
+  transitively, and the candidates' declared Kotlin stdlib versions (Apollo 1.9.25, secp256k1-kmp
+  1.9.22, bip32-ed25519 2.2.0) all upgrade to 2.4.0 without conflict.
+- Honest scope: this proves dependency resolution + Kotlin compilation/typecheck (including the
+  iOS-simulator klib) only — not runtime cryptographic correctness, iOS-simulator/device
+  execution, or native-binary linkage. Those, plus the concrete adoption/wiring decision, land in
+  1.5b via official cited vectors.
+- Docs-only update this session: ADR-0008 (new §6 spike result; Candidate 3 matrix rows updated
+  from `To verify in 1.5a`; §4 provisional text; follow-up work), `docs/PHASE_1_PLAN.md` (1.5a
+  Resultado + "Siguiente paso" → 1.5b), `docs/ROADMAP.md` (Current Status + Block 1.5 entry), and
+  this file. No Kotlin, Gradle, dependency, or module changes remain; only Markdown changed.
+
+Files changed this step:
+
+- `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`
+- `docs/PHASE_1_PLAN.md`, `docs/ROADMAP.md`, `docs/HANDOFF.md`
+
+Tests run:
+
+- Spike verification (on the discarded branch): `:crypto-spike:compileKotlinJvm`,
+  `:crypto-spike:compileKotlinIosSimulatorArm64`, `:crypto-spike:testAndroidHostTest` — all
+  BUILD SUCCESSFUL. This docs-only update changed no code and ran no build.
+
+Next recommended task:
+
+- **Block 1.5b**: create `:crypto`, add the selected dependency pinned, wire Blake2b-224/256
+  behind the `Hashing` interface (returning `KardanoResult`, no throwing across Swift/ObjC), and
+  add official cited Blake2b vectors (RFC 7693 / Cardano context).
+
+### Previous Session Summary
 
 Date: 2026-07-07
 

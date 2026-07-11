@@ -349,6 +349,17 @@ decisiones de ADR-0008. Se divide para no comprometer una dependencia sin probar
 - Registrar el resultado (candidato, targets, versiones) en ADR-0008 o en una nota de
   seguimiento corta. No se compromete ninguna dependencia al build antes de que 1.5a pase.
 
+Resultado (2026-07-11): **PASS.** En una rama desechable (`spike/1.5a-apollo-kotlin24`, ya
+descartada) con un modulo scratch `:crypto-spike` que dependia solo de los dos artefactos
+candidatos, el candidato **resolvio y compilo** en los tres targets bajo Kotlin 2.4.0 / AGP 9.0.1:
+`:crypto-spike:compileKotlinJvm`, `:crypto-spike:compileKotlinIosSimulatorArm64` y
+`:crypto-spike:testAndroidHostTest` (`compileAndroidMain`). Versiones resueltas:
+`org.hyperledger.identus:apollo:1.8.8` y `dev.allain:bip32-ed25519:2.3.0`. Correccion: no hizo
+falta `org.hyperledger.identus:secp256k1-kmp:1.8.8`; Apollo arrastra
+`fr.acinq.secp256k1:secp256k1-kmp:0.16.0` transitivamente. Esto prueba resolucion +
+compilacion/typecheck (incluido el klib de iOS sim), no correccion criptografica ni ejecucion en
+runtime. La adopcion/cableado concretos se deciden en 1.5b. Detalle en ADR-0008 §6.
+
 #### 1.5b Wire + test (solo tras pasar 1.5a)
 
 Objetivo:
@@ -508,10 +519,11 @@ Abrir la app Android y comprobar funcionalidad despues de:
 `1.1`, `1.2`, `1.3a` (interfaz + modelos + mock + Playground en `:provider`), `1.3b-pre`
 (`Address.bech32` en `:core`), `1.3b` (`:provider-blockfrost`: `BlockfrostChainQueryProvider`
 con Ktor + kotlinx-serialization, mapeo a modelos neutrales, toggle live en el Playground y
-ADR-0007) y `1.4` (Crypto Evaluation And Module Decision, solo docs; ADR-0008) estan completos.
-El siguiente paso es `1.5a`: el spike de compatibilidad del candidato provisional (Apollo +
-`bip32-ed25519`) bajo Kotlin 2.4.0 en Android + JVM + iosSimulatorArm64, antes de comprometer
-ninguna dependencia; solo si pasa se procede a `1.5b` (crear `:crypto`, cablear la dependencia
-elegida detras de `Hashing` y anadir vectores Blake2b oficiales). No hay wallet, crypto, tx ni
-signing todavia.
+ADR-0007), `1.4` (Crypto Evaluation And Module Decision, solo docs; ADR-0008) y `1.5a` (spike de
+compatibilidad, **PASS**) estan completos. `1.5a` confirmo que el candidato provisional
+(Apollo 1.8.8 + `bip32-ed25519` 2.3.0) resuelve y compila en Android + JVM + iosSimulatorArm64
+bajo Kotlin 2.4.0 (ADR-0008 §6); no se comprometio ninguna dependencia al build (el modulo scratch
+se descarto). El siguiente paso es `1.5b`: crear `:crypto`, cablear la dependencia elegida detras
+de `Hashing` y anadir vectores Blake2b oficiales (RFC 7693 / contexto Cardano). No hay wallet,
+crypto, tx ni signing todavia.
 
