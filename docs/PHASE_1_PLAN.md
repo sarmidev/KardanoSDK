@@ -752,6 +752,59 @@ Android checkpoint:
 
 - Receive ADA from a preprod faucet at the generated address and see balance/UTxOs in the app.
 
+#### 1.8a `:wallet` module + read-only API
+
+Status: complete.
+
+Outcome:
+
+- Added [ADR-0013](DECISIONS/0013-wallet-boundary-and-read-only-state.md), resolving the
+  `:wallet` module/ownership/API-shape decision ADR-0011 §2 deferred to this block: creating a
+  new Gradle module (not a package) because holding wallet state and composing it with a
+  provider query is the exact ADR-0009 §1 extraction trigger firing for the first time.
+- New module `:wallet` (`org.sarmidev.kardano.wallet`), targets mirroring `:provider`
+  (`iosArm64`, `iosSimulatorArm64`, `jvm`, `androidLibrary { withHostTest }`,
+  `explicitApi()`). Depends on `:core`, `:crypto`, and `:provider` only — never
+  `:provider-blockfrost`; no new external `commonMain` dependency.
+- `ReadOnlyWallet`: `companion.restore(words, network)` restores a mnemonic, derives the
+  account-0 payment (`m/1852'/1815'/0'/0/0`) and stake (`m/1852'/1815'/0'/2/0`) keys, hashes
+  each with `Hashing.default().blake2b224(...)`, and builds a base address via
+  `AddressCredential.keyHash(...)` + `Address.baseAddress(...)`. `balance(provider)` queries a
+  caller-supplied `ChainQueryProvider` and sums lovelace into a `WalletBalance`, rejecting
+  `Long` overflow (`WalletError.BalanceOverflow`) rather than truncating. An `internal
+  of(...)` test-only factory assembles a wallet around an already-built address, so
+  `balance`'s tests avoid native crypto. The mnemonic, master key, and both derived
+  private/public key handles are cleared in `finally`; the returned handle retains only
+  `network`, `address`, `paymentPath`, and `stakePath` — no secret material.
+- `WalletBalance` (`coin: Lovelace`, `utxoCount: Int`) and `WalletError` (a sealed interface
+  wrapping `MnemonicError`, `KeyDerivationError`, `CryptoError`, `AddressError`, or
+  `ProviderError`, plus the wallet-owned `BalanceOverflow`) are the only other new public
+  types. No `WalletState`, `WalletAddress`, or `TestWallet` type was added (ADR-0013 §3).
+- Confirmed and documented (ADR-0013 §7): a restored wallet's generated address is not seeded
+  by `InMemoryChainQueryProvider`'s default data, so it reads as zero-balance under the
+  default mock; this is correct and `defaultSeed()` was not changed to fake a funded wallet.
+- Tests (15 total, all native-crypto-free except one): `ReadOnlyWalletBalanceTest` (5 —
+  seeded-with-UTxOs summation, seeded-empty, unseeded, provider `NetworkMismatch` wrapping,
+  overflow rejection), `WalletErrorTest` (7 — direct construction/equality for every variant),
+  `ReadOnlyWalletRestoreMnemonicTest` (2 — invalid word count / word not in wordlist rejected
+  before any native call). `ReadOnlyWalletRestoreDesktopTest` (1, JVM-only) restores the same
+  cited `IntersectMBO/cardano-addresses` mnemonic already pinned in `:crypto`'s
+  `HashingVectorsTest`/`KeyDerivationVectorsTest`, asserts both path strings, the cited golden
+  payment-credential hex, an `addr_test1`-prefixed address, and a structural
+  parse-back-equal round trip — no generated address string is pinned as a golden.
+- Verified: `:wallet:jvmTest`, `:wallet:testAndroidHostTest`,
+  `:wallet:compileKotlinIosSimulatorArm64`, `:wallet:compileKotlinIosArm64`, and `:core:jvmTest`
+  (regression) all pass; `:core`/`:crypto`/`:provider` sources unchanged; lints clean on every
+  touched file; no banned words or mnemonic/seed/private/raw-key exposure found.
+
+#### 1.8b `:shared` Android checkpoint
+
+Status: pending.
+
+Outcome: not started. Will wire `ReadOnlyWallet.restore(...)`/`balance(...)` into the
+Playground (new `WalletBalancePresentation` display type, "Query balance" manual-refresh
+button, honest zero-under-mock copy per ADR-0013 §7) and update `shared/README.md`.
+
 ### 1.9 Transaction Builder Minimal
 
 Build a simple ADA transaction.

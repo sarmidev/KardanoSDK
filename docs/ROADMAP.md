@@ -942,7 +942,36 @@ Proposed block sequence:
     never pinned as a golden. Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
     `:shared:compileKotlinIosSimulatorArm64`, `:core:jvmTest`; lints clean; no banned words or
     mnemonic/seed/private/raw-key exposure found.
-- `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance.
+- `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance. Split
+  into 1.8a/1.8b (see `docs/PHASE_1_PLAN.md`).
+  - `1.8a` `:wallet` module + read-only API — **Status: complete.** Outcome:
+    [ADR-0013](DECISIONS/0013-wallet-boundary-and-read-only-state.md) resolved the
+    `:wallet` module/ownership/API-shape decision ADR-0011 §2 deferred here: holding wallet
+    state and composing it with a provider query is the ADR-0009 §1 extraction trigger firing
+    for the first time, so a new module (not a package) was created. New module `:wallet`
+    (`org.sarmidev.kardano.wallet`), targets mirroring `:provider`; depends on `:core`,
+    `:crypto`, and `:provider` only (never `:provider-blockfrost`, no new external
+    `commonMain` dependency). `ReadOnlyWallet.restore(words, network)` restores a mnemonic,
+    derives the account-0 payment/stake keys, hashes and builds a base address via `:core`'s
+    1.7a API, clearing all key handles in `finally`; the returned handle retains only
+    `network`/`address`/`paymentPath`/`stakePath`. `ReadOnlyWallet.balance(provider)` queries
+    a caller-supplied `ChainQueryProvider` and sums lovelace into `WalletBalance`, rejecting
+    `Long` overflow (`WalletError.BalanceOverflow`) rather than truncating. `WalletError` wraps
+    each upstream typed error (`MnemonicError`/`KeyDerivationError`/`CryptoError`/
+    `AddressError`/`ProviderError`) rather than inventing a parallel taxonomy; no
+    `WalletState`/`WalletAddress`/`TestWallet` type was added. Confirmed and documented
+    (ADR-0013 §7) that a restored wallet's generated address is not seeded by
+    `InMemoryChainQueryProvider`'s default data and stays zero-balance under the mock —
+    `defaultSeed()` was not changed to fake a funded wallet. 15 new tests (14 native-free —
+    balance summation/overflow/provider-error-wrapping via an `internal of(...)` test-only
+    factory, direct `WalletError` variant construction, pre-native-call mnemonic rejection —
+    plus 1 JVM-only end-to-end `restore` test against the same cited
+    `IntersectMBO/cardano-addresses` mnemonic already pinned in `:crypto`). Verified:
+    `:wallet:jvmTest`, `:wallet:testAndroidHostTest`, `:wallet:compileKotlinIosSimulatorArm64`,
+    `:wallet:compileKotlinIosArm64`, `:core:jvmTest` (regression); `:core`/`:crypto`/
+    `:provider` sources unchanged; lints clean; no banned words or mnemonic/seed/private/
+    raw-key exposure found.
+  - `1.8b` `:shared` Android checkpoint — **Status: pending.**
 - `1.9` Transaction Builder Minimal — build a simple ADA transaction draft.
 - `1.10` Transaction Signing — sign a testnet/preprod transaction locally.
 - `1.11` Submit Transaction — submit a signed transaction to preprod.
