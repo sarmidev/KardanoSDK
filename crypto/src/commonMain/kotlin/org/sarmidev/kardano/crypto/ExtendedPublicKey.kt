@@ -11,9 +11,8 @@ import org.sarmidev.kardano.KardanoResult
  * this does not widen ADR-0009 §7's "no public private-key byte accessor" rule, which applies
  * only to private-key material.
  *
- * 1.6c-follow-up gate result (ADR-0010): projection is verified on JVM and iOS only; on Android,
- * [KeyDerivation.publicKey] returns [KeyDerivationError.PublicKeyProjectionUnavailable] instead
- * of producing an instance of this type.
+ * 1.6c-follow-up-2 gate result (ADR-0010): projection is verified on JVM, iOS, and Android
+ * (real-runtime execution on API 24, 35, and 36).
  */
 public class ExtendedPublicKey private constructor(publicKey: ByteArray, chainCode: ByteArray) {
 

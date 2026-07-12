@@ -319,14 +319,14 @@ ADR-0005 §6).
 
 > **Update (2026-07-12) — see [ADR-0010](0010-key-derivation-backend-swap-and-public-key-projection.md)
 > for the current, superseding status.** The two items this ADR's Block 1.6c gate result left
-> open are both closed there, with one correction: (1) **Android derivation is no longer
-> blocked** — a coordinate swap to `org.hyperledger.identus:bip32-ed25519:1.8.8` (same wrapper
-> API) was verified on real Android runtime; (2) `ExtendedPublicKey`/`KeyDerivation.publicKey`
-> are now implemented and golden-vector-verified for JVM/iOS, but **Android public-key
-> projection is a new, separate, open blocker** (a different backend's published Android
-> native library is missing the needed symbol) — do not read this as fully resolved. This
-> ADR's own findings below remain an accurate historical record of what was verified at the
-> time; ADR-0010 is the current source of truth for 1.6c-follow-up status.
+> open are both closed there: (1) **Android derivation is no longer blocked** — a coordinate
+> swap to `org.hyperledger.identus:bip32-ed25519:1.8.8` (same wrapper API) was verified on real
+> Android runtime; (2) `ExtendedPublicKey`/`KeyDerivation.publicKey` are now implemented and
+> golden-vector-verified on JVM, real Android runtime, and iOS compile/link — including
+> Android, after a second follow-up (1.6c-follow-up-2, ADR-0010 §2a) closed the
+> Android-specific projection gap the first follow-up opened. This ADR's own findings below
+> remain an accurate historical record of what was verified at the time; ADR-0010 is the
+> current source of truth for 1.6c-follow-up/1.6c-follow-up-2 status.
 
 ---
 
@@ -359,18 +359,28 @@ fallback** — no public-key-derivation primitive exists in the pinned backend (
 to private derivation only), and the published Android artifact ships no native library, so
 `deriveBytes` (the call `derivePrivate` makes) throws a confirmed `UnsatisfiedLinkError`
 under `:crypto:testAndroidHostTest`. **1.6c's own JVM/iOS scope is not gated on Android by
-this decision, but Android derivation itself is blocked, not merely an open risk — this is
-a reproduced failure, not an absence of verification.** JVM is the verified target for
-1.6c; iOS compile-and-link **passed**.
+this decision, but at the time of this ADR, Android derivation itself was blocked, not
+merely an open risk — this was a reproduced failure, not an absence of verification.** JVM
+was the verified target for 1.6c; iOS compile-and-link **passed**.
+
+> **Historical — superseded by [ADR-0010](0010-key-derivation-backend-swap-and-public-key-projection.md).**
+> Both blockers below are resolved: Android derivation via the
+> `org.hyperledger.identus:bip32-ed25519:1.8.8` coordinate swap (ADR-0010 §1), and
+> public-key projection — including on Android — via `com.goterl:lazysodium-android`
+> (ADR-0010 §2a). This paragraph is kept as the accurate record of what was true when this
+> ADR's gate closed; it does not describe current status.
 
 **1.6d may not start until** 1.6c's JVM-verified private-derivation output reproduces the
-cited golden vectors (done). **1.6d's own Android checkpoint is blocked, not merely
-carrying an open risk forward**, until Android on-device/emulator verification either
-disproves the reproduced `UnsatisfiedLinkError` or an Android-capable alternative is found;
-1.6d's fingerprint-display step is separately blocked on the public-key-derivation
-follow-up block (Blake2b-224 of the *public* key — 1.6c produces only the private key).
-Neither blocker prevents 1.6d from *starting* its non-Android path-derivation/error-state
-work.
+cited golden vectors (done). **At the time of this ADR, 1.6d's own Android checkpoint was
+blocked, not merely carrying an open risk forward**, until Android on-device/emulator
+verification either disproved the reproduced `UnsatisfiedLinkError` or an Android-capable
+alternative was found; 1.6d's fingerprint-display step was separately blocked on the
+public-key-derivation follow-up block (Blake2b-224 of the *public* key — 1.6c produced only
+the private key). Neither blocker prevented 1.6d from *starting* its non-Android
+path-derivation/error-state work. **Both are now resolved by ADR-0010 (derivation §1,
+public-key projection including Android §2a): 1.6d's Android checkpoint, including its
+Blake2b-224 fingerprint-display step, is unblocked.** iOS runtime execution of these
+vectors remains future work — only iOS compile/link is verified.
 
 ---
 
@@ -565,14 +575,21 @@ wrapper-facing code was written):**
    fallback dependency decision for Android specifically — the same escalation path an iOS
    link failure would have triggered here.
 
-**Consequence for 1.6d (§8):** 1.6d's Playground checkpoint needs a Blake2b-224 fingerprint
-of the *derived public key*. 1.6c alone cannot produce that key (Blocker 1), so 1.6d cannot
-finish its checkpoint until the public-key-derivation follow-up block lands, even though
-1.6d *can* start on top of 1.6c's private-derivation path and path/error-state UI work.
-**1.6d's own Android checkpoint is blocked, not merely at-risk:** it depends on the same
-`KeyDerivation.derivePrivate` call that is confirmed broken on Android, so the checkpoint
-cannot be demonstrated on Android until the follow-up device/emulator run either disproves
-that failure or an Android-capable alternative is adopted.
+**Consequence for 1.6d (§8), as of this ADR:** 1.6d's Playground checkpoint needs a
+Blake2b-224 fingerprint of the *derived public key*. 1.6c alone could not produce that key
+(Blocker 1), so 1.6d could not finish its checkpoint until the public-key-derivation
+follow-up block landed, even though 1.6d *could* start on top of 1.6c's private-derivation
+path and path/error-state UI work. **1.6d's own Android checkpoint was blocked, not merely
+at-risk:** it depended on the same `KeyDerivation.derivePrivate` call that was confirmed
+broken on Android, so the checkpoint could not be demonstrated on Android until a follow-up
+device/emulator run either disproved that failure or an Android-capable alternative was
+adopted.
+
+> **Superseded by ADR-0010.** Both conditions above are now met: Android derivation is
+> confirmed working (ADR-0010 §1, real Android runtime), and `KeyDerivation.publicKey(...)`
+> is implemented and verified on JVM, real Android runtime, and iOS compile/link (ADR-0010
+> §2/§2a). **1.6d's Android checkpoint, including its Blake2b-224 fingerprint-display step,
+> is unblocked.**
 
 ---
 
@@ -598,12 +615,14 @@ that failure or an Android-capable alternative is adopted.
 - 1.6c is a thin adapter over one verified wrapper function (`deriveBytes`) plus SDK-owned
   path types, tested against the cardano-addresses goldens on JVM. Public-key derivation is
   out of scope for 1.6c (§Block 1.6c gate result); a follow-up block picks it up.
-- 1.6d needs no new external dependency for its private-derivation-path UI, but two of its
-  pieces are blocked, not merely open: its fingerprint-display checkpoint (§8) cannot finish
-  until the public-key-derivation follow-up block lands, and its Android checkpoint cannot
-  run until Android derivation of this dependency is confirmed working (or replaced);
-  `:shared` still only needs a project dependency on `:crypto` and a Playground section
-  limited to public metadata.
+- 1.6d needs no new external dependency for its private-derivation-path UI. At the time of
+  this ADR, two of its pieces were blocked, not merely open: its fingerprint-display
+  checkpoint (§8) could not finish until the public-key-derivation follow-up block landed,
+  and its Android checkpoint could not run until Android derivation of this dependency was
+  confirmed working (or replaced). **Both are now resolved by ADR-0010 (§1, §2/§2a): 1.6d's
+  Android checkpoint, including its fingerprint-display step, is unblocked.** `:shared`
+  still only needs a project dependency on `:crypto` and a Playground section limited to
+  public metadata.
 - The main Apollo artifact's remaining candidacy is narrowed to Block 1.10 (signing), to be
   re-evaluated there with the same published-artifact discipline.
 
@@ -631,22 +650,24 @@ that failure or an Android-capable alternative is adopted.
   (ADR-0008 §6–§8 pattern).
 - Block 1.6c: implemented the `KeyDerivation` seam (private derivation only) + CIP-1852 path
   types over `bip32-ed25519`; gate result and narrowed-scope decision recorded above.
-- **New, opened by the 1.6c gate result:** a public-key-derivation block. Needs its own
-  dependency decision for an Ed25519 "public key from a clamped 32-byte scalar" primitive
-  (delegated per ADR-0004, not hand-rolled), then adds `ExtendedPublicKey`,
-  `KeyDerivation.publicKey(...)`, and the `addr_xvk`/CIP-19-cross-link vectors from §4.
-  Gates 1.6d's fingerprint checkpoint.
-- **New, opened by the 1.6c gate result, and currently blocking 1.6d's Android
-  checkpoint:** Android on-device/emulator verification of
-  `dev.allain:bip32-ed25519:2.3.0`'s private-derivation vectors, to confirm or rule out
-  Android viability for this dependency beyond the host-JVM-confirmed `UnsatisfiedLinkError`
-  recorded above. Until this closes (by disproving the failure) or an Android-capable
-  alternative is adopted, Android derivation for this dependency stays blocked — this
-  reopens the ADR-0008 §4 fallback dependency decision for Android specifically if the
-  on-device run reproduces the same failure.
+- **Opened by the 1.6c gate result; closed by [ADR-0010](0010-key-derivation-backend-swap-and-public-key-projection.md) §2/§2a:**
+  a public-key-derivation block. Needed its own dependency decision for an Ed25519 "public
+  key from a clamped 32-byte scalar" primitive (delegated per ADR-0004, not hand-rolled),
+  then added `ExtendedPublicKey`, `KeyDerivation.publicKey(...)`, and the
+  `addr_xvk`/CIP-19-cross-link vectors from §4. This gated 1.6d's fingerprint checkpoint,
+  which is now unblocked (ADR-0010, verified on JVM, real Android runtime, and iOS
+  compile/link).
+- **Opened by the 1.6c gate result; closed by ADR-0010 §1:** Android on-device/emulator
+  verification of the derivation vectors, to confirm or rule out Android viability for this
+  dependency beyond the host-JVM-confirmed `UnsatisfiedLinkError` recorded above. Resolved by
+  swapping to the `org.hyperledger.identus:bip32-ed25519:1.8.8` coordinate, verified on real
+  Android runtime — this closed the item without reopening the ADR-0008 §4 fallback decision,
+  since the coordinate swap kept the same wrapper API.
 - Block 1.6d: fixture wallet + Playground checkpoint per §8; record the owner-verified
-  checkpoint in `docs/PHASE_1_PLAN.md`. Can start now on the non-Android
-  private-derivation path and error-state UI; its fingerprint step and its Android
-  checkpoint are both blocked on the two follow-ups directly above, not merely open items.
+  checkpoint in `docs/PHASE_1_PLAN.md`. Could start on the non-Android private-derivation
+  path and error-state UI while its fingerprint step and Android checkpoint were blocked on
+  the two follow-ups directly above; **both are now resolved (ADR-0010), so 1.6d's Android
+  checkpoint as a whole, including the fingerprint step, is unblocked.** iOS runtime
+  execution of these vectors remains future work — only iOS compile/link is verified.
 - Block 1.10 (signing) re-evaluates the signing backend (Apollo, the same wrapper stack,
   or another candidate) with published-artifact verification.

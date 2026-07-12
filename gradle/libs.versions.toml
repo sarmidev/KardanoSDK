@@ -20,6 +20,10 @@ bouncycastle-bcprov = "1.84"
 bip32-ed25519 = "1.8.8"
 androidx-test-runner = "1.7.0"
 ionspin-libsodium = "0.9.5"
+# 1.6c-follow-up-2 gate result (ADR-0010): Android public-key-projection backend, verified by
+# on-device execution on API 24/35/36. See ADR-0010 for the full evidence.
+lazysodium-android = "5.2.0"
+jna = "5.17.0"
 ktor = "3.5.1"
 material3 = "1.11.0-alpha07"
 
@@ -36,13 +40,17 @@ bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref 
 # jni/<abi>/*.so (dev.allain's did not) — verified on real Android runtime. See ADR-0010.
 bip32-ed25519 = { module = "org.hyperledger.identus:bip32-ed25519", version.ref = "bip32-ed25519" }
 androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
-# 1.6c-follow-up gate result: public-key projection backend (JVM + iOS only — see ADR-0010).
-# The published Android native library is missing the crypto_scalarmult_ed25519_* symbols
+# 1.6c-follow-up gate result: public-key projection backend for JVM + iOS (see ADR-0010). The
+# published Android native library is missing the crypto_scalarmult_ed25519_* symbols
 # (confirmed UnsatisfiedLinkError on real Android runtime across every published version), so
-# this is not an androidMain dependency; the androidMain actual returns a typed
-# PublicKeyProjectionUnavailable error instead of calling it.
+# this is not an androidMain dependency there; Android uses lazysodium-android instead (below).
 ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings", version.ref = "ionspin-libsodium" }
 kotlinx-coroutinesCore = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+# 1.6c-follow-up-2 gate result (ADR-0010): Android-only public-key-projection backend — its AAR
+# bundles a full libsodium .so exporting crypto_scalarmult_ed25519_base_noclamp on all four ABIs,
+# verified by symbol inspection and by on-device execution (API 24/35/36). androidMain-only.
+lazysodium-android = { module = "com.goterl:lazysodium-android", version.ref = "lazysodium-android" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }

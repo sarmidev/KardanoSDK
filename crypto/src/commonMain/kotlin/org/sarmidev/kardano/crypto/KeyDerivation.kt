@@ -14,10 +14,11 @@ import org.sarmidev.kardano.KardanoResult
  * Operations return [KardanoResult] and never throw, which keeps the API compatible with
  * Swift/ObjC interop (a thrown exception would crash iOS consumers).
  *
- * 1.6c-follow-up gate result (ADR-0010): [publicKey] is verified on JVM and iOS, but returns
- * [KeyDerivationError.PublicKeyProjectionUnavailable] on Android — the verified projection
- * backend's published Android native library is missing the required symbols.
- * [derivePrivate] is unaffected and verified on every target including Android.
+ * 1.6c-follow-up-2 gate result (ADR-0010): [publicKey] is verified on JVM, iOS, and Android
+ * (real-runtime execution on API 24, 35, and 36). [derivePrivate] is likewise verified on every
+ * target including Android (1.6c-follow-up). [KeyDerivationError.PublicKeyProjectionUnavailable]
+ * remains a declared error for platforms without a projection backend, but no current target
+ * returns it.
  *
  * @see <a href="https://github.com/cardano-foundation/CIPs/tree/master/CIP-1852">CIP-1852</a>
  */
@@ -49,8 +50,7 @@ public interface KeyDerivation {
      * @param key the extended private key to project (see [derivePrivate]).
      * @return [KardanoResult.Ok] with the projected [ExtendedPublicKey], or [KardanoResult.Err]
      *   with [KeyDerivationError.PublicKeyProjectionUnavailable] if projection is not available
-     *   on this platform (currently: Android), or another [KeyDerivationError] if the backend
-     *   fails. Never throws.
+     *   on this platform, or another [KeyDerivationError] if the backend fails. Never throws.
      */
     public fun publicKey(key: ExtendedPrivateKey): KardanoResult<ExtendedPublicKey, KeyDerivationError>
 

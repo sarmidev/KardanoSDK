@@ -2,7 +2,8 @@
 
 The cryptographic boundary for Kardano SDK: hashing (Phase 1 Block 1.5b), BIP-39/CIP-3
 mnemonic + Icarus master-key derivation (Phase 1 Block 1.6b), and Ed25519-BIP32/CIP-1852
-private- and public-key derivation (Phase 1 Block 1.6c + 1.6c-follow-up, ADR-0010).
+private- and public-key derivation (Phase 1 Block 1.6c + 1.6c-follow-up + 1.6c-follow-up-2,
+ADR-0010).
 
 ## Status
 
@@ -14,30 +15,29 @@ pass via an interop shim (see "iOS PBKDF2 cinterop" below); iOS runtime executio
 vectors is still future verification — no iOS-simulator/device test run has executed the
 derivation.
 
-Block 1.6c's original gate (ADR-0009) narrowed it to private derivation only. A follow-up gate
-([ADR-0010](../docs/DECISIONS/0010-key-derivation-backend-swap-and-public-key-projection.md))
-then closed the two blockers that left open, with one important correction: **private
-derivation now works on JVM, real Android runtime, and iOS compile/link; public-key
-projection works on JVM and iOS compile/link, but is unavailable on Android.**
+Block 1.6c's original gate (ADR-0009) narrowed it to private derivation only. Two follow-up
+gates ([ADR-0010](../docs/DECISIONS/0010-key-derivation-backend-swap-and-public-key-projection.md))
+then closed every blocker those left open: **private derivation and public-key projection both
+now work on JVM, real Android runtime, and iOS compile/link.**
 
 - **Private derivation, all targets: verified.** `KeyDerivation.derivePrivate(...)` and
   `ExtendedPrivateKey` are backed by `org.hyperledger.identus:bip32-ed25519:1.8.8`'s
   `deriveBytes` (the coordinate ADR-0010 swapped to, from the `dev.allain` republish, for its
   Android native-library support — identical wrapper API, no adapter code changed). Verified
-  against the cited golden vectors on `:crypto:jvmTest` and on a **real Android emulator**
-  via `:crypto:connectedAndroidDeviceTest` (not host JVM); iOS compiles and links.
-- **Public-key projection: verified on JVM, unavailable on Android.**
-  `KeyDerivation.publicKey(key)` and `ExtendedPublicKey` are backed by libsodium's
-  `crypto_scalarmult_ed25519_base_noclamp` (`com.ionspin.kotlin:
-  multiplatform-crypto-libsodium-bindings:0.9.5`), verified byte-for-byte against the cited
-  `addr_xvk` goldens on JVM; iOS compiles and links against the same backend. **On Android,
-  the same real-emulator run that verified derivation throws a confirmed
-  `UnsatisfiedLinkError` for this call specifically** — static symbol inspection confirmed the
-  published Android native library for this projection backend does not export the needed
-  symbol at all (present on its JVM/iOS builds). `KeyDerivation.publicKey` on Android returns
-  `KeyDerivationError.PublicKeyProjectionUnavailable` instead of calling the backend (verified
-  on-device to degrade gracefully, not crash). **This does not affect
-  `KeyDerivation.derivePrivate`, which works on Android.**
+  against the cited golden vectors on `:crypto:jvmTest` and on **real Android runtime**
+  (a physical device plus API 24 and 36 emulators) via `:crypto:connectedAndroidDeviceTest`
+  (not host JVM); iOS compiles and links.
+- **Public-key projection, all targets: verified.** `KeyDerivation.publicKey(key)` and
+  `ExtendedPublicKey` are backed by libsodium's `crypto_scalarmult_ed25519_base_noclamp` —
+  `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5` on JVM/iOS, and
+  `com.goterl:lazysodium-android:5.2.0` on Android (whose AAR bundles a fuller libsodium `.so`
+  that exports the same symbol, unlike Ionspin's Android build). Verified byte-for-byte against
+  the cited `addr_xvk` goldens on JVM and on **real Android runtime** — a physical device
+  (API 35) plus API 24 and 36 emulators — with an additional cross-check against the CIP-19
+  payment credential pinned in `HashingVectorsTest`; iOS compiles and links against the Ionspin
+  backend (runtime execution deferred, same posture as 1.6b/1.6c's iOS checkpoints).
+  `KeyDerivationError.PublicKeyProjectionUnavailable` remains declared for a platform without a
+  projection backend, but no current target returns it.
 - iOS **compile and link** both pass for both the derivation and projection backends
   (`:crypto:compileKotlinIosSimulatorArm64`, `:crypto:compileKotlinIosArm64`, and an actual
   test-binary link all succeed). iOS runtime execution of the vectors is still future
@@ -79,9 +79,7 @@ projection works on JVM and iOS compile/link, but is unavailable on Android.**
 - Defines `KeyDerivation.publicKey(key)`: projects an `ExtendedPrivateKey` to its
   `ExtendedPublicKey` via a per-platform seam backed by libsodium's
   `crypto_scalarmult_ed25519_base_noclamp`. Verified against the cited `addr_xvk` goldens on
-  JVM; compiles and links on iOS. **Unavailable on Android** — returns
-  `KeyDerivationError.PublicKeyProjectionUnavailable` (ADR-0010; the published Android native
-  library for this backend is missing the required symbol).
+  JVM and on real Android runtime (API 24/35/36); compiles and links on iOS (ADR-0010).
 - Defines `ExtendedPrivateKey` and `ExtendedPublicKey`: opaque like `IcarusMasterKey` (private
   constructor, defensive copies, structural `toString()`, best-effort `clear()`).
   `ExtendedPrivateKey` has no public raw-byte accessor; `ExtendedPublicKey.publicKeyBytes()`
@@ -94,9 +92,8 @@ Swift/ObjC interop.
 ## Scope
 
 - **Hashing (1.5b), mnemonic/Icarus-master-key derivation (1.6b), and CIP-1852 private and
-  public derivation (1.6c + 1.6c-follow-up/ADR-0010) only.** Public-key projection is
-  available on JVM/iOS only (unavailable on Android — see "Status"). There is no signing, no
-  wallet, no transaction, and no address generation here.
+  public derivation (1.6c + 1.6c-follow-up + 1.6c-follow-up-2/ADR-0010) only.** There is no
+  signing, no wallet, no transaction, and no address generation here.
 - No real mnemonics, private keys, or funds are involved anywhere — every mnemonic in this
   module's tests is a public, cited test vector, clearly labeled as such.
 - English BIP-39 wordlist only; other wordlists, and the Byron/Ledger/Trezor scheme
@@ -104,14 +101,14 @@ Swift/ObjC interop.
 
 ## Boundaries
 
-- Depends only on `:core` (for `KardanoResult` and, in `jvmTest` only, the generic
-  `Bech32.decode` used to decode CIP-5 test vectors),
+- Depends only on `:core` (for `KardanoResult` and, in `jvmTest`/`androidDeviceTest`, the
+  generic `Bech32.decode`/`Hex.decode` used to decode CIP-5/hex test vectors),
   `org.hyperledger.identus:bip32-ed25519:1.8.8` (Ed25519-BIP32 private derivation, Block 1.6c;
   swapped from `dev.allain:bip32-ed25519:2.3.0` in ADR-0010 for Android native-library
-  support), and — on `jvmMain`/`iosArm64Main`/`iosSimulatorArm64Main` only, not `androidMain`
-  — `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5` plus
-  `kotlinx-coroutines-core` (public-key projection, ADR-0010). `:core` does not depend on
-  `:crypto`.
+  support), and, for public-key projection (ADR-0010): on `jvmMain`/`iosArm64Main`/
+  `iosSimulatorArm64Main`, `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5`
+  plus `kotlinx-coroutines-core`; on `androidMain`, `com.goterl:lazysodium-android:5.2.0` plus a
+  pinned `net.java.dev.jna:jna:5.17.0`. `:core` does not depend on `:crypto`.
 - No backend type appears in any public API. Per
   [ADR-0008](../docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md),
   Apollo 1.8.8 does not ship a Blake2b implementation, so hashing is backed by KotlinCrypto
@@ -164,8 +161,11 @@ wired up.
 - **Android on-device tests (real emulator/device, ADR-0010):**
   `./gradlew :crypto:connectedAndroidDeviceTest` — requires a running emulator or connected
   device (`adb devices` must list one first). This is the only task that actually loads the
-  `bip32-ed25519`/libsodium native libraries on Android; `testAndroidHostTest` cannot detect
-  native-loading failures because it runs on the host JVM, not Android.
+  `bip32-ed25519`/lazysodium native libraries on Android; `testAndroidHostTest` cannot detect
+  native-loading failures because it runs on the host JVM, not Android. Covers both
+  `KeyDerivation.derivePrivate` (`KeyDerivationDeviceTest`) and `KeyDerivation.publicKey`
+  (`PublicKeyProjectionDeviceTest`), the latter cross-checking against both the cited
+  `addr_xvk` golden and the CIP-19 payment credential.
 - iOS compile targets: `./gradlew :crypto:compileKotlinIosSimulatorArm64` and
   `./gradlew :crypto:compileKotlinIosArm64` (both pass; see "iOS PBKDF2 cinterop" above —
   compile-only, no iOS runtime vector execution yet)
@@ -180,7 +180,7 @@ tests built by mutating a cited vector one property at a time (see `MnemonicRule
 `docs/TESTING.md`.
 
 **Placement rule for CIP-1852 vector tests (`crypto/jvmTest`, not `commonTest`):** any test
-that calls the real `bip32-ed25519`/libsodium backends lives in `crypto/src/jvmTest`
+that calls the real `bip32-ed25519`/libsodium/lazysodium backends lives in `crypto/src/jvmTest`
 (JVM-executed goldens) and `crypto/src/androidDeviceTest` (real-Android-runtime goldens, run
 only when an emulator/device is attached — see above). `commonTest` runs under
 `:crypto:testAndroidHostTest` too, which is host-JVM-only and cannot exercise Android's real
@@ -195,5 +195,5 @@ for the hashing dependency decision,
 [docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md](../docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md)
 for the mnemonic/key-derivation scheme, dependency, and PBKDF2 platform-seam decisions, and
 [docs/DECISIONS/0010-key-derivation-backend-swap-and-public-key-projection.md](../docs/DECISIONS/0010-key-derivation-backend-swap-and-public-key-projection.md)
-for the 1.6c-follow-up backend swap (Android derivation), public-key projection, and the
-Android public-key-projection blocker.
+for the 1.6c-follow-up backend swap (Android derivation) and the 1.6c-follow-up-2 Android
+public-key-projection resolution.

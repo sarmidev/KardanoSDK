@@ -47,10 +47,9 @@ public sealed interface KeyDerivationError {
      * Public-key projection ([KeyDerivation.publicKey]) is not available on the current
      * platform.
      *
-     * 1.6c-follow-up gate result (ADR-0010): this currently applies to Android — the verified
-     * projection backend's published Android native library does not export the required
-     * symbols, unlike its JVM and iOS builds. Private-key derivation ([KeyDerivation.derivePrivate])
-     * is unaffected and works on every target including Android.
+     * As of the 1.6c-follow-up-2 gate result (ADR-0010), every current target (JVM, iOS,
+     * Android) has a verified projection backend, so no target currently returns this. It
+     * remains declared for a platform without one added in the future.
      */
     public data object PublicKeyProjectionUnavailable : KeyDerivationError
 }

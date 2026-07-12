@@ -42,13 +42,25 @@ kotlin {
         }
         withHostTest {
         }
-        // 1.6c-follow-up gate result: test-only device-test source set that verifies the
-        // identus bip32-ed25519 coordinate's native library actually loads and derives
-        // correctly on Android runtime (emulator/device), not just compiles, and that
-        // KeyDerivation.publicKey() degrades to a typed error rather than crashing on Android
-        // (see src/androidDeviceTest). No product/app code is added.
+        // 1.6c-follow-up / 1.6c-follow-up-2 gate results: test-only device-test source set that
+        // verifies, on real Android runtime (emulator/device) rather than just host-JVM
+        // compilation, that (a) the identus bip32-ed25519 coordinate's native library loads and
+        // derives correctly, and (b) KeyDerivation.publicKey() returns Ok and reproduces the
+        // cited addr_xvk golden via the lazysodium-android backend (see src/androidDeviceTest).
+        // No product/app code is added.
         withDeviceTest {
             instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
+        // 1.6c-follow-up-2 (ADR-0010 Android-projection resolution): net.java.dev.jna:jna
+        // publishes both a jar and an aar artifact for the same coordinate; depending on it from
+        // both androidMain (transitively, via identus bip32-ed25519-android) and lazysodium's
+        // own dependency metadata resolved to two different artifact types, which AGP's
+        // duplicate-class check on the merged device-test APK correctly rejected. Excluding the
+        // duplicated license-notice resource is the documented AGP workaround for the resulting
+        // packaging clash; it does not change which JNA classes/symbols load at runtime.
+        packaging {
+            resources.excludes.add("META-INF/AL2.0")
+            resources.excludes.add("META-INF/LGPL2.1")
         }
     }
 
@@ -79,9 +91,20 @@ kotlin {
         }
         androidMain.dependencies {
             implementation(libs.bouncycastle.bcprov)
-            // No libsodium dependency here: the androidMain PublicKeyProjection actual returns
-            // KeyDerivationError.PublicKeyProjectionUnavailable without calling any backend
-            // (ADR-0010 — the published Android native library lacks the needed symbols).
+            // Public-key projection actual (1.6c-follow-up-2 gate result, ADR-0010): unlike the
+            // minimal libsodium build Ionspin ships for Android (JVM/iOS backend, above), the
+            // lazysodium-android AAR bundles a full libsodium .so that exports
+            // crypto_scalarmult_ed25519_base_noclamp on all four ABIs (verified by `nm -D` and
+            // by an on-device probe reproducing the cited addr_xvk goldens on API 24, 35, and 36
+            // runtimes). Its own Sodium/SodiumAndroid JNA interfaces do not declare that
+            // function, so PublicKeyProjection.android.kt defines a minimal JNA Library
+            // interface for it directly. net.java.dev.jna:jna is pinned explicitly (and forced
+            // to the @aar artifact type) to reconcile with the identus-transitive jna dependency
+            // and avoid a duplicate jar+aar artifact clash in the merged device-test APK.
+            implementation("com.goterl:lazysodium-android:${libs.versions.lazysodium.android.get()}") {
+                exclude(group = "net.java.dev.jna", module = "jna")
+            }
+            implementation("net.java.dev.jna:jna:${libs.versions.jna.get()}@aar")
         }
         getByName("androidDeviceTest").dependencies {
             implementation(libs.kotlin.test)

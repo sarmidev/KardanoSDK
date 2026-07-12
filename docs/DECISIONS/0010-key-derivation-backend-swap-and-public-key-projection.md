@@ -2,8 +2,8 @@
 
 | Field   | Value                                             |
 |---------|---------------------------------------------------|
-| Status  | **Accepted** (dependency swap and public-key-projection backend are implemented and verified per the scope below; Android public-key projection stays an explicit, open blocker) |
-| Scope   | Phase 1 Block 1.6c-follow-up — closes the two blockers ADR-0009 §Block 1.6c gate result opened |
+| Status  | **Accepted** — dependency swap and public-key projection are implemented and verified on JVM, iOS (compile/link), and Android (real-runtime execution, API 24/35/36) for every target; no open blocker remains from this ADR |
+| Scope   | Phase 1 Block 1.6c-follow-up + 1.6c-follow-up-2 — closes the two blockers ADR-0009 §Block 1.6c gate result opened, then closes the Android-projection sub-blocker this ADR opened |
 | Phase   | Phase 1 (follow-up to Block 1.6c)                 |
 | Updated | 2026-07-12                                        |
 
@@ -71,6 +71,11 @@ no longer blocked for this dependency.
 
 ### 2. Public-key projection: `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5` — resolves Blocker 1 for JVM/iOS; opens an Android-specific projection blocker
 
+> **Historical: this was the 1.6c-follow-up (first follow-up) result.** The Android-specific
+> blocker this section describes is closed by §2a below (1.6c-follow-up-2). This section is
+> kept as the accurate record of what was verified at that point; it does not describe the
+> current state.
+
 The extended private key's left 32-byte scalar `kL` (already clamped/tweaked by the CIP-3/
 Ed25519-BIP32 derivation chain) is projected to its public key via libsodium's
 `crypto_scalarmult_ed25519_base_noclamp(kL)` — the standard Ed25519 "scalar × base point,
@@ -105,20 +110,75 @@ split above:**
   The projection math and API shape are proven correct (JVM golden-vector match); withholding
   them from JVM/iOS callers to wait for an Android-capable build of the same library would
   block real, working functionality for no benefit.
-- **Android public-key projection is a separate, explicit, open blocker — not silently
-  degraded and not implemented by any other backend in this ADR.** `KeyDerivation.publicKey`
-  is implemented via a per-platform seam (`internal expect fun projectPublicKey(kL): 
+- **At this point, Android public-key projection was treated as a separate, explicit, open
+  blocker — not silently degraded and not implemented by any other backend in this ADR.**
+  (Superseded by §2a below, which implements a working Android backend; kept here as the
+  historical record of the decision taken at this stage.) `KeyDerivation.publicKey` is
+  implemented via a per-platform seam (`internal expect fun projectPublicKey(kL): 
   KardanoResult<ByteArray, KeyDerivationError>`, mirroring the existing PBKDF2 platform-seam
-  pattern from ADR-0009's Block 1.6b gate result). The `androidMain` actual does **not**
-  attempt the native call at all (there is no libsodium dependency in `androidMain`); it
-  returns the new `KeyDerivationError.PublicKeyProjectionUnavailable` immediately. This was
-  verified on the same real Android runtime via `PublicKeyUnavailableDeviceTest`
-  (`:crypto:connectedAndroidDeviceTest`): calling `KeyDerivation.publicKey(...)` on-device
-  returns the typed error and does not crash, throw, or hang.
-- **`KeyDerivation.derivePrivate` is unaffected by this blocker and works on Android** (§1) —
-  the Android gap is scoped exactly to public-key projection, not to key derivation in
-  general. No code or documentation in this repository should describe Android as blocked for
-  derivation, or as supported for public-key projection; the two must be stated separately.
+  pattern from ADR-0009's Block 1.6b gate result). At this stage, the `androidMain` actual did
+  **not** attempt the native call at all (there was no libsodium dependency in `androidMain`
+  yet); it returned the new `KeyDerivationError.PublicKeyProjectionUnavailable` immediately.
+  This was verified on the same real Android runtime via the now-removed
+  `PublicKeyUnavailableDeviceTest` (`:crypto:connectedAndroidDeviceTest`): calling
+  `KeyDerivation.publicKey(...)` on-device returned the typed error and did not crash, throw,
+  or hang.
+- **`KeyDerivation.derivePrivate` was unaffected by this blocker and worked on Android
+  already** (§1) — the Android gap at this stage was scoped exactly to public-key projection,
+  not to key derivation in general. (As of §2a, both now work on Android; this bullet is kept
+  to explain why the two were never conflated while the projection gap was still open.)
+
+### 2a. Android public-key projection resolution (Block 1.6c-follow-up-2): `com.goterl:lazysodium-android:5.2.0`
+
+The Android-specific blocker §2 opened is now closed. `com.goterl:lazysodium-android` (MPL-2.0)
+bundles a **fuller** libsodium `.so` build than the Ionspin/Android build §2 found lacking:
+static inspection (`nm -D`, the dynamic/exported symbol table, not just any local symbol)
+confirms `crypto_scalarmult_ed25519_base_noclamp` is exported as a global symbol on **all four**
+bundled ABIs (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`). Its own `Sodium`/`SodiumAndroid` JNA
+interfaces do not declare that function anywhere in the library's Java/Kotlin API (checked by
+disassembling `classes.jar` with `javap` across every class), so the `androidMain`
+`projectPublicKey` actual defines a minimal JNA `Library` interface for the one native symbol it
+needs, loaded via `Native.load("sodium", ...)` after `SodiumAndroid()` triggers the library's
+normal native-load path — the same "define a minimal binding to a maintained native library"
+pattern already used for the derivation backend, not a hand-written re-implementation of
+anything libsodium already does.
+
+**Verification — real Android runtime, three independent runtimes.** Unlike §1/§2's single
+provisioned emulator, this gate ran on three real Android runtimes simultaneously available in
+the working environment: a physical device (`SM-A356B`, Android 15, **API 35**), the
+already-provisioned API 36 emulator (§1), and a newly provisioned **API 24** emulator
+(`system-images;android-24;google_apis;arm64-v8a` — Google publishes an `arm64-v8a` image for
+API 24, which runs natively on Apple Silicon), added specifically because this project's
+`minSdk = 24` and a higher-API-only verification would not have covered it. The lead candidate's
+own AAR manifest declares `minSdkVersion="21"`, imposing no floor above 24.
+
+`PublicKeyProjectionDeviceTest` (via `:crypto:connectedAndroidDeviceTest`) derives
+`m/1852'/1815'/0'/0/0`, calls `KeyDerivation.publicKey(...)`, and asserts both (a) the result
+matches the cited `addr_xvk0` golden byte-for-byte, and (b) `Hashing.blake2b224` of the projected
+public key matches the CIP-19 payment credential pinned in `HashingVectorsTest` — cross-linking
+two independently cited sources for the same key, per ADR-0009 §4. **Both assertions passed on
+all three runtimes** (JUnit XML: `tests="4" failures="0" errors="0"` per device, covering this
+test plus the unaffected `KeyDerivationDeviceTest`). `:crypto:jvmTest`,
+`:crypto:testAndroidHostTest`, and `:crypto:compileKotlinIosSimulatorArm64`/
+`compileKotlinIosArm64` were re-run and remain green — the Android-only dependency addition does
+not affect JVM/iOS, which keep the Ionspin backend from §2 unchanged.
+
+**Outcome: the Android public-key-projection blocker is resolved, not merely narrowed.**
+`KeyDerivation.publicKey` now returns `Ok` and reproduces the cited goldens on Android exactly as
+it already did on JVM and iOS (compile/link). `KeyDerivationError.PublicKeyProjectionUnavailable`
+remains declared in the public API (removing a sealed-interface member is itself a breaking
+change) but no current target returns it; it is reserved for a platform without a projection
+backend added in the future.
+
+A minor packaging note, not a cryptographic concern: `net.java.dev.jna:jna` publishes both a
+`.jar` and an `.aar` artifact for the same coordinate, and this project already depends on it
+transitively (via the derivation backend, §1). Depending on it from two source sets that each
+resolved a different artifact type triggered AGP's duplicate-class check on the merged
+device-test APK. Fixed by excluding JNA from the projection candidate's own dependency metadata
+and depending on it explicitly with a single, pinned, `@aar`-typed coordinate instead, plus a
+`packaging { resources.excludes += [...] }` block for a duplicated license-notice resource file
+this produces regardless. This is a Gradle/AGP artifact-resolution detail with no effect on which
+native code loads or runs.
 
 ### 3. Key-material handling for the new type and seam
 
@@ -131,7 +191,10 @@ JVM/iOS `projectPublicKey` actuals wipe every intermediate native-call buffer th
 result) immediately after copying the needed bytes out — not just the `ByteArray` handles the
 common-code caller already wipes — so no unwiped scalar or projected-key copy is left for the
 garbage collector beyond what the native library itself may retain internally (unchanged,
-pre-existing caveat, same as every other delegated-crypto call in this repository).
+pre-existing caveat, same as every other delegated-crypto call in this repository). The Android
+actual (§2a) passes `kL` directly to the JNA call (no intermediate type-conversion copy is
+needed, unlike JVM/iOS's `UByteArray` conversion) and wipes its own output buffer on any failure
+path before discarding it, so the same "no unwiped intermediate copy" discipline holds there too.
 
 ---
 
@@ -139,28 +202,26 @@ pre-existing caveat, same as every other delegated-crypto call in this repositor
 
 - **1.6c's own Android derivation blocker (ADR-0009 §Block 1.6c gate result) is resolved.**
   `KeyDerivation.derivePrivate` is now verified on real Android runtime, not merely on JVM.
-- **1.6d's fingerprint-display checkpoint remains blocked on Android specifically, for a
-  narrower and different reason than before.** The checkpoint needs a Blake2b-224 fingerprint
-  of the *derived public key*. `KeyDerivation.publicKey(...)` now exists and is
-  golden-vector-verified on JVM (and compile/link-verified on iOS), so 1.6d's fingerprint step
-  can proceed on JVM/iOS. **On Android it cannot**: `KeyDerivation.publicKey` returns
-  `PublicKeyProjectionUnavailable` there, so the fingerprint cannot be computed on Android
-  until that gap closes. **1.6d's Android checkpoint is not unblocked by this ADR** — only the
-  path-derivation/error-state portion of it (which depends solely on `derivePrivate`) gains a
-  working Android path; the fingerprint-display portion of the same checkpoint stays blocked.
+- **1.6d's fingerprint-display checkpoint is now unblocked on every target, including
+  Android.** The checkpoint needs a Blake2b-224 fingerprint of the *derived public key*.
+  `KeyDerivation.publicKey(...)` is golden-vector-verified on JVM and Android (real-runtime
+  execution, §2a) and compile/link-verified on iOS, so 1.6d's fingerprint step can now proceed
+  on every target this SDK supports. This corrects §2's original expectation that 1.6d's
+  Android checkpoint would stay blocked.
 - **Block 1.7 (address generation) is not started, evaluated, or unblocked by this ADR.**
-  Address generation is out of scope here; whether it needs the projected public key on every
-  target (likely, since a payment credential is a hash of the public key) is that block's own
-  gate to run.
+  Address generation is out of scope here; it should still run its own dependency/target
+  verification gate even though the public-key-projection prerequisite it would have needed is
+  now available on every target.
 - The `bip32-ed25519` version-catalog entry now points at
   `org.hyperledger.identus:bip32-ed25519:1.8.8` instead of `dev.allain:bip32-ed25519:2.3.0`.
   No public API changed as a result of this swap (same wrapper functions, same byte layouts).
-- Two new production dependencies enter `:crypto`:
+- Three new production dependencies enter `:crypto`:
   `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5` (`jvmMain`, `iosArm64Main`,
-  `iosSimulatorArm64Main` only — deliberately not `androidMain`, per the decision above) and
-  `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0` (needed to call the libsodium
-  bindings' suspending `LibsodiumInitializer.initialize()` synchronously via `runBlocking` on
-  JVM/iOS actuals).
+  `iosSimulatorArm64Main` only) and `org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0`
+  (needed to call the libsodium bindings' suspending `LibsodiumInitializer.initialize()`
+  synchronously via `runBlocking` on JVM/iOS actuals), plus `com.goterl:lazysodium-android:5.2.0`
+  and `net.java.dev.jna:jna:5.17.0` (`androidMain` only, §2a) for the Android projection
+  backend.
 
 ---
 
@@ -173,27 +234,21 @@ pre-existing caveat, same as every other delegated-crypto call in this repositor
 - No backend type appears in any public API signature (`ExtendedPublicKey`,
   `KeyDerivation.publicKey`, and `KeyDerivationError.PublicKeyProjectionUnavailable` are all
   backend-neutral).
-- No claim that Android public-key projection works, is planned to be fixed by a specific
-  date, or is merely "at risk" — it is a confirmed, reproduced failure on real Android runtime
-  with a confirmed root cause (missing native symbol), exactly the same evidentiary standard
-  ADR-0009 applied to the original Android derivation blocker.
+- No claim of Android coverage beyond what real-runtime execution actually verified: §2a's
+  on-device tests ran on API 24, 35, and 36 specifically, and the record above names exactly
+  those three, not a general "all API levels" claim.
 
 ---
 
 ## Follow-up work
 
-- **Android public-key projection is an open blocker.** Options for a future block to
-  evaluate (not decided here): an alternative Android-capable Ed25519 "public key from a
-  clamped scalar" library; a different libsodium Android distribution/build that does export
-  the needed symbol; or an explicit re-scope decision that a given checkpoint/feature ships
-  JVM/iOS-only. Whichever path is chosen must be verified on real Android runtime, not host
-  JVM or artifact inspection alone (the same lesson this ADR and ADR-0009 both apply).
+- **Android public-key projection is resolved (§2a); no open blocker remains from this ADR.**
 - **1.6d:** can now implement its Android path-derivation/error-state work against a working
-  `derivePrivate` on Android; its fingerprint-display step can proceed on JVM/iOS now, but
-  stays blocked on Android pending the item above.
-- **1.7 (address generation):** not started; must run its own dependency/target-verification
-  gate, and should account for the Android public-key-projection gap when scoping its own
-  Android checkpoint.
+  `derivePrivate` on Android, and its fingerprint-display step against a working
+  `KeyDerivation.publicKey` on every target including Android.
+- **1.7 (address generation):** not started; must still run its own dependency/target-
+  verification gate (this ADR does not pre-approve any address-generation dependency), but no
+  longer needs to account for an Android public-key-projection gap when scoping it.
 
 ---
 
@@ -202,8 +257,8 @@ pre-existing caveat, same as every other delegated-crypto call in this repositor
 - ADR-0004's no-handwritten-crypto rule and ADR-0009 §7's key-material rules apply unchanged
   to `ExtendedPublicKey` and the `projectPublicKey` seam (§3 above).
 - This ADR closes both items ADR-0009 §Block 1.6c gate result left open under "Follow-up
-  work," with one correction to that ADR's expectation: Blocker 1 (public-key projection) is
-  **not** fully closed for every target — only for JVM/iOS. ADR-0009 should be read together
-  with this ADR for 1.6c/1.6c-follow-up's actual, current status; this ADR does not edit
+  work," and, as of §2a (Block 1.6c-follow-up-2), closes the Android-projection sub-blocker
+  this ADR itself opened in between. ADR-0009 should be read together with this ADR for
+  1.6c/1.6c-follow-up/1.6c-follow-up-2's actual, current status; this ADR does not edit
   ADR-0009's own historical findings, which remain an accurate record of what was verified at
   the time.
