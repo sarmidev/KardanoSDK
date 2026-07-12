@@ -643,7 +643,9 @@ Re-evaluate `:wallet` there, not before.
 
 ### 1.7 Address Generation
 
-Generate Shelley addresses from derived keys.
+Generate Shelley addresses from derived keys. Split into 1.7a (`:core` ADR + generation
+capability) and 1.7b (`:shared` Android checkpoint), gated on the address encoding/roundtrip
+ADR ADR-0005 §6 flagged as a Block 1.7 prerequisite.
 
 Objective:
 
@@ -657,6 +659,83 @@ Android checkpoint:
 
 - Generate an `addr_test` address in the app and parse it immediately, showing its
   structure.
+
+#### 1.7a ADR-0012 + `:core` generation capability
+
+Status: complete.
+
+Outcome:
+
+- Added [ADR-0012](DECISIONS/0012-address-encoding-and-roundtrip.md), resolving the ADR-0005
+  §6 prerequisite: the exact `:core` public API shape, the `bech32` (untouched parse-time
+  source string) vs `toBech32()` (canonical, always-derived) distinction, the plain-Bech32
+  canonical encoding/round-trip contract, base-only builder scope, no new `:crypto` API, and
+  the structural-only disclaimer.
+- `AddressCredential`'s companion is now public; `HASH_SIZE` and the parser-only `of(...)`
+  stay `internal`. Added public `keyHash(hash)` / `scriptHash(hash)` factories that
+  length-check 28 bytes (`AddressError.InvalidCredentialLength`), defensive-copy, and
+  delegate to `of(...)`.
+- `Address.baseAddress(network, paymentCredential, stakeCredential)` builds a CIP-19 base
+  address (header types 0-3) and encodes it; `Address.toBech32()` returns the canonical
+  lowercase Bech32 encoding from a new private `canonicalBech32` field computed at
+  construction for both the parse and generate paths. `bech32` is unchanged (still the exact
+  parse-time source string; for a generated address it equals `toBech32()`, since generation
+  has no separate source).
+- `AddressError`'s type-level KDoc updated to state it covers parse, construction, and
+  encoding failures — all structural, none an ownership/funds/ledger claim. No new variant.
+- `:crypto` untouched, as ADR-0011 §2/ADR-0012 anticipated: no new API added.
+- Tests: new `AddressGenerationTest.kt` (22 tests) — rebuilds every cited CIP-19 base vector
+  (mainnet + testnet, types 00-03) from its own decoded credential bytes through
+  `keyHash`/`scriptHash` + `baseAddress` and asserts `toBech32()` matches the cited string,
+  plus a parse→generate→parse structural roundtrip, credential-length rejection, defensive
+  copies, HRP/network derivation, and equals/hashCode/toString coverage. `AddressTest.kt`
+  gained 20 `toBech32()` canonicalization tests (`parse(vector).toBech32() == vector`) across
+  every currently parsed type (base/enterprise/reward/pointer, mainnet + testnet); all
+  existing non-canonical rejection tests are unchanged. `AddressTest` total: 58 → 78 tests;
+  new `AddressGenerationTest`: 22 tests.
+- Verified: `:core:jvmTest`, `:core:testAndroidHostTest`,
+  `:core:compileKotlinIosSimulatorArm64` all pass; `:core` stays dependency-free.
+
+#### 1.7b `:shared` Android checkpoint
+
+Status: complete.
+
+Outcome:
+
+- Extended the existing Test Wallet section in `:shared` (Block 1.6d) into a combined
+  derivation + structural address-generation checkpoint, per ADR-0011 §2: `:shared` calls
+  `:core`/`:crypto` APIs and displays results; it owns no protocol logic. `:crypto` was not
+  touched.
+- `TestWalletFixture`: replaced the single `path` with explicit `paymentPath`
+  (`m/1852'/1815'/0'/0/0`, role `EXTERNAL`) and `stakePath` (`m/1852'/1815'/0'/2/0`, role
+  `STAKING`). The cited golden payment fingerprint is unchanged; no golden was invented for
+  the stake credential or a full generated address — those are computed at runtime and
+  labelled as fixture/checkpoint output, not an external vector.
+- `PlaygroundPresenter.presentTestWalletWithWords` now derives both the payment and stake
+  keys from one restored master key, hashes each derived public key with
+  `Hashing.default().blake2b224(...)`, builds `AddressCredential.keyHash(...)` for each, and
+  calls `Address.baseAddress(Network.TESTNET, paymentCredential, stakeCredential)`. The
+  generated address is immediately re-parsed with `Address.parse(address.toBech32())` for a
+  structural round-trip check. Both private keys, both public keys, the master key, and the
+  mnemonic are cleared in `finally`. Mnemonic words, entropy, seed, private/root key bytes,
+  and raw public key bytes are never surfaced — only path strings, full credential-hash hex
+  (a public CIP-19 credential, not secret key material), the generated `addr_test1...`
+  string, and an "ok"/"mismatch" round-trip row.
+- `PlaygroundScreen`'s section copy was renamed from "Test Wallet (derivation)" to "Test
+  Wallet & Address Generation" and reworded to describe the structural address-generation
+  checkpoint; the warning text stays factual (test-only fixture, no real funds, no signing,
+  structural generation only).
+- Tests: `PlaygroundWalletPresenterTest` (runs on every target, including
+  `testAndroidHostTest`, where `:crypto`'s native backend cannot load) updated for
+  `paymentPath`/`stakePath` formatting, unchanged for error-mapping and pre-native-call
+  mnemonic-rejection cases. `PlaygroundWalletDerivationDesktopTest` (JVM-only, reaches native
+  derivation) now asserts both path strings, the cited golden payment-credential hex, an
+  `addr_test1`-prefixed generated address, that it parses back as `Network.TESTNET` /
+  `AddressType.BASE`, and a positive round-trip row — never pinning the generated address
+  string itself as a golden.
+- Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+  `:shared:compileKotlinIosSimulatorArm64`, `:core:jvmTest` all pass; lints clean on every
+  touched file; no banned words or mnemonic/seed/private/raw-key exposure found.
 
 ### 1.8 Wallet State Read-Only
 

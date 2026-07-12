@@ -524,6 +524,139 @@ Date: 2026-07-12
 
 Summary:
 
+- **Block 1.7b (`:shared` Android checkpoint) — delivered.** Extends the existing Test
+  Wallet section into a combined derivation + structural address-generation checkpoint;
+  `:crypto` untouched, no Gradle change, no dependency change.
+  - `TestWalletFixture`: replaced the single `path` with explicit `paymentPath`
+    (`m/1852'/1815'/0'/0/0`, role `EXTERNAL`) and `stakePath` (`m/1852'/1815'/0'/2/0`, role
+    `STAKING`). The cited golden payment fingerprint is unchanged; no golden was invented for
+    the stake credential or a full generated address — both are computed at runtime and
+    documented as checkpoint output, not an external vector.
+  - `PlaygroundPresenter.presentTestWalletWithWords` now derives both the payment and stake
+    keys from one restored master key, hashes each derived public key with
+    `Hashing.default().blake2b224(...)`, wraps each hash with
+    `AddressCredential.keyHash(...)`, and calls
+    `Address.baseAddress(Network.TESTNET, paymentCredential, stakeCredential)`. The generated
+    address is immediately re-parsed via `Address.parse(address.toBech32())` for a structural
+    round-trip check. All key handles (`master`, both private keys, both public keys) and the
+    mnemonic are cleared in `finally`, unchanged from Block 1.6d's pattern. Displayed rows are
+    limited to both path strings, both full credential-hash hex values (public CIP-19
+    credentials, not secret key material), the generated `addr_test1...` address, and an
+    "ok"/"mismatch" round-trip row — never mnemonic/seed/private/root/raw-public-key bytes.
+  - `PlaygroundScreen`: renamed the section from "Test Wallet (derivation)" to "Test Wallet &
+    Address Generation" and reworded the description and button label to reflect address
+    generation; the warning stays factual (test-only fixture, no real funds, no signing,
+    structural generation only). No new sensitive input is persisted.
+  - Tests: `PlaygroundWalletPresenterTest` (runs on every target, including
+    `testAndroidHostTest`, where `:crypto`'s native backend cannot load) updated for
+    `paymentPath`/`stakePath` formatting; error-mapping and pre-native-call mnemonic-rejection
+    tests are unchanged. `PlaygroundWalletDerivationDesktopTest` (JVM-only, reaches native
+    derivation) now asserts both path strings, the cited golden payment-credential hex, an
+    `addr_test1`-prefixed generated address, that it parses back as `Network.TESTNET` /
+    `AddressType.BASE`, and a positive round-trip row — the generated address string itself is
+    never pinned as a golden.
+  - Docs: `docs/PHASE_1_PLAN.md` §1.7b and `docs/ROADMAP.md` §1.7b marked complete with
+    outcome; `shared/README.md`'s "Test Wallet" section renamed/reworded for address
+    generation and its "Testing" section updated for the new golden-check description.
+  - Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+    `:shared:compileKotlinIosSimulatorArm64`, `:core:jvmTest` all pass; lints clean on every
+    touched file; no banned readiness/security words or mnemonic/seed/private/raw-key exposure
+    found.
+  - Files changed:
+    `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/TestWalletFixture.kt`,
+    `PlaygroundPresenter.kt`, `PlaygroundScreen.kt`;
+    `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletPresenterTest.kt`;
+    `shared/src/jvmTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletDerivationDesktopTest.kt`;
+    `shared/README.md`; `docs/PHASE_1_PLAN.md`; `docs/ROADMAP.md`; this file. No Gradle,
+    Kotlin build config, `:core`, or `:crypto` file touched.
+
+Next recommended task:
+
+- **Block 1.8** (Wallet State Read-Only): connect the generated test address to `:provider`
+  without building transactions yet — show the generated address, query its UTxOs, show the
+  test ADA balance, and allow a manual refresh. Re-evaluate whether a `:wallet` module is
+  warranted at this point (ADR-0011 §2's `:wallet` trigger — orchestration/state/persistence
+  composed with a provider query — first applies here, not at 1.7).
+- No commit was made this session unless the project owner explicitly requests one.
+
+### Session Summary (1.7a implementation + review microfix)
+
+Date: 2026-07-12
+
+Summary:
+
+- **Block 1.7a (ADR-0012 + `:core` address generation) — delivered.** `:core`-only
+  capability, no Gradle change, no dependency change, `:crypto`/`:shared` untouched; full
+  write-up: [ADR-0012](DECISIONS/0012-address-encoding-and-roundtrip.md).
+  - Added ADR-0012, resolving the ADR-0005 §6 address encoding/round-trip prerequisite and
+    fixing the exact `:core` API shape before any code was written: `AddressCredential`'s
+    companion is now public with narrow `keyHash`/`scriptHash` factories (`HASH_SIZE` and
+    the parser-only `of(...)` stay `internal`); `Address` gained a base-only
+    `baseAddress(network, paymentCredential, stakeCredential)` builder and a `toBech32()`
+    canonical encoder backed by a new private `canonicalBech32` field computed at
+    construction for both the parse and generate paths; `bech32` is unchanged — still the
+    exact parse-time source string, coinciding with `toBech32()` only for a generated
+    address (which has no separate source). `AddressError` gained no new variant; its
+    type-level KDoc was reworded to cover construction/encoding, not just parsing, staying
+    structural-only (no ownership/funds/ledger claim). `:crypto` was not touched — no new API
+    was needed, matching ADR-0011 §2's "only if useful" framing.
+  - `Address.baseAddress` builds only CIP-19 base addresses (header types 0-3); enterprise,
+    reward/stake, and pointer builders remain deferred. It accepts either `Network` as a pure
+    function (used by `:core`'s own tests against cited mainnet vectors); the "no mainnet"
+    boundary is left to the caller (1.7b will only ever pass `Network.TESTNET`).
+  - Tests: new `AddressGenerationTest.kt` (22 tests) rebuilds every cited CIP-19 base vector
+    (mainnet + testnet, types 00-03) from its own decoded 28-byte credential bytes through
+    `keyHash`/`scriptHash` + `baseAddress`, asserting `toBech32()` reproduces the cited
+    string exactly, plus a parse→generate→parse structural roundtrip, credential-length
+    rejection (`AddressError.InvalidCredentialLength`), defensive-copy checks, HRP/network
+    derivation, and equals/hashCode/`toString` (no byte/hex leak) coverage on generated
+    addresses. `AddressTest.kt` gained 20 `toBech32()` canonicalization tests asserting
+    `parse(vector).toBech32() == vector` across every currently parsed type (base,
+    enterprise, reward, pointer; mainnet and testnet) — broader than the builder's base-only
+    scope, since `toBech32()` only depends on `rawBytes + hrp`. All existing non-canonical
+    rejection tests are unchanged. `AddressTest`: 58 → 78 tests; new `AddressGenerationTest`:
+    22 tests.
+  - Docs: `core/README.md` gained the generation-API description; `docs/PHASE_1_PLAN.md`
+    §1.7 split into 1.7a (complete)/1.7b (pending); `docs/ROADMAP.md` §1.7 updated to match.
+  - Verified: `:core:compileKotlinJvm`, `:core:jvmTest` (all 100 `:core` `address` package
+    tests pass), `:core:testAndroidHostTest`, `:core:compileKotlinIosSimulatorArm64` all
+    pass; lints clean on every touched file; no banned readiness/security words or
+    mnemonic/private/raw-public-key material introduced (`:core` has none of that surface).
+  - Files changed: `core/src/commonMain/kotlin/org/sarmidev/kardano/address/AddressCredential.kt`,
+    `Address.kt`, `AddressError.kt`;
+    `core/src/commonTest/kotlin/org/sarmidev/kardano/address/AddressTest.kt`,
+    `AddressGenerationTest.kt` (new); `core/README.md`;
+    `docs/DECISIONS/0012-address-encoding-and-roundtrip.md` (new); `docs/PHASE_1_PLAN.md`;
+    `docs/ROADMAP.md`; this file. No Gradle, Kotlin build config, `:crypto`, or `:shared`
+    file touched.
+- **Block 1.7a review microfix — delivered (test-only, no behavior change).** Reworded
+  `AddressError.Bech32`'s KDoc to cover encode failures (`toBech32`/`baseAddress`) as well as
+  decode, and `AddressError.InvalidCredentialLength`'s KDoc to cover public
+  `AddressCredential.keyHash`/`scriptHash` construction as well as parsed credential slices.
+  Added `AddressTest.bech32AndToBech32DivergeForValidUppercaseInput`, proving `Bech32.decode`
+  accepts all-uppercase input and that `address.bech32` (source-preserving) and
+  `address.toBech32()` (canonical) diverge for it, with a reparse-equality check. `AddressTest`
+  total: 78 → 79 tests. Re-verified `:core:jvmTest`, `:core:testAndroidHostTest`,
+  `:core:compileKotlinIosSimulatorArm64`; lints clean.
+
+Next recommended task:
+
+- **Block 1.7b** (`:shared` Android checkpoint): wire `Address.baseAddress`/`toBech32()`
+  into a new Playground "Address Generation" section, deriving the existing test wallet's
+  payment (`m/1852'/1815'/0'/0/0`) and stake (`m/1852'/1815'/0'/2/0`) keys, hashing each via
+  `Hashing.blake2b224`, generating and immediately re-parsing an `addr_test`, and displaying
+  only public metadata — never mnemonic/seed/private/raw public key bytes. Per the revised
+  plan, do not pin a full generated `addr_test` string as a golden unless an externally cited
+  source publishes the same address for this mnemonic/path; otherwise assert only the cited
+  payment credential/fingerprint plus a structural generate→parse roundtrip.
+- No commit was made this session unless the project owner explicitly requests one.
+
+### Session Summary (pre-1.7 architecture cleanup)
+
+Date: 2026-07-12
+
+Summary:
+
 - **Pre-1.7 architecture cleanup — delivered.** Docs-and-package-only microblock, no
   behavior change, no Gradle change, no dependency change; full write-up:
   [ADR-0011](DECISIONS/0011-phase-1-architecture-standards.md).

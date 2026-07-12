@@ -2,6 +2,7 @@ package org.sarmidev.kardano.playground
 
 import org.sarmidev.kardano.KardanoResult
 import org.sarmidev.kardano.address.Address
+import org.sarmidev.kardano.address.AddressCredential
 import org.sarmidev.kardano.address.AddressError
 import org.sarmidev.kardano.crypto.derivation.ExtendedPrivateKey
 import org.sarmidev.kardano.crypto.derivation.ExtendedPublicKey
@@ -16,6 +17,7 @@ import org.sarmidev.kardano.encoding.cbor.Cbor
 import org.sarmidev.kardano.encoding.cbor.CborError
 import org.sarmidev.kardano.encoding.hex.Hex
 import org.sarmidev.kardano.encoding.hex.HexError
+import org.sarmidev.kardano.primitives.Network
 import org.sarmidev.kardano.provider.ChainQueryProvider
 import org.sarmidev.kardano.provider.ProtocolParameters
 import org.sarmidev.kardano.provider.ProviderError
@@ -49,11 +51,13 @@ internal sealed interface CborPresentation {
 }
 
 /**
- * Result of presenting the test-wallet derivation checkpoint ([TestWalletFixture]).
+ * Result of presenting the test-wallet derivation and address-generation checkpoint
+ * ([TestWalletFixture]).
  *
- * Carries only public metadata: the CIP-1852 path and the Blake2b-224 fingerprint of the
- * derived public key. Never the mnemonic, entropy, seed, root/private key bytes, or the raw
- * 32-byte public key.
+ * Carries only public metadata: the payment and stake CIP-1852 paths, the Blake2b-224
+ * credential hash of each derived public key, the generated testnet base address, and its
+ * structural round-trip status. Never the mnemonic, entropy, seed, root/private key bytes, or
+ * the raw 32-byte public key.
  */
 internal sealed interface WalletPresentation {
     data object Empty : WalletPresentation
@@ -228,17 +232,22 @@ internal object PlaygroundPresenter {
 
     private fun presentCborError(error: CborError): String = error.toString()
 
-    // --- Test wallet (derivation checkpoint, Block 1.6d) ---
+    // --- Test wallet + address generation checkpoint (Block 1.6d, extended by Block 1.7b) ---
 
     /**
-     * Restores [TestWalletFixture]'s cited test-only mnemonic, derives [TestWalletFixture.path],
-     * projects the public key, and computes its Blake2b-224 fingerprint — displaying only that
-     * public metadata.
+     * Restores [TestWalletFixture]'s cited test-only mnemonic, derives the payment
+     * ([TestWalletFixture.paymentPath]) and stake ([TestWalletFixture.stakePath]) keys,
+     * hashes each derived public key to a credential, builds a testnet base address from the
+     * two credentials, and immediately re-parses that address — displaying only this public
+     * metadata.
      *
      * Delegates entirely to `:crypto` ([Mnemonic], [IcarusMasterKey], [KeyDerivation],
-     * [Hashing]); this presenter does not reimplement or duplicate any derivation or hashing
-     * logic. Never surfaces the mnemonic, entropy, seed, root/private key bytes, or the raw
-     * 32-byte public key — only the path string and the fingerprint hex.
+     * [Hashing]) and `:core` ([AddressCredential], [Address]); this presenter does not
+     * reimplement or duplicate any derivation, hashing, or address-encoding logic. This is
+     * **structural address generation only** (Block 1.7a/1.7b): it does not sign anything,
+     * build a transaction, or prove the generated address is owned, funded, or registered.
+     * Never surfaces the mnemonic, entropy, seed, root/private key bytes, or a raw public key
+     * — only path strings, credential-hash hex, and the generated/re-parsed address.
      */
     fun presentTestWallet(): WalletPresentation = presentTestWalletWithWords(TestWalletFixture.words)
 
@@ -254,8 +263,10 @@ internal object PlaygroundPresenter {
             is KardanoResult.Err -> return WalletPresentation.Failure(presentMnemonicError(result.error))
         }
         var master: IcarusMasterKey? = null
-        var privateKey: ExtendedPrivateKey? = null
-        var publicKey: ExtendedPublicKey? = null
+        var paymentPrivateKey: ExtendedPrivateKey? = null
+        var paymentPublicKey: ExtendedPublicKey? = null
+        var stakePrivateKey: ExtendedPrivateKey? = null
+        var stakePublicKey: ExtendedPublicKey? = null
         try {
             master = when (val result = IcarusMasterKey.fromMnemonic(mnemonic)) {
                 is KardanoResult.Ok -> result.value
@@ -263,38 +274,93 @@ internal object PlaygroundPresenter {
                     return WalletPresentation.Failure(presentKeyDerivationError(result.error))
             }
             val derivation = KeyDerivation.default()
-            privateKey = when (val result = derivation.derivePrivate(master, TestWalletFixture.path)) {
+
+            paymentPrivateKey = when (
+                val result = derivation.derivePrivate(master, TestWalletFixture.paymentPath)
+            ) {
                 is KardanoResult.Ok -> result.value
                 is KardanoResult.Err ->
                     return WalletPresentation.Failure(presentKeyDerivationError(result.error))
             }
-            publicKey = when (val result = derivation.publicKey(privateKey)) {
+            paymentPublicKey = when (val result = derivation.publicKey(paymentPrivateKey)) {
                 is KardanoResult.Ok -> result.value
                 is KardanoResult.Err ->
                     return WalletPresentation.Failure(presentKeyDerivationError(result.error))
             }
-            val fingerprint = when (
-                val result = Hashing.default().blake2b224(publicKey.publicKeyBytes())
+            val paymentDigest = when (
+                val result = Hashing.default().blake2b224(paymentPublicKey.publicKeyBytes())
             ) {
                 is KardanoResult.Ok -> result.value
                 is KardanoResult.Err -> return WalletPresentation.Failure(presentCryptoError(result.error))
             }
-            val fingerprintHex = Hex.encode(fingerprint.toByteArray())
+            val paymentFingerprintHex = Hex.encode(paymentDigest.toByteArray())
+            val paymentCredential = when (
+                val result = AddressCredential.keyHash(paymentDigest.toByteArray())
+            ) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return WalletPresentation.Failure(presentAddressError(result.error))
+            }
+
+            stakePrivateKey = when (
+                val result = derivation.derivePrivate(master, TestWalletFixture.stakePath)
+            ) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return WalletPresentation.Failure(presentKeyDerivationError(result.error))
+            }
+            stakePublicKey = when (val result = derivation.publicKey(stakePrivateKey)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return WalletPresentation.Failure(presentKeyDerivationError(result.error))
+            }
+            val stakeDigest = when (
+                val result = Hashing.default().blake2b224(stakePublicKey.publicKeyBytes())
+            ) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return WalletPresentation.Failure(presentCryptoError(result.error))
+            }
+            val stakeFingerprintHex = Hex.encode(stakeDigest.toByteArray())
+            val stakeCredential = when (
+                val result = AddressCredential.keyHash(stakeDigest.toByteArray())
+            ) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return WalletPresentation.Failure(presentAddressError(result.error))
+            }
+
+            val generatedAddress = when (
+                val result = Address.baseAddress(Network.TESTNET, paymentCredential, stakeCredential)
+            ) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return WalletPresentation.Failure(presentAddressError(result.error))
+            }
+            val generatedBech32 = generatedAddress.toBech32()
+            val roundTripOk = when (val result = Address.parse(generatedBech32)) {
+                is KardanoResult.Ok -> result.value == generatedAddress
+                is KardanoResult.Err -> false
+            }
+
             val rows = listOf(
-                LabeledRow("Path", TestWalletFixture.path.toString()),
-                LabeledRow("Fingerprint (Blake2b-224)", fingerprintHex),
+                LabeledRow("Payment path", TestWalletFixture.paymentPath.toString()),
+                LabeledRow("Payment credential (Blake2b-224)", paymentFingerprintHex),
+                LabeledRow("Stake path", TestWalletFixture.stakePath.toString()),
+                LabeledRow("Stake credential (Blake2b-224)", stakeFingerprintHex),
+                LabeledRow("Generated address", generatedBech32),
+                LabeledRow("Address round-trip", if (roundTripOk) "ok" else "mismatch"),
             )
             return WalletPresentation.Success(
                 rows = rows,
-                fingerprintMatchesVector = fingerprintHex == TestWalletFixture.GOLDEN_FINGERPRINT_HEX,
+                fingerprintMatchesVector = paymentFingerprintHex == TestWalletFixture.GOLDEN_FINGERPRINT_HEX,
             )
         } finally {
             mnemonic.clear()
             master?.clear()
-            privateKey?.clear()
-            publicKey?.clear()
+            paymentPrivateKey?.clear()
+            paymentPublicKey?.clear()
+            stakePrivateKey?.clear()
+            stakePublicKey?.clear()
         }
     }
+
 
     /** Maps a [MnemonicError] to a human-readable single-line message. */
     internal fun presentMnemonicError(error: MnemonicError): String = when (error) {

@@ -896,7 +896,52 @@ Proposed block sequence:
     fingerprint, and "matches cited vector: yes" all render, no crash/ANR, no noticeable
     freeze on API 24).
 - `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
-  `Address.parse`.
+  `Address.parse`. Split into 1.7a/1.7b (see `docs/PHASE_1_PLAN.md`).
+  - `1.7a` ADR-0012 + `:core` generation capability — **Status: complete.** Outcome:
+    [ADR-0012](DECISIONS/0012-address-encoding-and-roundtrip.md) resolved the ADR-0005 §6
+    address encoding/round-trip prerequisite and fixed the `:core` API shape. `AddressCredential`
+    gained a public companion with `keyHash(hash)`/`scriptHash(hash)` factories (`HASH_SIZE`
+    and the parser-only `of(...)` stay `internal`); `Address` gained `baseAddress(network,
+    paymentCredential, stakeCredential)` (CIP-19 base, header types 0-3 only — enterprise/
+    reward/pointer builders deferred) and `toBech32()` (a new private `canonicalBech32`
+    field, canonical lowercase Bech32 from the address's own bytes, computed for both parsed
+    and generated addresses). `bech32` is unchanged — still the exact parse-time source
+    string (equal to `toBech32()` only for a generated address, which has no separate
+    source). No new `AddressError` variant; its KDoc now covers construction/encoding, not
+    just parsing. `:crypto` untouched — no new API needed. New `AddressGenerationTest.kt`
+    (22 tests) rebuilds every cited CIP-19 base vector from its own decoded bytes and asserts
+    `toBech32()` matches; `AddressTest.kt` gained 20 `toBech32()` canonicalization tests
+    across every parsed type (base/enterprise/reward/pointer, mainnet + testnet), with all
+    existing non-canonical rejection tests unchanged. Verified: `:core:jvmTest`,
+    `:core:testAndroidHostTest`, `:core:compileKotlinIosSimulatorArm64`; `:core` stays
+    dependency-free.
+  - `1.7b` `:shared` Android checkpoint — **Status: complete.** Outcome: extended the
+    existing Test Wallet section (Block 1.6d) into a combined derivation + structural
+    address-generation checkpoint, per ADR-0011 §2 (`:shared` calls SDK APIs and displays
+    results; no protocol logic). `:crypto` untouched. `TestWalletFixture` replaced its single
+    `path` with `paymentPath` (`m/1852'/1815'/0'/0/0`) and `stakePath`
+    (`m/1852'/1815'/0'/2/0`); the cited golden payment fingerprint is unchanged, and no golden
+    was invented for the stake credential or a full generated address — both are computed at
+    runtime and labelled as checkpoint output, not an external vector.
+    `PlaygroundPresenter.presentTestWalletWithWords` derives both keys from one restored
+    master key, hashes each with `Hashing.default().blake2b224(...)`, builds two
+    `AddressCredential.keyHash(...)` credentials, calls
+    `Address.baseAddress(Network.TESTNET, paymentCredential, stakeCredential)`, and
+    immediately re-parses `address.toBech32()` for a structural round trip; all key handles
+    and the mnemonic are cleared in `finally`. Displayed rows are limited to both path
+    strings, both full credential-hash hex (public CIP-19 credentials, not secret key
+    material), the generated `addr_test1...` address, and an "ok"/"mismatch" round-trip row —
+    never mnemonic/seed/private/root/raw-public-key bytes. `PlaygroundScreen`'s section was
+    renamed "Test Wallet & Address Generation" with reworded, factual copy (test-only
+    fixture, no real funds, no signing, structural generation only).
+    `PlaygroundWalletPresenterTest` (every target) covers the new path names and unchanged
+    error/pre-native-rejection cases; `PlaygroundWalletDerivationDesktopTest` (JVM-only,
+    native) asserts both paths, the cited golden payment-credential hex, an
+    `addr_test1`-prefixed generated address parsing back as `Network.TESTNET` /
+    `AddressType.BASE`, and a positive round trip — the generated address string itself is
+    never pinned as a golden. Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+    `:shared:compileKotlinIosSimulatorArm64`, `:core:jvmTest`; lints clean; no banned words or
+    mnemonic/seed/private/raw-key exposure found.
 - `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance.
 - `1.9` Transaction Builder Minimal — build a simple ADA transaction draft.
 - `1.10` Transaction Signing — sign a testnet/preprod transaction locally.

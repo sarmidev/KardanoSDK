@@ -11,32 +11,40 @@ Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
 
 - Hosts the SDK Playground (`playground/PlaygroundScreen.kt`, `playground/PlaygroundPresenter.kt`),
   introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core`/`:crypto`
-  SDK behavior (address parsing, Hex, CBOR, test-wallet derivation) and, from Block 1.3a, a
-  read-only "Provider" section (mock by default, with an optional live-Blockfrost toggle added
-  in Block 1.3b).
+  SDK behavior (address parsing, Hex, CBOR, test-wallet derivation + address generation) and,
+  from Block 1.3a, a read-only "Provider" section (mock by default, with an optional
+  live-Blockfrost toggle added in Block 1.3b).
 - Hosts `App.kt` (theme wrapper that renders `PlaygroundScreen`) and the iOS UI entry point
   (`MainViewController.kt`).
 - Retains the sample glue (`Greeting.kt`, `GreetingUtil.kt`) used by `PlaygroundScreen` to
   show the platform name.
-- Depends on `:core` for encoding/address SDK logic (`Address.parse`, `Hex`, `Cbor`,
-  `Platform`), on `:crypto` for the test-wallet derivation checkpoint (`Mnemonic`,
-  `IcarusMasterKey`, `KeyDerivation`, `Hashing` — see "Test Wallet" below), on `:provider` for
-  the read-only query boundary (`ChainQueryProvider`) and its in-memory mock, and on
-  `:provider-blockfrost` for the live Blockfrost provider.
+- Depends on `:core` for encoding/address SDK logic (`Address.parse`, `Address.baseAddress`,
+  `Address.toBech32()`, `AddressCredential`, `Hex`, `Cbor`, `Platform`), on `:crypto` for the
+  test-wallet derivation checkpoint (`Mnemonic`, `IcarusMasterKey`, `KeyDerivation`, `Hashing`
+  — see "Test Wallet & Address Generation" below), on `:provider` for the read-only query
+  boundary (`ChainQueryProvider`) and its in-memory mock, and on `:provider-blockfrost` for the
+  live Blockfrost provider.
 
-### Test Wallet section (Block 1.6d)
+### Test Wallet & Address Generation section (Block 1.6d, extended by Block 1.7b)
 
-The "Test Wallet (derivation)" section restores `playground/TestWalletFixture.kt`'s cited
-test-only BIP-39 mnemonic (the same public vector `:crypto`'s `KeyDerivationVectorsTest` and
-`PublicKeyProjectionDeviceTest` already cite from `IntersectMBO/cardano-addresses`) — **never a
-real mnemonic, never associated with real funds** — derives the fixed CIP-1852 path
-`m/1852'/1815'/0'/0/0` via `:crypto`'s `KeyDerivation.derivePrivate`/`publicKey`, and computes
-the Blake2b-224 fingerprint of the derived public key via `:crypto`'s `Hashing.blake2b224`. The
-screen displays **only** the path string, the fingerprint hex, and whether it matches the cited
-golden vector — never the mnemonic, entropy, seed, root/private key bytes, or the raw public
-key. All derivation, projection, and hashing logic is `:crypto`'s; `PlaygroundPresenter` only
-calls it and formats the result, per this file's standing rule below. Addresses are not part of
-this checkpoint (Block 1.7).
+The "Test Wallet & Address Generation" section restores `playground/TestWalletFixture.kt`'s
+cited test-only BIP-39 mnemonic (the same public vector `:crypto`'s `KeyDerivationVectorsTest`
+and `PublicKeyProjectionDeviceTest` already cite from `IntersectMBO/cardano-addresses`) —
+**never a real mnemonic, never associated with real funds** — and derives the two fixed
+CIP-1852 paths `paymentPath` (`m/1852'/1815'/0'/0/0`) and `stakePath` (`m/1852'/1815'/0'/2/0`)
+via `:crypto`'s `KeyDerivation.derivePrivate`/`publicKey`. Each derived public key's
+Blake2b-224 credential hash is computed via `:crypto`'s `Hashing.blake2b224`, wrapped with
+`:core`'s `AddressCredential.keyHash(...)`, and passed to
+`Address.baseAddress(Network.TESTNET, paymentCredential, stakeCredential)`
+(Block 1.7a). The generated address is immediately re-parsed with
+`Address.parse(address.toBech32())` for a structural round-trip check. The screen displays
+**only** both path strings, both credential-hash hex values (public CIP-19 credentials, not
+secret key material), the generated `addr_test1...` address, and the round-trip status —
+never the mnemonic, entropy, seed, root/private key bytes, or a raw public key. All
+derivation, projection, hashing, credential, and address-encoding logic belongs to
+`:crypto`/`:core`; `PlaygroundPresenter` only calls it and formats the result, per this file's
+standing rule below. This is structural address generation only: no signing, no transaction
+logic, and no claim that the generated address is owned, funded, or registered.
 
 ### Provider section
 
@@ -91,14 +99,16 @@ project. See [docs/DECISIONS/0002-module-structure.md](../docs/DECISIONS/0002-mo
 `:shared` carries example tests in `commonTest`, `jvmTest`, `androidHostTest`, and `iosTest`
 that demonstrate the wiring per target. The protocol/cryptographic test-vector suites and
 SDK-logic tests belong in `:core`/`:crypto`; `:shared` uses only a minimum of cited CIP-19/
-CIP-1852 vectors for presenter-wiring verification. The test-wallet checkpoint's `commonTest`
-coverage (`PlaygroundWalletPresenterTest`) is deliberately native-free — it covers only error
-mapping, path formatting, and mnemonic-parsing failures that are rejected before any native
-derivation call, because `:crypto`'s native backend cannot load under the Android host-JVM
-target (`androidHostTest`); the end-to-end fingerprint golden check
-(`PlaygroundWalletDerivationDesktopTest`) lives only in `jvmTest`, where the native backend
-does load. See [docs/TESTING.md](../docs/TESTING.md) for the testing strategy and
-test-vector policy.
+CIP-1852 vectors for presenter-wiring verification. The test-wallet + address-generation
+checkpoint's `commonTest` coverage (`PlaygroundWalletPresenterTest`) is deliberately
+native-free — it covers only error mapping, path formatting, and mnemonic-parsing failures
+that are rejected before any native derivation call, because `:crypto`'s native backend
+cannot load under the Android host-JVM target (`androidHostTest`); the end-to-end
+fingerprint/address golden check (`PlaygroundWalletDerivationDesktopTest`) lives only in
+`jvmTest`, where the native backend does load — it asserts the cited golden payment
+credential and a structural generate-then-parse round trip, never a self-generated address
+pinned as if it were an external vector. See [docs/TESTING.md](../docs/TESTING.md) for the
+testing strategy and test-vector policy.
 
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host tests: `./gradlew :shared:testAndroidHostTest`

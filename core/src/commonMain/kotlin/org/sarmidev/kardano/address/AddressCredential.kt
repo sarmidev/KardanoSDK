@@ -21,17 +21,19 @@ public enum class CredentialKind {
 }
 
 /**
- * A structural Cardano address credential: a [kind] plus its exactly [HASH_SIZE]-byte hash.
+ * A structural Cardano address credential: a [kind] plus its exactly 28-byte hash.
  *
  * A credential is the 28-byte payload of a Shelley address part, classified as a key hash
  * or a script hash by [kind]. This is a structural byte container only: it does not verify
  * that the bytes are a correct `blake2b-224` digest, that any corresponding key or script
  * exists, or that funds at an address using it are owned or spendable.
  *
- * The constructor is private; instances are created internally by [Address.parse] through
- * an internal length-validated factory, so a credential can never hold a hash of the wrong
- * length. The wrapped bytes are copied on construction and on every read, so the internal
- * array is never shared or mutable.
+ * The constructor is private. [Address.parse] builds instances through an internal
+ * length-validated factory, and callers building an address for generation (Block 1.7a) use
+ * the public [keyHash] / [scriptHash] factories below — every path validates the same
+ * length, so a credential can never hold a hash of the wrong length. The wrapped bytes are
+ * copied on construction and on every read, so the internal array is never shared or
+ * mutable.
  *
  * @property kind whether the hash is a key hash or a script hash.
  * @see <a href="https://cips.cardano.org/cip/CIP-19">CIP-19</a>
@@ -64,18 +66,51 @@ public class AddressCredential private constructor(
     /** Structural description that does not render the wrapped hash. */
     override fun toString(): String = "AddressCredential(kind=$kind, hashSize=${hash.size})"
 
-    internal companion object {
+    public companion object {
 
         /** The exact number of bytes a credential hash holds (a `blake2b-224` digest). */
         internal const val HASH_SIZE: Int = 28
 
         /**
+         * Creates a key-hash [AddressCredential] from a raw `blake2b-224` digest.
+         *
+         * Structural construction only: this does not verify that [hash] is actually a
+         * `blake2b-224` digest of a real verification key, only that it has the required
+         * length. The typical source is a public key hashed with
+         * `org.sarmidev.kardano.crypto.hashing.Hashing.blake2b224`.
+         *
+         * @param hash the candidate 28-byte key-hash bytes. Copied defensively; not
+         *   modified.
+         * @return [KardanoResult.Ok] with the credential when [hash] is exactly 28 bytes, or
+         *   [KardanoResult.Err] with [AddressError.InvalidCredentialLength] otherwise. Never
+         *   throws.
+         */
+        public fun keyHash(hash: ByteArray): KardanoResult<AddressCredential, AddressError> =
+            of(CredentialKind.KEY, hash)
+
+        /**
+         * Creates a script-hash [AddressCredential] from a raw `blake2b-224` digest.
+         *
+         * Structural construction only: this does not verify that [hash] is actually a
+         * `blake2b-224` digest of a real script, only that it has the required length.
+         *
+         * @param hash the candidate 28-byte script-hash bytes. Copied defensively; not
+         *   modified.
+         * @return [KardanoResult.Ok] with the credential when [hash] is exactly 28 bytes, or
+         *   [KardanoResult.Err] with [AddressError.InvalidCredentialLength] otherwise. Never
+         *   throws.
+         */
+        public fun scriptHash(hash: ByteArray): KardanoResult<AddressCredential, AddressError> =
+            of(CredentialKind.SCRIPT, hash)
+
+        /**
          * Creates an [AddressCredential] from [hash], validating its length.
          *
-         * This is the only construction path for [AddressCredential]; it is internal and
-         * used by [Address.parse] after a credential slice has been taken from a validated
-         * payload. It returns a [KardanoResult] so an invalid length cannot produce a
-         * credential.
+         * This is the parser's construction path, used by [Address.parse] after a credential
+         * slice has been taken from a validated payload; [keyHash] and [scriptHash] delegate
+         * to it as well, so every [AddressCredential] is built through this single
+         * length-validated factory. It returns a [KardanoResult] so an invalid length cannot
+         * produce a credential.
          *
          * @param kind whether [hash] is a key hash or a script hash.
          * @param hash the candidate credential bytes; must be exactly [HASH_SIZE] bytes. The

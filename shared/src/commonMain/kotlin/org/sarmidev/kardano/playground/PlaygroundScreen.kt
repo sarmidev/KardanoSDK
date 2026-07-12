@@ -188,14 +188,16 @@ internal fun PlaygroundScreen() {
         }
         cborResult?.let { CborResultCard(it) }
 
-        // --- Test Wallet (derivation checkpoint, Block 1.6d) ---
+        // --- Test Wallet / Address Generation checkpoint (Block 1.6d, extended by 1.7b) ---
         HorizontalDivider()
-        Text("Test Wallet (derivation)", style = MaterialTheme.typography.titleMedium)
+        Text("Test Wallet & Address Generation", style = MaterialTheme.typography.titleMedium)
         Text(
-            text = "Restores a test-only wallet from a public cited vector. No real funds, " +
-                "no real mnemonic. Shows only the derivation path and the Blake2b-224 " +
-                "fingerprint of the derived public key — never the mnemonic, seed, or any " +
-                "raw key bytes.",
+            text = "Restores a test-only wallet from a public cited vector (no real funds, " +
+                "no real mnemonic), derives its payment and stake keys, and generates a " +
+                "structural addr_test base address from their credential hashes — then " +
+                "parses that address straight back. No signing, no transaction logic. Shows " +
+                "only the derivation paths, credential hashes, and the generated address — " +
+                "never the mnemonic, seed, or any private/raw key bytes.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -203,7 +205,7 @@ internal fun PlaygroundScreen() {
             onClick = { walletResult = PlaygroundPresenter.presentTestWallet() },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Restore test wallet & derive")
+            Text("Restore test wallet & generate address")
         }
         WalletResultCard(walletResult)
 

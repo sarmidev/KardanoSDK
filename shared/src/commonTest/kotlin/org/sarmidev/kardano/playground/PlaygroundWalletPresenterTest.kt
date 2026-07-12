@@ -9,23 +9,29 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * Unit tests for [PlaygroundPresenter]'s test-wallet derivation checkpoint (Block 1.6d).
+ * Unit tests for [PlaygroundPresenter]'s test-wallet + address-generation checkpoint
+ * (Block 1.6d, extended by Block 1.7b).
  *
  * This test runs on **every** target, including `:shared:testAndroidHostTest` — the host JVM
  * under the Android target, where `:crypto`'s native derivation/projection backend cannot load
  * (`UnsatisfiedLinkError`, same finding as Block 1.6c). It therefore covers only paths that
  * never reach a native call: error-message mapping (variants constructed directly), CIP-1852
  * path formatting, and mnemonic parsing failures that are rejected before
- * `IcarusMasterKey.fromMnemonic`/derivation. The end-to-end fingerprint golden check (which does
- * reach the native backend) lives only in `shared/jvmTest`.
+ * `IcarusMasterKey.fromMnemonic`/derivation. The end-to-end fingerprint/address golden check
+ * (which does reach the native backend) lives only in `shared/jvmTest`.
  */
 class PlaygroundWalletPresenterTest {
 
     // --- TestWalletFixture: path formatting, no native call ---
 
     @Test
-    fun fixturePath_formatsAsExpectedCip1852Path() {
-        assertEquals("m/1852'/1815'/0'/0/0", TestWalletFixture.path.toString())
+    fun fixturePaymentPath_formatsAsExpectedCip1852Path() {
+        assertEquals("m/1852'/1815'/0'/0/0", TestWalletFixture.paymentPath.toString())
+    }
+
+    @Test
+    fun fixtureStakePath_formatsAsExpectedCip1852Path() {
+        assertEquals("m/1852'/1815'/0'/2/0", TestWalletFixture.stakePath.toString())
     }
 
     @Test

@@ -125,7 +125,35 @@ this reorganization, but fully qualified names and imports moved into the packag
   owned, is controllable, or is spendable, it does not verify a credential is a real
   key/script hash, and it does not check that a pointer refers to an on-chain certificate.
   Byron (type 8) addresses, Base58, and raw-byte/hex constructors are deferred beyond Block
-  0.7 (`Address.parse` is the only constructor).
+  0.7 (`Address.parse` remains the only *parsing* constructor).
+- **Address generation (Block 1.7a)** — a minimal, structural base-address builder and a
+  canonical Bech32 encoder, gated on
+  [docs/DECISIONS/0012-address-encoding-and-roundtrip.md](../docs/DECISIONS/0012-address-encoding-and-roundtrip.md):
+  - `AddressCredential.keyHash(hash)` / `AddressCredential.scriptHash(hash)` — public
+    factories on `AddressCredential`'s now-public companion. Each returns a
+    `KardanoResult<AddressCredential, AddressError>`, length-checking `hash` (must be
+    exactly 28 bytes, a `blake2b-224` digest) and defensive-copying it before returning
+    `AddressError.InvalidCredentialLength` on a mismatch or the credential on success.
+  - `Address.baseAddress(network, paymentCredential, stakeCredential)` — builds a CIP-19
+    base address (header types 0-3) from two already-computed credentials and a `Network`,
+    returning `KardanoResult<Address, AddressError>`. This is the only generation builder in
+    1.7a; enterprise, reward/stake, and pointer builders remain deferred. The builder accepts
+    either `Network` (a pure function, used by `:core`'s own tests to roundtrip cited
+    mainnet vectors); callers needing the "no mainnet" boundary (for example the sample app)
+    enforce it themselves by only ever passing `Network.TESTNET`.
+  - `Address.toBech32(): String` — returns the canonical lowercase Bech32 encoding derived
+    from the address's own bytes and HRP, computed once at construction for both parsed and
+    generated addresses. Unlike `bech32` (the exact, unmodified source string for a *parsed*
+    address, or the same canonical value for a *generated* one, since generation has no
+    separate source), `toBech32()` canonicalizes **every currently supported parsed type**
+    (base, enterprise, reward, pointer; mainnet and testnet), not only base, because it only
+    depends on the address's own `rawBytes + hrp`.
+  - Structural construction/encoding only, same disclaimer as `Address.parse`: none of these
+    APIs prove an address exists on-chain, is owned, or is spendable, and they do not verify
+    that a credential hash is a real key/script hash.
+  - `:crypto` is not touched by this capability: hashing a derived public key into a
+    28-byte credential hash stays a two-call composition the caller performs directly
+    (`ExtendedPublicKey.publicKeyBytes()` → `Hashing.blake2b224(...)`).
 
 ## Out of scope
 
