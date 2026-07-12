@@ -573,28 +573,42 @@ Outcome:
   CIP-5 HRPs are intentionally outside `CardanoBech32`'s allowlist; `:core`'s `convertBits`
   stays `internal`, not widened for this).
 
-#### 1.6d Test-wallet fixture / Android checkpoint (unblocked on every target)
+#### 1.6d Test-wallet fixture / Android checkpoint — delivered
 
-- A fixture built exclusively from the cited public vector (`test walk nut …`),
-  labeled test-only. No real funds, no real mnemonics.
-- Playground: `:shared` gains a project dependency on `:crypto` (no new
-  external dependency). Shows **only publicly derived metadata**: the CIP-1852 path used, the
-  Blake2b-224 fingerprint of the derived public key (via the existing `Hashing`, which must
-  match the CIP-19 payment credential fixed in 1.5b), and the typed
-  success/error state. **No** raw public key or hex is shown unless a later plan
-  justifies it; nothing about private bytes, seed, or words. Addresses are
-  part of the 1.7 checkpoint.
-- **1.6d's Android checkpoint is now fully unblocked.** 1.6c-follow-up (ADR-0010) verified
-  `KeyDerivation.derivePrivate` on real Android runtime; 1.6c-follow-up-2 (ADR-0010) then
-  verified `KeyDerivation.publicKey` there too, so the fingerprint-display step no longer
-  needs to be scoped out on Android. 1.7 is still not started or unblocked by this: address
-  generation has not run its own target-verification gate.
+- A fixture (`TestWalletFixture`, `:shared` `playground` package) built exclusively from the
+  cited public vector (`test walk nut …`), labeled test-only. No real funds, no real
+  mnemonics.
+- Playground: `:shared` gained a project dependency on `:crypto` (no new external
+  dependency). The new "Test Wallet (derivation)" section shows **only publicly derived
+  metadata**: the CIP-1852 path used (`m/1852'/1815'/0'/0/0`), the Blake2b-224 fingerprint of
+  the derived public key (via the existing `Hashing`, matching the CIP-19 payment credential
+  fixed in 1.5b), whether it matches the cited golden vector, and the typed success/error
+  state. **No** raw public key or hex is shown; nothing about private bytes, seed, or words.
+  Addresses remain part of the 1.7 checkpoint.
+- **1.6d's Android checkpoint is fully unblocked and delivered.** 1.6c-follow-up (ADR-0010)
+  verified `KeyDerivation.derivePrivate` on real Android runtime; 1.6c-follow-up-2 (ADR-0010)
+  then verified `KeyDerivation.publicKey` there too, so the fingerprint-display step needed no
+  Android scope-out. 1.7 is still not started or unblocked by this: address generation has not
+  run its own target-verification gate.
+- Test split: `shared/commonTest`'s `PlaygroundWalletPresenterTest` covers error mapping, path
+  formatting, and mnemonic-parsing failures that stop before any native call (safe under
+  `:shared:testAndroidHostTest`, where `:crypto`'s native backend cannot load); the end-to-end
+  fingerprint golden check lives only in `shared/jvmTest`'s
+  `PlaygroundWalletDerivationDesktopTest`. Android runtime coverage for the native path stays
+  `:crypto:connectedAndroidDeviceTest` (already exercises the same path/fingerprint) plus the
+  manual Android Playground checkpoint below.
 
-Android checkpoint (1.6d):
+Android checkpoint (1.6d) — confirmed on real Android runtime (API 36 and API 24 emulators,
+via `adb`-driven UI interaction: install, launch, scroll to the section, tap, screenshot):
 
-- Restore the fixture test wallet and see the derivation path + Blake2b-224
-  fingerprint matching the cited vector; invalid mnemonic input -> typed error
-  without crash.
+- Tapping "Restore test wallet & derive" renders `Path: m/1852'/1815'/0'/0/0`,
+  `Fingerprint (Blake2b-224): 9493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e`,
+  `Matches cited vector: yes` — on both runtimes. No crash, no ANR (checked via `logcat`), and
+  no noticeable freeze on API 24 (the oldest supported runtime): the result rendered within
+  roughly 500–750 ms of the tap.
+- Invalid-mnemonic input has no dedicated UI trigger in this block (per plan: the primary flow
+  has no mnemonic text field); that path is covered by `presentTestWalletWithWords` in
+  `PlaygroundWalletPresenterTest` instead.
 
 ### 1.7 Address Generation
 
@@ -758,5 +772,7 @@ public-key-projection gap that opened**: `KeyDerivation.publicKey` now delegates
 Android native library, which lacks the needed symbol), verified on real Android runtime — a
 physical device plus API 24/36 emulators — reproducing the cited `addr_xvk` golden and the
 CIP-19 payment credential. Full write-up: ADR-0009 "Block 1.6c gate result" and ADR-0010.
-`1.6d`'s Android checkpoint is now fully unblocked: both `derivePrivate` and `publicKey` are
-verified on real Android runtime. There is no wallet, tx, or signing yet.
+`1.6d` (test-wallet fixture + Android checkpoint) is delivered on top of that: `:shared` gained
+a `:crypto` dependency and a Playground section restoring the cited test-only mnemonic,
+deriving `m/1852'/1815'/0'/0/0`, and displaying only its CIP-1852 path and Blake2b-224
+fingerprint. There is no wallet, tx, or signing yet; addresses remain 1.7.

@@ -881,11 +881,20 @@ Proposed block sequence:
     values on JVM (`:crypto:jvmTest`) and on real Android runtime
     (`:crypto:connectedAndroidDeviceTest`, both derivation and projection). Full write-up:
     ADR-0009 "Block 1.6c gate result" and ADR-0010.
-  - `1.6d` test-wallet fixture + Android checkpoint (derived public metadata only: path,
-    Blake2b-224 fingerprint, typed state; no raw/hex public key; addresses belong to 1.7)
-    — **now fully unblocked on Android**: both `derivePrivate` and `publicKey` are verified
-    on real Android runtime (ADR-0010), so its Android path-derivation/error-state work and
-    its fingerprint-display step can both proceed.
+  - `1.6d` test-wallet fixture + Android checkpoint — **delivered.** `:shared` gained a
+    project dependency on `:crypto` (no new external dependency) and a "Test Wallet
+    (derivation)" Playground section: `TestWalletFixture` restores the cited test-only
+    mnemonic, `PlaygroundPresenter.presentTestWallet()` derives `m/1852'/1815'/0'/0/0`,
+    projects the public key, and computes its Blake2b-224 fingerprint — displaying only the
+    path, the fingerprint, whether it matches the cited golden, and typed state; no raw/hex
+    public key; addresses belong to 1.7. `PlaygroundWalletPresenterTest` (`commonTest`) covers
+    error mapping/path formatting/invalid-mnemonic rejection without any native call (safe
+    under `testAndroidHostTest`); `PlaygroundWalletDerivationDesktopTest` (`jvmTest`) is the
+    only end-to-end fingerprint golden check. Android runtime coverage for the native path
+    stays `:crypto:connectedAndroidDeviceTest`; the Android Playground checkpoint itself was
+    confirmed via `adb`-driven UI interaction on the API 36 and API 24 emulators (path,
+    fingerprint, and "matches cited vector: yes" all render, no crash/ANR, no noticeable
+    freeze on API 24).
 - `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
   `Address.parse`.
 - `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance.

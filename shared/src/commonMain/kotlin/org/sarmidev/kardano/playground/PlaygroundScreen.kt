@@ -32,17 +32,21 @@ import org.sarmidev.kardano.provider.blockfrost.BlockfrostChainQueryProvider
 import org.sarmidev.kardano.provider.blockfrost.BlockfrostConfig
 
 /**
- * The SDK Playground screen: a diagnostic surface for visually verifying existing `:core`
- * SDK behavior on Android (Block 1.2).
+ * The SDK Playground screen: a diagnostic surface for visually verifying existing `:core` and
+ * `:crypto` SDK behavior on Android (Blocks 1.2, 1.3, and 1.6d).
  *
  * Covers [Address.parse] with typed [org.sarmidev.kardano.address.AddressError] display,
- * a Hex decoder, a CBOR decoder, and a read-only Provider section. The provider section
- * defaults to the in-memory mock ([InMemoryChainQueryProvider], fake/test-only, no network);
- * a "Use live Blockfrost (preprod)" toggle switches to a live
+ * a Hex decoder, a CBOR decoder, a test-wallet derivation checkpoint, and a read-only Provider
+ * section. The test-wallet section restores [TestWalletFixture]'s cited test-only mnemonic and
+ * shows only the resulting CIP-1852 path and Blake2b-224 fingerprint — never the mnemonic,
+ * seed, or any raw key bytes; all derivation, public-key projection, and hashing logic is
+ * `:crypto`'s, called through [KeyDerivation]/[Hashing] and formatted here, not reimplemented.
+ * The provider section defaults to the in-memory mock ([InMemoryChainQueryProvider],
+ * fake/test-only, no network); a "Use live Blockfrost (preprod)" toggle switches to a live
  * [BlockfrostChainQueryProvider] built from a runtime `project_id`. That key is held only in
  * non-persistent Compose state (never stored or logged) and live calls hit real preprod (test
  * funds). This is sample/diagnostic code in `:shared` and is not part of the SDK public API.
- * No wallet, crypto, or transaction logic.
+ * No signing, address generation, wallet persistence, or transaction logic.
  */
 @Composable
 internal fun PlaygroundScreen() {
@@ -56,6 +60,8 @@ internal fun PlaygroundScreen() {
 
     var cborInput by remember { mutableStateOf("") }
     var cborResult by remember { mutableStateOf<CborPresentation?>(null) }
+
+    var walletResult by remember { mutableStateOf<WalletPresentation>(WalletPresentation.Empty) }
 
     val mockProvider = remember { InMemoryChainQueryProvider() }
     var providerAddressInput by remember {
@@ -181,6 +187,25 @@ internal fun PlaygroundScreen() {
             Text("Decode")
         }
         cborResult?.let { CborResultCard(it) }
+
+        // --- Test Wallet (derivation checkpoint, Block 1.6d) ---
+        HorizontalDivider()
+        Text("Test Wallet (derivation)", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Restores a test-only wallet from a public cited vector. No real funds, " +
+                "no real mnemonic. Shows only the derivation path and the Blake2b-224 " +
+                "fingerprint of the derived public key — never the mnemonic, seed, or any " +
+                "raw key bytes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = { walletResult = PlaygroundPresenter.presentTestWallet() },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Restore test wallet & derive")
+        }
+        WalletResultCard(walletResult)
 
         // --- Provider (read-only: mock or live Blockfrost) ---
         HorizontalDivider()
@@ -311,6 +336,26 @@ private fun CborResultCard(presentation: CborPresentation) {
             }
         }
         is CborPresentation.Failure -> ErrorCard(presentation.message)
+    }
+}
+
+@Composable
+private fun WalletResultCard(presentation: WalletPresentation) {
+    when (presentation) {
+        is WalletPresentation.Empty -> Unit
+        is WalletPresentation.Success -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                presentation.rows.forEach { row -> ResultRow(row.label, row.value) }
+                ResultRow(
+                    "Matches cited vector",
+                    if (presentation.fingerprintMatchesVector) "yes" else "no",
+                )
+            }
+        }
+        is WalletPresentation.Failure -> ErrorCard(presentation.message)
     }
 }
 

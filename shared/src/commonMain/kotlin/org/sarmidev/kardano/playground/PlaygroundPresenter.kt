@@ -3,6 +3,15 @@ package org.sarmidev.kardano.playground
 import org.sarmidev.kardano.KardanoResult
 import org.sarmidev.kardano.address.Address
 import org.sarmidev.kardano.address.AddressError
+import org.sarmidev.kardano.crypto.CryptoError
+import org.sarmidev.kardano.crypto.ExtendedPrivateKey
+import org.sarmidev.kardano.crypto.ExtendedPublicKey
+import org.sarmidev.kardano.crypto.Hashing
+import org.sarmidev.kardano.crypto.IcarusMasterKey
+import org.sarmidev.kardano.crypto.KeyDerivation
+import org.sarmidev.kardano.crypto.KeyDerivationError
+import org.sarmidev.kardano.crypto.Mnemonic
+import org.sarmidev.kardano.crypto.MnemonicError
 import org.sarmidev.kardano.encoding.cbor.Cbor
 import org.sarmidev.kardano.encoding.cbor.CborError
 import org.sarmidev.kardano.encoding.hex.Hex
@@ -37,6 +46,22 @@ internal sealed interface HexPresentation {
 internal sealed interface CborPresentation {
     data class Success(val summary: String, val roundTripOk: Boolean) : CborPresentation
     data class Failure(val message: String) : CborPresentation
+}
+
+/**
+ * Result of presenting the test-wallet derivation checkpoint ([TestWalletFixture]).
+ *
+ * Carries only public metadata: the CIP-1852 path and the Blake2b-224 fingerprint of the
+ * derived public key. Never the mnemonic, entropy, seed, root/private key bytes, or the raw
+ * 32-byte public key.
+ */
+internal sealed interface WalletPresentation {
+    data object Empty : WalletPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val fingerprintMatchesVector: Boolean,
+    ) : WalletPresentation
+    data class Failure(val message: String) : WalletPresentation
 }
 
 /** Result of presenting a [ChainQueryProvider.getUtxos] call (mock or live provider). */
@@ -202,6 +227,102 @@ internal object PlaygroundPresenter {
     }
 
     private fun presentCborError(error: CborError): String = error.toString()
+
+    // --- Test wallet (derivation checkpoint, Block 1.6d) ---
+
+    /**
+     * Restores [TestWalletFixture]'s cited test-only mnemonic, derives [TestWalletFixture.path],
+     * projects the public key, and computes its Blake2b-224 fingerprint — displaying only that
+     * public metadata.
+     *
+     * Delegates entirely to `:crypto` ([Mnemonic], [IcarusMasterKey], [KeyDerivation],
+     * [Hashing]); this presenter does not reimplement or duplicate any derivation or hashing
+     * logic. Never surfaces the mnemonic, entropy, seed, root/private key bytes, or the raw
+     * 32-byte public key — only the path string and the fingerprint hex.
+     */
+    fun presentTestWallet(): WalletPresentation = presentTestWalletWithWords(TestWalletFixture.words)
+
+    /**
+     * Same chain as [presentTestWallet], but over an arbitrary [words] list instead of the
+     * fixture's cited mnemonic. Exists so invalid-input handling can be exercised (including in
+     * tests) without changing [TestWalletFixture] itself. [Mnemonic.parse] runs first and
+     * rejects malformed input before any native derivation call is reached.
+     */
+    fun presentTestWalletWithWords(words: List<String>): WalletPresentation {
+        val mnemonic = when (val result = Mnemonic.parse(words)) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err -> return WalletPresentation.Failure(presentMnemonicError(result.error))
+        }
+        var master: IcarusMasterKey? = null
+        var privateKey: ExtendedPrivateKey? = null
+        var publicKey: ExtendedPublicKey? = null
+        try {
+            master = when (val result = IcarusMasterKey.fromMnemonic(mnemonic)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return WalletPresentation.Failure(presentKeyDerivationError(result.error))
+            }
+            val derivation = KeyDerivation.default()
+            privateKey = when (val result = derivation.derivePrivate(master, TestWalletFixture.path)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return WalletPresentation.Failure(presentKeyDerivationError(result.error))
+            }
+            publicKey = when (val result = derivation.publicKey(privateKey)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return WalletPresentation.Failure(presentKeyDerivationError(result.error))
+            }
+            val fingerprint = when (
+                val result = Hashing.default().blake2b224(publicKey.publicKeyBytes())
+            ) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return WalletPresentation.Failure(presentCryptoError(result.error))
+            }
+            val fingerprintHex = Hex.encode(fingerprint.toByteArray())
+            val rows = listOf(
+                LabeledRow("Path", TestWalletFixture.path.toString()),
+                LabeledRow("Fingerprint (Blake2b-224)", fingerprintHex),
+            )
+            return WalletPresentation.Success(
+                rows = rows,
+                fingerprintMatchesVector = fingerprintHex == TestWalletFixture.GOLDEN_FINGERPRINT_HEX,
+            )
+        } finally {
+            mnemonic.clear()
+            master?.clear()
+            privateKey?.clear()
+            publicKey?.clear()
+        }
+    }
+
+    /** Maps a [MnemonicError] to a human-readable single-line message. */
+    internal fun presentMnemonicError(error: MnemonicError): String = when (error) {
+        is MnemonicError.InvalidWordCount -> "Invalid word count: ${error.count}"
+        is MnemonicError.WordNotInWordlist -> "Word not in wordlist at position ${error.position}"
+        is MnemonicError.ChecksumMismatch -> "Mnemonic checksum mismatch"
+        is MnemonicError.InvalidCharacters -> "Invalid characters at word position ${error.position}"
+        is MnemonicError.InputTooLong ->
+            "Mnemonic phrase too long: ${error.actual} chars (max ${error.max})"
+    }
+
+    /** Maps a [KeyDerivationError] to a human-readable single-line message. */
+    internal fun presentKeyDerivationError(error: KeyDerivationError): String = when (error) {
+        is KeyDerivationError.InvalidKeyMaterial ->
+            "Invalid key material: expected ${error.expectedBytes}B, got ${error.actualBytes}B"
+        is KeyDerivationError.IndexOutOfRange -> "Derivation index out of range: ${error.value}"
+        is KeyDerivationError.SoftDerivationRequired -> "Soft derivation required for this index"
+        is KeyDerivationError.DerivationFailed -> "Derivation failed: ${error.message}"
+        is KeyDerivationError.PublicKeyProjectionUnavailable ->
+            "Public-key projection is not available on this platform"
+    }
+
+    /** Maps a [CryptoError] to a human-readable single-line message. */
+    internal fun presentCryptoError(error: CryptoError): String = when (error) {
+        is CryptoError.HashingFailed -> "Hashing failed: ${error.message}"
+        is CryptoError.InvalidDigestLength ->
+            "Invalid digest length: expected ${error.expected}B, got ${error.actual}B"
+    }
 
     // --- Provider (read-only; provider-agnostic: mock or live) ---
 

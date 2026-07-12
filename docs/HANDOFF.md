@@ -81,7 +81,11 @@ Current phase:
   `ExtendedPublicKey`/`KeyDerivation.derivePrivate`/`KeyDerivation.publicKey`) both work on
   JVM, real Android runtime, and iOS compile/link (resolved across the 1.6c-follow-up and
   1.6c-follow-up-2 sessions, ADR-0010, after 1.6c's own gate had found Android derivation
-  blocked and no public-key primitive available at all)** — see below). Block 1.5b created
+  blocked and no public-key primitive available at all)**; **1.6d (test-wallet fixture +
+  Android Playground checkpoint) is now delivered** on top of that — `:shared` gained a
+  `:crypto` dependency and a "Test Wallet (derivation)" Playground section showing only the
+  CIP-1852 path and Blake2b-224 fingerprint of a restored test-only mnemonic — see below).
+  Block 1.5b created
   the `:crypto` KMP module and wired Blake2b-224/256 behind the backend-neutral `Hashing`
   interface. It found that Apollo 1.8.8 ships no Blake2b (verified in `apollo-jvm-1.8.8.jar`
   and source tags `v1.7.2`–`v1.8.7`), so the hashing-only backend is KotlinCrypto
@@ -137,7 +141,12 @@ Current phase:
   are implemented and pass the cited `IntersectMBO/cardano-addresses` golden vectors on JVM
   and on real Android runtime, for both derivation and projection. iOS **compiles and links**
   for both; iOS runtime execution of the vectors remains future work (same posture as 1.6b).
-  **1.6d's Android checkpoint, including its fingerprint-display step, is unblocked.**
+  **1.6d (test-wallet fixture + Android Playground checkpoint) is delivered on top of this:**
+  `:shared` gained a project dependency on `:crypto` and a "Test Wallet (derivation)"
+  Playground section (`TestWalletFixture`, `PlaygroundPresenter.presentTestWallet()`,
+  `WalletResultCard`) restoring the same cited test-only mnemonic, deriving
+  `m/1852'/1815'/0'/0/0`, and showing only the path, the Blake2b-224 fingerprint, whether it
+  matches the cited golden, and typed state — never the mnemonic, seed, or any raw key bytes.
   Phase 0 - Core Foundation closed below for reference.
 
 Block status:
@@ -510,6 +519,89 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-12
+
+Summary:
+
+- **Block 1.6d (test-wallet fixture + Android Playground checkpoint) — delivered.** `:shared`
+  gained a project dependency on `:crypto` (no new external dependency; verified first as its
+  own gate: `:shared:compileKotlinIosSimulatorArm64`/`compileKotlinIosArm64`,
+  `:androidApp:assembleDebug`, and `:desktopApp:compileKotlin` all still pass with the
+  transitive native backends now bundled — no AGP duplicate-class or packaging regressions).
+  New `playground/TestWalletFixture.kt` (`internal object`) holds the same cited test-only
+  12-word mnemonic (`test walk nut …`) `:crypto`'s own `KeyDerivationVectorsTest`/
+  `PublicKeyProjectionDeviceTest` already cite, and the fixed path `m/1852'/1815'/0'/0/0`
+  (`Cip1852Path.of(0, EXTERNAL, 0)`) — never a real mnemonic, never real funds.
+- **Presenter chain, all sample-only code in `:shared`, no `:crypto` API change.**
+  `PlaygroundPresenter.presentTestWallet()` runs `Mnemonic.parse` ->
+  `IcarusMasterKey.fromMnemonic` -> `KeyDerivation.derivePrivate` -> `KeyDerivation.publicKey`
+  -> `Hashing.blake2b224`, returning a new `WalletPresentation` sealed type that carries only
+  the CIP-1852 path string, the Blake2b-224 fingerprint hex, and whether it matches the cited
+  golden — never the mnemonic, entropy, seed, root/private key bytes, or the raw 32-byte public
+  key. In a `finally`, calls `.clear()` only on the handles that expose it (`Mnemonic`,
+  `IcarusMasterKey`, `ExtendedPrivateKey`, `ExtendedPublicKey`); `HashDigest` has no `clear()`
+  and is treated as a public digest, not key material. New exhaustive
+  `presentMnemonicError`/`presentKeyDerivationError`/`presentCryptoError` mappers (same
+  direct-construction-testable pattern as the existing `presentAddressError`). A
+  `presentTestWalletWithWords(words)` seam lets invalid-input handling be exercised without
+  touching `TestWalletFixture`.
+- **UI:** one new synchronous "Test Wallet (derivation)" Playground section (button ->
+  `presentTestWallet()`, same pattern as the Address/Hex/CBOR sections — no `LaunchedEffect`
+  needed since the whole chain returns `KardanoResult` today) plus a `WalletResultCard`. No
+  freeze observed manually on the same devices used for 1.6c-follow-up-2's checkpoints; if a
+  future manual pass on an older/slower device disagrees, the plan called for switching to the
+  existing request-token + `Loading` pattern instead.
+- **Test split, enforced by construction, not just convention:**
+  `shared/commonTest`'s new `PlaygroundWalletPresenterTest` (16 cases; runs under
+  `:shared:testAndroidHostTest` too) covers only error-mapping variants (constructed directly),
+  `TestWalletFixture.path`'s string form, and two invalid-mnemonic inputs that `Mnemonic.parse`
+  rejects before any native call is reached — it never calls `presentTestWallet()`. The single
+  end-to-end fingerprint golden check lives only in `shared/jvmTest`'s new
+  `PlaygroundWalletDerivationDesktopTest`, asserting the path and the fingerprint hex
+  `9493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e` (= the CIP-19 payment credential
+  already pinned in 1.5b and reproduced end to end by `:crypto`'s
+  `PublicKeyProjectionDeviceTest`). Android-runtime coverage of the native path itself is not
+  re-implemented in `:shared`; it stays `:crypto:connectedAndroidDeviceTest` plus the manual
+  Android Playground checkpoint (below).
+- Tests run this session: `:shared:jvmTest` (all pass, including the new golden test);
+  `:shared:testAndroidHostTest` (all pass, 16/16 on the new native-free presenter test);
+  `:shared:compileKotlinIosSimulatorArm64`/`compileKotlinIosArm64` (pass);
+  `:desktopApp:compileKotlin` (pass); `:androidApp:assembleDebug` (pass; native `.so`s for
+  `libsodium`/`libuniffi_ed25519_bip32_wrapper` package correctly, matching the 1.6c-follow-up-2
+  finding); lints clean on every new/edited file.
+- Files changed this session: `shared/build.gradle.kts` (added `implementation(projects.crypto)`
+  to `commonMain`); `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/`:
+  `TestWalletFixture.kt` (new), `PlaygroundPresenter.kt` (added `WalletPresentation` +
+  `presentTestWallet`/`presentTestWalletWithWords` + three error mappers),
+  `PlaygroundScreen.kt` (new section, `WalletResultCard`, reworded top KDoc to cover the
+  `:crypto` checkpoint without implying SDK core logic lives in `:shared`);
+  `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletPresenterTest.kt`
+  (new); `shared/src/jvmTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletDerivationDesktopTest.kt`
+  (new); `shared/README.md`, `docs/PHASE_1_PLAN.md`, `docs/ROADMAP.md`, this file. No ADR
+  added or amended (no new dependency, no new decision beyond ADR-0010's already-recorded
+  ones).
+
+- **Android Playground checkpoint confirmed this session**, driven via `adb` (install, launch,
+  scroll, `uiautomator dump` for exact button bounds, tap, screenshot) rather than left for a
+  separate manual pass: on both the API 36 and API 24 emulators, tapping "Restore test wallet &
+  derive" rendered `Path: m/1852'/1815'/0'/0/0`, `Fingerprint (Blake2b-224):
+  9493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e`, `Matches cited vector: yes`, with
+  no crash/ANR (`logcat` checked) and no noticeable freeze on API 24 (result rendered within
+  roughly 500–750 ms of the tap). The connected physical device (`SM-A356B`) was left untouched
+  for this UI pass since it is PIN-locked; its native derivation/projection path is already
+  covered by this session's `:crypto:connectedAndroidDeviceTest` run (12/12 passing across all
+  three runtimes, physical device included).
+
+Next recommended task:
+
+- **Block 1.7 (address generation)** is the natural next step — not started, has not run its
+  own dependency/target-verification gate.
+- iOS runtime execution of vectors (derivation, projection, and now this checkpoint's chain)
+  remains future work, same posture as every prior block.
+- No commit was made this session unless the project owner explicitly requests one.
+
+### Session Summary (1.6c-follow-up-2)
 
 Date: 2026-07-12
 
