@@ -89,6 +89,33 @@ now work on JVM, real Android runtime, and iOS compile/link.**
 All operations return `KardanoResult` and never throw, which keeps the API compatible with
 Swift/ObjC interop.
 
+## Package layout
+
+Pre-1.7 cleanup ([ADR-0011](../docs/DECISIONS/0011-phase-1-architecture-standards.md))
+reorganized this module's previously flat `org.sarmidev.kardano.crypto` package into
+thematic sub-packages, mirroring what [ADR-0003](../docs/DECISIONS/0003-core-package-structure.md)
+did for `:core` before Block 0.7. No behavior changed; only packages/imports did.
+
+- `org.sarmidev.kardano.crypto.hashing` — `Hashing`, `Blake2bHashing`, `HashDigest`,
+  `CryptoError`.
+- `org.sarmidev.kardano.crypto.mnemonic` — `Mnemonic`, `MnemonicError`,
+  `Bip39EnglishWordlist`.
+- `org.sarmidev.kardano.crypto.derivation` — `KeyDerivation`, `KeyDerivationError`,
+  `Bip32Ed25519KeyDerivation`, `Cip1852Path`, `IcarusMasterKey`, `ExtendedPrivateKey`,
+  `ExtendedPublicKey`.
+- `org.sarmidev.kardano.crypto.internal.pbkdf2` — the `pbkdf2HmacSha512` platform seam
+  (`expect` + JVM/Android/iOS `actual`s).
+- `org.sarmidev.kardano.crypto.internal.projection` — the `projectPublicKey` platform seam
+  (`expect` + JVM/Android/iOS `actual`s).
+
+The two `internal.*` sub-packages hold `internal expect`/`actual` platform seams only —
+implementation detail, never part of this module's public API — kept out of the public
+`derivation` package so that package reads as API surface only. All five sub-packages stay
+in this one Gradle module, so `internal`-visible members (e.g. `HashDigest.of()`, the two
+seam functions, opaque-type internal constructors) remain callable across sub-packages
+without being widened to `public`; splitting into separate modules would force that
+(same reasoning as ADR-0003 §Rationale).
+
 ## Scope
 
 - **Hashing (1.5b), mnemonic/Icarus-master-key derivation (1.6b), and CIP-1852 private and

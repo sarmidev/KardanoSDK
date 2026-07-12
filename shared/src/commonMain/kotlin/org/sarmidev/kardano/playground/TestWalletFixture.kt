@@ -1,8 +1,8 @@
 package org.sarmidev.kardano.playground
 
 import org.sarmidev.kardano.KardanoResult
-import org.sarmidev.kardano.crypto.Cip1852Path
-import org.sarmidev.kardano.crypto.Cip1852Role
+import org.sarmidev.kardano.crypto.derivation.Cip1852Path
+import org.sarmidev.kardano.crypto.derivation.Cip1852Role
 
 /**
  * A **test-only** fixture wallet for the Playground's derivation checkpoint (Block 1.6d).

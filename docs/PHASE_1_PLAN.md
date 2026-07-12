@@ -610,6 +610,37 @@ via `adb`-driven UI interaction: install, launch, scroll to the section, tap, sc
   has no mnemonic text field); that path is covered by `presentTestWalletWithWords` in
   `PlaygroundWalletPresenterTest` instead.
 
+### Pre-1.7 Architecture Cleanup
+
+Docs-and-package-only microblock, no behavior change, done before starting 1.7 code.
+Recorded in [ADR-0011](DECISIONS/0011-phase-1-architecture-standards.md):
+
+- Reorganized `:crypto`'s flat `org.sarmidev.kardano.crypto` package into
+  `hashing`/`mnemonic`/`derivation` (public) plus `internal.pbkdf2`/`internal.projection`
+  (the two platform seams), mirroring what ADR-0003 did for `:core` before Block 0.7.
+  `:shared`'s imports (`PlaygroundPresenter`, `TestWalletFixture`, playground tests) updated
+  in the same change. Verified: `:crypto:compileKotlinJvm`, `:crypto:jvmTest`,
+  `:crypto:testAndroidHostTest`, `:shared:jvmTest`,
+  `:crypto:compileKotlinIosSimulatorArm64` + `:crypto:linkDebugTestIosSimulatorArm64` all
+  pass unchanged.
+- Fixed Block 1.7's ownership split ahead of any 1.7 code: `:core` owns address
+  assembly/encoding (and must design a minimal public factory/encoding API — the current
+  `Address`/`AddressCredential` types are parse-oriented, not assumed generation-ready);
+  `:crypto` may own a narrow public-key-to-credential-hash helper only if useful; `:shared`
+  owns no SDK logic. No `:wallet` module at 1.7 — see the note below.
+- Refreshed `.cursor/rules/kardano-sdk-guardrails.mdc` and
+  `.cursor/rules/kotlin-tests-and-docs.mdc` (rules-only): the Phase 0 rule no longer claims
+  crypto is docs-only, and the testing rule
+  now lists the BIP-39/CIP-3/CIP-1852 vector sources and Android/iOS runtime-testing
+  guidance Block 1.6 already established in practice.
+
+**`:wallet` extraction trigger, cross-linked:** ADR-0009 §1 records the trigger as "the
+first block that composes derivation with non-crypto concerns — account/address
+orchestration, wallet state, or persistence." ADR-0011 §2 confirms Block 1.7 (a pure
+function over already-derived keys) does not fire that trigger; it fires at **Block 1.8**
+below, which is the first block holding wallet state composed with a provider query.
+Re-evaluate `:wallet` there, not before.
+
 ### 1.7 Address Generation
 
 Generate Shelley addresses from derived keys.

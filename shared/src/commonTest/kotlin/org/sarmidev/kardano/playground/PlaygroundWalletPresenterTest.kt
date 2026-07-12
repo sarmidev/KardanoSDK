@@ -1,8 +1,8 @@
 package org.sarmidev.kardano.playground
 
-import org.sarmidev.kardano.crypto.CryptoError
-import org.sarmidev.kardano.crypto.KeyDerivationError
-import org.sarmidev.kardano.crypto.MnemonicError
+import org.sarmidev.kardano.crypto.derivation.KeyDerivationError
+import org.sarmidev.kardano.crypto.hashing.CryptoError
+import org.sarmidev.kardano.crypto.mnemonic.MnemonicError
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

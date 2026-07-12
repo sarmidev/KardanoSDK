@@ -524,6 +524,63 @@ Date: 2026-07-12
 
 Summary:
 
+- **Pre-1.7 architecture cleanup — delivered.** Docs-and-package-only microblock, no
+  behavior change, no Gradle change, no dependency change; full write-up:
+  [ADR-0011](DECISIONS/0011-phase-1-architecture-standards.md).
+  - Reorganized `:crypto`'s previously flat `org.sarmidev.kardano.crypto` package into
+    `hashing`/`mnemonic`/`derivation` (public) plus `internal.pbkdf2`/`internal.projection`
+    (the two platform seams), moved as `git mv` across every source set
+    (`commonMain`/`commonTest`/`jvmMain`/`jvmTest`/`androidMain`/`androidDeviceTest`/
+    `iosArm64Main`/`iosSimulatorArm64Main`), mirroring what ADR-0003 did for `:core` before
+    Block 0.7. `:shared`'s imports (`PlaygroundPresenter.kt`, `TestWalletFixture.kt`,
+    `PlaygroundWalletPresenterTest.kt`) updated in the same change. A stale KDoc link,
+    `[PublicKeyProjection]` (the old file name, never an actual symbol), was fixed in
+    `Bip32Ed25519KeyDerivation.kt` (now `[projectPublicKey]`, which resolves) and reworded to
+    plain text in `PublicKeyProjectionDeviceTest.kt`.
+  - Fixed Block 1.7's ownership split ahead of any 1.7 code (ADR-0011 §2): `:core` owns
+    address assembly/encoding and must design a new minimal public factory/encoding API
+    (the current `Address`/`AddressCredential` types are parse-oriented, not assumed
+    generation-ready); `:crypto` may own a narrow public-key-to-credential-hash helper only
+    if useful; `:shared` owns no SDK logic. No `:wallet` module at 1.7 — the ADR-0009 §1
+    extraction trigger (derivation composed with wallet state/orchestration) fires at
+    Block 1.8, not 1.7.
+  - Refreshed `.cursor/rules/kardano-sdk-guardrails.mdc` (crypto is no longer described as
+    docs-only; the transaction-signing hard rule now states it stays disallowed unless a
+    future explicit block/ADR updates and scopes it, rather than reading as a bare permanent
+    ban) and `.cursor/rules/kotlin-tests-and-docs.mdc` (added the BIP-39/CIP-3/CIP-1852
+    vector sources and an Android/iOS runtime-testing-guidance section).
+  - Verified: `:crypto:compileKotlinJvm`, `:shared:compileKotlinJvm`, `:crypto:jvmTest`,
+    `:crypto:testAndroidHostTest`, `:shared:jvmTest`,
+    `:crypto:compileKotlinIosSimulatorArm64` + `:crypto:linkDebugTestIosSimulatorArm64`, and
+    a repo-wide `compileKotlinJvm` all pass unchanged; lints clean on every touched file; no
+    stale flat-package imports or `[PublicKeyProjection]` KDoc links remain anywhere in the
+    repo.
+  - Files changed: `crypto/src/**` (37 files moved + package/import updates),
+    `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenter.kt`,
+    `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/TestWalletFixture.kt`,
+    `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletPresenterTest.kt`,
+    `crypto/README.md`, `docs/PHASE_1_PLAN.md`, `docs/DECISIONS/0011-phase-1-architecture-standards.md`
+    (new), `.cursor/rules/kardano-sdk-guardrails.mdc`, `.cursor/rules/kotlin-tests-and-docs.mdc`,
+    this file. No Gradle file touched (Android namespaces and cinterop package names are
+    unchanged).
+  - **Follow-up in the same session:** the Cursor rule file itself (previously named after
+    Phase 0 alone) was renamed to `kardano-sdk-guardrails.mdc` via `git mv` (rule
+    content/behavior unchanged — the new name no longer implies Phase-0-only scope now that
+    Phase 1 crypto and provider code are real). All doc references to the prior filename in
+    this file, `docs/PHASE_1_PLAN.md`, and ADR-0011 were updated to match.
+
+Next recommended task:
+
+- **Block 1.7 (address generation)** per the ownership split ADR-0011 §2 now records —
+  starting with the address-encoding/roundtrip ADR that ADR-0005 §6 flags as a prerequisite.
+- No commit was made this session unless the project owner explicitly requests one.
+
+### Session Summary (1.6d test-wallet fixture + Android Playground checkpoint)
+
+Date: 2026-07-12
+
+Summary:
+
 - **Block 1.6d (test-wallet fixture + Android Playground checkpoint) — delivered.** `:shared`
   gained a project dependency on `:crypto` (no new external dependency; verified first as its
   own gate: `:shared:compileKotlinIosSimulatorArm64`/`compileKotlinIosArm64`,
