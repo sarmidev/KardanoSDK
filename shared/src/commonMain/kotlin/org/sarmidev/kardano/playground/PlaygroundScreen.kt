@@ -32,21 +32,25 @@ import org.sarmidev.kardano.provider.blockfrost.BlockfrostChainQueryProvider
 import org.sarmidev.kardano.provider.blockfrost.BlockfrostConfig
 
 /**
- * The SDK Playground screen: a diagnostic surface for visually verifying existing `:core` and
- * `:crypto` SDK behavior on Android (Blocks 1.2, 1.3, and 1.6d).
+ * The SDK Playground screen: a diagnostic surface for visually verifying existing `:core`,
+ * `:crypto`, and `:wallet` SDK behavior on Android (Blocks 1.2, 1.3, 1.6d, 1.7b, and 1.8b).
  *
  * Covers [Address.parse] with typed [org.sarmidev.kardano.address.AddressError] display,
- * a Hex decoder, a CBOR decoder, a test-wallet derivation checkpoint, and a read-only Provider
- * section. The test-wallet section restores [TestWalletFixture]'s cited test-only mnemonic and
- * shows only the resulting CIP-1852 path and Blake2b-224 fingerprint — never the mnemonic,
- * seed, or any raw key bytes; all derivation, public-key projection, and hashing logic is
- * `:crypto`'s, called through [KeyDerivation]/[Hashing] and formatted here, not reimplemented.
- * The provider section defaults to the in-memory mock ([InMemoryChainQueryProvider],
- * fake/test-only, no network); a "Use live Blockfrost (preprod)" toggle switches to a live
- * [BlockfrostChainQueryProvider] built from a runtime `project_id`. That key is held only in
- * non-persistent Compose state (never stored or logged) and live calls hit real preprod (test
- * funds). This is sample/diagnostic code in `:shared` and is not part of the SDK public API.
- * No signing, address generation, wallet persistence, or transaction logic.
+ * a Hex decoder, a CBOR decoder, a test-wallet derivation + address-generation checkpoint, a
+ * read-only Provider section, and a read-only Wallet Balance checkpoint. The test-wallet
+ * section restores [TestWalletFixture]'s cited test-only mnemonic and shows only the resulting
+ * CIP-1852 paths, Blake2b-224 credential hashes, and generated address — never the mnemonic,
+ * seed, or any raw key bytes; all derivation, public-key projection, hashing, and
+ * address-encoding logic is `:crypto`'s/`:core`'s, called through [KeyDerivation]/[Hashing]/
+ * [Address] and formatted here, not reimplemented. The Wallet Balance section restores the same
+ * fixture through `:wallet`'s `ReadOnlyWallet.restore` (always `Network.TESTNET`) and queries
+ * whichever provider is currently active for that wallet's balance; a zero balance under the
+ * mock is the expected result, not a failure. The provider section defaults to the in-memory
+ * mock ([InMemoryChainQueryProvider], fake/test-only, no network); a "Use live Blockfrost
+ * (preprod)" toggle switches to a live [BlockfrostChainQueryProvider] built from a runtime
+ * `project_id`. That key is held only in non-persistent Compose state (never stored or logged)
+ * and live calls hit real preprod (test funds). This is sample/diagnostic code in `:shared` and
+ * is not part of the SDK public API. No signing, wallet persistence, or transaction logic.
  */
 @Composable
 internal fun PlaygroundScreen() {
@@ -88,6 +92,11 @@ internal fun PlaygroundScreen() {
     }
     var paramsRequest by remember { mutableStateOf(0) }
 
+    var walletBalanceResult by remember {
+        mutableStateOf<WalletBalancePresentation>(WalletBalancePresentation.Empty)
+    }
+    var walletBalanceRequest by remember { mutableStateOf(0) }
+
     // One-shot suspend loads triggered by incrementing a request token. Using LaunchedEffect
     // keeps the screen dependent only on the Compose runtime (no extra coroutine artifact).
     // The effect reads the currently active provider (mock or live) at launch.
@@ -100,6 +109,14 @@ internal fun PlaygroundScreen() {
         if (paramsRequest == 0) return@LaunchedEffect
         paramsResult = ProviderParamsPresentation.Loading
         paramsResult = PlaygroundPresenter.presentProviderParams(activeProvider)
+    }
+    // Restores TestWalletFixture's cited test-only mnemonic (always Network.TESTNET — Phase 1
+    // never constructs a mainnet wallet here) and queries whichever provider is currently
+    // active (mock or live), same request-token pattern as the Provider section above.
+    LaunchedEffect(walletBalanceRequest) {
+        if (walletBalanceRequest == 0) return@LaunchedEffect
+        walletBalanceResult = WalletBalancePresentation.Loading
+        walletBalanceResult = PlaygroundPresenter.presentWalletBalance(activeProvider)
     }
 
     Column(
@@ -287,6 +304,30 @@ internal fun PlaygroundScreen() {
             Text("Load protocol params")
         }
         ProviderParamsCard(paramsResult)
+
+        // --- Wallet Balance (read-only; Block 1.8b) ---
+        HorizontalDivider()
+        Text("Wallet Balance (read-only)", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Restores the same test-only wallet as above (always testnet) and queries " +
+                "the provider selected in the Provider section for its balance — no signing, " +
+                "no transaction logic. Mock provider data is fake/test-only: it has no fake " +
+                "UTxOs seeded for this generated address, so it normally shows 0 UTxOs / 0 " +
+                "lovelace here, which is the expected mock result, not a failure. Live " +
+                "Blockfrost preprod can show a non-zero balance only after this address is " +
+                "funded with test ADA from a preprod faucet. Shows only the generated address, " +
+                "UTxO count, and balance in lovelace — never the mnemonic, seed, or any " +
+                "private/raw key bytes.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = { walletBalanceRequest += 1 },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Query wallet balance")
+        }
+        WalletBalanceCard(walletBalanceResult)
     }
 }
 
@@ -421,6 +462,29 @@ private fun ProviderParamsCard(presentation: ProviderParamsPresentation) {
             }
         }
         is ProviderParamsPresentation.Failure -> ErrorCard(presentation.message)
+    }
+}
+
+@Composable
+private fun WalletBalanceCard(presentation: WalletBalancePresentation) {
+    when (presentation) {
+        is WalletBalancePresentation.Empty -> Unit
+        is WalletBalancePresentation.Loading -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Loading…",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        is WalletBalancePresentation.Success -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                presentation.rows.forEach { row -> ResultRow(row.label, row.value) }
+            }
+        }
+        is WalletBalancePresentation.Failure -> ErrorCard(presentation.message)
     }
 }
 

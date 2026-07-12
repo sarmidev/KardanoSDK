@@ -5,15 +5,15 @@ builds the iOS `Shared` framework that the Xcode app consumes.
 
 ## Status
 
-Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
+Phase 1 — pre-alpha, experimental. Not for real funds.
 
 ## Role today
 
 - Hosts the SDK Playground (`playground/PlaygroundScreen.kt`, `playground/PlaygroundPresenter.kt`),
-  introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core`/`:crypto`
-  SDK behavior (address parsing, Hex, CBOR, test-wallet derivation + address generation) and,
-  from Block 1.3a, a read-only "Provider" section (mock by default, with an optional
-  live-Blockfrost toggle added in Block 1.3b).
+  introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core`/
+  `:crypto`/`:wallet` SDK behavior (address parsing, Hex, CBOR, test-wallet derivation + address
+  generation, read-only wallet balance) and, from Block 1.3a, a read-only "Provider" section
+  (mock by default, with an optional live-Blockfrost toggle added in Block 1.3b).
 - Hosts `App.kt` (theme wrapper that renders `PlaygroundScreen`) and the iOS UI entry point
   (`MainViewController.kt`).
 - Retains the sample glue (`Greeting.kt`, `GreetingUtil.kt`) used by `PlaygroundScreen` to
@@ -22,8 +22,11 @@ Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
   `Address.toBech32()`, `AddressCredential`, `Hex`, `Cbor`, `Platform`), on `:crypto` for the
   test-wallet derivation checkpoint (`Mnemonic`, `IcarusMasterKey`, `KeyDerivation`, `Hashing`
   — see "Test Wallet & Address Generation" below), on `:provider` for the read-only query
-  boundary (`ChainQueryProvider`) and its in-memory mock, and on `:provider-blockfrost` for the
-  live Blockfrost provider.
+  boundary (`ChainQueryProvider`) and its in-memory mock, on `:provider-blockfrost` for the
+  live Blockfrost provider, and, from Block 1.8b, on `:wallet` for the read-only wallet-balance
+  checkpoint (`ReadOnlyWallet`, `WalletBalance`, `WalletError` — see "Wallet Balance" below).
+- Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
+  `iosApp` via `MainViewControllerKt.MainViewController()`.
 
 ### Test Wallet & Address Generation section (Block 1.6d, extended by Block 1.7b)
 
@@ -67,15 +70,33 @@ is never stored, saved, or logged — and live calls hit the real preprod networ
 No key is committed to the repo. See
 [docs/DECISIONS/0006-provider-boundary-and-strategy.md](../docs/DECISIONS/0006-provider-boundary-and-strategy.md)
 and [docs/DECISIONS/0007-http-client-and-blockfrost-provider.md](../docs/DECISIONS/0007-http-client-and-blockfrost-provider.md).
-- Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
-  `iosApp` via `MainViewControllerKt.MainViewController()`.
 
-**SDK logic and the protocol/cryptographic test-vector suites belong in `:core`/`:crypto`, not
-here.** `:shared` only calls `:core`/`:crypto` APIs and formats/displays results.
-`PlaygroundPresenter` is a display-only mapping layer with no protocol or cryptographic rules
-of its own — it does not reimplement derivation, projection, or hashing. `:shared` tests use a
-minimum of cited CIP-19/CIP-1852 vectors to verify presenter wiring, but do not replicate the
-`:core`/`:crypto` test-vector suites.
+### Wallet Balance section (Block 1.8b)
+
+The "Wallet Balance (read-only)" section restores the same `TestWalletFixture` mnemonic as the
+Test Wallet section above, but through `:wallet`'s `ReadOnlyWallet.restore(TestWalletFixture.words,
+Network.TESTNET)` — always `Network.TESTNET`; that call site, not `ReadOnlyWallet.restore`
+itself, is what enforces the Phase 1 no-mainnet boundary here (`ReadOnlyWallet.restore` is
+generic over `Network`, see [docs/DECISIONS/0013-wallet-boundary-and-read-only-state.md](../docs/DECISIONS/0013-wallet-boundary-and-read-only-state.md)
+§3). It then queries whichever `ChainQueryProvider` is currently selected in the Provider
+section above (mock or live) via `wallet.balance(provider)` and displays only the generated
+`addr_test1...` address, the UTxO count, and the balance in lovelace — never the mnemonic,
+seed, entropy, or any private/raw key bytes. `:shared` reimplements none of mnemonic parsing,
+derivation, hashing, address generation, or balance summation; all of that logic belongs to
+`:wallet`/`:crypto`/`:core`, and `PlaygroundPresenter.presentWalletBalance` only calls it and
+formats the result. A zero balance/UTxO count under the default `InMemoryChainQueryProvider` is
+the expected, honest result (ADR-0013 §7) — that provider has no fake UTxOs seeded for this
+generated address — and is displayed as a normal success, not an error; a live Blockfrost
+preprod provider can show a non-zero balance only after the generated address is funded with
+test ADA from a preprod faucet.
+
+**SDK logic and the protocol/cryptographic test-vector suites belong in `:core`/`:crypto`/
+`:wallet`, not here.** `:shared` only calls `:core`/`:crypto`/`:provider`/`:wallet` APIs and
+formats/displays results. `PlaygroundPresenter` is a display-only mapping layer with no
+protocol or cryptographic rules of its own — it does not reimplement derivation, projection,
+hashing, address generation, or balance summation. `:shared` tests use a minimum of cited
+CIP-19/CIP-1852 vectors to verify presenter wiring, but do not replicate the `:core`/`:crypto`/
+`:wallet` test-vector suites.
 
 ## Why it still contains UI
 
@@ -98,8 +119,8 @@ project. See [docs/DECISIONS/0002-module-structure.md](../docs/DECISIONS/0002-mo
 
 `:shared` carries example tests in `commonTest`, `jvmTest`, `androidHostTest`, and `iosTest`
 that demonstrate the wiring per target. The protocol/cryptographic test-vector suites and
-SDK-logic tests belong in `:core`/`:crypto`; `:shared` uses only a minimum of cited CIP-19/
-CIP-1852 vectors for presenter-wiring verification. The test-wallet + address-generation
+SDK-logic tests belong in `:core`/`:crypto`/`:wallet`; `:shared` uses only a minimum of cited
+CIP-19/CIP-1852 vectors for presenter-wiring verification. The test-wallet + address-generation
 checkpoint's `commonTest` coverage (`PlaygroundWalletPresenterTest`) is deliberately
 native-free — it covers only error mapping, path formatting, and mnemonic-parsing failures
 that are rejected before any native derivation call, because `:crypto`'s native backend
@@ -107,8 +128,14 @@ cannot load under the Android host-JVM target (`androidHostTest`); the end-to-en
 fingerprint/address golden check (`PlaygroundWalletDerivationDesktopTest`) lives only in
 `jvmTest`, where the native backend does load — it asserts the cited golden payment
 credential and a structural generate-then-parse round trip, never a self-generated address
-pinned as if it were an external vector. See [docs/TESTING.md](../docs/TESTING.md) for the
-testing strategy and test-vector policy.
+pinned as if it were an external vector. The wallet-balance checkpoint follows the same split:
+`PlaygroundWalletBalancePresenterTest` (`commonTest`) is native-free, feeding constructed
+`WalletBalance`/`WalletError` values and a `Address.parse`-derived address into
+`mapWalletBalanceResult`/`presentWalletError` directly; `PlaygroundWalletBalanceDesktopTest`
+(`jvmTest`-only) is the only place `presentWalletBalance` and `ReadOnlyWallet.restore` run end
+to end together, asserting the honest zero balance under the default mock and that the
+checkpoint's own restore call uses `Network.TESTNET`. See [docs/TESTING.md](../docs/TESTING.md)
+for the testing strategy and test-vector policy.
 
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host tests: `./gradlew :shared:testAndroidHostTest`

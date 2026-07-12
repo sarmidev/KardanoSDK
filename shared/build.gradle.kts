@@ -45,6 +45,7 @@ kotlin {
             implementation(projects.crypto)
             implementation(projects.provider)
             implementation(projects.providerBlockfrost)
+            implementation(projects.wallet)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -56,6 +57,9 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+        }
+        jvmTest.dependencies {
+            implementation(libs.kotlinx.coroutinesTest)
         }
     }
 }

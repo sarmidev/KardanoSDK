@@ -799,11 +799,46 @@ Outcome:
 
 #### 1.8b `:shared` Android checkpoint
 
-Status: pending.
+Status: complete.
 
-Outcome: not started. Will wire `ReadOnlyWallet.restore(...)`/`balance(...)` into the
-Playground (new `WalletBalancePresentation` display type, "Query balance" manual-refresh
-button, honest zero-under-mock copy per ADR-0013 §7) and update `shared/README.md`.
+Outcome:
+
+- Added `:wallet` as a `:shared` `commonMain` dependency (no `:provider-blockfrost` dependency
+  added to `:wallet` itself). No other Gradle module changed.
+- New "Wallet Balance (read-only)" section in the Playground, wired through a new
+  `PlaygroundPresenter.presentWalletBalance(provider)`: restores `TestWalletFixture`'s cited
+  mnemonic via `:wallet`'s `ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)`
+  (always testnet — the Phase 1 no-mainnet boundary is enforced by this call site, not by
+  `ReadOnlyWallet.restore` itself, ADR-0013 §3), then queries whichever `ChainQueryProvider` is
+  currently active (mock or live) via `wallet.balance(provider)`. `:shared` reimplements none
+  of mnemonic parsing, derivation, hashing, address generation, or balance summation — all of
+  it is `:wallet`'s.
+- New `WalletBalancePresentation` (`Empty`/`Loading`/`Success(rows)`/`Failure(message)`,
+  mirroring `ProviderUtxosPresentation`'s shape) and `PlaygroundPresenter.presentWalletError`
+  map every `WalletError` variant, delegating to the existing `presentMnemonicError`/
+  `presentKeyDerivationError`/`presentCryptoError`/`presentAddressError`/`presentProviderError`
+  for the five wrapped variants and adding one message for `WalletError.BalanceOverflow`. A
+  non-suspend, `internal` `mapWalletBalanceResult(address, result)` keeps the formatting logic
+  unit-testable without native crypto, same pattern as `mapUtxosResult`/`mapParamsResult`.
+- The screen shows only the generated `addr_test1...` address, UTxO count, and balance in
+  lovelace (no existing lovelace→ADA formatting pattern existed anywhere in `:shared`, so none
+  was invented — kept lovelace-only per the plan's fallback). A zero balance/UTxO count under
+  the default mock is rendered as a normal `Success`, not a `Failure`, with explanatory copy
+  that the mock has no fake UTxOs seeded for this address and that live preprod needs the
+  address funded from a faucet first. Uses the same request-token + `LaunchedEffect` pattern as
+  the existing Provider section's "Load UTxOs"/"Load protocol params" buttons.
+- Tests: `PlaygroundWalletBalancePresenterTest` (commonTest, native-free — feeds constructed
+  `WalletBalance`/`WalletError` values plus a `Address.parse`-derived address, covering the
+  zero-balance-is-success case and every `WalletError` variant's message delegation).
+  `PlaygroundWalletBalanceDesktopTest` (jvmTest, JVM-only — the only place
+  `presentWalletBalance` and `ReadOnlyWallet.restore` are exercised end to end together, since
+  `restore` reaches `:crypto`'s native backend) asserts the default in-memory mock's honest
+  zero balance and that the checkpoint's own `restore` call uses `Network.TESTNET`.
+- Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+  `:shared:compileKotlinIosSimulatorArm64`, `:wallet:jvmTest`, `:wallet:testAndroidHostTest`,
+  `:androidApp:assembleDebug` all pass; lints clean on every touched file; no banned words or
+  mnemonic/seed/private/raw-key exposure found; `:wallet` still depends on `:core`/`:crypto`/
+  `:provider` only.
 
 ### 1.9 Transaction Builder Minimal
 

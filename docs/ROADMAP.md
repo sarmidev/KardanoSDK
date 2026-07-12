@@ -971,7 +971,29 @@ Proposed block sequence:
     `:wallet:compileKotlinIosArm64`, `:core:jvmTest` (regression); `:core`/`:crypto`/
     `:provider` sources unchanged; lints clean; no banned words or mnemonic/seed/private/
     raw-key exposure found.
-  - `1.8b` `:shared` Android checkpoint — **Status: pending.**
+  - `1.8b` `:shared` Android checkpoint — **Status: complete.** Outcome: added `:wallet` as a
+    `:shared` `commonMain` dependency (no other Gradle module changed; `:wallet` still depends
+    on `:core`/`:crypto`/`:provider` only). New "Wallet Balance (read-only)" Playground section
+    calls `PlaygroundPresenter.presentWalletBalance(provider)`, which restores
+    `TestWalletFixture`'s cited mnemonic via `ReadOnlyWallet.restore(TestWalletFixture.words,
+    Network.TESTNET)` (always testnet, per the Phase 1 no-mainnet boundary — ADR-0013 §3) and
+    queries whichever `ChainQueryProvider` is currently active (mock or live) via
+    `wallet.balance(provider)`; `:shared` reimplements none of mnemonic parsing, derivation,
+    hashing, address generation, or balance summation. New `WalletBalancePresentation`
+    (`Empty`/`Loading`/`Success`/`Failure`) and `presentWalletError` (delegating to the
+    existing per-type error presenters, plus one message for `WalletError.BalanceOverflow`).
+    Displays only the generated `addr_test1...` address, UTxO count, and balance in lovelace
+    (no existing lovelace→ADA formatting pattern existed in `:shared`, so none was added); a
+    zero balance/UTxO count under the default mock renders as a normal success with
+    explanatory copy, per ADR-0013 §7, not as a failure. 6 new commonTest cases
+    (`PlaygroundWalletBalancePresenterTest`, native-free — zero-balance-is-success, every
+    `WalletError` variant's message delegation) plus 2 new jvmTest cases
+    (`PlaygroundWalletBalanceDesktopTest` — the only place `presentWalletBalance`/
+    `ReadOnlyWallet.restore` run end to end together, asserting the honest zero balance and the
+    `Network.TESTNET` restore call). Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+    `:shared:compileKotlinIosSimulatorArm64`, `:wallet:jvmTest`, `:wallet:testAndroidHostTest`,
+    `:androidApp:assembleDebug`; lints clean; no banned words or mnemonic/seed/private/raw-key
+    exposure found.
 - `1.9` Transaction Builder Minimal — build a simple ADA transaction draft.
 - `1.10` Transaction Signing — sign a testnet/preprod transaction locally.
 - `1.11` Submit Transaction — submit a signed transaction to preprod.

@@ -22,6 +22,9 @@ import org.sarmidev.kardano.provider.ChainQueryProvider
 import org.sarmidev.kardano.provider.ProtocolParameters
 import org.sarmidev.kardano.provider.ProviderError
 import org.sarmidev.kardano.provider.Utxo
+import org.sarmidev.kardano.wallet.ReadOnlyWallet
+import org.sarmidev.kardano.wallet.WalletBalance
+import org.sarmidev.kardano.wallet.WalletError
 
 // ---------------------------------------------------------------------------
 // Display models — pure data, no Compose imports
@@ -85,16 +88,35 @@ internal sealed interface ProviderParamsPresentation {
     data class Failure(val message: String) : ProviderParamsPresentation
 }
 
+/**
+ * Result of presenting the read-only wallet-balance checkpoint ([ReadOnlyWallet], Block 1.8b).
+ *
+ * Carries only public metadata: the generated `addr_test1...` address, the queried UTxO
+ * count, and the summed balance in lovelace. Never the mnemonic, entropy, seed, root/private
+ * key bytes, or a raw public key. A zero balance/UTxO count is a normal [Success], not a
+ * failure — the default in-memory mock provider has no fake UTxOs seeded for the generated
+ * wallet address (ADR-0013 §7), so it is expected to show `0`.
+ */
+internal sealed interface WalletBalancePresentation {
+    data object Empty : WalletBalancePresentation
+    data object Loading : WalletBalancePresentation
+    data class Success(val rows: List<LabeledRow>) : WalletBalancePresentation
+    data class Failure(val message: String) : WalletBalancePresentation
+}
+
 // ---------------------------------------------------------------------------
 // Presenter — maps :core results to display models; no SDK logic of its own
 // ---------------------------------------------------------------------------
 
 /**
- * Maps results from `:core` APIs to [AddressPresentation], [HexPresentation], and
- * [CborPresentation] for display in [PlaygroundScreen].
+ * Maps results from `:core`, `:crypto`, `:provider`, and `:wallet` APIs to [AddressPresentation],
+ * [HexPresentation], [CborPresentation], [WalletPresentation], [ProviderUtxosPresentation],
+ * [ProviderParamsPresentation], and [WalletBalancePresentation] for display in
+ * [PlaygroundScreen].
  *
  * This object only formats and labels results. It never re-parses, re-validates, or
- * reimplements any protocol rule. All structural-validation semantics come from `:core`.
+ * reimplements any protocol rule, derivation, hashing, address-generation, or balance-summation
+ * logic. All of that semantics comes from `:core`/`:crypto`/`:provider`/`:wallet`.
  *
  * This is sample/diagnostic code in `:shared`. It is not part of the SDK public API.
  */
@@ -477,6 +499,69 @@ internal object PlaygroundPresenter {
         is ProviderError.NetworkMismatch ->
             "Network mismatch: provider=${error.expected.name}, address=${error.actual.name}"
         is ProviderError.Unknown -> "Unknown provider error"
+    }
+
+    // --- Wallet balance (read-only; Block 1.8b) ---
+
+    /**
+     * Restores [TestWalletFixture]'s cited test-only mnemonic through
+     * [ReadOnlyWallet.restore], always with [Network.TESTNET] — this checkpoint never
+     * constructs, displays, or restores a mainnet wallet (Phase 1 no-mainnet boundary,
+     * ADR-0005 §7) — then queries [provider] for that wallet's balance.
+     *
+     * Delegates entirely to `:wallet` ([ReadOnlyWallet]); this presenter does not reimplement
+     * mnemonic parsing, key derivation, hashing, address generation, or balance summation —
+     * it only formats the result. Provider-agnostic: the caller decides whether [provider] is
+     * the in-memory mock (fake/test-only, and expected to show a zero balance for this
+     * generated address per ADR-0013 §7) or a live provider (for example Blockfrost preprod,
+     * which can show a non-zero balance only after the generated address is funded from a
+     * preprod faucet).
+     */
+    suspend fun presentWalletBalance(provider: ChainQueryProvider): WalletBalancePresentation {
+        val wallet = when (val result = ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err -> return WalletBalancePresentation.Failure(presentWalletError(result.error))
+        }
+        return mapWalletBalanceResult(wallet.address, wallet.balance(provider))
+    }
+
+    /**
+     * Maps a raw [ReadOnlyWallet.balance] result (for [address]) to a
+     * [WalletBalancePresentation]. Non-suspend and `internal` so it can be unit-tested by
+     * constructing a [WalletBalance] or [WalletError] directly, without restoring a mnemonic
+     * or reaching native cryptography.
+     */
+    internal fun mapWalletBalanceResult(
+        address: Address,
+        result: KardanoResult<WalletBalance, WalletError>,
+    ): WalletBalancePresentation = when (result) {
+        is KardanoResult.Ok -> WalletBalancePresentation.Success(walletBalanceRows(address, result.value))
+        is KardanoResult.Err -> WalletBalancePresentation.Failure(presentWalletError(result.error))
+    }
+
+    private fun walletBalanceRows(address: Address, balance: WalletBalance): List<LabeledRow> = listOf(
+        LabeledRow("Address", address.toBech32()),
+        LabeledRow("UTxO count", balance.utxoCount.toString()),
+        LabeledRow("Balance", "${balance.coin.value} lovelace"),
+    )
+
+    /**
+     * Maps a [WalletError] to a human-readable single-line message, delegating to the
+     * existing per-error-type presenters ([presentMnemonicError], [presentKeyDerivationError],
+     * [presentCryptoError], [presentAddressError], [presentProviderError]) for every wrapped
+     * variant, so no formatting logic is duplicated. [WalletError.BalanceOverflow] is the one
+     * variant `:wallet` owns itself.
+     *
+     * Internal so tests can exercise all variants by constructing them directly.
+     */
+    internal fun presentWalletError(error: WalletError): String = when (error) {
+        is WalletError.Mnemonic -> presentMnemonicError(error.error)
+        is WalletError.Derivation -> presentKeyDerivationError(error.error)
+        is WalletError.Hashing -> presentCryptoError(error.error)
+        is WalletError.AddressBuild -> presentAddressError(error.error)
+        is WalletError.Provider -> presentProviderError(error.error)
+        is WalletError.BalanceOverflow ->
+            "Balance overflow after summing ${error.partialCount} UTxO(s)"
     }
 
     // --- Helpers ---

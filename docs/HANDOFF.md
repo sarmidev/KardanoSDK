@@ -520,6 +520,83 @@ At the end of each session, update this section.
 
 ### Last Session Summary
 
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.8b (`:shared` Android checkpoint) — delivered.** Wires `:wallet` into the
+  Playground; `:core`/`:crypto`/`:provider`/`:wallet` sources untouched — only `:shared` code,
+  its Gradle file, and docs changed.
+  - `shared/build.gradle.kts`: added `implementation(projects.wallet)` to `commonMain`
+    dependencies, and a new `jvmTest.dependencies { implementation(libs.kotlinx.coroutinesTest) }`
+    block (needed for the new `runTest`-based JVM end-to-end test below). No other Gradle file
+    touched; `:wallet` still depends on `:core`/`:crypto`/`:provider` only.
+  - New "Wallet Balance (read-only)" Playground section and
+    `PlaygroundPresenter.presentWalletBalance(provider: ChainQueryProvider):
+    WalletBalancePresentation`: restores `TestWalletFixture`'s cited mnemonic via
+    `ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)` — always
+    `Network.TESTNET`; `ReadOnlyWallet.restore` itself stays generic over `Network` (ADR-0013
+    §3), so this call site is what enforces the Phase 1 no-mainnet boundary — then queries
+    whichever `ChainQueryProvider` is currently active (mock or live, from the existing
+    Provider-section toggle) via `wallet.balance(provider)`. `:shared` reimplements none of
+    mnemonic parsing, derivation, hashing, address generation, or balance summation.
+  - New `WalletBalancePresentation` (`Empty`/`Loading`/`Success(rows)`/`Failure(message)`,
+    mirroring `ProviderUtxosPresentation`'s shape) and `presentWalletError(WalletError): String`,
+    which delegates to the existing `presentMnemonicError`/`presentKeyDerivationError`/
+    `presentCryptoError`/`presentAddressError`/`presentProviderError` for the five wrapped
+    `WalletError` variants and adds one message for `WalletError.BalanceOverflow`
+    (`partialCount`). A non-suspend, `internal mapWalletBalanceResult(address, result)` keeps
+    the Success/Failure formatting unit-testable without native crypto, matching the existing
+    `mapUtxosResult`/`mapParamsResult` pattern.
+  - Display rows: generated `addr_test1...` address (`wallet.address.toBech32()`), UTxO count,
+    and balance in lovelace. No lovelace→ADA formatting pattern existed anywhere in `:shared`
+    (checked before implementing), so none was added — kept lovelace-only per the plan's
+    documented fallback. A zero balance/UTxO count under the default
+    `InMemoryChainQueryProvider` renders as a normal `Success`, not a `Failure`, with
+    explanatory screen copy (mock has no fake UTxOs seeded for this address; live preprod needs
+    the address funded from a faucet first) — matching ADR-0013 §7's honest-zero-balance
+    policy; the mock's default seed data was **not** changed.
+  - `PlaygroundScreen`: new "Wallet Balance (read-only)" section with a "Query wallet balance"
+    button, using the same request-token + `LaunchedEffect` pattern as the existing "Load
+    UTxOs"/"Load protocol params" buttons and reading the same `activeProvider` the Provider
+    section already selects.
+  - Tests: `PlaygroundWalletBalancePresenterTest` (`commonTest`, 8 tests, native-free — feeds
+    constructed `WalletBalance`/`WalletError` values plus an `Address.parse`-derived address
+    into `mapWalletBalanceResult`/`presentWalletError` directly, covering the
+    zero-balance-is-success case and every `WalletError` variant's message delegation; runs
+    under `testAndroidHostTest`, where `:crypto`'s native backend cannot load).
+    `PlaygroundWalletBalanceDesktopTest` (`jvmTest`-only, 2 tests — the only place
+    `presentWalletBalance`/`ReadOnlyWallet.restore` run end to end together): asserts the
+    default in-memory mock's honest zero balance for the `addr_test1`-prefixed generated
+    address, and that the checkpoint's own `restore` call uses `Network.TESTNET`.
+  - Docs: `docs/PHASE_1_PLAN.md` and `docs/ROADMAP.md` §1.8b marked complete with outcome;
+    `shared/README.md` gained a "Wallet Balance section (Block 1.8b)" subsection plus updated
+    "Role today"/"Testing" text; this file.
+  - Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+    `:shared:compileKotlinIosSimulatorArm64`, `:wallet:jvmTest`, `:wallet:testAndroidHostTest`,
+    `:androidApp:assembleDebug` all pass; lints clean on every touched file; no banned words or
+    mnemonic/seed/private/raw-key exposure found; confirmed `:wallet` still does not depend on
+    `:provider-blockfrost`; confirmed the checkpoint's `restore` call passes `Network.TESTNET`.
+  - Files changed: `shared/build.gradle.kts`;
+    `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/PlaygroundPresenter.kt`,
+    `PlaygroundScreen.kt`;
+    `shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletBalancePresenterTest.kt`
+    (new);
+    `shared/src/jvmTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletBalanceDesktopTest.kt`
+    (new); `docs/PHASE_1_PLAN.md`; `docs/ROADMAP.md`; `shared/README.md`; this file. No `:core`,
+    `:crypto`, `:provider`, or `:wallet` source file touched.
+
+Next recommended task:
+
+- **Block 1.9** (Transaction Builder Minimal): select inputs, create the destination output,
+  compute change and fee, and generate the transaction body/CBOR needed for future signing —
+  see `docs/PHASE_1_PLAN.md` §1.9 for the full objective. This is the first block that touches
+  transaction structure; expect a planning pass (and likely a new ADR) before implementation,
+  consistent with how Blocks 1.7 and 1.8 were each planned before their `a`/`b` split.
+- No commit was made this session unless the project owner explicitly requests one.
+
+### Session Summary (1.8a implementation)
+
 Date: 2026-07-12
 
 Summary:
