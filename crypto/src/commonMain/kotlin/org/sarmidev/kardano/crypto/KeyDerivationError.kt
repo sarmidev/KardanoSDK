@@ -42,4 +42,15 @@ public sealed interface KeyDerivationError {
      *   bytes, or mnemonic words.
      */
     public data class DerivationFailed(public val message: String) : KeyDerivationError
+
+    /**
+     * Public-key projection ([KeyDerivation.publicKey]) is not available on the current
+     * platform.
+     *
+     * 1.6c-follow-up gate result (ADR-0010): this currently applies to Android — the verified
+     * projection backend's published Android native library does not export the required
+     * symbols, unlike its JVM and iOS builds. Private-key derivation ([KeyDerivation.derivePrivate])
+     * is unaffected and works on every target including Android.
+     */
+    public data object PublicKeyProjectionUnavailable : KeyDerivationError
 }

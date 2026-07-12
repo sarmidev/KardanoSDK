@@ -30,6 +30,20 @@ public class ExtendedPrivateKey private constructor(xsk: ByteArray, chainCode: B
     internal fun xskBytesForTesting(): ByteArray = xsk.copyOf() + chainCode.copyOf()
 
     /**
+     * Returns the left 32-byte scalar (`kL`) of the extended private key, and a defensive copy
+     * of the 32-byte chain code, for public-key projection.
+     *
+     * Module-internal: the only caller is [KeyDerivation.publicKey]'s backend adapter. This
+     * does not widen the "no public private-key byte accessor" rule (ADR-0009 §7) — `kL` never
+     * leaves the module.
+     *
+     * @return a fresh copy of the 32-byte left scalar, and a fresh copy of the 32-byte chain
+     *   code.
+     */
+    internal fun leftScalarAndChainCode(): Pair<ByteArray, ByteArray> =
+        xsk.copyOfRange(0, 32) to chainCode.copyOf()
+
+    /**
      * Best-effort wipe of the retained key bytes.
      *
      * This zeroes this instance's backing arrays, but gives no guarantee about compiler,

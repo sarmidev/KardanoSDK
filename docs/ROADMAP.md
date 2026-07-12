@@ -48,20 +48,22 @@ Current priority:
 > iOS compile targets pass** (`:crypto:compileKotlinIosSimulatorArm64` and
 > `:crypto:compileKotlinIosArm64`). **iOS runtime execution of the vectors is still future
 > verification** — no iOS-simulator/device test run has exercised this binding. **Block
-> 1.6c is narrowed to private derivation only and is JVM-verified + iOS compile/link
-> verified; Android derivation is blocked, not merely unverified.** Its gate closed with two
-> blockers, both resolved by an explicit decision rather than an ADR-0008 §4 fallback — the
-> pinned `dev.allain:bip32-ed25519:2.3.0` backend has no primitive to derive a public key
-> from a private key (deferred to a follow-up block, alongside `ExtendedPublicKey`/
-> `publicKey()`/`addr_xvk`), and the published `bip32-ed25519-android` artifact ships no
-> native library, so `KeyDerivation.derivePrivate` throws a confirmed
-> `UnsatisfiedLinkError` under `:crypto:testAndroidHostTest` — JVM is the only verified
-> target for this dependency; Android is blocked until a working native path exists.
-> `KeyDerivation.derivePrivate(...)`, `Cip1852Path`/`Cip1852Role`, and `ExtendedPrivateKey`
-> are implemented and pass the cited `IntersectMBO/cardano-addresses` golden vectors on JVM.
-> iOS **compile and link** both pass for this dependency (an actual test-binary link, not
-> just compile) — this closes the previously-unproven iOS link gap. Full write-up: ADR-0009
-> "Block 1.6c gate result".
+> 1.6c's original gate narrowed it to private derivation only** (ADR-0009); its follow-up
+> (ADR-0010) then **swapped the derivation backend's coordinate to
+> `org.hyperledger.identus:bip32-ed25519:1.8.8`** (identical wrapper API) and **verified
+> private derivation on a real Android emulator** — `KeyDerivation.derivePrivate` now works
+> on Android, JVM, and compiles/links on iOS; the earlier Android-derivation blocker is
+> resolved, not merely downgraded. The same follow-up added `ExtendedPublicKey` and
+> `KeyDerivation.publicKey(...)`, backed by libsodium's
+> `crypto_scalarmult_ed25519_base_noclamp`, verified byte-for-byte against the cited
+> `addr_xvk` goldens on JVM (iOS compile/link verified). **Android public-key projection is a
+> new, separate, open blocker**: the same real-emulator run reproduces a confirmed
+> `UnsatisfiedLinkError` for the projection call specifically — the published Android native
+> build of that backend is missing the required symbol (confirmed by static symbol
+> inspection), while the identical call succeeds on JVM/iOS. `KeyDerivation.publicKey`
+> returns a typed `PublicKeyProjectionUnavailable` error on Android instead of crashing
+> (also verified on-device); `derivePrivate` is unaffected. Full write-up: ADR-0009 "Block
+> 1.6c gate result" and ADR-0010.
 
 ## Phase 0 - Core Foundation
 
@@ -847,37 +849,44 @@ Proposed block sequence:
     errors versus the canonical `bitcoin/bips` source; regenerated and verified against a fresh
     download of the pinned commit, with a structural test guarding wordlist shape going
     forward.
-  - `1.6c` Ed25519-BIP32 + CIP-1852 derivation — **Status: narrowed to private derivation
-    only; JVM-verified + iOS compile/link verified; Android derivation is blocked, not
-    merely unverified.** The `To verify in 1.6c` gate closed with two blockers, both resolved
-    by an explicit scope/risk decision (not an ADR-0008 §4 fallback, since neither is a
-    dependency-selection failure in the ADR-0008 §4 sense): (1) no primitive in
-    `dev.allain:bip32-ed25519:2.3.0` derives a public key from a private key — narrows this
-    block to `KeyDerivation.derivePrivate(...)` only; `ExtendedPublicKey`/`publicKey()`/
-    `addr_xvk` are deferred to a follow-up block that makes its own dependency decision; (2)
-    the published `bip32-ed25519-android` AAR ships no native library (`unzip -l` shows only
-    `classes.jar`/manifest/`R.txt`, no `jni/<abi>/*.so`); calling `deriveBytes` (the function
-    `derivePrivate` calls) under `:crypto:testAndroidHostTest` produced a confirmed
-    `UnsatisfiedLinkError` — Android is a **blocked** target for this dependency (a
-    reproduced failure, not an absence of verification); JVM is the verified target.
-    Confirmed-passing: `deriveBytes`'s byte layout (`UInt` index, `{secret_key: 64B,
-    chain_code: 32B}` map) and V2-only scheme; iosSimulatorArm64/iosArm64 compile **and
-    link** (an actual test-binary link against the Rust static library, not just compile —
-    this closes the previously-unproven iOS link gap). Implemented `Cip1852Path`/
-    `Cip1852Role` (SDK-owned, `Long`-validated), `ExtendedPrivateKey` (opaque, no raw
-    accessor), and `KeyDerivation.derivePrivate(...)` (calls the wrapper directly from
-    `commonMain`, no platform seam needed). Tests pass the cited
-    `IntersectMBO/cardano-addresses` golden `root_xsk`/`acct_xsk`/`addr_xsk` values on JVM
-    (`:crypto:jvmTest`); moved out of `commonTest` specifically because
-    `:crypto:testAndroidHostTest` cannot load the backend. Full write-up: ADR-0009 "Block
-    1.6c gate result".
+  - `1.6c` Ed25519-BIP32 + CIP-1852 derivation — **Status: private derivation is
+    JVM/Android/iOS-compile-verified; public-key projection is implemented and verified for
+    JVM/iOS, unavailable on Android.** The original `To verify in 1.6c` gate (ADR-0009)
+    narrowed the block to private derivation only, with a confirmed `UnsatisfiedLinkError` on
+    Android host JVM for the pinned `dev.allain:bip32-ed25519:2.3.0` backend, and no
+    public-key-from-private-key primitive in that backend. A follow-up gate
+    ([ADR-0010](DECISIONS/0010-key-derivation-backend-swap-and-public-key-projection.md))
+    closed both, with a correction to the Android status: (1) **swapped the derivation
+    backend's coordinate** to `org.hyperledger.identus:bip32-ed25519:1.8.8` (identical
+    wrapper API — `deriveBytes`/`deriveBytesPub`/`fromNonextended`, `UInt` index, same map
+    keys) and **verified private derivation on a real Android emulator**
+    (`:crypto:connectedAndroidDeviceTest`, not host JVM) — this AAR ships the native `.so`
+    the prior republish omitted, resolving the Android-derivation blocker outright; (2)
+    **implemented `ExtendedPublicKey`/`KeyDerivation.publicKey(key)`**, backed by libsodium's
+    `crypto_scalarmult_ed25519_base_noclamp` over the derived key's left 32-byte scalar,
+    verified byte-for-byte against the cited `addr_xvk` goldens on JVM (iOS compile/link
+    verified) — **but on the same real Android emulator this backend's projection call
+    throws a confirmed `UnsatisfiedLinkError`**, root-caused by static symbol inspection to a
+    missing `crypto_scalarmult_ed25519_*`/`crypto_core_ed25519_*` symbol set in the published
+    Android native library for this specific dependency (present on its JVM/iOS builds).
+    **Android public-key projection is therefore a new, separate, open blocker — Android
+    derivation is not affected and works.** `KeyDerivation.publicKey` returns
+    `KeyDerivationError.PublicKeyProjectionUnavailable` on Android (verified on-device to
+    degrade gracefully, not crash) rather than calling the backend. Implemented
+    `Cip1852Path`/`Cip1852Role` (SDK-owned, `Long`-validated), `ExtendedPrivateKey`/
+    `ExtendedPublicKey` (opaque, no raw private-key accessor), and both `KeyDerivation`
+    methods. Tests pass the cited `IntersectMBO/cardano-addresses` golden
+    `root_xsk`/`acct_xsk`/`addr_xsk`/`addr_xvk` values on JVM (`:crypto:jvmTest`) and
+    `root_xsk`/`addr_xsk` on real Android runtime (`:crypto:connectedAndroidDeviceTest`).
+    Full write-up: ADR-0009 "Block 1.6c gate result" and ADR-0010.
   - `1.6d` test-wallet fixture + Android checkpoint (derived public metadata only: path,
     Blake2b-224 fingerprint, typed state; no raw/hex public key; addresses belong to 1.7)
-    — its non-Android path-derivation/error-state UI work can start now on 1.6c's
-    private-derivation path, but **both the fingerprint-display step and the Android
-    checkpoint itself stay blocked**: the former on the public-key-derivation follow-up block
-    opened by 1.6c's gate result, the latter because 1.6c's Android derivation path is
-    confirmed broken (`UnsatisfiedLinkError`), not merely unverified.
+    — its Android path-derivation/error-state UI work can now proceed against a
+    real-runtime-verified `derivePrivate` (ADR-0010), but **the fingerprint-display step
+    stays blocked on Android specifically**: it needs `KeyDerivation.publicKey(...)`, which
+    now works and is verified on JVM/iOS but returns `PublicKeyProjectionUnavailable` on
+    Android (ADR-0010). **1.6d's Android checkpoint as a whole is not unblocked** by the
+    1.6c-follow-up — only its non-fingerprint portion is.
 - `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
   `Address.parse`.
 - `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance.

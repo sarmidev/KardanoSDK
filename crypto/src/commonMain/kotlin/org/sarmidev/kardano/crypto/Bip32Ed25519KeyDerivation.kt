@@ -5,16 +5,17 @@ import uniffi.ed25519_bip32_wrapper.DerivationException
 import uniffi.ed25519_bip32_wrapper.deriveBytes
 
 /**
- * The default [KeyDerivation] implementation, backed by `dev.allain:bip32-ed25519:2.3.0`'s
- * `deriveBytes` (Ed25519-BIP32 V2/Icarus private child derivation).
+ * The default [KeyDerivation] implementation. Private derivation is backed by
+ * `org.hyperledger.identus:bip32-ed25519:1.8.8`'s `deriveBytes` (Ed25519-BIP32 V2/Icarus
+ * private child derivation); public-key projection is backed by [PublicKeyProjection] (a
+ * per-platform seam — see its doc for why, per the 1.6c-follow-up gate result / ADR-0010).
  *
  * This adapter is `internal`: the uniffi-generated wrapper types never appear in the public
  * API. Per the Block 1.6c gate result (ADR-0009 §4), the wrapper's `deriveBytes` function is
  * directly callable from `commonMain` on every target (no `expect`/`actual` seam needed), takes
  * the derivation index as a [UInt] (so a prime index is a plain `(offset + n).toUInt()`, never a
  * signed-`Int` bit-pattern trick), and returns exactly `{"secret_key": 64 bytes, "chain_code":
- * 32 bytes}` — there is no derived public key in the result, which is why this block has no
- * `publicKey()` method (see [KeyDerivation]).
+ * 32 bytes}`.
  */
 internal class Bip32Ed25519KeyDerivation : KeyDerivation {
 
@@ -61,6 +62,27 @@ internal class Bip32Ed25519KeyDerivation : KeyDerivation {
         sk.fill(0)
         chainCode.fill(0)
         return result
+    }
+
+    override fun publicKey(
+        key: ExtendedPrivateKey,
+    ): KardanoResult<ExtendedPublicKey, KeyDerivationError> {
+        val (leftScalar, chainCode) = key.leftScalarAndChainCode()
+        val projected = projectPublicKey(leftScalar)
+        leftScalar.fill(0)
+
+        return when (projected) {
+            is KardanoResult.Ok -> {
+                val result = ExtendedPublicKey.of(projected.value, chainCode)
+                projected.value.fill(0)
+                chainCode.fill(0)
+                result
+            }
+            is KardanoResult.Err -> {
+                chainCode.fill(0)
+                KardanoResult.Err(projected.error)
+            }
+        }
     }
 
     internal companion object {

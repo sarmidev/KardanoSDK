@@ -8,13 +8,16 @@ import org.sarmidev.kardano.KardanoResult
  * This interface names no cryptographic library: the concrete implementation is a swappable
  * adapter behind it, so consumers depend only on this SDK's types. It derives only along the
  * private (prime-and-soft) path from an [IcarusMasterKey] root to a full CIP-1852
- * `m/1852'/1815'/account'/role/index` leaf; it does not sign, generate addresses, or project a
- * private key to its public counterpart (ADR-0009 §4's Block 1.6c gate result: the pinned
- * `dev.allain:bip32-ed25519` backend has no such primitive — public-key derivation is deferred
- * to a follow-up block).
+ * `m/1852'/1815'/account'/role/index` leaf, and projects a derived private key to its public
+ * counterpart; it does not sign or generate addresses.
  *
  * Operations return [KardanoResult] and never throw, which keeps the API compatible with
  * Swift/ObjC interop (a thrown exception would crash iOS consumers).
+ *
+ * 1.6c-follow-up gate result (ADR-0010): [publicKey] is verified on JVM and iOS, but returns
+ * [KeyDerivationError.PublicKeyProjectionUnavailable] on Android — the verified projection
+ * backend's published Android native library is missing the required symbols.
+ * [derivePrivate] is unaffected and verified on every target including Android.
  *
  * @see <a href="https://github.com/cardano-foundation/CIPs/tree/master/CIP-1852">CIP-1852</a>
  */
@@ -36,6 +39,20 @@ public interface KeyDerivation {
         master: IcarusMasterKey,
         path: Cip1852Path,
     ): KardanoResult<ExtendedPrivateKey, KeyDerivationError>
+
+    /**
+     * Projects [key] to its [ExtendedPublicKey] counterpart.
+     *
+     * Computes `A = [kL] * B` (Ed25519 base-point scalar multiplication, noclamp, on the
+     * extended private key's left 32-byte scalar) and pairs it with the unchanged chain code.
+     *
+     * @param key the extended private key to project (see [derivePrivate]).
+     * @return [KardanoResult.Ok] with the projected [ExtendedPublicKey], or [KardanoResult.Err]
+     *   with [KeyDerivationError.PublicKeyProjectionUnavailable] if projection is not available
+     *   on this platform (currently: Android), or another [KeyDerivationError] if the backend
+     *   fails. Never throws.
+     */
+    public fun publicKey(key: ExtendedPrivateKey): KardanoResult<ExtendedPublicKey, KeyDerivationError>
 
     public companion object {
 

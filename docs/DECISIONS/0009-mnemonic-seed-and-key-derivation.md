@@ -317,6 +317,19 @@ ADR-0005 §6).
 
 ---
 
+> **Update (2026-07-12) — see [ADR-0010](0010-key-derivation-backend-swap-and-public-key-projection.md)
+> for the current, superseding status.** The two items this ADR's Block 1.6c gate result left
+> open are both closed there, with one correction: (1) **Android derivation is no longer
+> blocked** — a coordinate swap to `org.hyperledger.identus:bip32-ed25519:1.8.8` (same wrapper
+> API) was verified on real Android runtime; (2) `ExtendedPublicKey`/`KeyDerivation.publicKey`
+> are now implemented and golden-vector-verified for JVM/iOS, but **Android public-key
+> projection is a new, separate, open blocker** (a different backend's published Android
+> native library is missing the needed symbol) — do not read this as fully resolved. This
+> ADR's own findings below remain an accurate historical record of what was verified at the
+> time; ADR-0010 is the current source of truth for 1.6c-follow-up status.
+
+---
+
 ## Blockers (gates for the following subphases)
 
 **1.6b may not start until all of these hold** (all pass as of this ADR except the marked
