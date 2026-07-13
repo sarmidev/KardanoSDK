@@ -26,6 +26,10 @@ lazysodium-android = "5.2.0"
 jna = "5.17.0"
 ktor = "3.5.1"
 material3 = "1.11.0-alpha07"
+# ADR-0016 §9 (Block 1.10b backend adoption): the pre-generated UniFFI bindings in
+# :crypto-signing-backend use kotlinx.atomicfu for their handle-map counter. Version matches what
+# the disposable spike's Gobley toolchain resolved (ADR-0016 §8, scratch README).
+atomicfu = "0.26.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -51,6 +55,7 @@ kotlinx-coroutinesCore = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-co
 # verified by symbol inspection and by on-device execution (API 24/35/36). androidMain-only.
 lazysodium-android = { module = "com.goterl:lazysodium-android", version.ref = "lazysodium-android" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
@@ -83,3 +88,4 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+atomicfu = { id = "org.jetbrains.kotlin.plugin.atomicfu", version.ref = "kotlin" }

@@ -1020,8 +1020,9 @@ Sub-blocks:
   blocking backend gate (§4), the error model (§5), the test/vector policy (§6), the Playground
   checkpoint (§7), and the guardrail reconciliation (§8). No Kotlin/Gradle/dependency/source
   changes.
-- `1.10b-pre` Signing backend + vector-source gate — **Status: complete (docs-only). Gate result:
-  BLOCKED** (ADR-0016, `docs/DECISIONS/0016-transaction-signing-backend-gate.md`). Symbol-level
+- `1.10b-pre` Signing backend + vector-source gate — **Status: complete. Gate result: backend
+  ADOPTED and VERIFIED; Block 1.10b unblocked** (ADR-0016 §9i,
+  `docs/DECISIONS/0016-transaction-signing-backend-gate.md`). Symbol-level
   inspection of the resolved artifacts confirmed **none can sign an extended key**: the pinned
   `org.hyperledger.identus:bip32-ed25519:1.8.8` native library exports only
   `derive_bytes`/`derive_bytes_pub`/`from_nonextended` (no `sign` symbol at all — the gap is in the
@@ -1033,25 +1034,32 @@ Sub-blocks:
   scalar signing `"Hello World"` to a fixed 64-byte signature via `XPrv::sign`/`signature_extended`
   (unambiguously extended; a plain seed-based Ed25519 vector does **not** pass), with the CIP-0100
   32-byte-body-hash vector recorded as a secondary reproduce-to-confirm example. **Provisioning
-  spike run — result PARTIAL (ADR-0016 §8):** the recommended path (a disposable
-  `scratch-signing-backend` module, Gobley 0.3.7) was built and exposes the reference crate's
-  `XPrv::sign`/`XPub::verify` via uniffi. **JVM: PASS** (real Gobley/JNA bindings, KAT reproduced,
-  symbol proof). **iOS: PASS** (compile/link, symbol proof on both static libs). **Android: BLOCKED
-  at the Gradle/Gobley layer** — this repo's pinned AGP 9.0.1 is incompatible with Gobley 0.3.7's
-  Android integration (upstream-confirmed, `gobley/gobley#153`); raw-primitive Android evidence was
-  gathered instead outside Gradle (`cargo ndk` cross-compile of all 4 ABIs + `nm` symbol proof + a
-  standalone diagnostic binary reproducing the KAT on a real device and an emulator), but the
-  packaged UniFFI+JNA/Kotlin bridge itself was never built or run on Android. **Block 1.10b remains
-  blocked** — a partial spike pass does not unblock it, enable signing, or authorize
-  implementation. 1.10b is unblocked only after a backend passes the JVM KAT + Android
-  real-runtime KAT *through the packaged wrapper* + iOS compile/link, confirms the `sign` native
-  symbol per target (`nm`), and records the exact artifact/dependency (ADR-0016 §7d/§8). The
-  recommended next step is an Android packaging path that skips Gobley's Android Gradle
-  integration (`cargo ndk` + `uniffi-bindgen` CLI + hand-wired `androidLibrary {}` DSL, ADR-0016
-  §8) — a separately-scoped follow-up task, not signing code. No Gradle/dependency change to any
-  SDK module is authorized until then.
+  spike (and its Android-packaging follow-up) both run — all four §7d verification legs now
+  individually PASS (ADR-0016 §8):** the recommended path (a disposable `scratch-signing-backend`
+  module, Gobley 0.3.7, for JVM/iOS) plus a second disposable sibling
+  `scratch-signing-backend:android` module (no Gobley Gradle plugin; `cargo ndk` + the
+  `gobley-uniffi-bindgen` CLI invoked directly + this SDK's `androidLibrary {}` KMP DSL, for
+  Android) was built and exposes the reference crate's `XPrv::sign`/`XPub::verify` via uniffi.
+  **JVM: PASS** (real Gobley/JNA bindings, KAT reproduced, symbol proof). **iOS: PASS**
+  (compile/link, symbol proof on both static libs). **Android: PASS** — a real
+  `connectedAndroidDeviceTest` reproduces the KAT *through the packaged Kotlin/JNA bindings* on
+  both a physical device and an emulator; Gobley's own Android Gradle integration remains
+  incompatible with this repo's pinned AGP 9.0.1 (upstream-confirmed, `gobley/gobley#153`) and was
+  not used, but the same `gobley-uniffi-bindgen` CLI, invoked by hand instead, was. **The backend
+  has now been ADOPTED (ADR-0016 §9i):** the spike is the permanent, project-owned module
+  **`:crypto-signing-backend`** (crate `kardano-ed25519-bip32-signing`, `publish = false`,
+  `ed25519-bip32 = "0.4.2"` pinned + `Cargo.lock`), landed as Option R1 (no Rust/Cargo/Gobley Gradle
+  plugin; 8 committed native artifacts + pre-generated UniFFI bindings). Every §7d leg was **re-run
+  and passes against the real module**: `jvmTest` 4/4 (macOS arm64); `connectedAndroidDeviceTest`
+  4/4 on a physical device (Android 15) + 4/4 on an API-24 emulator, through the packaged bindings;
+  `compileKotlinIosArm64` + `linkDebugTestIosSimulatorArm64` green; `nm`/`llvm-nm` symbol proof on
+  all 8 artifacts. The disposable `scratch-signing-backend` modules are deleted. JVM native coverage
+  is macOS-only by design (no CI in-repo; Linux/Windows = future work, ADR-0016 §9 R3). **Block
+  1.10b (the signing API) is unblocked**, but the adoption block itself added **no** signing code,
+  **no** `:crypto`→backend dependency, and no change to any other SDK module.
 - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
-  (blocked on 1.10b-pre).** Add `:crypto`'s backend-neutral `Signing` (sign the `bodyHash` with an
+  (unblocked — 1.10b-pre backend adopted + verified, ADR-0016 §9i; not yet started).** Add
+  `:crypto`'s backend-neutral `Signing` (sign the `bodyHash` with an
   `ExtendedPrivateKey`; add the module-internal full-extended-scalar accessor and a sealed
   `SigningError`, keeping no public private-key byte accessor); `:tx`'s witness-set/full-
   `transaction` CBOR assembly from supplied `(vkey, signature)` pairs (`SignedTransaction` +
@@ -1182,18 +1190,18 @@ records the signing ownership/boundary, the exact scope and its fixture-only enf
 cannot depend on `:shared`'s `TestWalletFixture`; Block 1.10 introduces no general-purpose wallet
 signing API), the signing message, artifact, error model, test policy, and the blocking backend
 gate, but authorizes no signing code. `1.10b-pre` (Signing backend + vector-source gate, ADR-0016)
-is also **complete (docs-only)**, and its recommended provisioning spike has now **run** in a
-disposable `scratch-signing-backend` module (ADR-0016 §8), landing **BLOCKED — provisioning spike
-run, PARTIAL**: a Gobley-0.3.7 uniffi wrapper over the reference `ed25519-bip32 0.4.2` crate's
-`XPrv::sign`/`XPub::verify` **passed for JVM** (real Gobley/JNA bindings, `D1_H0` KAT reproduced,
-symbol proof) and **passed for iOS** (compile/link, symbol proof), but **Android is blocked at the
-Gradle/Gobley layer** — this repo's AGP 9.0.1 pin is incompatible with Gobley 0.3.7's Android
-support (upstream-confirmed, `gobley/gobley#153`); `cargo ndk` cross-compilation, per-ABI symbol
-proof, and a standalone on-device diagnostic binary (real device + emulator, both reproducing the
-KAT) proved the underlying primitive but not the packaged Kotlin/JNI bridge on Android. **The next
-step is a scoped Android-packaging follow-up, not signing code**: skip Gobley's Android Gradle
-integration and instead hand-wire `cargo ndk`-built `.so`s + `uniffi-bindgen`-CLI-generated
-bindings into this SDK's `androidLibrary {}` KMP DSL (still in a disposable scratch module), then
-run a real `connectedAndroidDeviceTest` through that packaged wrapper. **Block 1.10b signing code
-remains blocked** — a partial spike pass does not unblock it — until that follow-up passes and
-names the exact artifact/dependency (ADR-0016 §7d/§8).
+is also **complete**: its provisioning spike (ADR-0016 §8) has now been **ADOPTED and VERIFIED**
+(ADR-0016 §9i) into the permanent, project-owned module **`:crypto-signing-backend`** (crate
+`kardano-ed25519-bip32-signing`, `publish = false`, `ed25519-bip32 = "0.4.2"` pinned + `Cargo.lock`),
+landed as Option R1 — no Rust/Cargo/Gobley Gradle plugin; 8 committed native artifacts + pre-generated
+UniFFI bindings, all offline-regenerable. Every §7d leg was **re-run and passes against that real
+module**: `jvmTest` 4/4 (macOS arm64); `connectedAndroidDeviceTest` 4/4 on a physical device (Android
+15) + 4/4 on an API-24 emulator, through the packaged Kotlin/JNA bindings; `compileKotlinIosArm64` +
+`linkDebugTestIosSimulatorArm64` green (cinterop over the committed static libs); and `nm`/`llvm-nm`
+symbol proof on all 8 artifacts. The disposable `scratch-signing-backend` /
+`scratch-signing-backend:android` modules are deleted. JVM native coverage is macOS-only by design
+(no CI in-repo; Linux/Windows JVM hosts are future work, ADR-0016 §9 Option R3). **The next step is
+the Block 1.10b signing implementation** (`:crypto`'s `Signing` API, the `:crypto`→`:crypto-signing-backend`
+dependency, witness/transaction assembly, wallet orchestration) under ADR-0015 scope — now unblocked
+(ADR-0016 §9i) but **not** started in the adoption block, which added no signing code and touched no
+other SDK module.
