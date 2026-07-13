@@ -1233,6 +1233,56 @@ Android checkpoint:
   showed the expected build/sign/submit outcome. No additional accepted transaction ids were
   provided.
 
+### 1.12-pre-a Playground MVI Architecture
+
+Refactor the `:shared` Playground from a long tool-like Compose screen into a maintainable
+guided-flow architecture, ahead of Phase 1 closure. **Architecture-only**: no SDK behavior
+change, and no visual redesign yet (that is `1.12-pre-b`).
+
+Objective:
+
+- Introduce a lightweight MVI (Model-View-Intent) split under
+  `shared/src/commonMain/kotlin/org/sarmidev/kardano/playground/`: `mvi/PlaygroundState.kt`,
+  `mvi/PlaygroundIntent.kt`, `mvi/PlaygroundReducer.kt`, `mvi/PlaygroundViewModel.kt`,
+  `domain/PlaygroundUseCases.kt` (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`,
+  `BuildTransactionDraftUseCase`, `SignTransactionUseCase`, `SubmitTransactionUseCase`, each a
+  thin wrapper over the existing `PlaygroundPresenter`), and `data/PlaygroundProviderFactory.kt`
+  (the mock-vs-live-Blockfrost provider selection, moved out of the Compose layer).
+- Model the guided flow explicitly — Wallet → Funds → Build → Sign → Submit — as a
+  `PlaygroundStep` enum and matching `PlaygroundState` fields, reusing the existing
+  `PlaygroundPresenter` `*Presentation` sealed types rather than a parallel display model.
+- Refactor `PlaygroundScreen` into a renderer: it reads `PlaygroundState` and dispatches
+  `PlaygroundIntent`s to `PlaygroundViewModel`; it computes nothing itself. The standalone
+  Address Parser/Hex Decoder/CBOR Decoder/generic Provider-explorer tools are folded into the
+  same state/intent model and rendered in a "Diagnostics" area below the guided flow, rather than
+  kept as separate ad hoc Compose state.
+- Preserve every existing behavior: the same test-only fixture wallet, the same mock/live
+  provider selection and Blockfrost preprod-only boundary, the same ADA-only filtering from
+  `1.11d`/`1.11d-2`, the same readable errors, the same submit id comparison, no mainnet, no real
+  mnemonic/private-key display, no full CBOR display, no multi-asset support, no polling, no
+  arbitrary-mnemonic import.
+- No new architecture library and no Gradle/dependency change: `androidx.lifecycle`
+  (`ViewModel`/`viewModelScope`, `collectAsStateWithLifecycle`) was already a `commonMain`
+  dependency (Block 1.2), and `kotlinx.coroutines` was already resolvable transitively.
+- Tests: `PlaygroundReducerTest` (`commonTest`, pure/non-suspend/native-free) covers the default
+  mock initial state, provider-selection and technical-details transitions, `ResetFlow`'s
+  keep-vs-clear behavior, and every `applyXResult` helper. `PlaygroundViewModelTest`
+  (`jvmTest`-only, since `viewModelScope` needs a `Dispatchers.Main` that
+  `kotlinx-coroutines-test` supplies) covers each guided-flow step's success/failure with faked
+  use cases, the submit step's id match/mismatch, the funds step's in-flight loading flag, and
+  that `PlaygroundProviderFactory` selects the correct provider instance. Every existing
+  `PlaygroundPresenter` test is kept unchanged — the presenter itself was not moved or modified.
+- Docs: `shared/README.md` gained a "Playground architecture (Block 1.12-pre-a)" section; this
+  entry and the matching `docs/ROADMAP.md`/`docs/HANDOFF.md` entries record the block.
+
+**Status: complete.** Compiles on common/JVM/Android/iOS-simulator (iOS simulator run itself is
+environment-gated on this machine — no installed simulator SDK — but
+`compileTestKotlinIosSimulatorArm64`/`linkDebugTestIosSimulatorArm64` both succeed, the existing
+compile-and-link-only iOS bar per `docs/TESTING.md`). `:shared:jvmTest` and
+`:shared:testAndroidHostTest` pass, including the new `PlaygroundReducerTest` (19 tests) and
+`PlaygroundViewModelTest` (12 tests). **Next: `1.12-pre-b`** (visual refresh of the guided flow
+built on this architecture), then Block 1.12 (Phase 1 Closure / MVP Review).
+
 ### 1.12 Phase 1 Closure / MVP Review
 
 Close Phase 1 with a review of the full flow.

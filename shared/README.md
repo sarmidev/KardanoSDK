@@ -38,6 +38,81 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
   `iosApp` via `MainViewControllerKt.MainViewController()`.
 
+## Playground architecture (Block 1.12-pre-a)
+
+Block 1.12-pre-a refactored the Playground from a single long Compose screen driving every
+checkpoint through `remember`/`LaunchedEffect` state into a lightweight MVI (Model-View-Intent)
+architecture, under `playground/mvi/`, `playground/domain/`, and `playground/data/`. This is an
+**architecture-only** change to the sample/diagnostic code in `:shared` — it is not part of the
+SDK public API, and every SDK-calling behavior each checkpoint below documents (fixture wallet,
+mock/live provider selection, ADA-only filtering, error messages, submit id comparison, and so
+on) is unchanged. **Visual redesign/branding is deferred to Block 1.12-pre-b** — this block keeps
+the existing Material3 cards/buttons/dividers style, only reordering and regrouping them.
+
+- `playground/mvi/PlaygroundState.kt` — a single immutable `PlaygroundState` data class holding
+  provider selection (mock vs. live Blockfrost preprod, the in-memory-only `project_id`), the
+  five guided-flow steps' results, per-step loading flags, a `technicalDetailsExpanded` set, and
+  the diagnostics tools' inputs/results. It reuses the existing `*Presentation` sealed types from
+  `PlaygroundPresenter` directly (`WalletPresentation`, `WalletBalancePresentation`,
+  `TransactionDraftPresentation`, `SignedTransactionPresentation`, `SubmitTransactionPresentation`,
+  `AddressPresentation`, `HexPresentation`, `CborPresentation`, `ProviderUtxosPresentation`,
+  `ProviderParamsPresentation`) rather than introducing a parallel display model — those types
+  already carry only public, display-safe metadata (see each type's KDoc), so this state holds no
+  new SDK semantics of its own. A `PlaygroundStep` enum (`WALLET`, `FUNDS`, `BUILD`, `SIGN`,
+  `SUBMIT`) identifies the five guided-flow steps for the technical-details toggle.
+- `playground/mvi/PlaygroundIntent.kt` — a sealed `PlaygroundIntent` covering every user action:
+  provider selection (`ToggleLiveBlockfrost`, `UpdateProjectId`), the guided flow
+  (`RestoreWallet`, `QueryFunds`, `BuildDraft`, `SignTransaction`, `SubmitTransaction`,
+  `ResetFlow`, `ToggleTechnicalDetails`), and the diagnostics tools (address/hex/CBOR
+  update-and-run pairs, the provider explorer's address field, seed-address fill, and UTxO/params
+  loads).
+- `playground/mvi/PlaygroundReducer.kt` — a pure, non-suspend object folding every intent that
+  needs no SDK/provider call (toggles, text-field edits, seed fill, technical-details toggling,
+  `ResetFlow`) directly into a new `PlaygroundState`, plus small `startXLoading`/`applyXResult`
+  helpers `PlaygroundViewModel` uses around each use-case/presenter call. Being pure and
+  coroutine-free, it is exercised directly and synchronously by `PlaygroundReducerTest`
+  (`commonTest`, native-free — runs on every target including `:shared:testAndroidHostTest`).
+  `ResetFlow` clears only the five guided-flow step results (and the Wallet step's loading flag);
+  provider selection and diagnostics inputs/results are intentionally preserved.
+- `playground/mvi/PlaygroundViewModel.kt` — an `androidx.lifecycle.ViewModel` (already a
+  `commonMain` dependency via `libs.androidx.lifecycle.viewmodelCompose`/`-runtimeCompose`; no new
+  architecture library was added) exposing `state: StateFlow<PlaygroundState>` and
+  `dispatch(intent: PlaygroundIntent)`. Sync intents go through `PlaygroundReducer`; intents that
+  call an SDK API run the matching use case or diagnostics presenter call — in `viewModelScope`
+  where a provider call is involved — and fold the result back into state through the matching
+  reducer helper. This class holds no derivation, hashing, address-generation, balance,
+  coin-selection, fee/change, signing, or submission logic of its own.
+- `playground/domain/PlaygroundUseCases.kt` — five small `fun interface`s
+  (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`, `BuildTransactionDraftUseCase`,
+  `SignTransactionUseCase`, `SubmitTransactionUseCase`), each a thin, directly-injectable wrapper
+  over the matching existing `PlaygroundPresenter` function (`.Default` delegates to it). They
+  exist so `PlaygroundViewModel` can be unit-tested with fakes (see `PlaygroundViewModelTest`,
+  `jvmTest`) without reimplementing or duplicating any `:wallet`/`:tx`/`:provider` call.
+- `playground/data/PlaygroundProviderFactory.kt` — moves the provider-selection logic (mock by
+  default; live Blockfrost preprod once the toggle is on and `project_id` is non-blank, cached
+  per `project_id` the same way the previous `remember(projectId)` block was) out of the Compose
+  layer, so `PlaygroundViewModel` can build a `ChainQueryProvider`/`TxSubmitProvider` pair from
+  `PlaygroundState` without a `remember`. The `project_id` string is still never stored, saved,
+  or logged.
+- `PlaygroundPresenter.kt` is **retained unchanged as the display-mapping layer** — every use
+  case and every diagnostics intent still calls into it, and every existing `PlaygroundPresenter`
+  test below (`PlaygroundPresenterTest`, `PlaygroundProviderPresenterTest`,
+  `PlaygroundWalletPresenterTest`, `PlaygroundWalletBalancePresenterTest`,
+  `PlaygroundTransactionDraftPresenterTest`, `PlaygroundSignedTransactionPresenterTest`,
+  `PlaygroundSubmitTransactionPresenterTest`, and their `jvmTest` end-to-end counterparts) still
+  applies unmodified.
+- `PlaygroundScreen.kt` is now a renderer: it reads `PlaygroundState` from `PlaygroundViewModel`
+  (via `collectAsStateWithLifecycle`) and only dispatches `PlaygroundIntent`s — it computes
+  nothing itself. The screen reads top to bottom as a guided flow, **Wallet → Funds → Build →
+  Sign → Submit** (restore the fixture wallet and generate its address; query its balance from
+  the active provider; build a minimal unsigned ADA-only draft; sign it; submit it), each step
+  with a short description and a "Details" toggle that expands its result card from a one-line
+  summary to the full row list (`PlaygroundIntent.ToggleTechnicalDetails`). Below the guided flow,
+  a **Diagnostics** area keeps the standalone Address Parser, Hex Decoder, CBOR Decoder, and the
+  generic (arbitrary-address) Provider explorer with its seed-address buttons — tools unrelated
+  to the fixture wallet, folded into the same `PlaygroundState`/`PlaygroundIntent` model rather
+  than kept as separate ad hoc Compose state.
+
 ### Test Wallet & Address Generation section (Block 1.6d, extended by Block 1.7b)
 
 The "Test Wallet & Address Generation" section restores `playground/TestWalletFixture.kt`'s
@@ -277,8 +352,24 @@ under the default mock and, once the mock query provider is seeded with a UTxO f
 restored wallet's own address, that the mock submit provider still reports its honest
 not-supported failure rather than a fake accepted id — there is no automated end-to-end
 *success* path, since an actual accepted submission only comes from a live Blockfrost preprod
-call, which these tests must not perform. See [docs/TESTING.md](../docs/TESTING.md) for the
-testing strategy and test-vector policy.
+call, which these tests must not perform.
+
+The MVI layer added in Block 1.12-pre-a follows the same split. `PlaygroundReducerTest`
+(`commonTest`) drives `PlaygroundReducer` directly — pure, non-suspend, no coroutine, no native
+call — covering the default mock initial state, provider-selection and technical-details
+transitions, `ResetFlow`'s keep-vs-clear behavior, and every `applyXResult` helper (including
+the ADA-only/native-asset draft-failure message from Block 1.11d/1.11d-2 flowing through
+unchanged). `PlaygroundViewModelTest` (`jvmTest`-only) drives `PlaygroundViewModel.dispatch`
+with every guided-flow use case faked (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`,
+`BuildTransactionDraftUseCase`, `SignTransactionUseCase`, `SubmitTransactionUseCase`), covering
+each step's success/failure folding (including the submit step's accepted/local-id match and
+mismatch cases), the funds step's loading flag while its fake use case is still in flight, and
+that `PlaygroundProviderFactory` selects the same mock-or-live provider instance the ViewModel
+passes to a use case. It is `jvmTest`-only because `androidx.lifecycle.ViewModel.viewModelScope`
+needs a `Dispatchers.Main` implementation to dispatch on, which `kotlinx-coroutines-test`
+(already a `jvmTest` dependency) supplies via `Dispatchers.setMain`; no native `:crypto`/`:wallet`
+call is reached by any fake used here. See [docs/TESTING.md](../docs/TESTING.md) for the testing
+strategy and test-vector policy.
 
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host tests: `./gradlew :shared:testAndroidHostTest`

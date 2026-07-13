@@ -1196,6 +1196,17 @@ Proposed block sequence:
   (`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`); the owner also reported
   the all-native-asset rejection and ADA-only-only build/sign/submit checks OK. **Block 1.11 is
   complete** (see `docs/HANDOFF.md`).
+- `1.12-pre-a` Playground MVI Architecture — refactored the `:shared` Playground from a long
+  tool-like Compose screen into a lightweight MVI split (`playground/mvi`, `playground/domain`,
+  `playground/data`), with `PlaygroundScreen` now a pure renderer dispatching intents to a
+  `PlaygroundViewModel`, and the standalone diagnostics tools folded into the same state/intent
+  model below an explicit Wallet → Funds → Build → Sign → Submit guided flow. Architecture-only:
+  no SDK behavior change (same fixture wallet, mock/live provider selection, ADA-only filtering,
+  errors, submit id comparison), no new architecture library, no Gradle/dependency change, and no
+  visual redesign yet. **Block 1.12-pre-a is complete** (see `docs/PHASE_1_PLAN.md` and
+  `docs/HANDOFF.md`).
+- `1.12-pre-b` Playground visual refresh — build an intuitive, branded guided-UX presentation on
+  top of the `1.12-pre-a` architecture. Not started.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 
