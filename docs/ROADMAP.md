@@ -1080,8 +1080,9 @@ Proposed block sequence:
     the "No transaction signing" guardrail to Block 1.10 scope while keeping every other ban. No
     Kotlin/Gradle/dependency/source changes.
   - `1.10b-pre` Signing backend + vector-source gate — **Status: complete (docs-only). Gate
-    result: BLOCKED** (ADR-0016, `docs/DECISIONS/0016-transaction-signing-backend-gate.md`).
-    Symbol-level inspection of the resolved artifacts confirmed **none can sign an extended key**:
+    result: BLOCKED — provisioning path planned** (ADR-0016,
+    `docs/DECISIONS/0016-transaction-signing-backend-gate.md`). Symbol-level inspection of the
+    resolved artifacts confirmed **none can sign an extended key**:
     `org.hyperledger.identus:bip32-ed25519:1.8.8`'s native library exports only
     `derive_bytes`/`derive_bytes_pub`/`from_nonextended` (no `sign` symbol in the shipped Rust
     cdylib), Apollo's `KMMEdPrivateKey.sign` is BouncyCastle standard **seed-based** RFC-8032
@@ -1089,11 +1090,15 @@ Proposed block sequence:
     `seed‖pk` layout). The **extended-key KAT is pinned**: the reference `ed25519-bip32 0.4.2`
     (MIT OR Apache-2.0) `xprv_sign` vector (64-byte extended scalar signs `"Hello World"` ⇒ fixed
     64-byte signature via `XPrv::sign`), with the CIP-0100 32-byte-body-hash vector as a secondary
-    reproduce-to-confirm example; a plain RFC-8032 Ed25519 vector does **not** pass. A backend path
-    is identified (the resolved derivation backend is a uniffi wrapper of that same crate, so expose
-    its already-present `XPrv::sign`/`verify` the same way), but it is **not a resolved artifact
-    yet** — a backend-provisioning task (its own Gradle/dependency authorization) plus real-runtime
-    verification is required before any 1.10b signing code.
+    reproduce-to-confirm example; a plain RFC-8032 Ed25519 vector does **not** pass. ADR-0016 §7
+    records the recommended unblock path: a disposable `scratch-signing-backend` module that exposes
+    the crate's already-present `XPrv::sign`/`verify` via a uniffi/KMP wrapper (recommended spike
+    toolchain **Gobley 0.3.7** — a recommendation to trial, not a confirmed project fact;
+    identus-apollo cited only as a packaging reference; Option B2 fallback = identus-apollo-style
+    Cargo/cinterop fork). **Block 1.10b remains blocked** — documenting the path does not unblock it
+    or authorize implementation — until the provisioning spike passes JVM KAT + Android real-runtime
+    KAT + iOS compile/link, confirms the `sign` symbol per target (`nm`), and records the exact
+    artifact/dependency (ADR-0016 §7d). No Gradle/dependency change is authorized until then.
   - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
     (blocked on 1.10b-pre).**
   - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:

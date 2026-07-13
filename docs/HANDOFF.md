@@ -490,15 +490,18 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
    BouncyCastle standard **seed-based** RFC-8032 Ed25519, and the ionspin/lazysodium libsodium API
    is seed-based (`ed25519SkToSeed` confirms the `seed‖pk` layout) — so **no resolved/published KMP
    dependency can sign a Cardano extended key today.** The Block 1.10b-pre gate is **complete
-   (docs-only) with result BLOCKED**: the **extended-key KAT is pinned** (reference
-   `ed25519-bip32 0.4.2`, MIT OR Apache-2.0, `xprv_sign` test — 64-byte extended scalar signs
-   `"Hello World"` ⇒ fixed 64-byte signature via `XPrv::sign`; CIP-0100 32-byte-body-hash vector as
-   a secondary reproduce-to-confirm example), but no all-target backend is resolved. A backend path
-   is identified (the resolved derivation backend is a uniffi wrapper of that same `ed25519-bip32`
-   crate, so expose its already-present `XPrv::sign`/`verify` the same way), but it requires a
-   separately-authorized backend-provisioning task plus real-runtime verification (JVM + Android
-   runtime + iOS compile/link) before any 1.10b signing code; no dependency/Gradle change is
-   authorized until then.
+   (docs-only) with result BLOCKED — provisioning path planned**: the **extended-key KAT is pinned**
+   (reference `ed25519-bip32 0.4.2`, MIT OR Apache-2.0, `xprv_sign` test — 64-byte extended scalar
+   signs `"Hello World"` ⇒ fixed 64-byte signature via `XPrv::sign`; CIP-0100 32-byte-body-hash
+   vector as a secondary reproduce-to-confirm example), but no all-target backend is resolved.
+   ADR-0016 §7 now documents the recommended unblock path: a disposable `scratch-signing-backend`
+   module that exposes the reference crate's already-present `XPrv::sign`/`verify` via a uniffi/KMP
+   wrapper (recommended spike toolchain **Gobley 0.3.7** — a recommendation to trial, not a confirmed
+   project fact; identus-apollo cited only as a packaging reference; Option B2 fallback = fork it +
+   its Cargo/cinterop build). **Documenting this path does not unblock Block 1.10b:** 1.10b remains
+   blocked until the provisioning spike passes JVM KAT + Android real-runtime KAT + iOS compile/link,
+   confirms the `sign` symbol per target (`nm`), and records the exact artifact/dependency (ADR-0016
+   §7d). No dependency/Gradle change is authorized until then.
    See `docs/DECISIONS/0004-crypto-strategy.md` (open questions),
    `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`,
    `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`,
@@ -549,6 +552,41 @@ At the end of each session, update this section.
 Date: 2026-07-13
 
 Summary:
+
+- **Block 1.10b-pre backend-provisioning plan (docs-only). Gate moved to BLOCKED — provisioning
+  path planned; Block 1.10b stays blocked.** Documented in ADR-0016 §7 the recommended way to
+  obtain an extended-signing backend, without touching Gradle/Rust/Kotlin or unblocking 1.10b.
+  - **Findings that shaped the plan (resolved-artifact + upstream inspection).** The identus
+    `bip32-ed25519:1.8.8` wrapper reaches JVM via JNA (bundled `.dylib`/`.so`), Android via jniLibs
+    `.so` (4 ABIs), and iOS via a Kotlin/Native **cinterop over a bundled static
+    `libuniffi_ed25519_bip32_wrapper.a`** — all exporting only the three derive functions. The iOS
+    `.a` still contains `cryptoxide::ed25519::signature_extended` (defined symbol), so the extended
+    primitive is compiled in and only the uniffi **export** of `sign`/`verify` is missing. Upstream
+    source is `hyperledger-identus/apollo` `bip32-ed25519/` (Apache-2.0), whose Rust wrapper is the
+    `wrapper/` crate in the `input-output-hk/rust-ed25519-bip32` submodule, built with a custom
+    Cargo/cinterop Gradle setup. **It was NOT verified that this wrapper uses Gobley** — identus is
+    cited only as a packaging reference.
+  - **Options recorded (ADR-0016 §7a):** A = wait/adopt an upstream wrapper exposing `sign`
+    (unavailable today; parallel PR only); **B1 (recommended) = a disposable project-owned uniffi
+    wrapper over `ed25519-bip32 0.4.2` built with the recommended spike toolchain Gobley 0.3.7**
+    (a recommendation to trial, not an established fact); B2 (fallback) = fork the reference wrapper
+    + reuse identus-apollo's Cargo/cinterop packaging; C = CML/CSL/bloxbean as JVM-only oracles.
+  - **Recommended path (ADR-0016 §7b–d):** an isolated, disposable `scratch-signing-backend` module
+    exposing `sign(xprv,msg)->64-byte sig` and `verify(xpub,msg,sig)->bool`, verified by a JVM KAT
+    (`D1_H0` + `"Hello World"` ⇒ `D1_H0_SIGNATURE`), an Android `connectedAndroidDeviceTest` (real
+    runtime, required), iOS compile/link, and `nm` symbol proof of a `sign` export per target;
+    evidence + exact artifact/crate/toolchain/license must be recorded before 1.10b starts.
+  - **Explicitly kept blocked.** ADR-0016 Status/Decision/PHASE_1_PLAN/ROADMAP all state that
+    documenting the path does not unblock 1.10b, enable signing, or authorize implementation; 1.10b
+    unblocks only after the spike passes and names the artifact. No PASS/enabled/ready wording.
+  - Docs touched: `docs/DECISIONS/0016-...md` (Status + Decision reworded to "BLOCKED — provisioning
+    path planned"; new §7 provisioning plan + verbatim §7e spike prompt; §3 heading + follow-up
+    aligned); `docs/PHASE_1_PLAN.md` (§1.10b-pre + "Next step"); `docs/ROADMAP.md` (§1.10b-pre);
+    this file (this entry + Open Decisions #4 + "Next recommended task"). No Kotlin/Gradle/Rust/
+    source changes; no dependency committed.
+  - Verification: banned-word scan clean; stale-wording scan clean (no plain-Ed25519 sufficiency,
+    mainnet, real funds, general wallet signing, readiness/audit, or "1.10b unblocked" wording);
+    `git status` shows docs only.
 
 - **Block 1.10b-pre (Signing backend + vector-source gate) — delivered (docs-only). Gate result:
   BLOCKED.** Added `docs/DECISIONS/0016-transaction-signing-backend-gate.md` (ADR-0016, `Accepted`
@@ -934,20 +972,30 @@ Summary:
 
 Next recommended task:
 
-- **Backend-provisioning task for extended Ed25519-BIP32 signing (new, blocking; requires its own
-  Gradle/dependency/toolchain authorization).** Block 1.10b-pre landed **BLOCKED** (ADR-0016): the
-  extended-key KAT is pinned, but no resolved/published KMP artifact signs an extended key. The
-  unblock is to provision a backend that exports extended `sign`/`verify` and verify it per
-  ADR-0016 §4. Preferred path: expose the reference `ed25519-bip32 0.4.2` crate's already-present
-  `XPrv::sign` (the resolved derivation backend is a uniffi wrapper of that same crate) through the
-  identical uniffi mechanism, then verify JVM + Android **real runtime**
-  (`connectedAndroidDeviceTest`) + iOS compile/link. Confirm any candidate at symbol level (`nm`)
-  before assuming it exports `sign`. This is **not signing code and not this docs-only block's
-  scope** — it is a dependency/build change to authorize separately. Only after it lands and names
-  the exact dependency may **Block 1.10b** signing code begin (ADR-0015 §1/§3/§5/§6). Given the
-  backend/toolchain judgment involved, an Opus review of ADR-0015/ADR-0016 and ownership of the
-  provisioning task is recommended; Sonnet is sufficient for 1.10b/1.10c once the backend is pinned
-  and verified. Also reconcile `docs/AI_WORKING_AGREEMENT.md` at the start of 1.10b (ADR-0016 §6).
+- **Backend-provisioning spike for extended Ed25519-BIP32 signing (new, blocking; the ADR-0016 §7e
+  prompt).** The gate is now **BLOCKED — provisioning path planned** (ADR-0016 §7): the extended-key
+  KAT is pinned and a recommended path is documented, but **Block 1.10b remains blocked** — the
+  documented path does not unblock 1.10b, enable signing, or authorize implementation. The spike
+  must build the recommended project-owned wrapper (ADR-0016 §7a Option B1) in an **isolated,
+  disposable `scratch-signing-backend` module** that exposes the reference `ed25519-bip32 0.4.2`
+  crate's already-present `XPrv::sign` (→ 64-byte signature) and `XPub::verify` (→ bool) via a
+  uniffi/KMP wrapper. **Recommended spike toolchain: Gobley 0.3.7** (`dev.gobley.cargo` /
+  `dev.gobley.uniffi`) — a recommendation to trial, **not** a confirmed project fact; it has not
+  been verified that the existing identus wrapper uses Gobley, so identus-apollo is cited only as a
+  packaging reference (Option B2 fallback = fork it + its Cargo/cinterop build). **Explicitly
+  authorized in the spike:** Gradle/Rust/Gobley files inside `scratch-signing-backend/` only, plus
+  exactly one root-level edit — adding `include(":scratch-signing-backend")` to
+  `settings.gradle.kts`. **Explicitly forbidden:** touching `:crypto`/`:tx`/`:wallet`/`:shared` or
+  any SDK API; modifying any SDK module's own `build.gradle.kts` (`core`, `crypto`, `tx`, `wallet`,
+  `shared`, the provider modules, or any app module); and adding any production dependency to any
+  SDK module. Verify + record: JVM KAT reproducing
+  `D1_H0` + `"Hello World"` ⇒ `D1_H0_SIGNATURE`; Android `connectedAndroidDeviceTest` (real runtime,
+  required); `compileKotlinIosArm64` + `linkDebugTestIosSimulatorArm64`; and `nm` proof each native
+  artifact exports a `sign` uniffi function. **Only after** the spike passes and records the exact
+  artifact/dependency (ADR-0016 §7d) may **Block 1.10b** signing code begin (ADR-0015 §1/§3/§5/§6).
+  Given the backend/toolchain judgment involved, an Opus review of ADR-0015/ADR-0016 and ownership
+  of the spike is recommended; Sonnet is sufficient for 1.10b/1.10c once the backend is pinned and
+  verified. Also reconcile `docs/AI_WORKING_AGREEMENT.md` at the start of 1.10b (ADR-0016 §6).
 - **Manual Android checkpoint remaining for the project owner:** open the Android app, use the
   Provider section's "Use live Blockfrost (preprod)" toggle with a `project_id` and fund the
   restored test wallet's address from a preprod faucet (or otherwise seed UTxOs for it), then

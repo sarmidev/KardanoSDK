@@ -1034,11 +1034,18 @@ Sub-blocks:
   (unambiguously extended; a plain seed-based Ed25519 vector does **not** pass), with the CIP-0100
   32-byte-body-hash vector recorded as a secondary reproduce-to-confirm example. **Backend path
   identified but not yet a resolved artifact:** the resolved derivation backend is a uniffi wrapper
-  of that same `ed25519-bip32` crate, so the clean unblock is to expose the crate's already-present
-  `XPrv::sign`/`verify` through the identical uniffi mechanism (JVM/Android/iOS) — a
-  build/dependency/toolchain change requiring its own authorization. **Block 1.10b stays blocked**
-  until a backend that exports extended `sign` is provisioned and verified (JVM + Android real
-  runtime + iOS compile/link). No Gradle/dependency change is authorized until then.
+  of that same `ed25519-bip32` crate, so the recommended unblock is to expose the crate's
+  already-present `XPrv::sign`/`verify` through a uniffi/KMP wrapper (JVM/Android/iOS) — a
+  build/dependency/toolchain change requiring its own authorization. **Gate status updated to
+  `BLOCKED — provisioning path planned`** (ADR-0016 §7): the recommended path is a disposable
+  `scratch-signing-backend` module built with the recommended spike toolchain **Gobley 0.3.7**
+  (recommendation to trial, not a confirmed project fact; identus-apollo cited only as a packaging
+  reference), fallback being an identus-apollo-style Cargo/cinterop fork (Option B2). **Block 1.10b
+  remains blocked** — documenting a path does not unblock it, enable signing, or authorize
+  implementation. 1.10b is unblocked only after the provisioning spike passes the JVM KAT + Android
+  real-runtime KAT + iOS compile/link, confirms the `sign` native symbol per target (`nm`), and
+  records the exact artifact/dependency (ADR-0016 §7d). No Gradle/dependency change is authorized
+  until then.
 - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
   (blocked on 1.10b-pre).** Add `:crypto`'s backend-neutral `Signing` (sign the `bodyHash` with an
   `ExtendedPrivateKey`; add the module-internal full-extended-scalar accessor and a sealed
@@ -1171,12 +1178,16 @@ records the signing ownership/boundary, the exact scope and its fixture-only enf
 cannot depend on `:shared`'s `TestWalletFixture`; Block 1.10 introduces no general-purpose wallet
 signing API), the signing message, artifact, error model, test policy, and the blocking backend
 gate, but authorizes no signing code. `1.10b-pre` (Signing backend + vector-source gate, ADR-0016)
-is also **complete (docs-only)** and landed **BLOCKED**: symbol-level inspection confirmed no
-resolved/published KMP backend can sign a Cardano extended key (`bip32-ed25519:1.8.8` exports only
-derive functions, Apollo is seed-based RFC-8032, libsodium is seed-based), while the **extended-key
-KAT is pinned** (reference `ed25519-bip32 0.4.2` `xprv_sign` vector). **The next step is a scoped
-backend-provisioning task** (not signing code): expose the reference `ed25519-bip32` crate's
-already-present `XPrv::sign`/`verify` through the same uniffi mechanism used for derivation, then
-verify it on JVM + Android real runtime + iOS compile/link. That is a Gradle/dependency/toolchain
-change requiring its own explicit authorization; Block 1.10b signing code stays blocked until it
-lands and names the exact dependency.
+is also **complete (docs-only)** and landed **BLOCKED — provisioning path planned**: symbol-level
+inspection confirmed no resolved/published KMP backend can sign a Cardano extended key
+(`bip32-ed25519:1.8.8` exports only derive functions, Apollo is seed-based RFC-8032, libsodium is
+seed-based), while the **extended-key KAT is pinned** (reference `ed25519-bip32 0.4.2` `xprv_sign`
+vector). ADR-0016 §7 now records the recommended provisioning path. **The next step is a scoped,
+disposable backend-provisioning spike** (not signing code): in a new `scratch-signing-backend`
+module (Gradle/Rust/Gobley allowed there only — never `:crypto`/`:tx`/`:wallet`/`:shared` or SDK
+Gradle files), expose the reference `ed25519-bip32 0.4.2` crate's already-present
+`XPrv::sign`/`verify` via a uniffi/KMP wrapper (recommended spike toolchain **Gobley 0.3.7**;
+identus-apollo is only a packaging reference), then verify JVM KAT + Android real-runtime KAT + iOS
+compile/link and confirm the `sign` symbol per target (`nm`). **Block 1.10b signing code remains
+blocked** — documenting the path does not unblock it — until that spike passes and names the exact
+artifact/dependency (ADR-0016 §7d).
