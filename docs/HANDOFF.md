@@ -494,14 +494,20 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
    (reference `ed25519-bip32 0.4.2`, MIT OR Apache-2.0, `xprv_sign` test — 64-byte extended scalar
    signs `"Hello World"` ⇒ fixed 64-byte signature via `XPrv::sign`; CIP-0100 32-byte-body-hash
    vector as a secondary reproduce-to-confirm example), but no all-target backend is resolved.
-   ADR-0016 §7 now documents the recommended unblock path: a disposable `scratch-signing-backend`
-   module that exposes the reference crate's already-present `XPrv::sign`/`verify` via a uniffi/KMP
-   wrapper (recommended spike toolchain **Gobley 0.3.7** — a recommendation to trial, not a confirmed
-   project fact; identus-apollo cited only as a packaging reference; Option B2 fallback = fork it +
-   its Cargo/cinterop build). **Documenting this path does not unblock Block 1.10b:** 1.10b remains
-   blocked until the provisioning spike passes JVM KAT + Android real-runtime KAT + iOS compile/link,
-   confirms the `sign` symbol per target (`nm`), and records the exact artifact/dependency (ADR-0016
-   §7d). No dependency/Gradle change is authorized until then.
+   ADR-0016 §7 documented the recommended unblock path, and that spike has now **run** (ADR-0016
+   §8, disposable `scratch-signing-backend` module): a Gobley 0.3.7 uniffi/KMP wrapper exposing the
+   reference crate's `XPrv::sign`/`verify` **passed for JVM** (real Gobley/JNA bindings, KAT
+   reproduced, symbol proof) **and for iOS** (`compileKotlinIosArm64` +
+   `linkDebugTestIosSimulatorArm64`, symbol proof on both static libs), but **Android is blocked at
+   the Gradle/Gobley layer**: this repo's pinned AGP 9.0.1 is incompatible with Gobley 0.3.7's
+   Android integration (upstream-confirmed, `gobley/gobley#153`). Android evidence was instead
+   gathered outside Gradle (`cargo ndk` cross-compile of all 4 ABIs, `nm` symbol proof per ABI, and
+   a standalone diagnostic binary reproducing the KAT on a real device and an emulator), which
+   proves the primitive but not the packaged Kotlin/JNI bridge on Android. **Block 1.10b remains
+   blocked:** ADR-0016 §7d requires an Android real-runtime KAT *through the packaged wrapper*,
+   which this spike did not achieve; the recommended follow-up is a hand-wired `cargo
+   ndk` + `uniffi-bindgen` CLI Android packaging path (no Gobley Android Gradle integration), a
+   separately-scoped task. No dependency/Gradle change to any SDK module is authorized until then.
    See `docs/DECISIONS/0004-crypto-strategy.md` (open questions),
    `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`,
    `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`,
@@ -552,6 +558,65 @@ At the end of each session, update this section.
 Date: 2026-07-13
 
 Summary:
+
+- **Block 1.10b signing-backend provisioning spike — run. Result: PARTIAL (JVM/iOS pass, Android
+  blocked at the Gradle/Gobley layer). Block 1.10b stays blocked.** Executed the ADR-0016 §7e spike
+  prompt in a new, isolated, disposable `scratch-signing-backend` Gradle module (the only
+  root-level edit: one `include(":scratch-signing-backend")` line in `settings.gradle.kts`). Full
+  evidence, commands, and toolchain/license versions are recorded in
+  `scratch-signing-backend/README.md`; ADR-0016 §8 summarizes the result.
+  - **Rust wrapper.** `scratch-signing-backend/src/commonMain/rust/lib.rs`: a `#[uniffi::export]`
+    crate depending on `ed25519-bip32 = "0.4.2"` exposing `sign`/`verify` (delegating directly to
+    `XPrv::sign`/`XPub::verify`, no handwritten crypto) plus a test-only `derive_xpub` helper
+    (`XPrv::public`, the same derivation the shipped `bip32-ed25519:1.8.8` wrapper already exposes
+    and verifies, per ADR-0016 §1). A plain `cargo test` in the crate itself
+    reproduces the ADR-0016 §3 `D1_H0` KAT.
+  - **JVM: PASS.** Wired Gobley 0.3.7 (`dev.gobley.cargo`/`dev.gobley.uniffi`) +
+    `kotlin("plugin.atomicfu")` for `jvm()` + `iosArm64()`/`iosSimulatorArm64()` targets (no
+    Android Kotlin target — see below). `./gradlew :scratch-signing-backend:jvmTest` passed 4/4
+    against the real generated JNA-backed bindings, including the exact `D1_H0` KAT. `nm -gU` on
+    the produced `.dylib` confirms the `sign`/`verify`/`derive_xpub` uniffi symbols are exported.
+  - **iOS: PASS (compile/link).** `compileKotlinIosArm64` and `linkDebugTestIosSimulatorArm64` both
+    succeeded; `nm -gU` on both produced static `.a` libraries confirms the same symbols exported.
+    iOS runtime execution not attempted (honest future work, per `kotlin-tests-and-docs.mdc`).
+  - **Android: BLOCKED at the Gradle/Gobley layer, not the Rust/crate layer.** This repo pins AGP
+    9.0.1, under which the classic `com.android.library` plugin refuses to combine with
+    `org.jetbrains.kotlin.multiplatform` (AGP 9 requires `com.android.kotlin.multiplatform.library`
+    instead); Gobley 0.3.7 does not yet support that plugin (confirmed upstream:
+    `github.com/gobley/gobley/issues/153`, open — a maintainer reports downgrading their own
+    project to AGP 8.12.3 to keep using Gobley). Downgrading this repo's AGP pin was correctly
+    treated as out of scope (project-wide Gradle change, its own decision). Instead, gathered
+    Android evidence entirely outside Gradle/AGP, touching no SDK module: `cargo ndk` cross-
+    compiled the wrapper for all 4 ABIs (arm64-v8a, armeabi-v7a, x86_64, x86); `llvm-nm -D`
+    confirmed the `sign`/`verify`/`derive_xpub` symbols exported on every ABI's `.so`; and a
+    standalone diagnostic Rust binary (direct `ed25519_bip32` calls, no UniFFI/JNI) reproducing the
+    same `D1_H0` KAT was pushed via `adb` and ran successfully (`ANDROID_RUNTIME_KAT: PASS`) on
+    **both** a real physical device (arm64-v8a, Android 15) and the project's existing `arm64-v8a`
+    emulator (Android 7.0/API 24, the SDK's own `minSdk`). This proves the primitive runs correctly
+    on real Android hardware across the SDK's supported API range, but is **not** equivalent to a
+    `connectedAndroidDeviceTest` through the packaged UniFFI+JNA/Kotlin bindings (that bridge was
+    never built for Android, because Gradle cannot currently build it there) — so ADR-0016 §7d's
+    Android requirement is **not met**.
+  - **Toolchain installed for this spike (host-level, not SDK changes):** Rust/`rustup`/`cargo`
+    1.97.0 (not previously installed in this environment), Android NDK 27.2.12479018 (via
+    `sdkmanager`), `cargo-ndk` 4.1.2 (via `cargo install`). Xcode 26.6 and the Android SDK/emulators
+    (`kardano_test`, `kardano_api24`) were already present.
+  - **Explicitly kept blocked; no scope violations.** No SDK module (`:crypto`/`:tx`/`:wallet`/
+    `:shared`/`:core`/providers/apps) or its Gradle file was touched; no production dependency was
+    added to any SDK module; `gradle/libs.versions.toml` and the root `build.gradle.kts` are
+    unchanged (all plugin/dependency versions are hardcoded inside
+    `scratch-signing-backend/build.gradle.kts` and `Cargo.toml` instead). No signing was implemented
+    in `:crypto`/`:tx`/`:wallet`.
+  - Docs touched: `docs/DECISIONS/0016-...md` (Status/Decision reworded to "BLOCKED — provisioning
+    spike run, PARTIAL"; new §8 spike-results section; §1/Consequences/Follow-up updated);
+    `docs/PHASE_1_PLAN.md` (§1.10b-pre + "Next step"); `docs/ROADMAP.md` (§1.10b-pre); this file
+    (this entry + Open Decisions #4 + "Next recommended task"). Code touched: new
+    `scratch-signing-backend/` module (Rust crate + Gradle build file + JVM test + README) and the
+    one `settings.gradle.kts` include line — both disposable, no SDK module depends on them.
+  - Verification: `git status` confirmed only `settings.gradle.kts` + `scratch-signing-backend/`
+    (+ the docs above) changed; banned-word scan on touched docs clean; stale-wording scan clean
+    (no "PASS"/"enabled"/"ready"/"implementation authorized" claims for 1.10b, no mainnet/real-
+    funds/general-wallet-signing wording).
 
 - **Block 1.10b-pre backend-provisioning plan (docs-only). Gate moved to BLOCKED — provisioning
   path planned; Block 1.10b stays blocked.** Documented in ADR-0016 §7 the recommended way to
@@ -972,30 +1037,28 @@ Summary:
 
 Next recommended task:
 
-- **Backend-provisioning spike for extended Ed25519-BIP32 signing (new, blocking; the ADR-0016 §7e
-  prompt).** The gate is now **BLOCKED — provisioning path planned** (ADR-0016 §7): the extended-key
-  KAT is pinned and a recommended path is documented, but **Block 1.10b remains blocked** — the
-  documented path does not unblock 1.10b, enable signing, or authorize implementation. The spike
-  must build the recommended project-owned wrapper (ADR-0016 §7a Option B1) in an **isolated,
-  disposable `scratch-signing-backend` module** that exposes the reference `ed25519-bip32 0.4.2`
-  crate's already-present `XPrv::sign` (→ 64-byte signature) and `XPub::verify` (→ bool) via a
-  uniffi/KMP wrapper. **Recommended spike toolchain: Gobley 0.3.7** (`dev.gobley.cargo` /
-  `dev.gobley.uniffi`) — a recommendation to trial, **not** a confirmed project fact; it has not
-  been verified that the existing identus wrapper uses Gobley, so identus-apollo is cited only as a
-  packaging reference (Option B2 fallback = fork it + its Cargo/cinterop build). **Explicitly
-  authorized in the spike:** Gradle/Rust/Gobley files inside `scratch-signing-backend/` only, plus
-  exactly one root-level edit — adding `include(":scratch-signing-backend")` to
-  `settings.gradle.kts`. **Explicitly forbidden:** touching `:crypto`/`:tx`/`:wallet`/`:shared` or
-  any SDK API; modifying any SDK module's own `build.gradle.kts` (`core`, `crypto`, `tx`, `wallet`,
-  `shared`, the provider modules, or any app module); and adding any production dependency to any
-  SDK module. Verify + record: JVM KAT reproducing
-  `D1_H0` + `"Hello World"` ⇒ `D1_H0_SIGNATURE`; Android `connectedAndroidDeviceTest` (real runtime,
-  required); `compileKotlinIosArm64` + `linkDebugTestIosSimulatorArm64`; and `nm` proof each native
-  artifact exports a `sign` uniffi function. **Only after** the spike passes and records the exact
-  artifact/dependency (ADR-0016 §7d) may **Block 1.10b** signing code begin (ADR-0015 §1/§3/§5/§6).
-  Given the backend/toolchain judgment involved, an Opus review of ADR-0015/ADR-0016 and ownership
-  of the spike is recommended; Sonnet is sufficient for 1.10b/1.10c once the backend is pinned and
-  verified. Also reconcile `docs/AI_WORKING_AGREEMENT.md` at the start of 1.10b (ADR-0016 §6).
+- **Android signing-backend packaging follow-up (new, blocking; see ADR-0016 §8's "Recommended
+  next step").** The `scratch-signing-backend` spike (ADR-0016 §8) already proved JVM (Gobley/JNA
+  bindings, KAT reproduced, symbol proof) and iOS (compile/link, symbol proof) for a project-owned
+  uniffi wrapper over `ed25519-bip32 0.4.2`'s `XPrv::sign`/`XPub::verify`. **Android packaging via
+  Gobley's Android Gradle integration is blocked** (this repo's AGP 9.0.1 pin is incompatible with
+  Gobley 0.3.7's Android support — upstream `gobley/gobley#153`, open, no released fix), so **Block
+  1.10b remains blocked**: ADR-0016 §7d still needs an Android real-runtime KAT *through the
+  packaged wrapper*, not just the raw-primitive evidence the spike gathered via `cargo ndk` +
+  `nm` + a standalone on-device binary (real device + emulator, both PASS, but no UniFFI/JNI
+  bridge involved). The follow-up task should **not** retry Gobley's Android Gradle plugin and
+  **not** downgrade this repo's AGP pin (out of scope, project-wide); instead it should: (a) reuse
+  `cargo ndk` (already proven, `scratch-signing-backend/README.md`) to build the 4 ABI `.so` files;
+  (b) generate the Kotlin bindings directly with the `uniffi-bindgen`/`gobley-uniffi-bindgen` CLI
+  (library mode), skipping the Gobley Gradle plugin for Android only; (c) hand-wire the `.so`s +
+  generated Kotlin file into this SDK's existing AGP-9-compatible `androidLibrary {}` KMP DSL (the
+  same jniLibs shape `crypto/build.gradle.kts` already uses for `bip32-ed25519:1.8.8`), still only
+  inside a disposable scratch module; and (d) run a real `connectedAndroidDeviceTest` through that
+  packaged wrapper. **Only after** that passes and records the exact artifact/dependency (ADR-0016
+  §7d/§8) may **Block 1.10b** signing code begin (ADR-0015 §1/§3/§5/§6). Given the backend/toolchain
+  judgment involved, an Opus review of ADR-0016 §8 and ownership of this follow-up is recommended;
+  Sonnet is sufficient for 1.10b/1.10c once the backend is pinned and verified. Also reconcile
+  `docs/AI_WORKING_AGREEMENT.md` at the start of 1.10b (ADR-0016 §6).
 - **Manual Android checkpoint remaining for the project owner:** open the Android app, use the
   Provider section's "Use live Blockfrost (preprod)" toggle with a `project_id` and fund the
   restored test wallet's address from a preprod faucet (or otherwise seed UTxOs for it), then

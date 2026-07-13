@@ -1,0 +1,20 @@
+# Disposable spike crate — see ../README.md. Not part of the Kardano SDK.
+# Wraps `ed25519-bip32 = "0.4.2"` (MIT OR Apache-2.0) via UniFFI to expose
+# `XPrv::sign` / `XPub::verify` (Cardano extended Ed25519-BIP32 signing).
+# No handwritten crypto: both exported functions delegate directly to the
+# reference crate.
+[package]
+name = "signing-backend-wrapper"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# cdylib -> JVM (JNA) + Android (jniLibs .so)
+# staticlib -> iOS (Kotlin/Native cinterop over a static .a)
+crate-type = ["cdylib", "staticlib"]
+path = "src/commonMain/rust/lib.rs"
+
+[dependencies]
+uniffi = "0.29.4"
+ed25519-bip32 = "0.4.2"

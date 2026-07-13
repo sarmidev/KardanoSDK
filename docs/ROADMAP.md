@@ -1080,7 +1080,7 @@ Proposed block sequence:
     the "No transaction signing" guardrail to Block 1.10 scope while keeping every other ban. No
     Kotlin/Gradle/dependency/source changes.
   - `1.10b-pre` Signing backend + vector-source gate — **Status: complete (docs-only). Gate
-    result: BLOCKED — provisioning path planned** (ADR-0016,
+    result: BLOCKED — provisioning spike run, PARTIAL** (ADR-0016,
     `docs/DECISIONS/0016-transaction-signing-backend-gate.md`). Symbol-level inspection of the
     resolved artifacts confirmed **none can sign an extended key**:
     `org.hyperledger.identus:bip32-ed25519:1.8.8`'s native library exports only
@@ -1090,15 +1090,21 @@ Proposed block sequence:
     `seed‖pk` layout). The **extended-key KAT is pinned**: the reference `ed25519-bip32 0.4.2`
     (MIT OR Apache-2.0) `xprv_sign` vector (64-byte extended scalar signs `"Hello World"` ⇒ fixed
     64-byte signature via `XPrv::sign`), with the CIP-0100 32-byte-body-hash vector as a secondary
-    reproduce-to-confirm example; a plain RFC-8032 Ed25519 vector does **not** pass. ADR-0016 §7
-    records the recommended unblock path: a disposable `scratch-signing-backend` module that exposes
-    the crate's already-present `XPrv::sign`/`verify` via a uniffi/KMP wrapper (recommended spike
-    toolchain **Gobley 0.3.7** — a recommendation to trial, not a confirmed project fact;
-    identus-apollo cited only as a packaging reference; Option B2 fallback = identus-apollo-style
-    Cargo/cinterop fork). **Block 1.10b remains blocked** — documenting the path does not unblock it
-    or authorize implementation — until the provisioning spike passes JVM KAT + Android real-runtime
-    KAT + iOS compile/link, confirms the `sign` symbol per target (`nm`), and records the exact
-    artifact/dependency (ADR-0016 §7d). No Gradle/dependency change is authorized until then.
+    reproduce-to-confirm example; a plain RFC-8032 Ed25519 vector does **not** pass. ADR-0016 §8
+    records that the recommended unblock path — a disposable `scratch-signing-backend` module
+    exposing the crate's `XPrv::sign`/`verify` via a Gobley-0.3.7 uniffi/KMP wrapper — has now
+    **run**: **JVM PASS** (real Gobley/JNA bindings, KAT reproduced, symbol proof) and **iOS PASS**
+    (compile/link, symbol proof), but **Android is BLOCKED at the Gradle/Gobley layer** (this
+    repo's AGP 9.0.1 pin is incompatible with Gobley 0.3.7's Android integration —
+    upstream-confirmed, `gobley/gobley#153`); raw-primitive Android evidence (`cargo ndk`
+    cross-compile of all 4 ABIs, per-ABI `nm` symbol proof, and a standalone diagnostic binary
+    reproducing the KAT on a real device and an emulator) was gathered outside Gradle, but the
+    packaged UniFFI+JNA/Kotlin bridge was never built or run on Android. **Block 1.10b remains
+    blocked** — a partial spike pass does not unblock it or authorize implementation — until an
+    Android-packaging follow-up (skipping Gobley's Android Gradle integration; ADR-0016 §8) passes
+    a real Android-runtime KAT through the packaged wrapper, alongside the already-passing JVM/iOS
+    legs and symbol proof, and records the exact artifact/dependency (ADR-0016 §7d/§8). No
+    Gradle/dependency change to any SDK module is authorized until then.
   - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
     (blocked on 1.10b-pre).**
   - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:

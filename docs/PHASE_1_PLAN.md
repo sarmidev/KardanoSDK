@@ -1032,20 +1032,24 @@ Sub-blocks:
   `ed25519-bip32` crate `0.4.2` (MIT OR Apache-2.0) `xprv_sign` test vector — a 64-byte extended
   scalar signing `"Hello World"` to a fixed 64-byte signature via `XPrv::sign`/`signature_extended`
   (unambiguously extended; a plain seed-based Ed25519 vector does **not** pass), with the CIP-0100
-  32-byte-body-hash vector recorded as a secondary reproduce-to-confirm example. **Backend path
-  identified but not yet a resolved artifact:** the resolved derivation backend is a uniffi wrapper
-  of that same `ed25519-bip32` crate, so the recommended unblock is to expose the crate's
-  already-present `XPrv::sign`/`verify` through a uniffi/KMP wrapper (JVM/Android/iOS) — a
-  build/dependency/toolchain change requiring its own authorization. **Gate status updated to
-  `BLOCKED — provisioning path planned`** (ADR-0016 §7): the recommended path is a disposable
-  `scratch-signing-backend` module built with the recommended spike toolchain **Gobley 0.3.7**
-  (recommendation to trial, not a confirmed project fact; identus-apollo cited only as a packaging
-  reference), fallback being an identus-apollo-style Cargo/cinterop fork (Option B2). **Block 1.10b
-  remains blocked** — documenting a path does not unblock it, enable signing, or authorize
-  implementation. 1.10b is unblocked only after the provisioning spike passes the JVM KAT + Android
-  real-runtime KAT + iOS compile/link, confirms the `sign` native symbol per target (`nm`), and
-  records the exact artifact/dependency (ADR-0016 §7d). No Gradle/dependency change is authorized
-  until then.
+  32-byte-body-hash vector recorded as a secondary reproduce-to-confirm example. **Provisioning
+  spike run — result PARTIAL (ADR-0016 §8):** the recommended path (a disposable
+  `scratch-signing-backend` module, Gobley 0.3.7) was built and exposes the reference crate's
+  `XPrv::sign`/`XPub::verify` via uniffi. **JVM: PASS** (real Gobley/JNA bindings, KAT reproduced,
+  symbol proof). **iOS: PASS** (compile/link, symbol proof on both static libs). **Android: BLOCKED
+  at the Gradle/Gobley layer** — this repo's pinned AGP 9.0.1 is incompatible with Gobley 0.3.7's
+  Android integration (upstream-confirmed, `gobley/gobley#153`); raw-primitive Android evidence was
+  gathered instead outside Gradle (`cargo ndk` cross-compile of all 4 ABIs + `nm` symbol proof + a
+  standalone diagnostic binary reproducing the KAT on a real device and an emulator), but the
+  packaged UniFFI+JNA/Kotlin bridge itself was never built or run on Android. **Block 1.10b remains
+  blocked** — a partial spike pass does not unblock it, enable signing, or authorize
+  implementation. 1.10b is unblocked only after a backend passes the JVM KAT + Android
+  real-runtime KAT *through the packaged wrapper* + iOS compile/link, confirms the `sign` native
+  symbol per target (`nm`), and records the exact artifact/dependency (ADR-0016 §7d/§8). The
+  recommended next step is an Android packaging path that skips Gobley's Android Gradle
+  integration (`cargo ndk` + `uniffi-bindgen` CLI + hand-wired `androidLibrary {}` DSL, ADR-0016
+  §8) — a separately-scoped follow-up task, not signing code. No Gradle/dependency change to any
+  SDK module is authorized until then.
 - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
   (blocked on 1.10b-pre).** Add `:crypto`'s backend-neutral `Signing` (sign the `bodyHash` with an
   `ExtendedPrivateKey`; add the module-internal full-extended-scalar accessor and a sealed
@@ -1178,16 +1182,18 @@ records the signing ownership/boundary, the exact scope and its fixture-only enf
 cannot depend on `:shared`'s `TestWalletFixture`; Block 1.10 introduces no general-purpose wallet
 signing API), the signing message, artifact, error model, test policy, and the blocking backend
 gate, but authorizes no signing code. `1.10b-pre` (Signing backend + vector-source gate, ADR-0016)
-is also **complete (docs-only)** and landed **BLOCKED — provisioning path planned**: symbol-level
-inspection confirmed no resolved/published KMP backend can sign a Cardano extended key
-(`bip32-ed25519:1.8.8` exports only derive functions, Apollo is seed-based RFC-8032, libsodium is
-seed-based), while the **extended-key KAT is pinned** (reference `ed25519-bip32 0.4.2` `xprv_sign`
-vector). ADR-0016 §7 now records the recommended provisioning path. **The next step is a scoped,
-disposable backend-provisioning spike** (not signing code): in a new `scratch-signing-backend`
-module (Gradle/Rust/Gobley allowed there only — never `:crypto`/`:tx`/`:wallet`/`:shared` or SDK
-Gradle files), expose the reference `ed25519-bip32 0.4.2` crate's already-present
-`XPrv::sign`/`verify` via a uniffi/KMP wrapper (recommended spike toolchain **Gobley 0.3.7**;
-identus-apollo is only a packaging reference), then verify JVM KAT + Android real-runtime KAT + iOS
-compile/link and confirm the `sign` symbol per target (`nm`). **Block 1.10b signing code remains
-blocked** — documenting the path does not unblock it — until that spike passes and names the exact
-artifact/dependency (ADR-0016 §7d).
+is also **complete (docs-only)**, and its recommended provisioning spike has now **run** in a
+disposable `scratch-signing-backend` module (ADR-0016 §8), landing **BLOCKED — provisioning spike
+run, PARTIAL**: a Gobley-0.3.7 uniffi wrapper over the reference `ed25519-bip32 0.4.2` crate's
+`XPrv::sign`/`XPub::verify` **passed for JVM** (real Gobley/JNA bindings, `D1_H0` KAT reproduced,
+symbol proof) and **passed for iOS** (compile/link, symbol proof), but **Android is blocked at the
+Gradle/Gobley layer** — this repo's AGP 9.0.1 pin is incompatible with Gobley 0.3.7's Android
+support (upstream-confirmed, `gobley/gobley#153`); `cargo ndk` cross-compilation, per-ABI symbol
+proof, and a standalone on-device diagnostic binary (real device + emulator, both reproducing the
+KAT) proved the underlying primitive but not the packaged Kotlin/JNI bridge on Android. **The next
+step is a scoped Android-packaging follow-up, not signing code**: skip Gobley's Android Gradle
+integration and instead hand-wire `cargo ndk`-built `.so`s + `uniffi-bindgen`-CLI-generated
+bindings into this SDK's `androidLibrary {}` KMP DSL (still in a disposable scratch module), then
+run a real `connectedAndroidDeviceTest` through that packaged wrapper. **Block 1.10b signing code
+remains blocked** — a partial spike pass does not unblock it — until that follow-up passes and
+names the exact artifact/dependency (ADR-0016 §7d/§8).
