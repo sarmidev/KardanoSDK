@@ -12,9 +12,13 @@ Full details in `docs/AI_WORKING_AGREEMENT.md`. UI-free Kotlin Multiplatform Car
 
 - No handwritten cryptographic algorithms (Blake2b, Ed25519, SHA, etc.) — always delegate to
   a verified backend (KotlinCrypto, BouncyCastle, libsodium, Apple CommonCrypto).
-- No transaction signing. Disallowed now; may be introduced only when a future explicit
-  block/ADR (planned for Phase 1 Block 1.10) updates this rule with its own scoped signing
-  API and dependency decision — do not implement signing ahead of that.
+- Transaction signing is allowed only inside the explicitly authorized Block 1.10 scope
+  (ADR-0015): testnet/preprod only; the existing Phase 1 test fixture/restored-wallet checkpoint
+  only; ADA-only single-payment `TransactionBuilder` drafts only. No mainnet, no
+  non-fixture/user-supplied wallet, no native assets, no scripts, no metadata, no multisig.
+  Implementation is additionally blocked until the Block 1.10b-pre gate passes with a verified
+  extended Ed25519-BIP32 signing backend and a citable extended-key vector — do not implement
+  signing ahead of that gate.
 - No real mnemonics, private keys, or anything touching real funds — anywhere.
 - No banned words: `secure`, `safe`, `hardened`, `audited`, `production-ready`,
   `guaranteed`, `cryptographically safe`. Use factual wording instead.

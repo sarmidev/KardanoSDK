@@ -1053,7 +1053,50 @@ Proposed block sequence:
     preview, always labeled unsigned; failure shows a cause-distinguishing message mapped from
     `TxBuildError`. No transaction id/body hash is computed (needs `:crypto`, deferred to
     `1.10`). `:shared` gained an explicit `:tx` dependency; no other module changed.
-- `1.10` Transaction Signing — sign a testnet/preprod transaction locally.
+- `1.10` Transaction Signing — sign a testnet/preprod transaction locally. Split into
+  `1.10a`/`1.10b-pre`/`1.10b`/`1.10c` (ADR-0015,
+  `docs/DECISIONS/0015-transaction-signing.md`).
+  - `1.10a` Transaction Signing ADR — **Status: complete (docs-only).** Outcome: ADR-0015
+    resolves signing ownership (no new module — `:crypto` owns a backend-neutral `Signing`
+    primitive, `:tx` owns crypto-free witness-set/full-`transaction` CBOR assembly from supplied
+    `(vkey, signature)` pairs, `:wallet` owns orchestration through an explicitly-scoped,
+    non-general-purpose entry point and gains a `:wallet → :tx` dependency, `:shared` displays
+    only); scope (testnet/preprod only, the existing test fixture/restored wallet only, ADA-only
+    single-payment `TransactionBuilder` drafts only — no mainnet/native assets/scripts/metadata/
+    multisig) **and its fixture-only enforcement boundary (§2a)** — because `:wallet` cannot
+    depend on `:shared`, it cannot itself recognize `TestWalletFixture`; Block 1.10 introduces no
+    general-purpose wallet signing API, and the fixture-only scope is enforced instead by the
+    Phase 1 call sites/checkpoint/tests passing the cited words/path and `Network.TESTNET`
+    explicitly; the signing message (Ed25519-BIP32 signs
+    the 32-byte `bodyHash = Blake2b-256(TransactionDraft.bodyCbor())`, i.e. the tx id — not the
+    raw body bytes); the fee stance (Block 1.9's one-witness-per-input estimate can over-estimate
+    for the single-key wallet, so 1.10 signs the existing body unchanged and defers exact
+    witness-aware fee minimization); the artifact (full signed `transaction` CBOR + witness count
+    + tx id, making the tx id displayable for the first time — the item ADR-0014 §2 deferred
+    here); a **blocking backend gate** (see 1.10b-pre); the error model (`:crypto` `SigningError`,
+    typed `:tx` assembly errors, `:wallet` wrapping, `finally` key clearing); the test/vector
+    policy (no invented vectors; a citable extended-key KAT; structural CBOR tests; Android
+    runtime verification); the Playground checkpoint; and the guardrail reconciliation. Narrows
+    the "No transaction signing" guardrail to Block 1.10 scope while keeping every other ban. No
+    Kotlin/Gradle/dependency/source changes.
+  - `1.10b-pre` Signing backend + vector-source gate — **Status: pending (docs-only, blocking).**
+    From resolved-artifact evidence only, identify and verify an **extended** Ed25519-BIP32
+    signing backend (pre-expanded 64-byte `kL ‖ kR` scalar) across JVM + Android (real runtime,
+    `connectedAndroidDeviceTest`) + iOS (compile/link), with no handwritten crypto, and pin a
+    citable **extended-key** signature known-answer vector — a plain (RFC 8032) Ed25519 vector
+    does **not** pass. Starting fact: the pinned `org.hyperledger.identus:bip32-ed25519:1.8.8`
+    wrapper exposes only `deriveBytes`/`deriveBytesPub`/`fromNonextended` (no `sign`), Apollo (JVM)
+    exposes no extended-key signing, and libsodium `crypto_sign` cannot sign a pre-expanded scalar.
+    Must PASS (and name the exact dependency) before any 1.10b signing code; no Gradle/dependency
+    change is authorized until then.
+  - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
+    (blocked on 1.10b-pre).**
+  - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:
+    pending.** Signs by calling `:wallet`'s entry point with the cited fixture words/path and
+    `Network.TESTNET` explicitly (ADR-0015 §2a). Displays the tx id, witness count, a truncated
+    signed-tx CBOR preview, and an explicit "signed, not submitted — testnet-only, test fixture,
+    no real funds" label. No submit
+    (Block 1.11).
 - `1.11` Submit Transaction — submit a signed transaction to preprod.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.

@@ -481,11 +481,20 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
    `minSdk = 24`), so 1.6b adopted the ADR-0009 §3 platform-seam fallback instead: BouncyCastle
    on JVM/Android, Apple CommonCrypto on iOS (iOS wiring blocked in this environment — see the
    Last Session Summary above). `cryptography-kotlin` is not added to this repository.
-   Ed25519-BIP32 = `dev.allain:bip32-ed25519:2.3.0` (1.6c, not yet implemented). The main Apollo
-   artifact enters neither 1.5 nor 1.6; its remaining candidacy is Block 1.10 (signing).
+   Ed25519-BIP32 derivation = `org.hyperledger.identus:bip32-ed25519:1.8.8` (1.6c, swapped in via
+   ADR-0010; public-key projection via Ionspin libsodium on JVM/iOS + `com.goterl:lazysodium-android`
+   on Android). **The transaction-signing backend is still open and is the top Block 1.10 risk:**
+   ADR-0015 (Block 1.10a) verified from resolved artifacts that the pinned `bip32-ed25519:1.8.8`
+   wrapper exposes no `sign`, Apollo (JVM) exposes no extended Ed25519-BIP32 signing, and libsodium
+   `crypto_sign` cannot sign a pre-expanded 64-byte extended scalar — so **no shipped dependency
+   can sign a Cardano extended key today.** The signing backend must be resolved and verified by the
+   blocking, docs-only **Block 1.10b-pre gate** (extended-key backend across JVM + Android runtime +
+   iOS compile/link, plus a citable extended-key signature KAT — a plain Ed25519 vector does not
+   pass) before any signing code; no dependency/Gradle change is authorized until then.
    See `docs/DECISIONS/0004-crypto-strategy.md` (open questions),
-   `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`, and
-   `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`.
+   `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`,
+   `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`, and
+   `docs/DECISIONS/0015-transaction-signing.md` (signing backend gate).
 
 5. Test vector sources:
    - The authoritative spec sources are now documented in `docs/TESTING.md` (Bech32/Bech32m
@@ -498,8 +507,16 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
 Do not implement:
 
 - Mnemonic generation.
-- Private key handling.
-- Transaction signing.
+- Raw private-key byte exposure (private-key material stays opaque, per ADR-0009 §7).
+- Transaction signing outside the Block 1.10 scope (ADR-0015 §2: testnet/preprod only, the
+  existing test fixture/restored wallet only, ADA-only single-payment `TransactionBuilder` drafts
+  only). No mainnet, non-fixture/user wallet, native assets, scripts, metadata, or multisig
+  signing. **No general-purpose or public wallet signing API** — `:wallet`'s Block 1.10 signing
+  entry point takes explicit `(words, network, draft)` inputs and is not fixture-aware; the
+  fixture-only scope is a Phase 1 call-site/checkpoint/test policy (`:shared`/tests pass the cited
+  fixture words/path and `Network.TESTNET` explicitly), not a `:wallet`-internal check, because
+  `:wallet` cannot depend on `:shared` (ADR-0015 §2a). Signing code is additionally gated on the
+  Block 1.10b-pre backend gate passing.
 - Transaction submission.
 - Real wallet flows.
 - Plutus support.
@@ -523,6 +540,82 @@ At the end of each session, update this section.
 Date: 2026-07-13
 
 Summary:
+
+- **Block 1.10a microfix (fixture-only enforcement boundary + guardrail wording) — delivered
+  (docs-only).** Two fixes to ADR-0015 before closing 1.10a:
+  - **Fixture-only enforcement boundary (new ADR-0015 §2a).** §1 placed signing orchestration in
+    `:wallet` and §2 scoped Block 1.10 to the existing test fixture, but `:wallet` cannot depend
+    on `:shared` and so cannot itself reference `:shared`'s `TestWalletFixture` — the two needed
+    reconciling. §2a now states explicitly: **Block 1.10 must not introduce a general-purpose
+    wallet signing API**; `:wallet`'s signing entry point takes the same explicit `(words,
+    network)` shape `ReadOnlyWallet.restore` already takes, plus a `TransactionDraft`, and its
+    KDoc must say the entry point is authorized only for the Phase 1 fixture flow and ADA-only
+    `TransactionBuilder` drafts. **Enforcement is a Phase 1 call-site/checkpoint/test policy, not
+    a `:wallet`-internal check:** `:shared`'s checkpoint (§7) and any real-signing test pass the
+    cited `TestWalletFixture` words/path and `Network.TESTNET` explicitly; `:wallet` cannot verify
+    "this is the fixture" without depending on `:shared`. Any future public/general-purpose wallet
+    signing needs its own later, explicit ADR/block. §1's `:wallet` bullet, §2's fixture bullet,
+    §7's checkpoint text, Rationale, Rejected alternatives, Consequences, and Non-goals were all
+    updated to stay consistent with §2a.
+  - **Guardrail wording finished.** `.cursor/rules/kardano-sdk-guardrails.mdc`'s transaction-
+    signing hard rule (left as a to-do in the prior session because it is not a markdown file) is
+    now narrowed to: signing allowed only inside ADR-0015/Block 1.10 scope (testnet/preprod only;
+    the existing Phase 1 test fixture/restored-wallet checkpoint only; ADA-only single-payment
+    `TransactionBuilder` drafts only; no mainnet, non-fixture/user-supplied wallet, native assets,
+    scripts, metadata, or multisig); implementation additionally blocked until Block 1.10b-pre
+    passes with a verified extended Ed25519-BIP32 backend and a citable extended-key vector; no
+    signing ahead of that gate.
+  - Docs touched: `docs/DECISIONS/0015-transaction-signing.md` (§2a added; §1/§2/§7/Rationale/
+    Rejected/Consequences/Non-goals updated); `docs/PHASE_1_PLAN.md` §1.10 (scope/1.10a/1.10c/
+    "Next step" updated); `docs/ROADMAP.md` §1.10 (1.10a/1.10c updated);
+    `.cursor/rules/kardano-sdk-guardrails.mdc` (signing bullet narrowed); this file (this entry).
+  - Verification: banned-word scan and a stale-scope scan (phrases implying general/arbitrary
+    wallet signing, real funds, mainnet, or readiness claims) on every touched file came back
+    clean — all matches are negated/scoping policy text; confirmed no Kotlin/Gradle/source
+    changes (`git status` still shows only docs + the one rule file); confirmed
+    `docs/DECISIONS/0015-transaction-signing.md` is tracked/staged.
+
+- **Block 1.10a (Transaction Signing — ADR / decision record) — delivered (docs-only).** Added
+  `docs/DECISIONS/0015-transaction-signing.md` (ADR-0015, `Accepted` as a decision record; it
+  authorizes no signing code and gates signing on the Block 1.10b-pre backend gate passing). It
+  resolves every blocking decision for Block 1.10 signing:
+  - **Ownership/boundary (§1):** no new module. `:crypto` owns a backend-neutral `Signing`
+    primitive; `:tx` owns crypto-free witness-set/full-`transaction` CBOR assembly from supplied
+    `(vkey, signature)` pairs (keeps its ADR-0014 `:core`+`:provider`-only dependency set);
+    `:wallet` owns orchestration and gains a `:wallet → :tx` dependency; `:shared` displays only.
+  - **Scope (§2):** testnet/preprod only (`Network.TESTNET`), the existing test fixture/restored
+    wallet only, ADA-only single-payment `TransactionBuilder` drafts only; no mainnet, non-fixture
+    wallet, native assets, scripts, metadata, or multisig.
+  - **Signing message (§3):** Ed25519-BIP32 signs the 32-byte
+    `bodyHash = Blake2b-256(TransactionDraft.bodyCbor())` (= the tx id), **not** the raw body
+    bytes. The Block 1.9 one-witness-per-input fee estimate can over-estimate for the single-key
+    wallet, so 1.10 signs the existing body **unchanged** and defers exact witness-aware fee
+    minimization.
+  - **Artifact (§3):** a full signed `transaction` `[body, witness_set, true, null]` +
+    witness count + tx id; the tx id is now displayable (closing the item ADR-0014 §2 deferred to
+    this block).
+  - **Backend gate (§4):** verified from resolved artifacts that the pinned
+    `org.hyperledger.identus:bip32-ed25519:1.8.8` wrapper exposes only
+    `deriveBytes`/`deriveBytesPub`/`fromNonextended` (no `sign`), Apollo (JVM) has no extended-key
+    signing, and libsodium `crypto_sign` cannot sign a pre-expanded 64-byte scalar — so **no
+    shipped dependency can sign a Cardano extended key today.** Block 1.10b-pre is a blocking,
+    docs-only gate that must find/verify an **extended** Ed25519-BIP32 backend across JVM +
+    Android (real runtime) + iOS (compile/link) with no handwritten crypto and pin a citable
+    **extended-key** KAT (a plain Ed25519 vector does not pass). No dependency/Gradle change is
+    authorized until it passes.
+  - **Error model (§5), test policy (§6), checkpoint (§7), guardrail reconciliation (§8),
+    sub-block split (§9):** typed `SigningError`/`:tx` assembly errors/`WalletError.Signing` with
+    `finally` key clearing; no invented vectors + backend KAT + structural CBOR tests + Android
+    runtime verification; a "Signed Transaction (not submitted)" checkpoint showing tx id/witness
+    count/CBOR preview with an explicit "signed, not submitted — testnet-only, test fixture, no
+    real funds" label; the guardrail "No transaction signing" narrowed to Block 1.10 scope while
+    every other ban is kept.
+  - Docs touched: new ADR-0015; `docs/PHASE_1_PLAN.md` §1.10 (expanded into 1.10a/1.10b-pre/
+    1.10b/1.10c + "Next step"); `docs/ROADMAP.md` §1.10; `.cursor/rules/kardano-sdk-guardrails.mdc`
+    (signing rule narrowed); this file (this entry + Open Decisions #4 + "What Not To Do Yet").
+  - Verification: banned-word scan and stale-phrase (mainnet/real-funds/general-wallet-signing/
+    readiness) scan on touched docs/rules clean (only factual/negated policy text); no
+    Kotlin/Gradle/source/iOS/Android changes.
 
 - **Block 1.9b-2 (fee/change coin-selection builder) — delivered.** Implements ADR-0014 §6-7
   on top of the 1.9b-1 serializer; no signing, witness construction, txid hashing, submit, or
@@ -785,15 +878,20 @@ Summary:
 
 Next recommended task:
 
-- **Block 1.10** (Transaction Signing): sign a testnet/preprod transaction locally using only
-  test keys, producing a witness/signed transaction and (only now) a meaningful transaction id;
-  keep tests backed by official vectors or verified references where available. This is the
-  first block authorized to introduce signing per the standing guardrail (an explicit
-  block/ADR — this is that block).
+- **Block 1.10b-pre** (Signing backend + vector-source gate, docs-only, blocking): from
+  resolved-artifact evidence only, identify and verify an **extended** Ed25519-BIP32 signing
+  backend (pre-expanded 64-byte `kL ‖ kR` scalar) across JVM + Android (real runtime,
+  `connectedAndroidDeviceTest`) + iOS (compile/link at minimum), with no handwritten crypto, and
+  pin a citable **extended-key** signature known-answer vector (a plain RFC-8032 Ed25519 vector
+  does not pass). This gate must PASS and name the exact dependency before any Block 1.10b signing
+  code; ADR-0015 §4 records the starting facts (no shipped dependency signs a Cardano extended key
+  today). Given the unresolved backend, an Opus review of ADR-0015 and ownership of the 1.10b-pre
+  gate is recommended before implementation; Sonnet is sufficient for 1.10b/1.10c once the backend
+  and vectors are pinned.
 - **Manual Android checkpoint remaining for the project owner:** open the Android app, use the
   Provider section's "Use live Blockfrost (preprod)" toggle with a `project_id` and fund the
   restored test wallet's address from a preprod faucet (or otherwise seed UTxOs for it), then
-  tap "Build transaction draft" in the new Transaction Draft section to visually confirm a
+  tap "Build transaction draft" in the Transaction Draft section to visually confirm a
   `Success` presentation on-device; the default mock provider path ("no UTxOs") is already
   covered by `PlaygroundTransactionDraftDesktopTest` and needs no manual check.
 - No commit was made this session unless the project owner explicitly requests one.
