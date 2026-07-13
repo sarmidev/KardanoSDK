@@ -11,9 +11,10 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
 
 - Hosts the SDK Playground (`playground/PlaygroundScreen.kt`, `playground/PlaygroundPresenter.kt`),
   introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core`/
-  `:crypto`/`:wallet` SDK behavior (address parsing, Hex, CBOR, test-wallet derivation + address
-  generation, read-only wallet balance) and, from Block 1.3a, a read-only "Provider" section
-  (mock by default, with an optional live-Blockfrost toggle added in Block 1.3b).
+  `:crypto`/`:wallet`/`:tx` SDK behavior (address parsing, Hex, CBOR, test-wallet derivation +
+  address generation, read-only wallet balance, and an unsigned transaction-draft checkpoint)
+  and, from Block 1.3a, a read-only "Provider" section (mock by default, with an optional
+  live-Blockfrost toggle added in Block 1.3b).
 - Hosts `App.kt` (theme wrapper that renders `PlaygroundScreen`) and the iOS UI entry point
   (`MainViewController.kt`).
 - Retains the sample glue (`Greeting.kt`, `GreetingUtil.kt`) used by `PlaygroundScreen` to
@@ -23,8 +24,11 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   test-wallet derivation checkpoint (`Mnemonic`, `IcarusMasterKey`, `KeyDerivation`, `Hashing`
   — see "Test Wallet & Address Generation" below), on `:provider` for the read-only query
   boundary (`ChainQueryProvider`) and its in-memory mock, on `:provider-blockfrost` for the
-  live Blockfrost provider, and, from Block 1.8b, on `:wallet` for the read-only wallet-balance
-  checkpoint (`ReadOnlyWallet`, `WalletBalance`, `WalletError` — see "Wallet Balance" below).
+  live Blockfrost provider, on `:wallet` (Block 1.8b) for the read-only wallet-balance
+  checkpoint (`ReadOnlyWallet`, `WalletBalance`, `WalletError` — see "Wallet Balance" below),
+  and, from Block 1.9c, on `:tx` for the unsigned transaction-draft checkpoint
+  (`TransactionBuilder`, `TransactionBuildRequest`, `TransactionDraft`, `TxBuildError` — see
+  "Transaction Draft" below).
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
   `iosApp` via `MainViewControllerKt.MainViewController()`.
 
@@ -90,13 +94,39 @@ generated address — and is displayed as a normal success, not an error; a live
 preprod provider can show a non-zero balance only after the generated address is funded with
 test ADA from a preprod faucet.
 
+### Transaction Draft section (Block 1.9c)
+
+The "Transaction Draft (unsigned)" section restores the same `TestWalletFixture` mnemonic as
+the Wallet Balance section above (always `Network.TESTNET`, via `ReadOnlyWallet.restore`),
+queries whichever `ChainQueryProvider` is currently selected in the Provider section for that
+wallet's candidate UTxOs and the current `ProtocolParameters`, and calls `:tx`'s
+`TransactionBuilder.build(TransactionBuildRequest)` to build a minimal, single-payment,
+**unsigned** ADA transaction: a fixed 2 ADA payment to a reused cited CIP-19 testnet vector
+(`InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY`, already used elsewhere in this Playground as a
+provider seed address — not invented for this checkpoint), with any change returned to the
+restored wallet's own address. `:shared` performs no coin selection, fee estimation, change
+decision, or CBOR encoding itself — all of that belongs to `:tx`
+(`TransactionBuilder`/`TransactionBodySerializer`), and `PlaygroundPresenter.presentTransactionDraft`
+only builds the request and formats the result. On success the screen shows only the selected
+input and output counts, the fee and (if present) change amounts in lovelace, the encoded body
+size in bytes, and a truncated hex preview of the body bytes — always labeled as an unsigned
+draft. On failure (for example no UTxOs, insufficient funds, or an amount below minimum ADA) the
+screen shows a message distinguishing the cause, mapped from `:tx`'s typed `TxBuildError`. Under
+the default `InMemoryChainQueryProvider`, the restored wallet's address has no fake UTxOs seeded
+for it — same honest-empty behavior as the Wallet Balance section (ADR-0013 §7) — so this section
+normally reports "no UTxOs" as the expected mock result, not a failure; a live Blockfrost preprod
+provider can build a real draft only after that address is funded with test ADA from a preprod
+faucet. **No signing, no witness construction, no transaction id hashing, and no submission**
+anywhere in this checkpoint — see
+[docs/DECISIONS/0014-minimal-ada-transaction-builder.md](../docs/DECISIONS/0014-minimal-ada-transaction-builder.md).
+
 **SDK logic and the protocol/cryptographic test-vector suites belong in `:core`/`:crypto`/
-`:wallet`, not here.** `:shared` only calls `:core`/`:crypto`/`:provider`/`:wallet` APIs and
-formats/displays results. `PlaygroundPresenter` is a display-only mapping layer with no
+`:wallet`/`:tx`, not here.** `:shared` only calls `:core`/`:crypto`/`:provider`/`:wallet`/`:tx`
+APIs and formats/displays results. `PlaygroundPresenter` is a display-only mapping layer with no
 protocol or cryptographic rules of its own — it does not reimplement derivation, projection,
-hashing, address generation, or balance summation. `:shared` tests use a minimum of cited
-CIP-19/CIP-1852 vectors to verify presenter wiring, but do not replicate the `:core`/`:crypto`/
-`:wallet` test-vector suites.
+hashing, address generation, balance summation, coin selection, fee/change computation, or CBOR
+encoding. `:shared` tests use a minimum of cited CIP-19/CIP-1852 vectors to verify presenter
+wiring, but do not replicate the `:core`/`:crypto`/`:wallet`/`:tx` test-vector suites.
 
 ## Why it still contains UI
 
@@ -134,8 +164,15 @@ pinned as if it were an external vector. The wallet-balance checkpoint follows t
 `mapWalletBalanceResult`/`presentWalletError` directly; `PlaygroundWalletBalanceDesktopTest`
 (`jvmTest`-only) is the only place `presentWalletBalance` and `ReadOnlyWallet.restore` run end
 to end together, asserting the honest zero balance under the default mock and that the
-checkpoint's own restore call uses `Network.TESTNET`. See [docs/TESTING.md](../docs/TESTING.md)
-for the testing strategy and test-vector policy.
+checkpoint's own restore call uses `Network.TESTNET`. The transaction-draft checkpoint follows
+the same split: `PlaygroundTransactionDraftPresenterTest` (`commonTest`) is native-free, building
+real `TransactionDraft`/`TxBuildError` values via `TransactionBuilder.build` against hand-built
+fake UTxOs and cited CIP-19 addresses (no mnemonic, no native call) and feeding them into
+`mapTransactionDraftResult`/`presentTxBuildError` directly; `PlaygroundTransactionDraftDesktopTest`
+(`jvmTest`-only) is the only place `presentTransactionDraft` and `ReadOnlyWallet.restore` run end
+to end together, asserting the honest "no UTxOs" result under the default mock and a successful
+draft once the mock is seeded with a UTxO for the restored wallet's own address. See
+[docs/TESTING.md](../docs/TESTING.md) for the testing strategy and test-vector policy.
 
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host tests: `./gradlew :shared:testAndroidHostTest`

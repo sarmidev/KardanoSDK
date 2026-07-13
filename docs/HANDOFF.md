@@ -524,6 +524,365 @@ Date: 2026-07-13
 
 Summary:
 
+- **Block 1.9b-2 (fee/change coin-selection builder) — delivered.** Implements ADR-0014 §6-7
+  on top of the 1.9b-1 serializer; no signing, witness construction, txid hashing, submit, or
+  `:shared` Playground code (that's 1.9c/1.10).
+  - Public API: `TransactionBuildRequest(network, candidateInputs, payment, changeAddress,
+    protocolParameters, ttl)` and `TransactionBuilder.build(request)`. `TransactionBuilder`
+    delegates all actual `transaction_body` CBOR encoding to
+    `TransactionBodySerializer.serialize` — no duplicated encoding logic.
+  - Extracted two small shared internals so the serializer and the new builder can never
+    disagree: `LedgerInputOrder` (the ledger `(transaction_id, index)` comparator, previously
+    private to the serializer) and `TxCborSupport` (the per-input/per-output CBOR entry
+    encoders). `TransactionBodySerializer`'s own behavior is unchanged — this is a pure
+    refactor of where the logic lives.
+  - `TransactionBuilder.build`: validates `payment`'s and `changeAddress`'s network against
+    `request.network` (`NetworkMismatch`); rejects empty `candidateInputs` (`NoInputs`) and a
+    payment below its own min-ADA (`InvalidOutputAmount`) before any selection; then runs a
+    largest-first selection (by `Utxo.value.coin.value`, tie-broken by `LedgerInputOrder`) and
+    a bounded fee/change fixed-point loop (`MAX_FEE_ITERATIONS = 8`). Each loop attempt grows
+    the selection to cover `payment + trial fee`, builds the trial output list (with a change
+    output whenever the trial change is non-zero — the *dust* check is deliberately deferred
+    to the final result, not applied per-attempt, since an intermediate trial's change is not
+    final), serializes the trial body, and re-estimates the fee from its real size. Because a
+    body that discovers `change == 0` for one trial fee immediately shrinks (dropping the
+    change output), the very next fee estimate can be *smaller*, which can then reopen a
+    positive change and cause the loop to oscillate between a with- and without-change shape
+    instead of settling. On non-convergence, `build` takes `maxOf` the last two fee estimates
+    (the conservative, larger one — this is the fix that makes the oscillating case still land
+    on the correct answer regardless of which shape the loop happened to stop on) and rebuilds
+    exactly once more with it, per ADR-0014 §6's "take the larger fee" guidance.
+  - Fee/size estimate (ADR-0014 §6): `estimateTxSize` = wrapper array header + the *real*
+    encoded body size (from the trial `TransactionDraft.bodyCbor()`, not a guess) + a
+    sized-but-never-built witness set (`witnessSetSize`: map overhead + a generic
+    `headSize(n)` for the inner array header, computed for the actual shortest-form CBOR rule
+    with no `n < 24` shortcut, + `101` bytes per selected input for one vkey witness) +
+    validity-flag byte + auxiliary-data-null byte. All arithmetic goes through new
+    `CheckedMath.kt` (`addExact`/`subtractExact`/`multiplyExact`, reimplementing the
+    well-known overflow checks since `java.lang.Math`'s versions are JVM-only, not available
+    from `commonMain`); any overflow maps to `FeeCalculationOverflow`.
+  - Min-ADA/change (ADR-0014 §7): `minADA = (160 + realEncodedOutputSize) * coinsPerUtxoByte`,
+    where the output size comes from `TxCborSupport.encodeOutput` — the same encoding the
+    serializer itself uses, so this can never drift from what actually gets encoded. Zero
+    change is omitted; change at/above its min-ADA is emitted to `changeAddress`; positive
+    dust change is rejected with `ChangeBelowMinimum` (never folded into the fee).
+    `ExceedsMaxTxSize` is checked on every fee-loop attempt against the same size estimate.
+  - No new `TxBuildError` variant was needed: `InsufficientFunds`, `InvalidOutputAmount`,
+    `ChangeBelowMinimum`, `ExceedsMaxTxSize`, and `FeeCalculationOverflow` — previously
+    documented as "not yet reachable" — are now produced by `TransactionBuilder.build`;
+    `NetworkMismatch`, `NoInputs`, `Serialization`, and `DuplicateInput` are shared with (or
+    passed through from) the serializer. `UnsupportedFeature` remains unreachable (`Utxo`/
+    `Value` have no multi-asset field yet). `TxBuildError`'s type- and variant-level KDoc was
+    updated throughout to reflect this.
+  - Tests (`tx/src/commonTest/TransactionBuilderTest.kt`, 15 cases): empty candidates
+    (`NoInputs`); payment below min-ADA (`InvalidOutputAmount`); insufficient funds after fee;
+    largest-first selection with a deterministic ledger-order tie-break; exact zero change
+    omits the change output; change at/above min-ADA emits it; dust change
+    (`ChangeBelowMinimum`); `ExceedsMaxTxSize`; `FeeCalculationOverflow` (via
+    `minFeeConstant = Long.MAX_VALUE`); network mismatch for both the payment and the change
+    address; final body decodes structurally via `:core`'s `Cbor.decode`; the encoded fee
+    (body field `2`) matches `TransactionDraft.fee`; `selectedInputs` are ledger-ordered
+    regardless of supplied/selection order; `bodyCbor()`'s defensive copy. Two tests (exact
+    zero change, dust change) use a `ProtocolParameters` with `minFeeCoefficient = 0` so the
+    fee is an exact, known constant regardless of body size — this isolates the change/min-ADA
+    decision from the size-dependent fee formula without hand-deriving `:core`'s CBOR
+    byte-size accounting (which, while feasible, is easy to get subtly wrong and was not
+    needed once this technique was found); every other test uses the real, illustrative
+    `InMemoryChainQueryProvider.DEFAULT_PROTOCOL_PARAMETERS` with generous headroom. No
+    invented `transaction_body` goldens; addresses reuse the CIP-19 vectors already cited in
+    `:core`'s `AddressTest`.
+  - Docs: `tx/README.md` documents the new `TransactionBuilder` API, the fee-is-an-estimate
+    caveat, and the `minFeeCoefficient = 0` test technique; `docs/PHASE_1_PLAN.md` and
+    `docs/ROADMAP.md` §1.9 mark `1.9b-2` complete; this file.
+  - Verified: `:tx:jvmTest`, `:tx:testAndroidHostTest`, `:tx:compileKotlinIosSimulatorArm64`,
+    `:tx:compileKotlinIosArm64`, and `:core:jvmTest` all pass; lints clean; banned-word and
+    mnemonic/seed/private-key scans on touched files clean; `:tx` still depends only on
+    `:core`/`:provider` (`tx/build.gradle.kts` unchanged); `:core` untouched; no signing,
+    witness construction, txid hashing, submit, `:shared` UI, or `:provider-blockfrost`
+    dependency added.
+- **Block 1.9b-1 (`:tx` module + `transaction_body` serialization) — delivered.** Implements
+  ADR-0014's serialization decisions (§3-5); defers the largest-first coin-selection and
+  fee/change fixed-point loop (§6-7) to a follow-up sub-block, 1.9b-2, per the task's explicit
+  permission to keep this diff focused.
+  - New Gradle module `:tx` (`org.sarmidev.kardano.tx`): targets mirror
+    `:provider`/`:wallet` (`jvm`, `androidLibrary { withHostTest }`, `iosArm64`,
+    `iosSimulatorArm64`, `explicitApi()`); `commonMain` depends only on `:core` and
+    `:provider`; `commonTest` adds only `libs.kotlin.test` (no `kotlinx-coroutines-test` —
+    nothing here is `suspend`). Registered in `settings.gradle.kts`.
+  - Public API: `TransactionOutput(address, amount)`; `TransactionBodyRequest(network,
+    inputs, outputs, fee, ttl)` — the narrow Block 1.9b-1 request shape, deliberately not the
+    fuller coin-selecting request ADR-0014 sketches, since that one performs no selection;
+    `TransactionDraft` (`selectedInputs`, `outputs`, `fee`, `ttl`, `bodyCbor()` returning a
+    defensive copy, `internal` constructor so only `TransactionBodySerializer` can produce a
+    consistent instance); `TransactionBodySerializer.serialize(request)`.
+  - `TxBuildError` exposes the **full** ADR-0014 §8 error surface now (`NoInputs`,
+    `InsufficientFunds`, `InvalidOutputAmount`, `ChangeBelowMinimum`, `ExceedsMaxTxSize`,
+    `FeeCalculationOverflow`, `Serialization`, `NetworkMismatch`, `UnsupportedFeature`) plus
+    one addition, `DuplicateInput` (ADR-0014 §4 requires duplicate-input rejection but §8's
+    illustrative sketch named no dedicated variant for it). Each variant's KDoc states
+    whether it is reachable from `serialize` today; only `Serialization`, `NetworkMismatch`,
+    and `DuplicateInput` are — the rest belong to the 1.9b-2 fee/change builder. (Superseded by
+    the review microfix below: `NoInputs` is reachable here too, and `NoOutputs` was added.)
+  - `TransactionBodySerializer.serialize`: checks every output address's network against
+    `TransactionBodyRequest.network` (`NetworkMismatch`); sorts inputs by the ledger
+    `(transaction_id, index)` order (unsigned-bytewise hash, then numeric index) and rejects
+    duplicate pairs (`DuplicateInput`); builds the Conway `transaction_body` map (keys
+    `0`/`1`/`2`, optional `3`) through `:core`'s unchanged `Cbor`/`CborValue` — inputs as an
+    untagged array of `[txHash, index]`, outputs in the legacy `[address, coin]` array form
+    (`address.toByteArray()`, no datum hash); wraps any `CborError` as `Serialization` (a
+    negative `ttl` is rejected this way, since an unsigned field cannot hold it — no separate
+    ttl validation was added).
+  - Tests (`tx/src/commonTest`): a module-wiring smoke test, plus structural/CDDL-derived
+    tests per ADR-0014 §9 (no invented `transaction_body` goldens) covering: body-map key
+    order with/without ttl; input sorting regardless of supplied order; duplicate-input
+    rejection; the legacy `[address, coin]` output form with raw address bytes; body bytes
+    decoded and inspected via `:core`'s `Cbor.decode`; `bodyCbor()`'s defensive copy;
+    `NetworkMismatch`; and negative-ttl `Serialization`. Addresses reuse the CIP-19 "Test
+    vectors" type-00 base addresses already cited in `:core`'s `AddressTest`, not invented.
+  - Docs: new `tx/README.md`; `docs/PHASE_1_PLAN.md` and `docs/ROADMAP.md` §1.9 updated to
+    split `1.9b` into `1.9b-1` (complete) and `1.9b-2` (pending, fee/change builder); this
+    file.
+  - No `:core` CBOR policy change; no `:wallet`/`:shared`/`:provider-blockfrost`/`:crypto`
+    dependency added to `:tx`; no signing, witness, or submit code.
+- **Block 1.9b-1 review microfix — delivered (no fee/change/coin-selection code; `:tx` still
+  not wired into `:shared`).**
+  - `tx/README.md`: replaced the banned word `Not audited.` with the same "no readiness claim"
+    phrasing `:core`/`:crypto` use elsewhere, keeping only `Not for real funds.`.
+  - `TransactionBodySerializer.serialize` now rejects an empty `TransactionBodyRequest.inputs`
+    list with `TxBuildError.NoInputs` and an empty `outputs` list with a new
+    `TxBuildError.NoOutputs`, both checked before the network/ordering/encoding steps — a
+    minimal transaction body (ADR-0014 §2) needs at least one input and one output.
+  - `TxBuildError`: `NoInputs`'s KDoc now says it is reachable directly from the 1.9b-1
+    serializer (not only from the future coin-selection builder); added `NoOutputs` as a
+    second implementation-discovered addition to the ADR-0014 §8 sketch (alongside the
+    existing `DuplicateInput`), with matching KDoc on the type and the variant. Updated
+    `serialize`'s KDoc to list both new failure cases.
+  - Tests: added `emptyInputsIsRejectedWithNoInputs` and `emptyOutputsIsRejectedWithNoOutputs`
+    to `TransactionBodySerializerTest`.
+  - Docs: `docs/DECISIONS/0014-minimal-ada-transaction-builder.md` §8 gained a small
+    "Implementation note (Block 1.9b-1)" recording the `NoOutputs` addition and `NoInputs`'s
+    earlier-than-expected reachability; `docs/PHASE_1_PLAN.md` and `docs/ROADMAP.md` §1.9
+    updated to match (and `1.9b-2`'s "remaining variants" list no longer includes `NoInputs`).
+  - Re-verified: `:tx:jvmTest`, `:tx:testAndroidHostTest`, `:tx:compileKotlinIosSimulatorArm64`,
+    `:core:jvmTest` all pass; lints clean; banned-word scan on `tx/` clean; `:tx` still depends
+    only on `:core`/`:provider`; `:core` untouched; no signing/witness/txid/submit/fee-change/
+    Playground code added.
+- **Block 1.9b-2 review microfix — delivered.** Two issues found reviewing `TransactionBuilder`
+  before moving to 1.9c; no `:core`/`:crypto`/`:wallet`/`:shared`/Android/iOS/provider changes,
+  `:tx` still depends only on `:core`/`:provider`.
+  - **Final conservative fee check.** The bounded fee loop's non-convergence path rebuilds once
+    more with `conservativeFee = maxOf(lastFee, lastFeeNext)` — but that rebuild can itself need
+    to select more inputs to cover the larger trial fee, and each additional input adds another
+    witness to the size estimate, which can push the *next* re-estimate past `conservativeFee`
+    again. `TransactionBuilder.build` now checks this explicitly: if the rebuild's `feeNext`
+    still exceeds `conservativeFee`, it returns the new `TxBuildError.FeeEstimateDidNotConverge
+    (encodedFee, recomputedFee)` instead of a `TransactionDraft` with a known-too-low encoded
+    fee. Found a genuine (not contrived-for-coverage) construction that reaches this: a large
+    `minFeeCoefficient` (so each witness is expensive relative to a filler UTxO's own value)
+    plus ~30 equal, moderately small filler UTxOs — covered by
+    `feeLoopNonConvergenceReturnsFeeEstimateDidNotConverge`.
+  - **Protocol-parameter validation.** `ProtocolParameters` is a plain data class of `Long`
+    fields with no non-negativity invariant of its own — a negative `coinsPerUtxoByte` in
+    particular would have silently defeated the min-ADA check (`amount < minAda` is trivially
+    false once `minAda` goes negative). `TransactionBuilder.build` now validates
+    `minFeeCoefficient`, `minFeeConstant`, `maxTxSize`, and `coinsPerUtxoByte` are all `>= 0`
+    before any selection or arithmetic runs, returning the new
+    `TxBuildError.InvalidProtocolParameters(field, value)` otherwise.
+  - `TxBuildError`: added `InvalidProtocolParameters` and `FeeEstimateDidNotConverge`; type-level
+    KDoc's reachability summary and `build`'s own KDoc updated to match. No existing variant was
+    renamed or removed.
+  - Tests (`TransactionBuilderTest.kt`, +5, 20 total): one per negative
+    `minFeeCoefficient`/`minFeeConstant`/`maxTxSize` field; one proving a negative
+    `coinsPerUtxoByte` cannot let a 1,000-lovelace payment bypass the min-ADA check
+    (`negativeCoinsPerUtxoByteCannotBypassMinAdaCheck`); and the non-convergence construction
+    above. No invented `transaction_body` goldens.
+  - Docs: `tx/README.md` documents both new error variants and the behavior they guard; this
+    file. `docs/PHASE_1_PLAN.md`/`docs/ROADMAP.md` were not touched — this task's instructions
+    scoped doc updates to `tx/README.md` and this file only.
+  - Verified: `:tx:jvmTest` (20/20), `:tx:testAndroidHostTest`, `:tx:compileKotlinIosSimulatorArm64`,
+    `:tx:compileKotlinIosArm64`, `:core:jvmTest` all pass; lints clean; banned-word scan and a
+    signing/witness/txid/submit/mnemonic/seed/private-key scan on touched files both clean;
+    `tx/build.gradle.kts` unchanged (`:core`/`:provider` only); `:core` untouched.
+- **ADR-0014 doc sync (Block 1.9b-2 review, docs-only) — delivered.** The ADR text had gone
+  stale against the `TxBuildError` review microfix above; no Kotlin/Gradle/iOS/Android/`:core`/
+  `:shared`/`:wallet`/`:provider`/test change in this pass — this only synchronizes ADR-0014
+  with already-implemented behavior, it does not record a new architecture decision.
+  - §6: the non-convergence step now matches the code exactly — `conservativeFee =
+    maxOf(lastFee, lastFeeNext)`, rebuild exactly once more, and (new step 5) that rebuild must
+    itself be checked: if its re-estimated fee still exceeds `conservativeFee`, the builder
+    fails with `TxBuildError.FeeEstimateDidNotConverge(encodedFee, recomputedFee)` instead of
+    returning an under-estimated `TransactionDraft`.
+  - §8: the `TxBuildError` sketch now includes all four implementation-discovered variants —
+    `NoOutputs`, `InvalidProtocolParameters(field, value)`, `FeeEstimateDidNotConverge
+    (encodedFee, recomputedFee)`, and `DuplicateInput(ref)` — each with a bullet explaining why
+    it extends the original sketch (two from Block 1.9b-1: `NoOutputs`, `DuplicateInput`; two
+    from the Block 1.9b-2 review: `InvalidProtocolParameters`, `FeeEstimateDidNotConverge`).
+    The old standalone "Implementation note (Block 1.9b-1)" paragraph was folded into the
+    `NoOutputs` bullet instead of being kept as a separate note now that the sketch itself is
+    current.
+  - Verified: banned-word scan on the changed ADR-0014 lines (and the file as a whole) is
+    clean; no Gradle build needed for a docs-only change. `git diff --staged` for both files
+    reviewed and matches this description.
+- **Block 1.9c (`:shared` Android Playground "Transaction Draft (unsigned)" checkpoint) —
+  delivered.** No `:core`/`:crypto`/`:tx`/`:wallet`/`:provider`/`:provider-blockfrost` change,
+  no Android app wiring or iOS project file change; `:shared` gained one explicit `:tx` Gradle
+  dependency. No signing, witness construction, transaction id hashing, or submission.
+  - Added a "Transaction Draft (unsigned)" section to `PlaygroundPresenter`/`PlaygroundScreen`.
+    `presentTransactionDraft(provider)` restores `TestWalletFixture`'s cited mnemonic via
+    `ReadOnlyWallet.restore` (always `Network.TESTNET`), queries `provider.getUtxos(wallet.
+    address)` and `provider.getProtocolParameters()`, builds a `TransactionBuildRequest` (a
+    fixed 2 ADA payment to the already-cited `InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY`
+    vector, reused rather than invented, with change to the wallet's own address, `ttl = null`
+    — no existing Playground flow has a clear slot source), and calls
+    `TransactionBuilder.build`. The destination/amount are fixed constants, not a free-text
+    form, keeping this a diagnostic checkpoint rather than a general-purpose send UI, per the
+    task's explicit constraints.
+  - `mapTransactionDraftResult`/`presentTxBuildError` are non-suspend, native-free mapping
+    functions (same split as `mapWalletBalanceResult`/`presentWalletError`): every
+    `TxBuildError` variant maps to a distinct, cause-naming message (no UTxOs, insufficient
+    funds, below minimum ADA, protocol-parameter/fee-convergence errors, network mismatch,
+    and so on).
+  - `TransactionDraftPresentation` (`Empty`/`Loading`/`Success`/`Failure`) follows the existing
+    presentation-model pattern. `Success` rows show selected input/output counts, the fee and
+    (if present) change in lovelace, the encoded body size in bytes, a truncated body-CBOR hex
+    preview, and an explicit "Unsigned draft — not signed, not submitted" status row.
+  - `PlaygroundScreen` adds a "Build transaction draft" button and result card, wired through
+    the same `LaunchedEffect`/request-token pattern the Wallet Balance section already uses.
+  - Under the default `InMemoryChainQueryProvider`, the restored wallet's self-generated
+    address has no fake UTxOs seeded for it, so this checkpoint normally reports the resulting
+    `TxBuildError.NoInputs` as a `Failure` ("No UTxOs available...") — the same honest-empty
+    pattern as the Wallet Balance section (ADR-0013 §7), not a bug to fix; a live Blockfrost
+    preprod provider (or a test that seeds the mock for that exact address) can reach
+    `Success`.
+  - **No transaction id / body hash is shown.** The original 1.9a/1.9b planning text sketched
+    displaying one (via `:crypto`'s `Blake2b-256`), but that is deferred: computing a
+    meaningful transaction id before signing exists (Block 1.10) would either hash an
+    incomplete structure or require `:shared` to anticipate signing-era logic ahead of that
+    block, so this checkpoint intentionally stops at the unsigned body/fee/change summary.
+  - Tests: `PlaygroundTransactionDraftPresenterTest` (`commonTest`, 17 tests, native-free) —
+    builds real `TransactionDraft`/`TxBuildError` values via `TransactionBuilder.build` against
+    hand-built fake UTxOs and the same cited CIP-19 testnet vectors `:tx`'s own
+    `TransactionBuilderTest` uses, then feeds them into `mapTransactionDraftResult` (success
+    with/without change, insufficient funds, no inputs) and exercises `presentTxBuildError`
+    for every `TxBuildError` variant. `PlaygroundTransactionDraftDesktopTest` (`jvmTest`-only,
+    2 tests) is the only place `presentTransactionDraft` and `ReadOnlyWallet.restore` run end
+    to end together: one asserts the honest "no UTxOs" result under the default mock, the
+    other seeds the mock with a UTxO for the restored wallet's own address and asserts a
+    `Success` presentation — no invented golden transaction bytes anywhere.
+  - Docs: `shared/README.md` (new "Transaction Draft section" subsection, dependency list,
+    testing-split paragraph), `docs/PHASE_1_PLAN.md` §1.9 (`1.9c` marked complete, with a note
+    on the top-of-section sketch's fixed-destination deviation), `docs/ROADMAP.md` §1.9
+    (`1.9c` marked complete), this file.
+  - Verified: `./gradlew :shared:jvmTest` (pass, including both new transaction-draft test
+    classes), `./gradlew :shared:testAndroidHostTest` (pass — confirms
+    `PlaygroundTransactionDraftPresenterTest`'s 17 tests are genuinely native-free),
+    `./gradlew :shared:compileKotlinIosSimulatorArm64` (pass),
+    `./gradlew :shared:compileKotlinIosArm64` (pass), `./gradlew :tx:jvmTest` (pass, no
+    regressions). Lints clean on touched files. Banned-word scan on touched files clean. A
+    signing/witness/txid/submit scan of `shared/` found only KDoc/non-goal statements (for
+    example "no signing", "not signed, not submitted") — no actual signing, witness
+    construction, hashing, or submission code.
+
+Next recommended task:
+
+- **Block 1.10** (Transaction Signing): sign a testnet/preprod transaction locally using only
+  test keys, producing a witness/signed transaction and (only now) a meaningful transaction id;
+  keep tests backed by official vectors or verified references where available. This is the
+  first block authorized to introduce signing per the standing guardrail (an explicit
+  block/ADR — this is that block).
+- **Manual Android checkpoint remaining for the project owner:** open the Android app, use the
+  Provider section's "Use live Blockfrost (preprod)" toggle with a `project_id` and fund the
+  restored test wallet's address from a preprod faucet (or otherwise seed UTxOs for it), then
+  tap "Build transaction draft" in the new Transaction Draft section to visually confirm a
+  `Success` presentation on-device; the default mock provider path ("no UTxOs") is already
+  covered by `PlaygroundTransactionDraftDesktopTest` and needs no manual check.
+- No commit was made this session unless the project owner explicitly requests one.
+
+### Session Summary (1.9a ADR / decision record)
+
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.9a (Minimal ADA Transaction Builder — ADR / decision record) — delivered
+  (docs-only).** No Kotlin, Gradle, dependency, or module changes; only docs were added/edited.
+  - [ADR-0014](DECISIONS/0014-minimal-ada-transaction-builder.md) written and marked
+    `Accepted`. It resolves every blocking decision for Block 1.9 and, in particular, the CBOR
+    transaction map-ordering item ADR-0005 §6 deferred to this block.
+  - **Module (§1):** Block 1.9b will create a new Gradle module `:tx`
+    (`org.sarmidev.kardano.tx`, targets mirroring `:provider`/`:wallet`), depending on **`:core`
+    and `:provider` only** — not `:wallet`, `:shared`, `:provider-blockfrost`, or `:crypto`. The
+    builder is a pure, I/O-free, signing-free function; the ADR spells out why the logic cannot
+    live in `:core`/`:provider`/`:wallet`/`:shared`.
+  - **Scope (§2):** Block 1.9 builds the **unsigned `transaction_body`** only (fields `0`
+    inputs, `1` outputs, `2` fee, optional `3` ttl) and emits its canonical CBOR bytes in 1.9b.
+    No witness set, full `transaction` array, signing, or submit. The transaction id
+    (`Blake2b-256(body)`) is **not computed anywhere in Block 1.9** — not by `:tx` (kept
+    crypto-free) and, as actually delivered in 1.9c (see the later session entry below), not by
+    the Playground checkpoint either; displaying it is deferred to Block 1.10 or whichever
+    block introduces signing/finalization first. No native assets, metadata, certificates,
+    withdrawals, scripts, collateral, datums, reference inputs, or minting.
+  - **CBOR map ordering (§3):** Cardano uses **RFC 7049 §3.9** canonical ordering (length-first,
+    then bytewise) — cited to CIP-21, RFC 7049 §3.9, the ledger CDDL comments, and
+    `cardano-api`'s canonicaliser. `:core`'s CBOR subset is **reused unchanged** for the MVP:
+    the body keys `0/1/2/3` are single-byte integers, for which RFC 7049 length-first and
+    `:core`'s RFC 8949 bytewise order are byte-identical. Recorded limitation: any future map
+    with heterogeneous/multi-byte keys (multiasset, withdrawals) must revisit this before
+    implementation, without weakening `:core`'s Phase 0 parser policy.
+  - **Input ordering (§4):** sort inputs by the ledger `(transaction_id, index)` order
+    (transaction-id bytes ascending, then numeric index), reject duplicates, encode field 0 as a
+    plain untagged definite-length array (no Conway tag `258`).
+  - **Output form (§5):** legacy/Alonzo array form `[address, coin]` (value = coin = uint for
+    ADA-only), per the Conway CDDL (`transaction_output = legacy_transaction_output /
+    post_alonzo_transaction_output`, interchangeable); stays within `:core`'s subset with no
+    inner map.
+  - **Fee/size (§6):** `fee = minFeeCoefficient * txSize + minFeeConstant`, `txSize` estimated
+    over the **whole** `[body, witness_set, bool, aux]` transaction (not the body alone), one
+    vkey witness per selected input (documented conservative assumption). The fee is an
+    **estimate** until Block 1.10 signs/finalizes it; a bounded fixed-point loop resolves the
+    fee/change/size circularity.
+  - **Min-ADA/change (§7):** enforce the sourced Babbage/Conway rule
+    `minADA = (160 + serializedOutputBytes) * coinsPerUtxoByte` (ledger `babbageMinUTxOValue`
+    + Cardano glossary); omit zero change; reject dust change below min-UTxO
+    (`ChangeBelowMinimum`); never fold dust into the fee.
+  - **Errors (§8):** a `:tx`-owned sealed `TxBuildError` (`NoInputs`, `InsufficientFunds`,
+    `InvalidOutputAmount`, `ChangeBelowMinimum`, `ExceedsMaxTxSize`, `FeeCalculationOverflow`,
+    `Serialization`, `NetworkMismatch`, `UnsupportedFeature`); provider errors are **not** in it
+    (`:tx` queries no provider).
+  - **Tests (§9):** no citable minimal ADA-only body golden was located, so 1.9b uses
+    structural, CDDL-derived, decode/inspect tests (body key order, input-set order, output
+    form, fee/change edge cases, insufficient funds, overflow, max tx size); no invented
+    goldens; no signing tests.
+  - **Sub-block split (§10):** 1.9a (this ADR, docs-only, complete) / 1.9b (`:tx` module +
+    builder + tests, pending) / 1.9c (`:shared` "Transaction Draft (unsigned)" Playground
+    checkpoint, pending). All blocking decisions are resolved, so 1.9b is authorized once
+    ADR-0014 is accepted; 1.9b may be split further if its diff exceeds the review target.
+  - Docs updated: `docs/DECISIONS/0014-minimal-ada-transaction-builder.md` (new);
+    `docs/PHASE_1_PLAN.md` §1.9 (1.9a marked complete with the decision summary; 1.9b/1.9c
+    pending); `docs/ROADMAP.md` Phase 1 §1.9 bullet; this file. No source, Gradle, or dependency
+    file touched.
+  - Verified: markdown-only change; banned-word and mnemonic/private-key/funds scans on the
+    touched docs found only factual policy text and non-goals (no new unsafe claims, no real
+    secrets); confirmed no Kotlin/Gradle/source file changed.
+
+Next recommended task:
+
+- **Block 1.9b** (`:tx` module + builder + tests): implement ADR-0014 — create the `:tx`
+  Gradle module (depending on `:core` + `:provider` only), the transaction model, canonical
+  `transaction_body` serialization via `:core`, largest-first selection with the bounded
+  fee/change fixed-point loop, the sealed `TxBuildError`, the structural/CDDL tests, and
+  `:tx/README.md`. Then **Block 1.9c** adds the `:shared` "Transaction Draft (unsigned)"
+  Playground checkpoint, showing only the unsigned draft's structural summary — no transaction
+  id/body hash, which is deferred to Block 1.10 or whichever block introduces
+  signing/finalization first. No signing until Block 1.10.
+- No commit was made this session unless the project owner explicitly requests one.
+
+### Session Summary (1.8b `:shared` Android checkpoint)
+
+Date: 2026-07-13
+
+Summary:
+
 - **Block 1.8b (`:shared` Android checkpoint) — delivered.** Wires `:wallet` into the
   Playground; `:core`/`:crypto`/`:provider`/`:wallet` sources untouched — only `:shared` code,
   its Gradle file, and docs changed.

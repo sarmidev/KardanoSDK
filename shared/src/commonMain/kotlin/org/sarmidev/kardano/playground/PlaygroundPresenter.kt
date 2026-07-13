@@ -17,11 +17,19 @@ import org.sarmidev.kardano.encoding.cbor.Cbor
 import org.sarmidev.kardano.encoding.cbor.CborError
 import org.sarmidev.kardano.encoding.hex.Hex
 import org.sarmidev.kardano.encoding.hex.HexError
+import org.sarmidev.kardano.getOrNull
+import org.sarmidev.kardano.primitives.Lovelace
 import org.sarmidev.kardano.primitives.Network
 import org.sarmidev.kardano.provider.ChainQueryProvider
+import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
 import org.sarmidev.kardano.provider.ProtocolParameters
 import org.sarmidev.kardano.provider.ProviderError
 import org.sarmidev.kardano.provider.Utxo
+import org.sarmidev.kardano.tx.TransactionBuildRequest
+import org.sarmidev.kardano.tx.TransactionBuilder
+import org.sarmidev.kardano.tx.TransactionDraft
+import org.sarmidev.kardano.tx.TransactionOutput
+import org.sarmidev.kardano.tx.TxBuildError
 import org.sarmidev.kardano.wallet.ReadOnlyWallet
 import org.sarmidev.kardano.wallet.WalletBalance
 import org.sarmidev.kardano.wallet.WalletError
@@ -104,19 +112,40 @@ internal sealed interface WalletBalancePresentation {
     data class Failure(val message: String) : WalletBalancePresentation
 }
 
+/**
+ * Result of presenting the unsigned minimal-ADA transaction-draft checkpoint
+ * ([TransactionBuilder], Block 1.9c).
+ *
+ * Carries only public metadata about the [TransactionDraft] `:tx` built: selected input/output
+ * counts, the fee and optional change amount in lovelace, the encoded body size in bytes, and a
+ * truncated hex preview of the body bytes. [TransactionDraft] is itself a structural, unsigned
+ * artifact only (ADR-0014 §2) — this presenter formats it, it never signs it, builds a witness
+ * set, computes a transaction id, or submits it. [Failure] covers both provider-boundary errors
+ * (for example no UTxOs, a network mismatch) and every [TxBuildError] `:tx` can return (for
+ * example insufficient funds, an amount below minimum ADA); its message text distinguishes the
+ * cause.
+ */
+internal sealed interface TransactionDraftPresentation {
+    data object Empty : TransactionDraftPresentation
+    data object Loading : TransactionDraftPresentation
+    data class Success(val rows: List<LabeledRow>) : TransactionDraftPresentation
+    data class Failure(val message: String) : TransactionDraftPresentation
+}
+
 // ---------------------------------------------------------------------------
 // Presenter — maps :core results to display models; no SDK logic of its own
 // ---------------------------------------------------------------------------
 
 /**
- * Maps results from `:core`, `:crypto`, `:provider`, and `:wallet` APIs to [AddressPresentation],
- * [HexPresentation], [CborPresentation], [WalletPresentation], [ProviderUtxosPresentation],
- * [ProviderParamsPresentation], and [WalletBalancePresentation] for display in
- * [PlaygroundScreen].
+ * Maps results from `:core`, `:crypto`, `:provider`, `:wallet`, and `:tx` APIs to
+ * [AddressPresentation], [HexPresentation], [CborPresentation], [WalletPresentation],
+ * [ProviderUtxosPresentation], [ProviderParamsPresentation], [WalletBalancePresentation], and
+ * [TransactionDraftPresentation] for display in [PlaygroundScreen].
  *
  * This object only formats and labels results. It never re-parses, re-validates, or
- * reimplements any protocol rule, derivation, hashing, address-generation, or balance-summation
- * logic. All of that semantics comes from `:core`/`:crypto`/`:provider`/`:wallet`.
+ * reimplements any protocol rule, derivation, hashing, address-generation, balance-summation,
+ * coin-selection, fee/change, or CBOR-encoding logic. All of that semantics comes from
+ * `:core`/`:crypto`/`:provider`/`:wallet`/`:tx`.
  *
  * This is sample/diagnostic code in `:shared`. It is not part of the SDK public API.
  */
@@ -562,6 +591,140 @@ internal object PlaygroundPresenter {
         is WalletError.Provider -> presentProviderError(error.error)
         is WalletError.BalanceOverflow ->
             "Balance overflow after summing ${error.partialCount} UTxO(s)"
+    }
+
+    // --- Transaction Draft (unsigned; Block 1.9c) ---
+
+    /**
+     * The fixed test-only payment recipient for the transaction-draft checkpoint: the same
+     * cited CIP-19 testnet vector already used as [InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY]
+     * elsewhere in this Playground. Reused here as a payment destination rather than an
+     * invented address; the role it plays there (an address with no seeded UTxOs) does not
+     * conflict with also being a valid destination for this unrelated draft's single payment.
+     */
+    private val transactionDraftRecipient: Address = requireNotNull(
+        Address.parse(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY).getOrNull(),
+    ) { "InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY is a fixed, already-valid CIP-19 vector" }
+
+    /** The fixed test-only payment amount for the transaction-draft checkpoint: 2 ADA. */
+    private val transactionDraftPaymentAmount: Lovelace = requireNotNull(
+        Lovelace.of(2_000_000L).getOrNull(),
+    ) { "2,000,000 lovelace is a fixed, in-range constant" }
+
+    /** Bytes of the body-CBOR hex preview shown in the UI before truncating with "…". */
+    private const val BODY_HEX_PREVIEW_BYTES: Int = 24
+
+    /**
+     * Restores [TestWalletFixture]'s cited test-only mnemonic through [ReadOnlyWallet.restore]
+     * (always [Network.TESTNET] — the Phase 1 no-mainnet boundary, ADR-0005 §7), queries
+     * [provider] for that wallet's candidate UTxOs and the current protocol parameters, then
+     * calls [TransactionBuilder.build] for a minimal, single-payment, unsigned transaction
+     * draft paying [transactionDraftPaymentAmount] to [transactionDraftRecipient] with change
+     * returned to the restored wallet's own address.
+     *
+     * Delegates entirely to `:wallet` ([ReadOnlyWallet]) and `:tx` ([TransactionBuilder]); this
+     * presenter does not select inputs, estimate a fee, decide change, or encode any CBOR
+     * itself — it only builds the request and formats the result. **No signing, no witness
+     * construction, no transaction id hashing, no submission**: [TransactionDraft] is a
+     * structural, unsigned artifact only (ADR-0014 §2). Provider-agnostic: the caller decides
+     * whether [provider] is the in-memory mock (fake/test-only) or a live provider (for example
+     * Blockfrost preprod). Under the default [InMemoryChainQueryProvider], the restored
+     * wallet's self-generated address has no fake UTxOs seeded for it (same honest-empty
+     * behavior as [presentWalletBalance], ADR-0013 §7), so this normally reports the resulting
+     * [TxBuildError.NoInputs] as a [TransactionDraftPresentation.Failure] — not a crash. Fund
+     * that address via a live Blockfrost preprod faucet to see a
+     * [TransactionDraftPresentation.Success].
+     */
+    suspend fun presentTransactionDraft(provider: ChainQueryProvider): TransactionDraftPresentation {
+        val wallet = when (val result = ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err ->
+                return TransactionDraftPresentation.Failure(presentWalletError(result.error))
+        }
+        val candidateInputs = when (val result = provider.getUtxos(wallet.address)) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err ->
+                return TransactionDraftPresentation.Failure(presentProviderError(result.error))
+        }
+        val protocolParameters = when (val result = provider.getProtocolParameters()) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err ->
+                return TransactionDraftPresentation.Failure(presentProviderError(result.error))
+        }
+        val request = TransactionBuildRequest(
+            network = Network.TESTNET,
+            candidateInputs = candidateInputs,
+            payment = TransactionOutput(transactionDraftRecipient, transactionDraftPaymentAmount),
+            changeAddress = wallet.address,
+            protocolParameters = protocolParameters,
+            ttl = null,
+        )
+        return mapTransactionDraftResult(TransactionBuilder.build(request))
+    }
+
+    /**
+     * Maps a raw [TransactionBuilder.build] result to a [TransactionDraftPresentation].
+     * Non-suspend and `internal` so it can be unit-tested by constructing a [TransactionDraft]
+     * or [TxBuildError] directly, without restoring a mnemonic, reaching native cryptography,
+     * or querying a provider.
+     */
+    internal fun mapTransactionDraftResult(
+        result: KardanoResult<TransactionDraft, TxBuildError>,
+    ): TransactionDraftPresentation = when (result) {
+        is KardanoResult.Ok -> TransactionDraftPresentation.Success(transactionDraftRows(result.value))
+        is KardanoResult.Err -> TransactionDraftPresentation.Failure(presentTxBuildError(result.error))
+    }
+
+    private fun transactionDraftRows(draft: TransactionDraft): List<LabeledRow> {
+        val bodyBytes = draft.bodyCbor()
+        val changeOutput = draft.outputs.getOrNull(1)
+        return buildList {
+            add(LabeledRow("Selected inputs", draft.selectedInputs.size.toString()))
+            add(LabeledRow("Outputs", draft.outputs.size.toString()))
+            add(LabeledRow("Fee", "${draft.fee.value} lovelace"))
+            changeOutput?.let { add(LabeledRow("Change", "${it.amount.value} lovelace")) }
+            add(LabeledRow("Body size", "${bodyBytes.size} bytes"))
+            add(LabeledRow("Body CBOR (preview)", bodyHexPreview(bodyBytes)))
+            add(LabeledRow("Status", "Unsigned draft — not signed, not submitted"))
+        }
+    }
+
+    private fun bodyHexPreview(bytes: ByteArray): String {
+        val prefixLength = minOf(BODY_HEX_PREVIEW_BYTES, bytes.size)
+        val hex = Hex.encode(bytes.copyOf(prefixLength))
+        return if (bytes.size > prefixLength) "$hex… (${bytes.size}B total)" else hex
+    }
+
+    /**
+     * Maps a [TxBuildError] to a human-readable single-line message, distinguishing the cause
+     * (no inputs, insufficient funds, below minimum ADA, and so on) in the text.
+     *
+     * Internal so tests can exercise all variants by constructing them directly.
+     */
+    internal fun presentTxBuildError(error: TxBuildError): String = when (error) {
+        is TxBuildError.NoInputs -> "No UTxOs available to build a transaction from."
+        is TxBuildError.NoOutputs -> "No outputs to encode (internal: missing payment output)."
+        is TxBuildError.InvalidProtocolParameters ->
+            "Invalid protocol parameters: ${error.field} = ${error.value}"
+        is TxBuildError.FeeEstimateDidNotConverge ->
+            "Fee estimate did not converge: encoded ${error.encodedFee}, " +
+                "recomputed ${error.recomputedFee} lovelace"
+        is TxBuildError.InsufficientFunds ->
+            "Insufficient funds: need ${error.required} lovelace, have ${error.available} lovelace"
+        is TxBuildError.InvalidOutputAmount ->
+            "Payment amount ${error.amount} lovelace is below the minimum ADA " +
+                "(${error.minRequired}) for this output"
+        is TxBuildError.ChangeBelowMinimum ->
+            "Change ${error.change} lovelace is below the minimum ADA " +
+                "(${error.minRequired}) for the change output"
+        is TxBuildError.ExceedsMaxTxSize ->
+            "Estimated transaction size ${error.size} bytes exceeds the maximum ${error.max} bytes"
+        is TxBuildError.FeeCalculationOverflow -> "Fee calculation overflow"
+        is TxBuildError.Serialization -> "Serialization error: ${presentCborError(error.error)}"
+        is TxBuildError.NetworkMismatch ->
+            "Network mismatch: expected ${error.expected.name}, got ${error.actual.name}"
+        is TxBuildError.UnsupportedFeature -> "Unsupported feature: ${error.detail}"
+        is TxBuildError.DuplicateInput -> "Duplicate input detected"
     }
 
     // --- Helpers ---

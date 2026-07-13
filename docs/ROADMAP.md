@@ -994,7 +994,65 @@ Proposed block sequence:
     `:shared:compileKotlinIosSimulatorArm64`, `:wallet:jvmTest`, `:wallet:testAndroidHostTest`,
     `:androidApp:assembleDebug`; lints clean; no banned words or mnemonic/seed/private/raw-key
     exposure found.
-- `1.9` Transaction Builder Minimal — build a simple ADA transaction draft.
+- `1.9` Transaction Builder Minimal — build a simple unsigned ADA transaction draft. Split
+  into 1.9a/1.9b-1/1.9b-2/1.9c (see `docs/PHASE_1_PLAN.md`).
+  - `1.9a` ADR / decision record — **Status: complete (docs-only).** Outcome:
+    [ADR-0014](DECISIONS/0014-minimal-ada-transaction-builder.md) resolves the builder's
+    blocking decisions, including the CBOR tx map-ordering item ADR-0005 §6 deferred here.
+    Block 1.9b creates a new `:tx` Gradle module (`org.sarmidev.kardano.tx`) depending on
+    `:core` and `:provider` only (not `:wallet`/`:shared`/`:provider-blockfrost`/`:crypto`);
+    Block 1.9 builds the **unsigned `transaction_body`** only (inputs, outputs, fee, optional
+    ttl) and emits its canonical CBOR, with no witness set, signing, or submit, and the
+    transaction id computed by the caller via `:crypto`. Cardano CBOR uses RFC 7049 §3.9
+    canonical (length-first) map ordering (CIP-21 / ledger CDDL / `cardano-api`); `:core`'s
+    subset is reused unchanged because the MVP body's single-byte integer keys make length-first
+    and `:core`'s RFC 8949 bytewise order byte-identical (heterogeneous-key maps must revisit
+    this later without weakening `:core`). Inputs sorted by ledger `(transaction_id, index)`
+    order and encoded as an untagged array; outputs use the legacy `[address, coin]` array form;
+    fee = `minFeeCoefficient * txSize + minFeeConstant` over the whole-transaction size estimate
+    (one witness per input; an estimate until Block 1.10); Babbage/Conway min-UTxO
+    `(160 + serializedOutputBytes) * coinsPerUtxoByte` enforced (zero change omitted, dust
+    rejected); sealed `TxBuildError`; structural/CDDL tests only (no invented goldens, no
+    signing tests). No Kotlin/Gradle/dependency changes.
+  - `1.9b-1` `:tx` module + `transaction_body` serialization — **Status: complete.** New
+    `:tx` Gradle module (`org.sarmidev.kardano.tx`, depending on `:core` + `:provider` only).
+    `TransactionBodySerializer.serialize` orders/validates/encodes an already fully specified
+    `TransactionBodyRequest` (explicit inputs/outputs/fee/ttl) into the canonical
+    `transaction_body` via `:core`'s unchanged CBOR subset; inputs sorted by ledger
+    `(transaction_id, index)` order with duplicates rejected
+    (`TxBuildError.DuplicateInput`); outputs use the legacy `[address, coin]` form; output
+    addresses checked against the request's network (`TxBuildError.NetworkMismatch`); empty
+    inputs/outputs rejected (`TxBuildError.NoInputs`/`NoOutputs`, the latter an
+    implementation-discovered addition to ADR-0014 §8). `TxBuildError` exposes the full
+    ADR-0014 §8 error surface plus these additions up front (KDoc marks
+    unreachable-until-1.9b-2 variants). No coin selection or fee/change loop yet — deferred to
+    `1.9b-2` to keep the diff focused. Structural/CDDL tests only; no invented goldens.
+  - `1.9b-2` fee/change coin-selection builder — **Status: complete.** New
+    `TransactionBuildRequest` + `TransactionBuilder.build`, delegating body encoding to
+    `TransactionBodySerializer.serialize` (no duplicated CBOR logic). Largest-first selection
+    over `List<Utxo>` + `ProtocolParameters`, tie-broken by the same ledger order the
+    serializer uses; fee = `minFeeCoefficient * txSize + minFeeConstant` with `txSize` from the
+    real encoded body plus a sized-but-unbuilt witness set (checked arithmetic, generic CBOR
+    head sizing, no `N < 24` shortcut); bounded fixed-point loop that, on non-convergence,
+    rebuilds once more with the conservative (`maxOf`) of the last two fee estimates;
+    Babbage/Conway min-UTxO enforcement (payment/change checked, zero change omitted, dust
+    rejected once against the final result, never folded into the fee). The initial cut reused
+    all existing `TxBuildError` variants; the follow-up review microfix then added
+    `InvalidProtocolParameters(field, value)` (rejects a negative `minFeeCoefficient`/
+    `minFeeConstant`/`maxTxSize`/`coinsPerUtxoByte`) and `FeeEstimateDidNotConverge(encodedFee,
+    recomputedFee)` (the bounded loop's final conservative rebuild still re-estimating a higher
+    fee than it encoded). No `:core`/`:provider`/Gradle changes.
+  - `1.9c` `:shared` Android Playground "Transaction Draft (unsigned)" checkpoint —
+    **Status: complete.** `PlaygroundPresenter.presentTransactionDraft` restores the
+    `TestWalletFixture` mnemonic (`ReadOnlyWallet.restore`, always `Network.TESTNET`), queries
+    the currently active `ChainQueryProvider` for candidate UTxOs and protocol parameters, and
+    calls `TransactionBuilder.build` for a fixed 2 ADA payment to a reused cited CIP-19 testnet
+    vector (`InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY`) with change to the wallet's own
+    address; `:shared` adds no coin-selection, fee, or CBOR logic of its own. Success shows
+    input/output counts, fee/change in lovelace, body size, and a truncated body-CBOR hex
+    preview, always labeled unsigned; failure shows a cause-distinguishing message mapped from
+    `TxBuildError`. No transaction id/body hash is computed (needs `:crypto`, deferred to
+    `1.10`). `:shared` gained an explicit `:tx` dependency; no other module changed.
 - `1.10` Transaction Signing — sign a testnet/preprod transaction locally.
 - `1.11` Submit Transaction — submit a signed transaction to preprod.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document

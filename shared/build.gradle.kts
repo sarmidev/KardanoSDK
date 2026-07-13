@@ -46,6 +46,7 @@ kotlin {
             implementation(projects.provider)
             implementation(projects.providerBlockfrost)
             implementation(projects.wallet)
+            implementation(projects.tx)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
