@@ -1179,7 +1179,7 @@ Proposed block sequence:
   `TxBuildError.UnsupportedFeature` if any candidate input had the flag set — too broad for a
   real wallet with a *mix* of ADA-only and native-asset UTxOs, which `1.11d-2` immediately
   narrows. `1.11d-2` (ADA-only UTxO filtering, not whole-wallet rejection — **Status:
-  implementation complete; manual re-validation partial pass**): `TransactionBuilder.build` now
+  implementation complete; manual re-validation PASS**): `TransactionBuilder.build` now
   drops every candidate with the flag set **before** coin selection, then builds normally from
   the remaining ADA-only candidates — `TxBuildError.UnsupportedFeature` is returned only if
   that leaves no candidates at all, and the usual `TxBuildError.InsufficientFunds` (its
@@ -1190,12 +1190,12 @@ Proposed block sequence:
   Phase 1 only builds ADA-only transactions." New/updated tests across `:tx` and `:shared` cover
   the mixed-sufficient success case, the mixed-insufficient failure case (proving the
   native-asset UTxO's lovelace is excluded), and the all-native-asset failure case (see
-  `docs/PHASE_1_PLAN.md` `1.11d`/`1.11d-2` for the full list). Manual Android re-validation has
-  a partial pass: the mixed ADA-only + native-asset case built, signed, and submitted from
-  ADA-only UTxOs, and the accepted transaction id matched the locally signed id
-  (`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`). Block 1.11 as a whole
-  is not complete until the remaining all-native-asset rejection and ADA-only-only build/submit
-  checks are run and recorded (see `docs/HANDOFF.md`).
+  `docs/PHASE_1_PLAN.md` `1.11d`/`1.11d-2` for the full list). Manual Android re-validation
+  passed: the mixed ADA-only + native-asset case built, signed, and submitted from ADA-only
+  UTxOs, and the accepted transaction id matched the locally signed id
+  (`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`); the owner also reported
+  the all-native-asset rejection and ADA-only-only build/sign/submit checks OK. **Block 1.11 is
+  complete** (see `docs/HANDOFF.md`).
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 

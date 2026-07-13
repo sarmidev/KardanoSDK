@@ -563,13 +563,12 @@ Do not implement:
   the usual `InsufficientFunds`, counting only the ADA-only total, if those remaining
   candidates still cannot cover the payment). Native-asset UTxOs are still never spendable and
   never will be in Phase 1 — no multi-asset CBOR output, no token sending, no token-preserving
-  change. **Manual re-validation is now partial:** the mixed ADA-only + native-asset case was
-  owner-run on Android after `1.11d-2` and passed (build/sign/submit succeeded using ADA-only
-  UTxOs; accepted transaction id matched the locally signed id:
-  `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`). Block 1.11 is still
-  not fully complete until the remaining cases are recorded: all-native-asset address →
-  readable rejection before submit; ADA-only-only address → same build/submit outcome as the
-  mixed case.
+  change. **Manual re-validation is complete (PASS, 2026-07-13):** the mixed ADA-only +
+  native-asset case was owner-run on Android after `1.11d-2` and passed (build/sign/submit
+  succeeded using ADA-only UTxOs; accepted transaction id matched the locally signed id:
+  `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`). The remaining
+  all-native-asset rejection and ADA-only-only build/submit cases were also owner-run and
+  reported OK. **Block 1.11 is complete.**
 - Real wallet flows.
 - Plutus support.
 - Staking or delegation.
@@ -594,7 +593,7 @@ Date: 2026-07-13
 Summary:
 
 - **Block 1.11d-2 ADA-only UTxO filtering instead of whole-wallet rejection — implementation
-  DONE; manual Android re-validation PARTIAL PASS.** Precondition:
+  DONE; manual Android re-validation PASS; Block 1.11 COMPLETE.** Precondition:
   working tree was clean and Block 1.11d (previous session, see the summary immediately below)
   was already committed before this change started. Context: manual preprod testing under
   `1.11d` found that a real wallet/address routinely has *some* UTxOs carrying native assets
@@ -649,17 +648,16 @@ Summary:
     superseded, Android-checkpoint/"Mandatory Android checkpoints"/"Next step" updated) and
     `docs/ROADMAP.md` §1.11 (same) updated. This file (this entry + the "What Not To Do Yet"
     submission bullet).
-  - **Manual Android re-validation — PARTIAL PASS (2026-07-13).** The mixed ADA-only +
+  - **Manual Android re-validation — PASS (2026-07-13).** The mixed ADA-only +
     native-asset case was owner-run on Android after this filtering change: `Sign transaction`
     succeeded, `Submit transaction` was accepted by preprod, and the accepted transaction id
     matched the locally signed transaction id:
     `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`. This confirms the app
     can build/sign/submit from ADA-only UTxOs while ignoring native-asset UTxOs on the same
-    wallet/address. Remaining owner checks: (1) an address whose UTxOs are *all* native-asset —
-    the app should show the readable ADA-only rejection *before* submit; (2) an address funded
-    with ADA-only UTxOs only — same expected build/submit outcome as the mixed case. **Block
-    1.11 is not complete until the remaining two checks are run and their results (pass/fail,
-    date) are recorded here.**
+    wallet/address. The owner then reported the remaining two checks OK: (1) an address whose
+    UTxOs are *all* native-asset showed the readable ADA-only rejection before submit; (2) an
+    address funded with ADA-only UTxOs only showed the expected build/sign/submit outcome. No
+    additional accepted transaction ids were provided. **Block 1.11 is complete.**
   - **Verification — all PASS:** `./gradlew :tx:jvmTest :shared:jvmTest
     :shared:testAndroidHostTest :tx:testAndroidHostTest :tx:compileKotlinIosArm64
     :shared:compileKotlinIosArm64`. No `:provider`/`:provider-blockfrost` behavior changed in
@@ -669,9 +667,8 @@ Summary:
     `:crypto-signing-backend`/`:core` file changed; no mainnet, no real mnemonics/private
     keys/funds anywhere; no multi-asset support, token sending, token-preserving change, or
     ledger-rule engine added — coin selection's existing `InsufficientFunds` path did all the
-    "is this enough" work it already did before. **Next step: run and record the two remaining
-    manual Android checks above; once both are recorded, Block 1.12** (Phase 1 Closure / MVP
-    Review).
+    "is this enough" work it already did before. **Next step: Block 1.12** (Phase 1 Closure /
+    MVP Review).
 
 ### Session Summary (Block 1.11d ADA-only rejection for the submit flow)
 
@@ -735,11 +732,12 @@ Summary:
     `Value.hasNativeAssets` field/behavior. `docs/PHASE_1_PLAN.md` §1.11 (new `1.11d` entry,
     "Mandatory Android checkpoints" `1.11` entry, and "Next step" updated) and `docs/ROADMAP.md`
     §1.11 (same) updated. This file (this entry + the "What Not To Do Yet" submission bullet).
-  - **Manual Android re-validation — NOT YET RUN.** Two owner checks are needed: (1) an address
-    with a native-asset UTxO — the app should show the new readable ADA-only rejection *before*
-    submit; (2) an address with only ADA-only UTxOs — the app should build/sign/submit normally
-    (record the accepted tx id) or show a different readable network/ledger error. **Block 1.11
-    is not complete until both are run and their results (pass/fail, date) are recorded here.**
+  - **Manual Android re-validation — superseded by `1.11d-2`, final result PASS (2026-07-13).**
+    This block's original whole-list rejection was narrowed in `1.11d-2`; final Android
+    re-validation is recorded in the latest session summary above. The owner reported the
+    all-native-asset rejection and ADA-only-only build/sign/submit checks OK, and the mixed
+    case submitted successfully with accepted transaction id
+    `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`.
   - **Verification — all PASS:** `./gradlew :provider:jvmTest :provider-blockfrost:jvmTest
     :tx:jvmTest :shared:jvmTest`; `./gradlew :provider:testAndroidHostTest
     :provider-blockfrost:testAndroidHostTest :tx:testAndroidHostTest :shared:testAndroidHostTest`;

@@ -1140,7 +1140,7 @@ Split into `1.11a` / `1.11b` / `1.11c` / `1.11d` / `1.11d-2` (ADR-0017,
   submitting is a mutating, non-idempotent action that consumes real preprod test UTxOs, unlike
   the read-only provider's opt-in live test. No `:shared` change in this sub-block.
 - `1.11c` `:shared` Android "Submit Transaction" Playground checkpoint — **Status:
-  implementation complete; manual Android checkpoint pending.** Added a "Submit Transaction
+  implementation complete; manual Android checkpoint complete after `1.11d`/`1.11d-2` follow-ups.** Added a "Submit Transaction
   (preprod)" Playground section below "Signed Transaction (not submitted)": it builds and
   signs the same fixture draft as Block 1.10c through `PlaygroundPresenter.presentSubmitTransaction`,
   then calls `TxSubmitProvider.submit(signed.signedTransaction.cbor())` directly — no new
@@ -1163,8 +1163,8 @@ Split into `1.11a` / `1.11b` / `1.11c` / `1.11d` / `1.11d-2` (ADR-0017,
   call) and `PlaygroundSubmitTransactionDesktopTest` (`jvmTest`-only — end to end with
   `InMemoryChainQueryProvider` + `InMemoryTxSubmitProvider`, asserting the mock's honest
   not-supported failure even once signing succeeds; no live network submit in tests).
-- `1.11d` ADA-only enforcement for the submit flow — **Status: implementation complete; manual
-  Android re-validation pending.** The `1.11c` manual checkpoint (below) found a real bug: a
+- `1.11d` ADA-only enforcement for the submit flow — **Status: implementation complete;
+  superseded by `1.11d-2`; final manual Android re-validation PASS.** The `1.11c` manual checkpoint found a real bug: a
   preprod address funded with mixed (ADA + native-asset) UTxOs let a draft build and sign, then
   the node rejected the submitted transaction with `ValueNotConservedUTxO` — the build silently
   dropped the native assets those inputs carried, which the ledger does not allow. Phase 1 stays
@@ -1187,7 +1187,7 @@ Split into `1.11a` / `1.11b` / `1.11c` / `1.11d` / `1.11d-2` (ADR-0017,
     still current, unaffected by `1.11d-2`). The `:tx`/`:shared` reject-whole-list tests this
     block originally added were replaced by `1.11d-2`'s filtering tests — see that entry.
 - `1.11d-2` ADA-only UTxO filtering, not whole-wallet rejection — **Status: implementation
-  complete; manual Android re-validation pending (same re-validation as `1.11d` below).** Manual
+  complete; manual Android re-validation PASS; Block 1.11 complete.** Manual
   preprod testing under `1.11d` showed a real wallet/address can have many UTxOs, some with
   native assets and some ADA-only — rejecting the *whole* candidate list because of one
   native-asset UTxO meant a wallet with plenty of spendable ADA could not build a transaction at
@@ -1222,15 +1222,16 @@ Android checkpoint:
 
 - Submit a preprod transaction from the app and see either an accepted result or an
   explainable error. **Status: attempted; found a real bug, now closed by `1.11d`/`1.11d-2`;
-  re-validation partial pass.** A preprod submit reached Blockfrost and was rejected with
+  re-validation PASS.** A preprod submit reached Blockfrost and was rejected with
   `ValueNotConservedUTxO` because the funded address's UTxOs carried native assets alongside
   ADA — see `1.11d`/`1.11d-2` above and `docs/HANDOFF.md` for the full write-up. After `1.11d-2`,
   the mixed ADA-only + native-asset case was owner-run on Android and passed: build/sign/submit
   succeeded using only ADA-only UTxOs, and the accepted transaction id matched the locally signed
-  id (`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`). Remaining cases to
-  record: (1) an address whose UTxOs are *all* native-asset — expect the readable ADA-only
-  rejection **before** submit; (2) an address funded with ADA-only UTxOs only — expect the same
-  build/submit outcome as the mixed case.
+  id (`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`). The owner then
+  reported both remaining cases OK: (1) an address whose UTxOs are *all* native-asset showed the
+  readable ADA-only rejection before submit; (2) an address funded with ADA-only UTxOs only
+  showed the expected build/sign/submit outcome. No additional accepted transaction ids were
+  provided.
 
 ### 1.12 Phase 1 Closure / MVP Review
 
@@ -1260,14 +1261,14 @@ Open the Android app and verify functionality after:
 - `1.8`: balance/UTxOs visible.
 - `1.9`: transaction draft visible.
 - `1.10`: signed transaction visible.
-- `1.11`: transaction submitted to preprod. **Status: partial pass** — implementation (`1.11a`/
+- `1.11`: transaction submitted to preprod. **Status: complete** — implementation (`1.11a`/
   `1.11b`/`1.11c`/`1.11d`/`1.11d-2`) is complete, and one owner-run attempt already surfaced a
   real ADA-only gap (`ValueNotConservedUTxO` from a mixed-UTxO address, now closed by
   `1.11d`/`1.11d-2`). The mixed ADA-only + native-asset re-validation then passed on Android:
   build/sign/submit succeeded using only ADA-only UTxOs and returned accepted transaction id
-  `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`. Block 1.11 is not
-  complete until the remaining all-native-asset rejection and ADA-only-only build/submit checks
-  are run and recorded (see `docs/HANDOFF.md`).
+  `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`; the owner also reported
+  the all-native-asset rejection and ADA-only-only build/sign/submit checks OK (see
+  `docs/HANDOFF.md`).
 
 ## Deferred or conditional work
 
@@ -1374,9 +1375,8 @@ manual Android checkpoint was attempted and found a real ADA-only gap (a mixed-U
 address caused a node-side `ValueNotConservedUTxO` rejection at submit time); `1.11d` first
 closed it by rejecting the whole candidate list whenever any UTxO carried a native asset, and
 `1.11d-2` then narrowed that to filtering out just the native-asset UTxOs so a mixed wallet can
-still build from its ADA-only ones. Manual Android re-validation is now a partial pass: the
+still build from its ADA-only ones. Manual Android re-validation is now PASS: the
 mixed address case built, signed, and submitted successfully from ADA-only UTxOs, with accepted
 transaction id `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416` matching the
-locally signed id. **The next step is to run and record the remaining all-native-asset rejection
-and ADA-only-only build/submit checks; after that, Block 1.12** (Phase 1 Closure / MVP Review)
-follows.
+locally signed id; the owner also reported the all-native-asset rejection and ADA-only-only
+build/sign/submit checks OK. **The next step is Block 1.12** (Phase 1 Closure / MVP Review).
