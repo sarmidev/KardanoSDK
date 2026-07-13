@@ -13,6 +13,7 @@ import org.sarmidev.kardano.crypto.hashing.CryptoError
 import org.sarmidev.kardano.crypto.hashing.Hashing
 import org.sarmidev.kardano.crypto.mnemonic.Mnemonic
 import org.sarmidev.kardano.crypto.mnemonic.MnemonicError
+import org.sarmidev.kardano.crypto.signing.SigningError
 import org.sarmidev.kardano.encoding.cbor.Cbor
 import org.sarmidev.kardano.encoding.cbor.CborError
 import org.sarmidev.kardano.encoding.hex.Hex
@@ -33,6 +34,7 @@ import org.sarmidev.kardano.tx.TxBuildError
 import org.sarmidev.kardano.wallet.ReadOnlyWallet
 import org.sarmidev.kardano.wallet.WalletBalance
 import org.sarmidev.kardano.wallet.WalletError
+import org.sarmidev.kardano.wallet.WalletSignedTransaction
 
 // ---------------------------------------------------------------------------
 // Display models — pure data, no Compose imports
@@ -132,6 +134,26 @@ internal sealed interface TransactionDraftPresentation {
     data class Failure(val message: String) : TransactionDraftPresentation
 }
 
+/**
+ * Result of presenting the signed-transaction checkpoint ([ReadOnlyWallet.signTransaction],
+ * Block 1.10c).
+ *
+ * Carries only public metadata about the [WalletSignedTransaction] built: the 32-byte
+ * transaction id (hex), the witness count, a truncated hex preview of the full signed
+ * `transaction` CBOR, and an explicit not-submitted/testnet/fixture label. Never the mnemonic,
+ * seed, private/root key bytes, or the full (untruncated) signed CBOR. [Failure] covers both
+ * the same draft-building errors [TransactionDraftPresentation.Failure] can report and every
+ * [WalletError] [ReadOnlyWallet.signTransaction] itself can return (for example a signing or
+ * transaction-assembly failure); its message text distinguishes the cause. This checkpoint
+ * never submits anything — submission is Block 1.11.
+ */
+internal sealed interface SignedTransactionPresentation {
+    data object Empty : SignedTransactionPresentation
+    data object Loading : SignedTransactionPresentation
+    data class Success(val rows: List<LabeledRow>) : SignedTransactionPresentation
+    data class Failure(val message: String) : SignedTransactionPresentation
+}
+
 // ---------------------------------------------------------------------------
 // Presenter — maps :core results to display models; no SDK logic of its own
 // ---------------------------------------------------------------------------
@@ -139,8 +161,9 @@ internal sealed interface TransactionDraftPresentation {
 /**
  * Maps results from `:core`, `:crypto`, `:provider`, `:wallet`, and `:tx` APIs to
  * [AddressPresentation], [HexPresentation], [CborPresentation], [WalletPresentation],
- * [ProviderUtxosPresentation], [ProviderParamsPresentation], [WalletBalancePresentation], and
- * [TransactionDraftPresentation] for display in [PlaygroundScreen].
+ * [ProviderUtxosPresentation], [ProviderParamsPresentation], [WalletBalancePresentation],
+ * [TransactionDraftPresentation], and [SignedTransactionPresentation] for display in
+ * [PlaygroundScreen].
  *
  * This object only formats and labels results. It never re-parses, re-validates, or
  * reimplements any protocol rule, derivation, hashing, address-generation, balance-summation,
@@ -577,9 +600,9 @@ internal object PlaygroundPresenter {
     /**
      * Maps a [WalletError] to a human-readable single-line message, delegating to the
      * existing per-error-type presenters ([presentMnemonicError], [presentKeyDerivationError],
-     * [presentCryptoError], [presentAddressError], [presentProviderError]) for every wrapped
-     * variant, so no formatting logic is duplicated. [WalletError.BalanceOverflow] is the one
-     * variant `:wallet` owns itself.
+     * [presentCryptoError], [presentAddressError], [presentProviderError], [presentSigningError],
+     * [presentTxBuildError]) for every wrapped variant, so no formatting logic is duplicated.
+     * [WalletError.BalanceOverflow] is the one variant `:wallet` owns itself.
      *
      * Internal so tests can exercise all variants by constructing them directly.
      */
@@ -591,6 +614,24 @@ internal object PlaygroundPresenter {
         is WalletError.Provider -> presentProviderError(error.error)
         is WalletError.BalanceOverflow ->
             "Balance overflow after summing ${error.partialCount} UTxO(s)"
+        is WalletError.Signing -> "Signing failed: ${presentSigningError(error.error)}"
+        is WalletError.TransactionAssembly ->
+            "Transaction assembly failed: ${presentTxBuildError(error.error)}"
+    }
+
+    /**
+     * Maps a [SigningError] to a human-readable single-line message. Never renders key,
+     * signature, or message bytes — [SigningError] itself carries none.
+     *
+     * Internal so tests can exercise all variants by constructing them directly.
+     */
+    internal fun presentSigningError(error: SigningError): String = when (error) {
+        is SigningError.InvalidBodyHashLength ->
+            "Invalid body hash length: expected ${error.expectedBytes}B, got ${error.actualBytes}B"
+        is SigningError.InvalidKeyMaterial ->
+            "Invalid key material: expected ${error.expectedBytes}B, got ${error.actualBytes}B"
+        is SigningError.BackendFailed -> "Signing backend failed: ${error.message}"
+        is SigningError.SigningUnavailable -> "Signing is not available on this platform"
     }
 
     // --- Transaction Draft (unsigned; Block 1.9c) ---
@@ -635,21 +676,40 @@ internal object PlaygroundPresenter {
      * that address via a live Blockfrost preprod faucet to see a
      * [TransactionDraftPresentation.Success].
      */
-    suspend fun presentTransactionDraft(provider: ChainQueryProvider): TransactionDraftPresentation {
+    suspend fun presentTransactionDraft(provider: ChainQueryProvider): TransactionDraftPresentation =
+        when (val outcome = buildTransactionDraft(provider)) {
+            is DraftBuildOutcome.Built -> mapTransactionDraftResult(outcome.result)
+            is DraftBuildOutcome.Failed -> TransactionDraftPresentation.Failure(outcome.message)
+        }
+
+    /** The outcome of [buildTransactionDraft]: either a `:tx` build result, or an already-formatted failure. */
+    private sealed interface DraftBuildOutcome {
+        data class Built(val result: KardanoResult<TransactionDraft, TxBuildError>) : DraftBuildOutcome
+        data class Failed(val message: String) : DraftBuildOutcome
+    }
+
+    /**
+     * Restores [TestWalletFixture]'s cited test-only mnemonic through [ReadOnlyWallet.restore]
+     * (always [Network.TESTNET]), queries [provider] for that wallet's candidate UTxOs and the
+     * current protocol parameters, and calls [TransactionBuilder.build] for the same minimal,
+     * single-payment, unsigned transaction draft [presentTransactionDraft] builds (Block 1.9c).
+     *
+     * Shared by [presentTransactionDraft] and [presentSignedTransaction] (Block 1.10c) so both
+     * checkpoints build the identical draft through one code path — this presenter still does
+     * not select inputs, estimate a fee, decide change, or encode any CBOR itself.
+     */
+    private suspend fun buildTransactionDraft(provider: ChainQueryProvider): DraftBuildOutcome {
         val wallet = when (val result = ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)) {
             is KardanoResult.Ok -> result.value
-            is KardanoResult.Err ->
-                return TransactionDraftPresentation.Failure(presentWalletError(result.error))
+            is KardanoResult.Err -> return DraftBuildOutcome.Failed(presentWalletError(result.error))
         }
         val candidateInputs = when (val result = provider.getUtxos(wallet.address)) {
             is KardanoResult.Ok -> result.value
-            is KardanoResult.Err ->
-                return TransactionDraftPresentation.Failure(presentProviderError(result.error))
+            is KardanoResult.Err -> return DraftBuildOutcome.Failed(presentProviderError(result.error))
         }
         val protocolParameters = when (val result = provider.getProtocolParameters()) {
             is KardanoResult.Ok -> result.value
-            is KardanoResult.Err ->
-                return TransactionDraftPresentation.Failure(presentProviderError(result.error))
+            is KardanoResult.Err -> return DraftBuildOutcome.Failed(presentProviderError(result.error))
         }
         val request = TransactionBuildRequest(
             network = Network.TESTNET,
@@ -659,7 +719,7 @@ internal object PlaygroundPresenter {
             protocolParameters = protocolParameters,
             ttl = null,
         )
-        return mapTransactionDraftResult(TransactionBuilder.build(request))
+        return DraftBuildOutcome.Built(TransactionBuilder.build(request))
     }
 
     /**
@@ -697,7 +757,10 @@ internal object PlaygroundPresenter {
 
     /**
      * Maps a [TxBuildError] to a human-readable single-line message, distinguishing the cause
-     * (no inputs, insufficient funds, below minimum ADA, and so on) in the text.
+     * (no inputs, insufficient funds, below minimum ADA, and so on, plus the Block 1.10b
+     * witness/assembly variants — [TxBuildError.InvalidVerificationKeyLength],
+     * [TxBuildError.InvalidSignatureLength], [TxBuildError.EmptyWitnessSet] — reachable via
+     * [WalletError.TransactionAssembly]) in the text.
      *
      * Internal so tests can exercise all variants by constructing them directly.
      */
@@ -725,6 +788,85 @@ internal object PlaygroundPresenter {
             "Network mismatch: expected ${error.expected.name}, got ${error.actual.name}"
         is TxBuildError.UnsupportedFeature -> "Unsupported feature: ${error.detail}"
         is TxBuildError.DuplicateInput -> "Duplicate input detected"
+        is TxBuildError.InvalidVerificationKeyLength ->
+            "Invalid verification key length: expected ${error.expectedBytes}B, got ${error.actualBytes}B"
+        is TxBuildError.InvalidSignatureLength ->
+            "Invalid signature length: expected ${error.expectedBytes}B, got ${error.actualBytes}B"
+        is TxBuildError.EmptyWitnessSet -> "Witness set is empty"
+    }
+
+    // --- Signed Transaction (not submitted; Block 1.10c) ---
+
+    /** Bytes of the signed-transaction CBOR hex preview shown before truncating with "…". */
+    private const val SIGNED_CBOR_PREVIEW_BYTES: Int = BODY_HEX_PREVIEW_BYTES
+
+    /**
+     * The explicit not-submitted label shown alongside every successfully signed transaction:
+     * this checkpoint (Block 1.10c) never submits anything — submission is Block 1.11.
+     */
+    private const val SIGNED_NOT_SUBMITTED_LABEL: String =
+        "signed, not submitted — testnet-only, test fixture, no real funds"
+
+    /**
+     * Builds the same unsigned minimal-ADA draft as [presentTransactionDraft] (Block 1.9c) via
+     * [buildTransactionDraft], then signs it through [ReadOnlyWallet.signTransaction] using
+     * [TestWalletFixture]'s cited test-only mnemonic and [Network.TESTNET] explicitly — the
+     * same fixture-only/testnet-only call-site discipline [presentTransactionDraft] and
+     * [presentWalletBalance] already follow (ADR-0015 §2a: `:wallet` itself is not
+     * fixture-aware, so this call site supplies both explicitly).
+     *
+     * Delegates entirely to `:tx` ([TransactionBuilder]) for the draft and `:wallet`
+     * ([ReadOnlyWallet.signTransaction], which itself delegates to `:crypto`'s `Signing` and
+     * `:tx`'s `TransactionAssembler`) for signing; this presenter does not hash, sign, or
+     * assemble anything itself, and it never submits the result — submission is out of scope
+     * (Block 1.11). Provider-agnostic: the caller decides whether [provider] is the in-memory
+     * mock (fake/test-only) or a live provider (for example Blockfrost preprod). Under the
+     * default [InMemoryChainQueryProvider], the restored wallet's address has no fake UTxOs
+     * seeded for it, so the shared draft-building step normally fails with
+     * [TxBuildError.NoInputs] before signing is ever attempted — reported the same way
+     * [presentTransactionDraft] reports it. Fund that address via a live Blockfrost preprod
+     * faucet to see a [SignedTransactionPresentation.Success].
+     */
+    suspend fun presentSignedTransaction(provider: ChainQueryProvider): SignedTransactionPresentation {
+        val draft = when (val outcome = buildTransactionDraft(provider)) {
+            is DraftBuildOutcome.Failed -> return SignedTransactionPresentation.Failure(outcome.message)
+            is DraftBuildOutcome.Built -> when (val result = outcome.result) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return SignedTransactionPresentation.Failure(presentTxBuildError(result.error))
+            }
+        }
+        val signResult = ReadOnlyWallet.signTransaction(TestWalletFixture.words, Network.TESTNET, draft)
+        return mapSignedTransactionResult(signResult)
+    }
+
+    /**
+     * Maps a raw [ReadOnlyWallet.signTransaction] result to a [SignedTransactionPresentation].
+     * Non-suspend and `internal` so it can be unit-tested by constructing a [WalletError]
+     * directly, without restoring a mnemonic, reaching native cryptography, or querying a
+     * provider.
+     */
+    internal fun mapSignedTransactionResult(
+        result: KardanoResult<WalletSignedTransaction, WalletError>,
+    ): SignedTransactionPresentation = when (result) {
+        is KardanoResult.Ok -> SignedTransactionPresentation.Success(signedTransactionRows(result.value))
+        is KardanoResult.Err -> SignedTransactionPresentation.Failure(presentWalletError(result.error))
+    }
+
+    private fun signedTransactionRows(signed: WalletSignedTransaction): List<LabeledRow> = listOf(
+        LabeledRow("Transaction id", Hex.encode(signed.transactionId.toByteArray())),
+        LabeledRow("Witnesses", signed.witnessCount.toString()),
+        LabeledRow(
+            "Signed tx CBOR (preview)",
+            signedCborPreview(signed.signedTransaction.cbor()),
+        ),
+        LabeledRow("Status", SIGNED_NOT_SUBMITTED_LABEL),
+    )
+
+    private fun signedCborPreview(bytes: ByteArray): String {
+        val prefixLength = minOf(SIGNED_CBOR_PREVIEW_BYTES, bytes.size)
+        val hex = Hex.encode(bytes.copyOf(prefixLength))
+        return if (bytes.size > prefixLength) "$hex… (${bytes.size}B total)" else hex
     }
 
     // --- Helpers ---

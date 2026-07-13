@@ -565,6 +565,70 @@ Date: 2026-07-13
 
 Summary:
 
+- **Block 1.10c `:shared` "Signed Transaction (not submitted)" Playground checkpoint — DONE.
+  Result: implemented and verified (compile/JVM/Android-host/iOS-compile); Android on-device
+  runtime checkpoint is a pending manual step for the project owner.** Precondition checked and
+  satisfied: working tree was clean and Block 1.10b (`d1acb80`) was already committed before this
+  change started.
+  - **`PlaygroundPresenter.kt`.** Extracted the draft-building steps already inlined in the
+    1.9c `presentTransactionDraft` (restore wallet → `getUtxos` → `getProtocolParameters` →
+    `TransactionBuilder.build`) into a private suspend helper, `buildTransactionDraft`, so both
+    the unsigned-draft and new signed-transaction checkpoints build the identical draft through
+    one code path; `presentTransactionDraft`'s existing tested behavior is unchanged. Added
+    `SignedTransactionPresentation` (`Empty`/`Loading`/`Success`/`Failure`, same shape as the
+    other checkpoints), `presentSignedTransaction(provider)` (builds the draft, then calls
+    `:wallet`'s `ReadOnlyWallet.signTransaction(TestWalletFixture.words, Network.TESTNET, draft)`
+    explicitly), `mapSignedTransactionResult` (non-suspend, testable), and `signedTransactionRows`
+    (transaction id as full hex, witness count, a truncated signed-CBOR preview reusing the
+    existing `BODY_HEX_PREVIEW_BYTES`-style truncation, and the exact label `"signed, not
+    submitted — testnet-only, test fixture, no real funds"`).
+  - **Pre-existing compile gap fixed (forced, in-scope).** Block 1.10b added
+    `WalletError.Signing`/`WalletError.TransactionAssembly` to `:wallet` and
+    `TxBuildError.InvalidVerificationKeyLength`/`InvalidSignatureLength`/`EmptyWitnessSet` to
+    `:tx`, but `:shared`'s `PlaygroundPresenter.presentWalletError`/`presentTxBuildError` — both
+    exhaustive `when` expressions — were never updated for them, so `:shared` did not compile at
+    all before this change (confirmed by a real `:shared:jvmTest` compile failure during this
+    session). Fixed by adding the missing branches (new `presentSigningError` for `SigningError`,
+    plus `TransactionAssembly`/three `TxBuildError` branches) — no `:crypto`/`:tx`/`:wallet`
+    behavior changed, this is presentation/formatting code in `:shared` only.
+  - **`PlaygroundScreen.kt`.** Kept the existing "Transaction Draft (unsigned)" section
+    unchanged. Added a "Signed Transaction (not submitted)" section below it (same one-shot
+    `LaunchedEffect`-plus-request-token pattern as the other checkpoints), a `SignedTransactionCard`
+    composable mirroring `TransactionDraftCard`, and updated the screen's block-list KDoc.
+  - **Tests added** (no invented vectors): `PlaygroundSignedTransactionPresenterTest`
+    (`commonTest`, native-free — `WalletError.Signing`/`TransactionAssembly` mapping, every
+    `SigningError` variant, and `TxBuildError.DuplicateInput` delegation, reusing the cited CIP-19
+    `UtxoRef` pattern already used elsewhere in this suite); `PlaygroundSignedTransactionDesktopTest`
+    (`jvmTest`-only, end-to-end — the default-mock "no UTxOs" `Failure`, and a seeded-UTxO
+    `Success` asserting a 64-hex-char lowercase transaction id, exactly one witness, a truncated
+    CBOR preview, the exact not-submitted/testnet/fixture label, and that no fixture mnemonic
+    word leaks into the hex-bearing fields).
+  - **Verification — all PASS:** `./gradlew :shared:jvmTest` (81 tests, including both new
+    files); `./gradlew :shared:testAndroidHostTest`; `./gradlew :shared:compileKotlinIosArm64`;
+    `./gradlew :shared:compileKotlinIosSimulatorArm64`. `git diff --check` clean; banned-word/
+    restricted-claim scan of touched files found none. No `:crypto-signing-backend`/`:crypto`/
+    `:tx`/`:wallet`/`:core`/provider/app behavior changed beyond the forced `presentWalletError`/
+    `presentTxBuildError` compile-gap fix described above, which is itself `:shared`-only
+    formatting code. No submission code was added anywhere.
+  - **Android runtime checkpoint: pending, manual.** Signing reaches `:crypto`'s native backend
+    and a `Success` state needs a funded UTxO; under the default mock the on-device section
+    honestly shows "no UTxOs", same as the 1.9c draft section did before it. Project-owner manual
+    checkpoint: build and run the Android app, enable "Use live Blockfrost (preprod)", paste a
+    preprod `project_id`, fund the generated `addr_test1…` address from a preprod faucet, tap
+    "Sign transaction", and confirm the section shows a transaction id, witness count `1`, a
+    truncated signed-CBOR preview, and the "signed, not submitted — testnet-only, test fixture,
+    no real funds" label.
+  - **Block 1.10 is now complete** except for that one manual Android checkpoint. Docs updated
+    in this change: `docs/PHASE_1_PLAN.md` §1.10 (1.10c → complete, "next step" → 1.11),
+    `docs/ROADMAP.md` §1.10 (1.10c → complete), `shared/README.md` (new "Signed Transaction"
+    section + status/testing refresh), this file. **Next step: Block 1.11** (Submit Transaction).
+
+### Session Summary (Block 1.10b signing implementation)
+
+Date: 2026-07-13
+
+Summary:
+
 - **Block 1.10b signing implementation — DONE. Result: `:crypto` `Signing`, `:tx` witness/full-
   `transaction` assembly, and `:wallet` signing orchestration implemented and verified (ADR-0015
   §9 result note).** Implements ADR-0015 §1/§3/§5/§6 now that the Block 1.10b-pre backend gate is

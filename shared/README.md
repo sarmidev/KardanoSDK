@@ -12,9 +12,9 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
 - Hosts the SDK Playground (`playground/PlaygroundScreen.kt`, `playground/PlaygroundPresenter.kt`),
   introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core`/
   `:crypto`/`:wallet`/`:tx` SDK behavior (address parsing, Hex, CBOR, test-wallet derivation +
-  address generation, read-only wallet balance, and an unsigned transaction-draft checkpoint)
-  and, from Block 1.3a, a read-only "Provider" section (mock by default, with an optional
-  live-Blockfrost toggle added in Block 1.3b).
+  address generation, read-only wallet balance, an unsigned transaction-draft checkpoint, and a
+  signed-but-not-submitted transaction checkpoint) and, from Block 1.3a, a read-only "Provider"
+  section (mock by default, with an optional live-Blockfrost toggle added in Block 1.3b).
 - Hosts `App.kt` (theme wrapper that renders `PlaygroundScreen`) and the iOS UI entry point
   (`MainViewController.kt`).
 - Retains the sample glue (`Greeting.kt`, `GreetingUtil.kt`) used by `PlaygroundScreen` to
@@ -28,7 +28,9 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   checkpoint (`ReadOnlyWallet`, `WalletBalance`, `WalletError` — see "Wallet Balance" below),
   and, from Block 1.9c, on `:tx` for the unsigned transaction-draft checkpoint
   (`TransactionBuilder`, `TransactionBuildRequest`, `TransactionDraft`, `TxBuildError` — see
-  "Transaction Draft" below).
+  "Transaction Draft" below). Block 1.10c (signing) reuses these same `:wallet`/`:tx`
+  dependencies — `ReadOnlyWallet.signTransaction` and `WalletSignedTransaction` — with no new
+  Gradle module added (see "Signed Transaction" below).
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
   `iosApp` via `MainViewControllerKt.MainViewController()`.
 
@@ -120,6 +122,32 @@ faucet. **No signing, no witness construction, no transaction id hashing, and no
 anywhere in this checkpoint — see
 [docs/DECISIONS/0014-minimal-ada-transaction-builder.md](../docs/DECISIONS/0014-minimal-ada-transaction-builder.md).
 
+### Signed Transaction (not submitted) section (Block 1.10c)
+
+The "Signed Transaction (not submitted)" section builds the same unsigned draft as the
+Transaction Draft section above — through a shared `PlaygroundPresenter.buildTransactionDraft`
+helper extracted from that checkpoint so both sections build the identical draft — then signs it
+by calling `:wallet`'s `ReadOnlyWallet.signTransaction(TestWalletFixture.words, Network.TESTNET,
+draft)`, always passing the cited test-only fixture words and `Network.TESTNET` explicitly:
+`:wallet` itself is not fixture-aware and enforces neither (ADR-0015 §2a), so this call site is
+what keeps this checkpoint on the fixture/testnet-only path. `:shared` performs no hashing,
+signing, or witness/CBOR assembly itself — all of that belongs to `:wallet` (which itself
+delegates to `:crypto`'s `Signing` and `:tx`'s `TransactionAssembler`) — and
+`PlaygroundPresenter.presentSignedTransaction` only calls it and formats the result. On success
+the screen shows only the 32-byte transaction id (hex), the witness count (always `1` for this
+single-key checkpoint), a truncated hex preview of the full signed `transaction` CBOR, and an
+explicit `signed, not submitted — testnet-only, test fixture, no real funds` label — never the
+mnemonic, seed, private/root key bytes, or the full (untruncated) signed CBOR. On failure the
+screen shows a message distinguishing the cause, covering both the same draft-building failures
+the Transaction Draft section can report and every `WalletError` `ReadOnlyWallet.signTransaction`
+itself can return (a signing failure or a witness/transaction-assembly failure). Under the
+default `InMemoryChainQueryProvider`, the restored wallet's address has no fake UTxOs seeded for
+it — same honest-empty behavior as the sections above — so this section normally reports "no
+UTxOs" as the expected mock result, not a failure; a live Blockfrost preprod provider can sign a
+real draft only after that address is funded with test ADA from a preprod faucet. **No
+submission anywhere in this checkpoint** — submitting a transaction is Block 1.11, see
+[docs/DECISIONS/0015-transaction-signing.md](../docs/DECISIONS/0015-transaction-signing.md).
+
 **SDK logic and the protocol/cryptographic test-vector suites belong in `:core`/`:crypto`/
 `:wallet`/`:tx`, not here.** `:shared` only calls `:core`/`:crypto`/`:provider`/`:wallet`/`:tx`
 APIs and formats/displays results. `PlaygroundPresenter` is a display-only mapping layer with no
@@ -171,7 +199,17 @@ fake UTxOs and cited CIP-19 addresses (no mnemonic, no native call) and feeding 
 `mapTransactionDraftResult`/`presentTxBuildError` directly; `PlaygroundTransactionDraftDesktopTest`
 (`jvmTest`-only) is the only place `presentTransactionDraft` and `ReadOnlyWallet.restore` run end
 to end together, asserting the honest "no UTxOs" result under the default mock and a successful
-draft once the mock is seeded with a UTxO for the restored wallet's own address. See
+draft once the mock is seeded with a UTxO for the restored wallet's own address. The signed-
+transaction checkpoint (Block 1.10c) follows the same split:
+`PlaygroundSignedTransactionPresenterTest` (`commonTest`) is native-free, feeding constructed
+`WalletError` values (`Signing`, `TransactionAssembly`) into `mapSignedTransactionResult`/
+`presentSigningError`/`presentWalletError` directly (no mnemonic, no native call);
+`PlaygroundSignedTransactionDesktopTest` (`jvmTest`-only) is the only place
+`presentSignedTransaction` and `ReadOnlyWallet.signTransaction` run end to end together,
+asserting the honest "no UTxOs" result under the default mock, and — once the mock is seeded
+with a UTxO for the restored wallet's own address — a successful signed transaction whose rows
+carry a well-formed 32-byte hex transaction id, exactly one witness, a truncated CBOR preview,
+the exact not-submitted/testnet/fixture label, and none of the fixture's mnemonic words. See
 [docs/TESTING.md](../docs/TESTING.md) for the testing strategy and test-vector policy.
 
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`

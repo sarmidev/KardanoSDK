@@ -1126,11 +1126,27 @@ Proposed block sequence:
     device and an emulator; `compileKotlinIosArm64` for all four modules; and
     `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`.
   - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:
-    pending.** Signs by calling `:wallet`'s entry point with the cited fixture words/path and
-    `Network.TESTNET` explicitly (ADR-0015 §2a). Displays the tx id, witness count, a truncated
-    signed-tx CBOR preview, and an explicit "signed, not submitted — testnet-only, test fixture,
-    no real funds" label. No submit
-    (Block 1.11).
+    complete (Android on-device/emulator checkpoint pending as a manual project-owner step).**
+    `PlaygroundPresenter` gained a shared `buildTransactionDraft` helper (extracted from the
+    1.9c `presentTransactionDraft`, reused unchanged by both checkpoints so they build the
+    identical unsigned draft) and `presentSignedTransaction`, which signs that draft by calling
+    `:wallet`'s `ReadOnlyWallet.signTransaction` with the cited fixture words/path and
+    `Network.TESTNET` explicitly (ADR-0015 §2a). `PlaygroundScreen` gained a "Signed Transaction
+    (not submitted)" section displaying the tx id, witness count, a truncated signed-tx CBOR
+    preview, and the explicit "signed, not submitted — testnet-only, test fixture, no real funds"
+    label. No submit code (Block 1.11). `:shared` gained no new Gradle module dependency (`:tx`
+    and `:wallet` were already present from 1.9c/1.8b). While wiring this up, a pre-existing gap
+    surfaced and was fixed as the minimum compile-forced change this block's guardrail allows:
+    `PlaygroundPresenter.presentWalletError`/`presentTxBuildError` had not been updated for the
+    `WalletError.Signing`/`WalletError.TransactionAssembly` and
+    `TxBuildError.InvalidVerificationKeyLength`/`InvalidSignatureLength`/`EmptyWitnessSet`
+    variants Block 1.10b added — `:shared` did not compile without those `when` branches (plus a
+    new `presentSigningError` for `SigningError`); no `:crypto`/`:tx`/`:wallet` behavior changed.
+    Tests: `PlaygroundSignedTransactionPresenterTest` (`commonTest`, native-free error-mapping)
+    and `PlaygroundSignedTransactionDesktopTest` (`jvmTest`-only, end-to-end sign-and-display,
+    plus the honest "no UTxOs" default-mock case). All verification commands pass:
+    `:shared:jvmTest`, `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`,
+    `:shared:compileKotlinIosSimulatorArm64`.
 - `1.11` Submit Transaction — submit a signed transaction to preprod.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.

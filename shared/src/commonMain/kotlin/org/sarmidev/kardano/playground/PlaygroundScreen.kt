@@ -35,30 +35,34 @@ import org.sarmidev.kardano.provider.blockfrost.BlockfrostConfig
 /**
  * The SDK Playground screen: a diagnostic surface for visually verifying existing `:core`,
  * `:crypto`, `:wallet`, and `:tx` SDK behavior on Android (Blocks 1.2, 1.3, 1.6d, 1.7b, 1.8b,
- * and 1.9c).
+ * 1.9c, and 1.10c).
  *
  * Covers [Address.parse] with typed [org.sarmidev.kardano.address.AddressError] display,
  * a Hex decoder, a CBOR decoder, a test-wallet derivation + address-generation checkpoint, a
- * read-only Provider section, a read-only Wallet Balance checkpoint, and an unsigned
- * Transaction Draft checkpoint. The test-wallet section restores [TestWalletFixture]'s cited
- * test-only mnemonic and shows only the resulting CIP-1852 paths, Blake2b-224 credential
- * hashes, and generated address — never the mnemonic, seed, or any raw key bytes; all
- * derivation, public-key projection, hashing, and address-encoding logic is `:crypto`'s/
- * `:core`'s, called through [KeyDerivation]/[Hashing]/[Address] and formatted here, not
- * reimplemented. The Wallet Balance section restores the same fixture through `:wallet`'s
- * `ReadOnlyWallet.restore` (always `Network.TESTNET`) and queries whichever provider is
- * currently active for that wallet's balance; a zero balance under the mock is the expected
- * result, not a failure. The Transaction Draft section restores the same fixture again and
- * calls `:tx`'s `TransactionBuilder.build` to build a minimal, unsigned, single-payment ADA
- * transaction from that wallet's UTxOs — no signing, no witness construction, no transaction
- * id, no submission; under the mock, the restored address has no seeded UTxOs, so this normally
- * reports "no UTxOs", the expected mock result. The provider section defaults to the in-memory
- * mock ([InMemoryChainQueryProvider], fake/test-only, no network); a "Use live Blockfrost
- * (preprod)" toggle switches to a live [BlockfrostChainQueryProvider] built from a runtime
- * `project_id`. That key is held only in non-persistent Compose state (never stored or logged)
- * and live calls hit real preprod (test funds). This is sample/diagnostic code in `:shared` and
- * is not part of the SDK public API. No signing, wallet persistence, transaction-id hashing, or
- * submission logic anywhere in this screen.
+ * read-only Provider section, a read-only Wallet Balance checkpoint, an unsigned Transaction
+ * Draft checkpoint, and a Signed Transaction (not submitted) checkpoint. The test-wallet
+ * section restores [TestWalletFixture]'s cited test-only mnemonic and shows only the resulting
+ * CIP-1852 paths, Blake2b-224 credential hashes, and generated address — never the mnemonic,
+ * seed, or any raw key bytes; all derivation, public-key projection, hashing, and
+ * address-encoding logic is `:crypto`'s/`:core`'s, called through [KeyDerivation]/[Hashing]/
+ * [Address] and formatted here, not reimplemented. The Wallet Balance section restores the same
+ * fixture through `:wallet`'s `ReadOnlyWallet.restore` (always `Network.TESTNET`) and queries
+ * whichever provider is currently active for that wallet's balance; a zero balance under the
+ * mock is the expected result, not a failure. The Transaction Draft section restores the same
+ * fixture again and calls `:tx`'s `TransactionBuilder.build` to build a minimal, unsigned,
+ * single-payment ADA transaction from that wallet's UTxOs — no signing, no witness
+ * construction, no transaction id, no submission; under the mock, the restored address has no
+ * seeded UTxOs, so this normally reports "no UTxOs", the expected mock result. The Signed
+ * Transaction section (Block 1.10c) builds that same unsigned draft again and signs it through
+ * `:wallet`'s `ReadOnlyWallet.signTransaction`, always passing [TestWalletFixture.words] and
+ * `Network.TESTNET` explicitly, then shows only the transaction id, witness count, a truncated
+ * signed-transaction CBOR preview, and an explicit "signed, not submitted" label — no
+ * submission (Block 1.11). The provider section defaults to the in-memory mock
+ * ([InMemoryChainQueryProvider], fake/test-only, no network); a "Use live Blockfrost (preprod)"
+ * toggle switches to a live [BlockfrostChainQueryProvider] built from a runtime `project_id`.
+ * That key is held only in non-persistent Compose state (never stored or logged) and live calls
+ * hit real preprod (test funds). This is sample/diagnostic code in `:shared` and is not part of
+ * the SDK public API. No submission logic anywhere in this screen.
  */
 @Composable
 internal fun PlaygroundScreen() {
@@ -110,6 +114,11 @@ internal fun PlaygroundScreen() {
     }
     var transactionDraftRequest by remember { mutableStateOf(0) }
 
+    var signedTransactionResult by remember {
+        mutableStateOf<SignedTransactionPresentation>(SignedTransactionPresentation.Empty)
+    }
+    var signedTransactionRequest by remember { mutableStateOf(0) }
+
     // One-shot suspend loads triggered by incrementing a request token. Using LaunchedEffect
     // keeps the screen dependent only on the Compose runtime (no extra coroutine artifact).
     // The effect reads the currently active provider (mock or live) at launch.
@@ -137,6 +146,13 @@ internal fun PlaygroundScreen() {
         if (transactionDraftRequest == 0) return@LaunchedEffect
         transactionDraftResult = TransactionDraftPresentation.Loading
         transactionDraftResult = PlaygroundPresenter.presentTransactionDraft(activeProvider)
+    }
+    // Builds the same unsigned draft as transactionDraftRequest above, then signs it through
+    // :wallet's ReadOnlyWallet.signTransaction (Block 1.10c) — never submitted.
+    LaunchedEffect(signedTransactionRequest) {
+        if (signedTransactionRequest == 0) return@LaunchedEffect
+        signedTransactionResult = SignedTransactionPresentation.Loading
+        signedTransactionResult = PlaygroundPresenter.presentSignedTransaction(activeProvider)
     }
 
     Column(
@@ -373,6 +389,31 @@ internal fun PlaygroundScreen() {
             Text("Build transaction draft")
         }
         TransactionDraftCard(transactionDraftResult)
+
+        // --- Signed Transaction (not submitted; Block 1.10c) ---
+        HorizontalDivider()
+        Text("Signed Transaction (not submitted)", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Builds the same unsigned draft as above (always testnet, same test-only " +
+                "fixture), then signs it through ReadOnlyWallet.signTransaction — never " +
+                "submitted, that is Block 1.11. Mock provider data has no fake UTxOs seeded " +
+                "for this generated wallet address, so this normally reports \"no UTxOs\", " +
+                "the expected mock result, not a failure. Live Blockfrost preprod can sign a " +
+                "real draft only after this address is funded with test ADA from a preprod " +
+                "faucet. Shows only the transaction id, witness count, a truncated hex " +
+                "preview of the signed transaction CBOR, and an explicit not-submitted label " +
+                "— never the mnemonic, seed, or any private/raw key bytes, and never the full " +
+                "signed CBOR.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = { signedTransactionRequest += 1 },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Sign transaction")
+        }
+        SignedTransactionCard(signedTransactionResult)
     }
 }
 
@@ -553,6 +594,29 @@ private fun TransactionDraftCard(presentation: TransactionDraftPresentation) {
             }
         }
         is TransactionDraftPresentation.Failure -> ErrorCard(presentation.message)
+    }
+}
+
+@Composable
+private fun SignedTransactionCard(presentation: SignedTransactionPresentation) {
+    when (presentation) {
+        is SignedTransactionPresentation.Empty -> Unit
+        is SignedTransactionPresentation.Loading -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Loading…",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        is SignedTransactionPresentation.Success -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                presentation.rows.forEach { row -> ResultRow(row.label, row.value) }
+            }
+        }
+        is SignedTransactionPresentation.Failure -> ErrorCard(presentation.message)
     }
 }
 
