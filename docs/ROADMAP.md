@@ -1151,7 +1151,11 @@ Proposed block sequence:
     "Sign transaction" displayed a transaction id, witness count `1`, a truncated signed-CBOR
     preview (`288B total`), and the "signed, not submitted — testnet-only, test fixture, no real
     funds" label, with no submit action invoked.
-- `1.11` Submit Transaction — submit a signed transaction to preprod.
+- `1.11` Submit Transaction — submit a signed transaction to preprod. Split into `1.11a`/`1.11b`/
+  `1.11c` (ADR-0017). `1.11a` (`:provider` boundary — `TxSubmitProvider`, `SubmitError`,
+  `InMemoryTxSubmitProvider`, which never fakes success) — **Status: complete.** `1.11b`
+  (`:provider-blockfrost` submit implementation) and `1.11c` (`:shared` Playground checkpoint) —
+  not started.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 

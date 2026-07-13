@@ -541,7 +541,10 @@ Do not implement:
   `Signing`, `:tx` witness/transaction assembly, `:wallet` orchestration) is complete** (ADR-0015
   §9 result note); do not widen it beyond the ADR-0015 §2 scope above without a new explicit
   block/ADR.
-- Transaction submission.
+- Real transaction submission to any network. Block 1.11a added only the provider-neutral
+  `TxSubmitProvider`/`SubmitError` boundary and a non-submitting `InMemoryTxSubmitProvider`
+  (ADR-0017); no Blockfrost or other backend submit implementation exists yet (Block 1.11b),
+  and no `:shared` submit UI exists yet (Block 1.11c).
 - Real wallet flows.
 - Plutus support.
 - Staking or delegation.
@@ -560,6 +563,52 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.11a `:provider` transaction-submission boundary — DONE. Result: implemented and
+  verified (docs-only architecture plan already existed; this session implemented it).**
+  Precondition checked and satisfied: working tree was clean and Block 1.10c was already
+  committed before this change started.
+  - **New `:provider` public API.** `TxSubmitProvider` (`provider/src/commonMain/.../
+    TxSubmitProvider.kt`): `val network: Network` and `suspend fun
+    submit(transactionCbor: ByteArray): KardanoResult<TxHash, SubmitError>`, a **separate**
+    interface from `ChainQueryProvider` (submission is a single mutating, non-idempotent
+    action with its own failure taxonomy, not a read). `SubmitError` (`SubmitError.kt`):
+    `SubmissionNotSupported`, `EmptyTransaction`, `Rejected(code, detail)`,
+    `Transport(message)`, `RemoteStatus(code, detail?)`, `RateLimited`,
+    `Deserialization(detail)`, `Unknown`. `InMemoryTxSubmitProvider`
+    (`InMemoryTxSubmitProvider.kt`): defaults to `Network.TESTNET`; `submit` always returns
+    `KardanoResult.Err(SubmitError.SubmissionNotSupported)`, including for empty input, and
+    never inspects/validates `transactionCbor` since it never uses it — it must never fake
+    successful submission.
+  - **Dependency-direction rationale.** `submit` takes raw `ByteArray`, not a `:tx`
+    `SignedTransaction` or a `:wallet` `WalletSignedTransaction`, because `:tx` already
+    depends on `:provider`; `:provider` depending back on `:tx` would cycle. Callers extract
+    bytes themselves (for example `walletSigned.signedTransaction.cbor()`).
+  - **Tests added** (`InMemoryTxSubmitProviderTest.kt`, `commonTest`): `submit` with non-empty
+    bytes returns `SubmissionNotSupported`; `submit` with empty bytes also returns
+    `SubmissionNotSupported`; default `network` is `Network.TESTNET`; `network` is
+    constructor-configurable. No fake-success path exists to test.
+  - **Docs added/updated.** New `docs/DECISIONS/0017-transaction-submission-boundary.md`
+    (references ADR-0006/ADR-0007; explains the interface split, the `ByteArray` input, the
+    `TxHash` return, the `SubmitError` taxonomy, and the never-fake-success double; records
+    the planned `1.11a`/`1.11b`/`1.11c` split). `provider/README.md` updated with the new
+    `TxSubmitProvider`/`InMemoryTxSubmitProvider`/`SubmitError` role and boundary notes; its
+    banned `Not audited.` wording was replaced with factual "pre-alpha, experimental.
+    Testnet/preprod only. No real funds." wording. `docs/PHASE_1_PLAN.md` §1.11 (split into
+    1.11a/b/c, 1.11a → complete) and `docs/ROADMAP.md` §1.11 (same) updated. This file.
+  - **Verification — all PASS:** `./gradlew :provider:jvmTest`; `./gradlew
+    :provider:testAndroidHostTest`; `./gradlew :provider:compileKotlinIosArm64`. `git diff
+    --check` clean; banned-word/restricted-claim scan of touched files found none (the only
+    prior occurrence, `provider/README.md`'s `Not audited.`, was replaced as required). No
+    `:shared`/`:wallet`/`:tx`/`:crypto`/`:crypto-signing-backend`/`:core` file changed; no
+    Blockfrost submit implementation added. **Next step: Block 1.11b** (`:provider-blockfrost`
+    Blockfrost submit implementation).
+
+### Session Summary (Block 1.10c `:shared` "Signed Transaction (not submitted)" checkpoint)
 
 Date: 2026-07-13
 

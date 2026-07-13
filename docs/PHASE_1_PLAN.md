@@ -1108,10 +1108,28 @@ Objective:
 - Show the tx id or a comprehensible error.
 - Optionally allow simple polling or an external link.
 
+Split into `1.11a` / `1.11b` / `1.11c` (ADR-0017,
+`docs/DECISIONS/0017-transaction-submission-boundary.md`):
+
+- `1.11a` `:provider` submission boundary — **Status: complete.** Added `TxSubmitProvider`
+  (`network`, `suspend fun submit(transactionCbor: ByteArray): KardanoResult<TxHash,
+  SubmitError>`) as a new interface separate from `ChainQueryProvider` (submission is a single
+  mutating, non-idempotent action with its own failure taxonomy, not a read); the sealed
+  `SubmitError` (`SubmissionNotSupported`, `EmptyTransaction`, `Rejected`, `Transport`,
+  `RemoteStatus`, `RateLimited`, `Deserialization`, `Unknown`); and `InMemoryTxSubmitProvider`,
+  which never submits — every call, including with empty bytes, returns
+  `SubmitError.SubmissionNotSupported`, and it performs no validation of its input since it
+  never uses it. `submit` takes raw signed transaction CBOR bytes rather than a `:tx`/`:wallet`
+  type because `:provider` must not depend on `:tx` (which already depends on `:provider`).
+  No Blockfrost implementation and no `:shared` change in this sub-block.
+- `1.11b` `:provider-blockfrost` Blockfrost submit implementation — **Status: not started.**
+- `1.11c` `:shared` Android "Submit Transaction" Playground checkpoint — **Status: not
+  started.**
+
 Android checkpoint:
 
 - Submit a preprod transaction from the app and see either an accepted result or an
-  explainable error.
+  explainable error. (Deferred to 1.11c.)
 
 ### 1.12 Phase 1 Closure / MVP Review
 

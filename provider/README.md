@@ -4,7 +4,7 @@ The read-only Cardano chain query boundary for Kardano SDK, introduced in Phase 
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Not audited. Not for real funds.
+Phase 1 — pre-alpha, experimental. Testnet/preprod only. No real funds.
 
 ## Role
 
@@ -12,9 +12,14 @@ Phase 1 — pre-alpha, experimental. Not audited. Not for real funds.
   UTxOs by address, protocol parameters, and an optional chain-tip liveness signal.
 - Defines the provider-neutral read models: `Utxo`, `Value` (ADA-only for the first MVP),
   `ProtocolParameters`, `ChainTip`, and the sealed `ProviderError`.
-- Ships one implementation in 1.3a: `InMemoryChainQueryProvider`, a documented sample/test
+- Ships one read implementation in 1.3a: `InMemoryChainQueryProvider`, a documented sample/test
   double whose data is **fake and test-only** (no network, no funds, no secrets, no committed
   chain fixtures).
+- Defines `TxSubmitProvider` (Block 1.11a): a minimal, provider-neutral interface for submitting
+  a fully signed transaction's raw CBOR bytes, and the sealed `SubmitError`.
+- Ships one submit implementation in 1.11a: `InMemoryTxSubmitProvider`, a sample/test double
+  that **never submits anything** — every call returns `SubmitError.SubmissionNotSupported`,
+  including for empty input; it never fakes acceptance.
 
 All operations are `suspend` and return `KardanoResult` (they never throw), which keeps the
 API compatible with Swift/ObjC interop.
@@ -23,13 +28,22 @@ API compatible with Swift/ObjC interop.
 
 - Depends only on `:core`. `commonMain` adds no third-party dependency; only `commonTest`
   uses `kotlinx-coroutines-test`.
-- Transaction submission is intentionally out of scope here. Per
-  [ADR-0006](../docs/DECISIONS/0006-provider-boundary-and-strategy.md), the read-only query
-  boundary is split from a future `TxSubmitProvider` (Block 1.11).
-- The first real preprod provider (Blockfrost) is deferred to Block 1.3b and will live in a
-  separate `:provider-blockfrost` module, which is where the HTTP client dependency and
-  API-key configuration land. `ProviderError` stays backend-neutral (for example
-  `RemoteStatus(code)`, not `HttpStatus`).
+- `TxSubmitProvider` is a separate interface from `ChainQueryProvider`, not an additional
+  method on it — submission is a single mutating, non-idempotent action with its own failure
+  taxonomy (`SubmitError`), not a read. See
+  [ADR-0006](../docs/DECISIONS/0006-provider-boundary-and-strategy.md) for why the split was
+  planned and [ADR-0017](../docs/DECISIONS/0017-transaction-submission-boundary.md) for the
+  concrete Block 1.11a decision (interface shape, `ByteArray` input, `TxHash` return,
+  `SubmitError` taxonomy).
+- `TxSubmitProvider.submit` takes raw signed transaction CBOR bytes (`ByteArray`), not a `:tx`
+  module type: `:tx` already depends on `:provider`, so `:provider` cannot depend back on
+  `:tx` without a cycle. Callers extract the bytes themselves (for example
+  `SignedTransaction.cbor()`) before calling `submit`.
+- No real backend submit implementation lands in this sub-block. The first real preprod
+  Blockfrost submit provider (`BlockfrostTxSubmitProvider`) is deferred to Block 1.11b and will
+  live in `:provider-blockfrost`, alongside the existing read-only Blockfrost provider from
+  Block 1.3b. `ProviderError`/`SubmitError` stay backend-neutral (for example `RemoteStatus`,
+  not `HttpStatus`).
 
 ## Testing
 
@@ -38,5 +52,7 @@ API compatible with Swift/ObjC interop.
 - iOS simulator compile: `./gradlew :provider:compileKotlinIosSimulatorArm64`
 
 See [docs/TESTING.md](../docs/TESTING.md) for the testing strategy and test-vector policy,
-and [docs/DECISIONS/0006-provider-boundary-and-strategy.md](../docs/DECISIONS/0006-provider-boundary-and-strategy.md)
-for the provider boundary decisions.
+[docs/DECISIONS/0006-provider-boundary-and-strategy.md](../docs/DECISIONS/0006-provider-boundary-and-strategy.md)
+for the read-only provider boundary decisions, and
+[docs/DECISIONS/0017-transaction-submission-boundary.md](../docs/DECISIONS/0017-transaction-submission-boundary.md)
+for the submission boundary decisions.
