@@ -11,7 +11,11 @@ Phase 1 — pre-alpha, experimental. Testnet/preprod only. No real funds.
 - Defines `ChainQueryProvider`: a minimal, provider-neutral, read-only interface for querying
   UTxOs by address, protocol parameters, and an optional chain-tip liveness signal.
 - Defines the provider-neutral read models: `Utxo`, `Value` (ADA-only for the first MVP),
-  `ProtocolParameters`, `ChainTip`, and the sealed `ProviderError`.
+  `ProtocolParameters`, `ChainTip`, and the sealed `ProviderError`. `Value.hasNativeAssets`
+  (Block 1.11d) records only whether the output also carried native assets/tokens alongside
+  its ADA `coin` — quantities, policy ids, and asset names are still not represented — so a
+  concrete provider (`:provider-blockfrost`) and a caller (`:tx`) can detect and reject what
+  this ADA-only MVP cannot fully represent, instead of silently dropping it.
 - Ships one read implementation in 1.3a: `InMemoryChainQueryProvider`, a documented sample/test
   double whose data is **fake and test-only** (no network, no funds, no secrets, no committed
   chain fixtures).

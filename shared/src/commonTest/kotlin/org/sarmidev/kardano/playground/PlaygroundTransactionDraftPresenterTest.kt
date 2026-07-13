@@ -239,6 +239,43 @@ class PlaygroundTransactionDraftPresenterTest {
     }
 
     @Test
+    fun presentTxBuildError_unsupportedFeature_mentionsNativeAssetsAndAdaOnly() {
+        // Block 1.11d: today's one reachable cause of UnsupportedFeature (a candidate UTxO
+        // carrying native assets/tokens) gets a dedicated, readable message — not just the
+        // raw detail string.
+        val msg = PlaygroundPresenter.presentTxBuildError(
+            TxBuildError.UnsupportedFeature("candidate UTxO ... carries native assets/tokens"),
+        )
+        assertTrue(msg.contains("native assets", ignoreCase = true), "got: $msg")
+        assertTrue(msg.contains("tokens", ignoreCase = true), "got: $msg")
+        assertTrue(msg.contains("ADA-only", ignoreCase = true), "got: $msg")
+    }
+
+    // --- Native-asset UTxO rejection, built through the real TransactionBuilder (Block 1.11d) ---
+
+    @Test
+    fun nativeAssetCandidate_isRejectedBeforeBuildingAndReportsReadableFailure() {
+        val nativeAssetUtxo = Utxo(
+            requireNotNull(
+                UtxoRef.of(
+                    requireNotNull(TxHash.of(ByteArray(TxHash.SIZE) { 0x66 }).getOrNull()),
+                    0L,
+                ).getOrNull(),
+            ),
+            Value(lovelace(10_000_000L), hasNativeAssets = true),
+        )
+        val draftResult = TransactionBuilder.build(buildRequest(listOf(nativeAssetUtxo)))
+        val err = assertIs<KardanoResult.Err<TxBuildError>>(draftResult)
+        assertIs<TxBuildError.UnsupportedFeature>(err.error)
+
+        val presentation = PlaygroundPresenter.mapTransactionDraftResult(draftResult)
+
+        val failure = assertIs<TransactionDraftPresentation.Failure>(presentation)
+        assertTrue(failure.message.contains("native assets", ignoreCase = true), "got: ${failure.message}")
+        assertTrue(failure.message.contains("ADA-only", ignoreCase = true), "got: ${failure.message}")
+    }
+
+    @Test
     fun presentTxBuildError_duplicateInput_hasDescription() {
         val txHash = requireNotNull(TxHash.of(ByteArray(TxHash.SIZE) { 0x55 }).getOrNull())
         val ref = requireNotNull(UtxoRef.of(txHash, 0L).getOrNull())

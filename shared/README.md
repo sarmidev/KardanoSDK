@@ -126,6 +126,16 @@ faucet. **No signing, no witness construction, no transaction id hashing, and no
 anywhere in this checkpoint — see
 [docs/DECISIONS/0014-minimal-ada-transaction-builder.md](../docs/DECISIONS/0014-minimal-ada-transaction-builder.md).
 
+**ADA-only enforcement (Block 1.11d).** A manual Android checkpoint found that a preprod address
+funded with mixed (ADA + native-asset) UTxOs let a draft build and sign, then get rejected by
+the node at submit time (`ValueNotConservedUTxO`) once the built transaction implicitly
+dropped the native assets those inputs carried. `:tx`'s `TransactionBuilder` now rejects the
+whole candidate list up front — before building anything — if any UTxO's `Value.hasNativeAssets`
+is set (via `TxBuildError.UnsupportedFeature`), and `presentTxBuildError` shows a dedicated
+message: "This wallet has UTxOs containing native assets/tokens. Phase 1 only builds ADA-only
+transactions." This is honest early rejection, not multi-asset support: no token quantities,
+policy ids, sending, or change-preserving logic were added anywhere in this stack.
+
 ### Signed Transaction (not submitted) section (Block 1.10c)
 
 The "Signed Transaction (not submitted)" section builds the same unsigned draft as the
@@ -232,7 +242,13 @@ fake UTxOs and cited CIP-19 addresses (no mnemonic, no native call) and feeding 
 `mapTransactionDraftResult`/`presentTxBuildError` directly; `PlaygroundTransactionDraftDesktopTest`
 (`jvmTest`-only) is the only place `presentTransactionDraft` and `ReadOnlyWallet.restore` run end
 to end together, asserting the honest "no UTxOs" result under the default mock and a successful
-draft once the mock is seeded with a UTxO for the restored wallet's own address. The signed-
+draft once the mock is seeded with a UTxO for the restored wallet's own address.
+`PlaygroundTransactionDraftPresenterTest` also covers the Block 1.11d ADA-only enforcement: a
+hand-built `Utxo` with `Value.hasNativeAssets = true` fed through the real `TransactionBuilder`
+is rejected with `TxBuildError.UnsupportedFeature`, and the resulting presenter message is
+asserted to mention "native assets" and "ADA-only"; `PlaygroundTransactionDraftDesktopTest`
+covers the same rejection end to end, once seeded for the restored wallet's own address, without
+a live Blockfrost call. The signed-
 transaction checkpoint (Block 1.10c) follows the same split:
 `PlaygroundSignedTransactionPresenterTest` (`commonTest`) is native-free, feeding constructed
 `WalletError` values (`Signing`, `TransactionAssembly`) into `mapSignedTransactionResult`/

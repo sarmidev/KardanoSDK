@@ -547,10 +547,19 @@ Do not implement:
   `BlockfrostTxSubmitProvider`, a verified (MockEngine-tested) real preprod submit
   implementation; Block 1.11c added the `:shared` "Submit Transaction (preprod)" Playground
   checkpoint, wiring both into the app UI (implementation complete, verified by
-  `:shared:jvmTest`/`:shared:testAndroidHostTest`/`compileKotlinIosArm64`). **The mandatory
-  manual Android checkpoint for Block 1.11 — submitting a real, fixture-derived,
-  faucet-funded preprod transaction from the running app — has not yet been performed; do not
-  claim it passed until an owner actually runs it and records the result here.**
+  `:shared:jvmTest`/`:shared:testAndroidHostTest`/`compileKotlinIosArm64`). **The `1.11c`
+  manual Android checkpoint was attempted and found a real ADA-only gap**: a preprod address
+  funded with mixed (ADA + native-asset) UTxOs let a draft build and sign, then the node
+  rejected the submitted transaction with `ValueNotConservedUTxO` — the build silently dropped
+  the native assets those inputs carried. Block 1.11d closes this gap: `:provider`'s `Value` gains
+  a `hasNativeAssets` presence flag, `:provider-blockfrost` sets it instead of silently
+  dropping non-`lovelace` amounts, `:tx`'s `TransactionBuilder` rejects the whole candidate list
+  before building if any input has it set, and `:shared` shows a dedicated readable message.
+  Native-asset UTxOs are still never spendable and never will be in Phase 1 — no multi-asset
+  CBOR output, no token sending, no token-preserving change. **A full manual re-validation
+  (native-asset address → readable rejection before submit; ADA-only address → accepted id or a
+  different readable error) has not yet been performed; do not claim Block 1.11 passed until an
+  owner actually runs it and records the result here.**
 - Real wallet flows.
 - Plutus support.
 - Staking or delegation.
@@ -569,6 +578,84 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.11d ADA-only enforcement for the submit flow — implementation DONE; manual Android
+  re-validation PENDING.** Precondition: the owner ran the `1.11c` mandatory manual Android
+  checkpoint (enabled live Blockfrost preprod, entered a preprod `project_id`, tapped "Submit
+  transaction") and **the submit reached Blockfrost/preprod but was rejected** with
+  `ValueNotConservedUTxO` — the funded address's UTxOs included native assets/tokens alongside
+  ADA, and the built transaction implicitly dropped them, which the ledger does not allow.
+  Root cause: `:provider`'s `Value` had no way to represent that a UTxO carried native assets,
+  `:provider-blockfrost`'s mapping silently ignored non-`lovelace` amounts (by design, per
+  ADR-0007 §4, for the ADA-only MVP), and `:tx`'s `TransactionBuilder` had no way to reject what
+  it could not see (`TxBuildError.UnsupportedFeature` existed but was documented as
+  unreachable, ADR-0014 §8). Phase 1 stays ADA-only (ADR-0005); this block closes that gap with
+  honest early rejection instead of a false success. **Architecture choice: reject the entire
+  candidate list, not skip only the flagged UTxOs** — filtering would need a ledger-rule engine
+  this MVP does not have to decide whether the remaining ADA-only inputs still suffice, and
+  could otherwise surprise a caller with a silently smaller input set.
+  - **`:provider` (`Value.kt`).** Added `hasNativeAssets: Boolean = false` — presence only, no
+    quantities/policy ids/asset names; the default preserves every existing ADA-only call site
+    (positional `Value(coin)` construction is unaffected everywhere in the repo). New
+    `ValueTest.kt` (`commonTest`): default/explicit ADA-only construction, native-asset
+    presence representable on `Value` and through `Utxo`, and an `equals`/`hashCode`
+    significance check.
+  - **`:provider-blockfrost` (`BlockfrostChainQueryProvider.kt`).** `mapUtxo` now sets
+    `hasNativeAssets = true` whenever a Blockfrost `amount` entry's `unit != "lovelace"`
+    (previously `continue`d silently); the summed-`lovelace`-only `coin` behavior is unchanged.
+    Updated `BlockfrostChainQueryProviderTest.kt`'s existing single-page mapping test to assert
+    the flag on both entries, and added two new fixtures/tests
+    (`UTXOS_LOVELACE_ONLY` → flag `false`; `UTXOS_LOVELACE_PLUS_MULTIPLE_TOKENS` → flag `true`
+    exactly once even with two distinct non-lovelace units).
+  - **`:tx` (`TransactionBuilder.kt`, `TxBuildError.kt`).** `build` now rejects the whole request
+    with `TxBuildError.UnsupportedFeature` — right after the existing empty-`candidateInputs`
+    (`NoInputs`) check, before any coin selection, min-ADA check, or fee arithmetic — if **any**
+    candidate input has `Value.hasNativeAssets` set. Updated `UnsupportedFeature`'s KDoc (now
+    reachable) and the type-level "Reachability" KDoc. New tests in
+    `TransactionBuilderTest.kt`: a sole native-asset candidate is rejected; a mixed list (one
+    ADA-only input that alone could cover payment + fee, plus one native-asset input) is
+    rejected entirely, proving the flagged input is not simply skipped from selection; an
+    ADA-only-only regression test confirms the existing success path is unaffected.
+  - **`:shared` (`PlaygroundPresenter.kt`).** `presentTxBuildError`'s `UnsupportedFeature` case
+    now shows: `"This wallet has UTxOs containing native assets/tokens. Phase 1 only builds
+    ADA-only transactions. (<detail>)"` — a dedicated, plain-language message rather than the
+    generic `"Unsupported feature: ..."` phrasing, since this variant has exactly one reachable
+    cause today. Added KDoc noting this must be revisited if a future block adds a second,
+    unrelated cause. New tests: `PlaygroundTransactionDraftPresenterTest.kt` gained a
+    message-content test and a test building a real `hasNativeAssets = true` candidate through
+    the actual `TransactionBuilder` and asserting the presenter's failure message;
+    `PlaygroundTransactionDraftDesktopTest.kt` gained an end-to-end test (restored wallet +
+    mock provider seeded with a native-asset UTxO for that wallet's own address, no live
+    Blockfrost call) asserting the same readable failure.
+  - **Docs updated.** `docs/DECISIONS/0006-provider-boundary-and-strategy.md`,
+    `0007-http-client-and-blockfrost-provider.md`, and
+    `0014-minimal-ada-transaction-builder.md` each gained a 2026-07-13 addendum recording this
+    narrowly-scoped change (no other decision in any of the three changes). `provider/README.md`,
+    `provider-blockfrost/README.md`, `tx/README.md`, and `shared/README.md` updated for the new
+    `Value.hasNativeAssets` field/behavior. `docs/PHASE_1_PLAN.md` §1.11 (new `1.11d` entry,
+    "Mandatory Android checkpoints" `1.11` entry, and "Next step" updated) and `docs/ROADMAP.md`
+    §1.11 (same) updated. This file (this entry + the "What Not To Do Yet" submission bullet).
+  - **Manual Android re-validation — NOT YET RUN.** Two owner checks are needed: (1) an address
+    with a native-asset UTxO — the app should show the new readable ADA-only rejection *before*
+    submit; (2) an address with only ADA-only UTxOs — the app should build/sign/submit normally
+    (record the accepted tx id) or show a different readable network/ledger error. **Block 1.11
+    is not complete until both are run and their results (pass/fail, date) are recorded here.**
+  - **Verification — all PASS:** `./gradlew :provider:jvmTest :provider-blockfrost:jvmTest
+    :tx:jvmTest :shared:jvmTest`; `./gradlew :provider:testAndroidHostTest
+    :provider-blockfrost:testAndroidHostTest :tx:testAndroidHostTest :shared:testAndroidHostTest`;
+    `./gradlew :provider:compileKotlinIosArm64 :provider-blockfrost:compileKotlinIosArm64
+    :tx:compileKotlinIosArm64 :shared:compileKotlinIosArm64`. `git diff --check` clean;
+    banned-word/restricted-claim scan of touched files found none. No `:wallet`/`:crypto`/
+    `:crypto-signing-backend`/`:core` file changed; no mainnet, no real mnemonics/private
+    keys/funds anywhere; no multi-asset CBOR output, token sending, token-preserving change, or
+    ledger-rule engine added. **Next step: run and record the two manual Android checks above;
+    once both are recorded, Block 1.12** (Phase 1 Closure / MVP Review).
+
+### Session Summary (Block 1.11c `:shared` Android Playground "Submit Transaction (preprod)" checkpoint)
 
 Date: 2026-07-13
 

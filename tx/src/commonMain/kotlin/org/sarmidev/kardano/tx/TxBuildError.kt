@@ -26,9 +26,11 @@ import org.sarmidev.kardano.primitives.UtxoRef
  * 1.9b-2) additionally performs largest-first coin selection and the fee/change fixed-point
  * loop (ADR-0014 §6-7), which is what makes [InsufficientFunds], [InvalidOutputAmount],
  * [ChangeBelowMinimum], [ExceedsMaxTxSize], [FeeCalculationOverflow],
- * [InvalidProtocolParameters], and [FeeEstimateDidNotConverge] reachable. Only
- * [UnsupportedFeature] remains unreachable: nothing in `:tx` yet consumes a multi-asset
- * `Value`. Each variant's KDoc below states which entry point produces it.
+ * [InvalidProtocolParameters], and [FeeEstimateDidNotConverge] reachable. [UnsupportedFeature]
+ * (Block 1.11d) became reachable once [org.sarmidev.kardano.provider.Value] gained the
+ * [org.sarmidev.kardano.provider.Value.hasNativeAssets] presence flag: [TransactionBuilder.build]
+ * now rejects any candidate input carrying it, before coin selection. Each variant's KDoc below
+ * states which entry point produces it.
  *
  * Block 1.10b (ADR-0015 §5) extends this same sealed type — rather than adding a sibling
  * sealed type — for witness/full-`transaction` assembly errors: [InvalidVerificationKeyLength],
@@ -201,14 +203,16 @@ public sealed interface TxBuildError {
     ) : TxBuildError
 
     /**
-     * A supplied input or output uses a feature this MVP does not support — for example a
-     * native-asset [org.sarmidev.kardano.provider.Value] once that type gains a multi-asset
-     * field.
+     * A supplied input or output uses a feature this MVP does not support.
      *
-     * Not yet reachable: [TransactionBuilder.build] (Block 1.9b-2) consumes
-     * [org.sarmidev.kardano.provider.Utxo] and [org.sarmidev.kardano.provider.Value] but only
-     * ever reads their ADA-only [org.sarmidev.kardano.provider.Value.coin] field — that type has
-     * no multi-asset field to reject yet, so this guard still has no caller.
+     * Reachable today (Block 1.11d): [TransactionBuilder.build] rejects the entire request —
+     * before any coin selection — if **any** of [TransactionBuildRequest.candidateInputs] has
+     * [org.sarmidev.kardano.provider.Value.hasNativeAssets] set. This MVP declines rather than
+     * silently dropping the caller's native assets/tokens (ADR-0014 §8): rejecting the whole
+     * candidate list, rather than silently filtering out just the flagged inputs, avoids a
+     * partial/surprising fund selection and needs no ledger-rule engine to decide which of the
+     * remaining ADA-only inputs would still be spendable. Quantities, policy ids, and asset
+     * names are never inspected — [TransactionBuilder] only reads the boolean presence flag.
      *
      * @property detail a human-readable description of the unsupported feature.
      */

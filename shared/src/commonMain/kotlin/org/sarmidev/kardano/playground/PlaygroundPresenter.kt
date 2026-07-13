@@ -785,6 +785,13 @@ internal object PlaygroundPresenter {
      * [TxBuildError.InvalidSignatureLength], [TxBuildError.EmptyWitnessSet] — reachable via
      * [WalletError.TransactionAssembly]) in the text.
      *
+     * [TxBuildError.UnsupportedFeature] (Block 1.11d) gets a dedicated, plain-language message
+     * rather than the generic `"Unsupported feature: ..."` phrasing every other variant's
+     * message pattern might suggest, because — as of this block — it has exactly one reachable
+     * cause: a candidate UTxO carrying native assets/tokens (see that variant's KDoc). If a
+     * future block adds a second, unrelated cause, this mapping must be revisited to
+     * distinguish them (for example by inspecting [TxBuildError.UnsupportedFeature.detail]).
+     *
      * Internal so tests can exercise all variants by constructing them directly.
      */
     internal fun presentTxBuildError(error: TxBuildError): String = when (error) {
@@ -809,7 +816,9 @@ internal object PlaygroundPresenter {
         is TxBuildError.Serialization -> "Serialization error: ${presentCborError(error.error)}"
         is TxBuildError.NetworkMismatch ->
             "Network mismatch: expected ${error.expected.name}, got ${error.actual.name}"
-        is TxBuildError.UnsupportedFeature -> "Unsupported feature: ${error.detail}"
+        is TxBuildError.UnsupportedFeature ->
+            "This wallet has UTxOs containing native assets/tokens. Phase 1 only builds " +
+                "ADA-only transactions. (${error.detail})"
         is TxBuildError.DuplicateInput -> "Duplicate input detected"
         is TxBuildError.InvalidVerificationKeyLength ->
             "Invalid verification key length: expected ${error.expectedBytes}B, got ${error.actualBytes}B"

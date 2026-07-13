@@ -23,7 +23,9 @@ internal object BlockfrostFixtures {
 
     /**
      * A single UTxO page (fewer than the page size, so it is the only page). The second entry
-     * carries a native asset alongside lovelace; the provider must keep only the lovelace.
+     * carries a native asset alongside lovelace: only the lovelace component is summed into
+     * `Value.coin`, but (Block 1.11d) its presence is flagged via `Value.hasNativeAssets`
+     * rather than silently dropped.
      */
     val UTXOS_SINGLE_PAGE: String =
         """
@@ -42,6 +44,42 @@ internal object BlockfrostFixtures {
             "amount": [
               { "unit": "lovelace", "quantity": "2000000" },
               { "unit": "abc123policyidplusassetname", "quantity": "10" }
+            ],
+            "block": "sanitized"
+          }
+        ]
+        """.trimIndent()
+
+    /** A single lovelace-only UTxO page entry (Block 1.11d): must not flag native assets. */
+    val UTXOS_LOVELACE_ONLY: String =
+        """
+        [
+          {
+            "tx_hash": "$TX_HASH_A",
+            "output_index": 0,
+            "amount": [
+              { "unit": "lovelace", "quantity": "3000000" }
+            ],
+            "block": "sanitized"
+          }
+        ]
+        """.trimIndent()
+
+    /**
+     * A single UTxO page entry carrying lovelace plus two distinct native-asset units
+     * (Block 1.11d): must flag native assets exactly once, regardless of how many non-lovelace
+     * units are present. Quantities/policy ids/asset names are still not represented.
+     */
+    val UTXOS_LOVELACE_PLUS_MULTIPLE_TOKENS: String =
+        """
+        [
+          {
+            "tx_hash": "$TX_HASH_A",
+            "output_index": 0,
+            "amount": [
+              { "unit": "lovelace", "quantity": "3000000" },
+              { "unit": "abc123policyidplusassetnameone", "quantity": "1" },
+              { "unit": "def456policyidplusassetnametwo", "quantity": "2" }
             ],
             "block": "sanitized"
           }

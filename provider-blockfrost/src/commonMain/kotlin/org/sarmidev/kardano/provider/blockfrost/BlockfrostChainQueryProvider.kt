@@ -35,8 +35,11 @@ import kotlin.coroutines.cancellation.CancellationException
  * Transaction submission is not part of this provider (ADR-0006 defers submit to Block 1.11).
  *
  * Scope limits for the first MVP:
- * - Values are ADA-only: native-asset amounts in a UTxO are ignored, only the `lovelace`
- *   component is mapped (see [Value]).
+ * - Values are ADA-only: only the `lovelace` component is summed into [Value.coin]. Native-asset
+ *   quantities, policy ids, and asset names are never represented — but (Block 1.11d) their mere
+ *   *presence* is no longer silently dropped: any `amount` entry whose `unit` is not `lovelace`
+ *   sets [Value.hasNativeAssets] to `true`, so a caller (for example `:tx`'s
+ *   `TransactionBuilder`) can honestly reject a UTxO it cannot fully represent.
  * - `getUtxos` treats a Blockfrost `404` (an address that never appeared on-chain) as an
  *   empty UTxO list, not an error. The other endpoints keep `404` as [ProviderError.NotFound].
  * - UTxO pagination is capped at [MAX_PAGES] pages of [PAGE_COUNT] entries.
@@ -175,9 +178,12 @@ public class BlockfrostChainQueryProvider internal constructor(
 
     /**
      * Maps a Blockfrost UTxO entry to the neutral [Utxo], summing only the `lovelace`
-     * component (native-asset amounts are ignored for the ADA-only MVP). Any value that a
-     * `:core` factory rejects (bad hex, wrong hash length, negative index, out-of-range
-     * lovelace) becomes a [ProviderError.Deserialization] rather than a thrown exception.
+     * component into [Value.coin]. Any other `amount` entry (`unit != "lovelace"`) is a native
+     * asset: its quantity/policy id/asset name are still not represented, but its mere
+     * presence sets [Value.hasNativeAssets] to `true` (Block 1.11d) — this mapping no longer
+     * silently drops that information. Any value that a `:core` factory rejects (bad hex,
+     * wrong hash length, negative index, out-of-range lovelace) becomes a
+     * [ProviderError.Deserialization] rather than a thrown exception.
      */
     private fun mapUtxo(dto: BlockfrostUtxoDto): KardanoResult<Utxo, ProviderError> {
         val hashBytes = when (val r = Hex.decode(dto.txHash)) {
@@ -203,8 +209,12 @@ public class BlockfrostChainQueryProvider internal constructor(
         }
 
         var total = 0L
+        var hasNativeAssets = false
         for (amount in dto.amount) {
-            if (amount.unit != LOVELACE_UNIT) continue
+            if (amount.unit != LOVELACE_UNIT) {
+                hasNativeAssets = true
+                continue
+            }
             val quantity = amount.quantity.toLongOrNull()
                 ?: return KardanoResult.Err(
                     ProviderError.Deserialization("invalid lovelace quantity: ${amount.quantity}"),
@@ -224,7 +234,7 @@ public class BlockfrostChainQueryProvider internal constructor(
                     ProviderError.Deserialization("invalid lovelace total: $total"),
                 )
         }
-        return KardanoResult.Ok(Utxo(ref, Value(coin)))
+        return KardanoResult.Ok(Utxo(ref, Value(coin, hasNativeAssets = hasNativeAssets)))
     }
 
     /**

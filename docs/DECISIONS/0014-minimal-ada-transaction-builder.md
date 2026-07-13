@@ -427,9 +427,9 @@ public sealed interface TxBuildError {
 - `FeeCalculationOverflow` — `Long` overflow anywhere in the fee/change arithmetic (§6).
 - `Serialization` — wraps a `:core` `CborError` if body encoding fails.
 - `NetworkMismatch` — the payment address, change address, or request `network` disagree.
-- `UnsupportedFeature` — a forward guard, e.g. a supplied `Utxo` whose `Value` carries native
-  assets once `Value` gains a multi-asset field; the ADA-only MVP declines rather than
-  silently dropping assets.
+- `UnsupportedFeature` — a supplied `Utxo` whose `Value` carries native assets; the ADA-only
+  MVP declines rather than silently dropping assets. Reachable as of Block 1.11d — see the
+  2026-07-13 addendum below.
 - `DuplicateInput` — two supplied inputs share the same `(transaction_id, index)` pair.
   Implementation-discovered addition (Block 1.9b-1): §4 requires duplicate-input rejection, but
   this sketch originally named no dedicated variant for it.
@@ -617,3 +617,23 @@ record it here (or in a follow-up ADR) rather than guess. Block 1.9b may itself 
 - ADR-0001 (CBOR/parser policy), ADR-0002/0003 (module/package structure), ADR-0005 (Phase 1
   scope), ADR-0006 (provider boundary), and ADR-0013 (`:wallet`) remain the governing decisions
   this ADR aligns with; this ADR does not supersede them.
+
+---
+
+## Addendum (2026-07-13): `UnsupportedFeature` becomes reachable (Block 1.11d)
+
+§8 above named `UnsupportedFeature` a forward guard with no caller: `Value` had no field to
+reject. ADR-0006's 2026-07-13 addendum gives it one — `Value.hasNativeAssets` — after a manual
+Android submit checkpoint found a mixed (ADA + native-asset) preprod UTxO caused a node-side
+`ValueNotConservedUTxO` rejection.
+
+This addendum records the resulting, narrowly-scoped change to `TransactionBuilder.build`:
+immediately after the existing `NoInputs` check (before any coin selection, min-ADA check, or
+fee arithmetic), it rejects the entire request with `UnsupportedFeature` if **any**
+`TransactionBuildRequest.candidateInputs` entry has `Value.hasNativeAssets` set. The whole
+candidate list is rejected, not just the flagged input(s): filtering silently would need a
+ledger-rule engine this MVP does not have to decide whether the *remaining* ADA-only inputs are
+still sufficient, and could otherwise surprise a caller with a smaller, silently-changed input
+set. No native-asset quantities, policy ids, or asset names are inspected or represented — this
+is honest early rejection of what the MVP cannot fully represent, not multi-asset support. No
+other decision in this ADR changes.

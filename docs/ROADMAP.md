@@ -1151,8 +1151,9 @@ Proposed block sequence:
     "Sign transaction" displayed a transaction id, witness count `1`, a truncated signed-CBOR
     preview (`288B total`), and the "signed, not submitted — testnet-only, test fixture, no real
     funds" label, with no submit action invoked.
-- `1.11` Submit Transaction — submit a signed transaction to preprod. Split into `1.11a`/`1.11b`/
-  `1.11c` (ADR-0017). `1.11a` (`:provider` boundary — `TxSubmitProvider`, `SubmitError`,
+- `1.11` Submit Transaction — submit a signed transaction to preprod. Split into
+  `1.11a`/`1.11b`/`1.11c`/`1.11d` (ADR-0017, plus the ADR-0006/0007/0014 2026-07-13 addenda for
+  `1.11d`). `1.11a` (`:provider` boundary — `TxSubmitProvider`, `SubmitError`,
   `InMemoryTxSubmitProvider`, which never fakes success) — **Status: complete.** `1.11b`
   (`:provider-blockfrost`'s `BlockfrostTxSubmitProvider`: `POST /tx/submit`,
   `Content-Type: application/cbor`, quoted-hex-string response mapped to `TxHash`, HTTP status
@@ -1164,9 +1165,25 @@ Proposed block sequence:
   `InMemoryTxSubmitProvider()` and switching to `BlockfrostTxSubmitProvider` under the existing
   live toggle/`project_id`; shows the accepted id, local id, match status, and a
   submitted/preprod/fixture label on success, every `SubmitError` variant on failure, no
-  polling) — **Status: implementation complete; mandatory manual Android checkpoint pending**
-  (see `docs/HANDOFF.md`). Block 1.11 as a whole is not complete until that checkpoint is run
-  and recorded.
+  polling) — **Status: implementation complete.** Its manual Android checkpoint was attempted
+  and found a real bug: a preprod address funded with mixed (ADA + native-asset) UTxOs let a
+  draft build and sign, then the node rejected the submitted transaction with
+  `ValueNotConservedUTxO` — the build silently dropped the native assets those inputs carried.
+  `1.11d` (ADA-only enforcement — **Status: implementation complete; manual re-validation
+  pending**) fixes this honestly rather than working around it: `:provider`'s `Value` gains a
+  `hasNativeAssets: Boolean = false` presence flag (no quantities/policy ids/asset names);
+  `:provider-blockfrost`'s `mapUtxo` sets it whenever a Blockfrost `amount` entry's
+  `unit != "lovelace"`, instead of silently dropping that entry; `:tx`'s
+  `TransactionBuilder.build` rejects the **entire** candidate list with
+  `TxBuildError.UnsupportedFeature` — right after the existing `NoInputs` check, before any coin
+  selection — if any candidate input has the flag set (rejecting the whole list rather than
+  silently filtering, since filtering would need a ledger-rule engine this MVP does not have);
+  `:shared`'s `presentTxBuildError` gives that variant a dedicated message ("This wallet has
+  UTxOs containing native assets/tokens. Phase 1 only builds ADA-only transactions."). New/
+  updated tests across all four modules (see `docs/PHASE_1_PLAN.md` `1.11d` for the full list).
+  Block 1.11 as a whole is not complete until a full manual re-validation (native-asset address
+  → readable rejection before submit; ADA-only address → accepted id or a different readable
+  error) is run and recorded (see `docs/HANDOFF.md`).
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 

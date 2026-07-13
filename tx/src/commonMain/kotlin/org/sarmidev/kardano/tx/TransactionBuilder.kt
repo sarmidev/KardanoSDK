@@ -60,11 +60,14 @@ public object TransactionBuilder {
     /**
      * Builds a [TransactionDraft] for [request].
      *
-     * Order of checks (ADR-0014 §6-7): [TxBuildError.InvalidProtocolParameters] if
-     * [TransactionBuildRequest.protocolParameters] has a negative
+     * Order of checks (ADR-0014 §6-7, extended by Block 1.11d): [TxBuildError.InvalidProtocolParameters]
+     * if [TransactionBuildRequest.protocolParameters] has a negative
      * `minFeeCoefficient`/`minFeeConstant`/`maxTxSize`/`coinsPerUtxoByte`, then network
      * validation, then [TxBuildError.NoInputs] if
-     * [TransactionBuildRequest.candidateInputs] is empty, then
+     * [TransactionBuildRequest.candidateInputs] is empty, then [TxBuildError.UnsupportedFeature]
+     * if **any** candidate input has [org.sarmidev.kardano.provider.Value.hasNativeAssets] set
+     * (Phase 1 stays ADA-only: this MVP declines the whole candidate list rather than silently
+     * building a transaction around, or filtering out, a UTxO it cannot fully represent), then
      * [TxBuildError.InvalidOutputAmount] if the payment itself is below its min-ADA. It then
      * runs the largest-first coin-selection / fee fixed-point loop (see the type-level KDoc) —
      * which can itself fail with [TxBuildError.FeeEstimateDidNotConverge] if even the final
@@ -93,6 +96,16 @@ public object TransactionBuilder {
 
         if (request.candidateInputs.isEmpty()) {
             return KardanoResult.Err(TxBuildError.NoInputs)
+        }
+
+        val nativeAssetInput = request.candidateInputs.firstOrNull { it.value.hasNativeAssets }
+        if (nativeAssetInput != null) {
+            return KardanoResult.Err(
+                TxBuildError.UnsupportedFeature(
+                    "candidate UTxO ${nativeAssetInput.ref} carries native assets/tokens; " +
+                        "Phase 1 builds ADA-only transactions only",
+                ),
+            )
         }
 
         val paymentMinAda = when (

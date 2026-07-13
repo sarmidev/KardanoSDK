@@ -15,6 +15,7 @@ import org.sarmidev.kardano.address.Address
 import org.sarmidev.kardano.provider.ProviderError
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -44,9 +45,32 @@ class BlockfrostChainQueryProviderTest {
         assertEquals(2, utxos.size)
         assertEquals(0L, utxos[0].ref.outputIndex)
         assertEquals(5_000_000L, utxos[0].value.coin.value)
-        // Second entry carried a native asset; only the lovelace component is mapped.
+        // Lovelace-only entry: hasNativeAssets stays false.
+        assertFalse(utxos[0].value.hasNativeAssets, "lovelace-only UTxO must not flag native assets")
+        // Second entry carried a native asset; only the lovelace component is summed, but
+        // (Block 1.11d) its presence is now flagged rather than silently dropped.
         assertEquals(1L, utxos[1].ref.outputIndex)
         assertEquals(2_000_000L, utxos[1].value.coin.value)
+        assertTrue(utxos[1].value.hasNativeAssets, "lovelace + token UTxO must flag native assets")
+    }
+
+    @Test
+    fun getUtxosLovelaceOnlyEntryHasNativeAssetsFalse() = runTest {
+        val provider = providerReturning(BlockfrostFixtures.UTXOS_LOVELACE_ONLY)
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertEquals(1, utxos.size)
+        assertEquals(3_000_000L, utxos[0].value.coin.value)
+        assertFalse(utxos[0].value.hasNativeAssets)
+    }
+
+    @Test
+    fun getUtxosLovelacePlusTokenEntryHasNativeAssetsTrue() = runTest {
+        val provider = providerReturning(BlockfrostFixtures.UTXOS_LOVELACE_PLUS_MULTIPLE_TOKENS)
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertEquals(1, utxos.size)
+        // Only the lovelace component is summed; multiple non-lovelace units still flag once.
+        assertEquals(3_000_000L, utxos[0].value.coin.value)
+        assertTrue(utxos[0].value.hasNativeAssets)
     }
 
     @Test

@@ -26,9 +26,12 @@ coroutine cancellation), which keeps the API compatible with Swift/ObjC interop.
 
 ## Scope and limits (first MVP)
 
-- `getUtxos`, `getProtocolParameters`, `getTip` (read) and `submit` (Block 1.11b). No `:shared`
-  submit UI yet (Block 1.11c).
-- ADA-only: native-asset amounts in a UTxO are ignored; only the `lovelace` component is mapped.
+- `getUtxos`, `getProtocolParameters`, `getTip` (read) and `submit` (Block 1.11b).
+- ADA-only: only the `lovelace` component is summed into `Value.coin`. Native-asset
+  quantities, policy ids, and asset names are never represented — but (Block 1.11d) any
+  `amount` entry whose `unit` is not `lovelace` sets `Value.hasNativeAssets = true` rather than
+  being silently dropped, so `:tx`'s `TransactionBuilder` can reject a UTxO it cannot fully
+  represent instead of building around it.
 - `getUtxos` treats a Blockfrost `404` (address never used) as an empty list, not an error.
   Other endpoints keep `404` as `ProviderError.NotFound`.
 - UTxO pagination is capped internally.

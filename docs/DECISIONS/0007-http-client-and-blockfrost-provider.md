@@ -79,8 +79,9 @@ models:
 
 Two documented relaxations/limits:
 
-- **ADA-only:** native-asset amounts in a UTxO are ignored; only the `lovelace` component is
-  mapped (matches the ADR-0006 ADA-only `Value`). This does not fail the UTxO.
+- **ADA-only:** only the `lovelace` component is summed into `Value.coin` (matches the
+  ADR-0006 ADA-only `Value`). This does not fail the UTxO. (See the 2026-07-13 addendum below:
+  a non-`lovelace` unit no longer passes silently — it now sets `Value.hasNativeAssets`.)
 - **404-as-empty (scoped to `getUtxos`):** a Blockfrost `404` for an address that has never
   appeared on-chain returns `Ok(emptyList())`, not an error. Other endpoints keep `404` as
   `ProviderError.NotFound`.
@@ -145,3 +146,17 @@ presenter, so the same UI drives the mock or the live provider.
 - ADR-0005 (`docs/DECISIONS/0005-phase-1-architecture-and-scope.md`) and ADR-0006
   (`docs/DECISIONS/0006-provider-boundary-and-strategy.md`) remain the governing decisions this
   ADR implements.
+
+---
+
+## Addendum (2026-07-13): native-asset amounts now flagged, not silently dropped (Block 1.11d)
+
+ADR-0006's own 2026-07-13 addendum records why: a manual Android submit checkpoint found a
+mixed (ADA + native-asset) preprod UTxO caused a node-side `ValueNotConservedUTxO` rejection,
+because §4 above's mapping silently dropped the non-`lovelace` amount entries it saw.
+
+The resulting, narrowly-scoped change to `mapUtxo`: any `amount` entry whose `unit` is not
+`lovelace` now sets the mapped `Value.hasNativeAssets` to `true` (in addition to being excluded
+from the summed `coin`, unchanged from before). Quantities, policy ids, and asset names of
+those entries are still not represented or stored anywhere. No other mapping, endpoint, or
+error-handling decision in this ADR changes.

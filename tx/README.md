@@ -23,6 +23,12 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   `TxBuildError`.
 - Orders inputs by the ledger `(transaction_id, index)` rule and rejects duplicates; encodes
   outputs in the legacy/Alonzo `[address, coin]` array form.
+- **(Block 1.11d, ADA-only enforcement)** `TransactionBuilder.build` rejects the entire request
+  with `TxBuildError.UnsupportedFeature` — before any coin selection — if **any**
+  `TransactionBuildRequest.candidateInputs` entry has `Value.hasNativeAssets` set. This MVP
+  declines rather than silently building a transaction around, or filtering out, a UTxO it
+  cannot fully represent (its native-asset quantities/policy ids/asset names are never
+  inspected — only the presence flag is read).
 - **(Block 1.10b, ADR-0015 §1/§3)** `TransactionAssembler.assemble(draft, witnessSet)` builds
   the full signed `transaction` array `[transaction_body, transaction_witness_set, true, null]`
   from an already-built `TransactionDraft` and a caller-supplied `TransactionWitnessSet`,

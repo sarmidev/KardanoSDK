@@ -79,7 +79,9 @@ The read models live in `:provider` and describe protocol concepts, not any back
 - `Utxo` = `UtxoRef` (reused from `:core`) + `Value`.
 - `Value` = ADA-only, wrapping `Lovelace` (`:core`) as `coin`. Native assets are out of the
   first MVP (ADR-0005); the type is designed to leave room for future multiasset support, and
-  no binary/source compatibility is promised for that future addition.
+  no binary/source compatibility is promised for that future addition. (See the 2026-07-13
+  addendum below: `Value` gained a `hasNativeAssets` presence flag in Block 1.11d — still no
+  quantities, policy ids, or asset names.)
 - `ProtocolParameters` = a small set of fee/build fields as `Long`s (`minFeeCoefficient`,
   `minFeeConstant`, `keyDeposit`, `poolDeposit`, `maxTxSize`, `coinsPerUtxoByte`). It may grow
   at Block 1.9 (transaction builder) and does not mirror any provider's field names.
@@ -161,3 +163,27 @@ JSON is introduced only in 1.3b, alongside the real response shapes, for error-m
   (`docs/DECISIONS/0003-core-package-structure.md`), and ADR-0005
   (`docs/DECISIONS/0005-phase-1-architecture-and-scope.md`) remain the governing decisions
   this ADR aligns with and, for ADR-0005 §5, refines.
+
+---
+
+## Addendum (2026-07-13): native-asset presence flag for Block 1.11d
+
+A manual Android submit checkpoint (Block 1.11c) found that a preprod address funded with
+mixed (ADA + native-asset) UTxOs let a draft build, sign, and submit, only for the node to
+reject it with `ValueNotConservedUTxO` — the built transaction implicitly dropped the native
+assets those inputs carried, which the ledger does not allow. §4 above's `Value` had no way to
+represent that a UTxO carried native assets at all, so nothing downstream could reject it
+honestly.
+
+This addendum records the resulting, narrowly-scoped change:
+
+- `Value` gains exactly one new field: `hasNativeAssets: Boolean = false`. The default
+  preserves every existing call site's ADA-only behavior.
+- No quantities, policy ids, or asset names are represented — this is presence detection only,
+  not the multiasset support §4 already anticipated as a future, compatibility-unconstrained
+  addition.
+- A concrete `ChainQueryProvider` (`:provider-blockfrost`, Block 1.11d) sets the flag when it
+  detects a non-`lovelace` amount unit; `:tx`'s `TransactionBuilder` (ADR-0014 §8) rejects any
+  candidate input carrying it before building, with `TxBuildError.UnsupportedFeature`.
+
+No other decision in this ADR changes.
