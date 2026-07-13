@@ -541,10 +541,12 @@ Do not implement:
   `Signing`, `:tx` witness/transaction assembly, `:wallet` orchestration) is complete** (ADR-0015
   §9 result note); do not widen it beyond the ADR-0015 §2 scope above without a new explicit
   block/ADR.
-- Real transaction submission to any network. Block 1.11a added only the provider-neutral
-  `TxSubmitProvider`/`SubmitError` boundary and a non-submitting `InMemoryTxSubmitProvider`
-  (ADR-0017); no Blockfrost or other backend submit implementation exists yet (Block 1.11b),
-  and no `:shared` submit UI exists yet (Block 1.11c).
+- Real transaction submission to any network from the app. Block 1.11a added the
+  provider-neutral `TxSubmitProvider`/`SubmitError` boundary and a non-submitting
+  `InMemoryTxSubmitProvider` (ADR-0017); Block 1.11b added `BlockfrostTxSubmitProvider`, a
+  verified (MockEngine-tested) real preprod submit implementation. There is still **no
+  `:shared` submit UI/checkpoint** — no way to trigger a submission from the Playground — until
+  Block 1.11c.
 - Real wallet flows.
 - Plutus support.
 - Staking or delegation.
@@ -563,6 +565,66 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.11b `:provider-blockfrost` Blockfrost transaction-submission implementation —
+  DONE. Result: implemented and verified.** Precondition checked and satisfied: working tree
+  was clean and Block 1.11a (`55c32f8`) was already committed before this change started.
+  - **New `:provider-blockfrost` public API.** `BlockfrostTxSubmitProvider`
+    (`BlockfrostTxSubmitProvider.kt`) implements `:provider`'s `TxSubmitProvider`, mirroring
+    `BlockfrostChainQueryProvider`'s constructor pattern exactly (`internal
+    constructor(config, httpClient)` + public `create(config)` using `defaultHttpClient`).
+    `submit(transactionCbor)`: rejects empty input with `SubmitError.EmptyTransaction` before
+    any HTTP call; otherwise defensively copies the bytes and issues `POST
+    {config.network.baseUrl}/tx/submit` with a raw `ByteArrayContent` body (`Content-Type:
+    application/cbor`, set explicitly via `io.ktor.http.content.ByteArrayContent` so it bypasses
+    JSON content negotiation entirely) — `project_id` is already applied by the existing
+    `configureBlockfrost` default request. On `200`, the response text (Blockfrost's quoted
+    64-hex-char JSON string) has its surrounding quotes stripped deliberately from the raw text
+    (not via JSON parsing) before `Hex.decode` + `TxHash.of`; anything malformed or the wrong
+    length becomes `SubmitError.Deserialization`. Non-2xx statuses map via a new `statusError`:
+    `400` to `SubmitError.Rejected(code, detail)`, `429` to `SubmitError.RateLimited`, any other
+    non-2xx (`403`/`404`/`418`/`425`/`500`/etc.) to `SubmitError.RemoteStatus(code, detail?)`.
+    `detail` comes from a new `detailFrom` helper that tries Blockfrost's
+    `{status_code, error, message}` JSON error envelope (new internal `BlockfrostErrorDto` in
+    `BlockfrostDtos.kt`) and falls back to the raw (length-capped) body. Transport exceptions map
+    to `SubmitError.Transport`; `CancellationException` is rethrown, never swallowed.
+  - **Tests added** (`BlockfrostTxSubmitProviderTest.kt`, `commonTest`, MockEngine, mirroring
+    `BlockfrostChainQueryProviderTest`'s helper style): success asserts `POST`, the `/tx/submit`
+    path, the raw request body bytes equal the input, the `application/cbor` content type, and
+    the mapped `TxHash`; an unquoted success body is also accepted; empty input returns
+    `EmptyTransaction` with no HTTP call made; two malformed-success-body cases (non-hex, wrong
+    length) both map to `Deserialization`; `400` maps to `Rejected` with the parsed envelope
+    `message` in `detail`; `403` maps to `RemoteStatus` with parsed detail; `404`/`418`/`425`/
+    `500` map to `RemoteStatus`; `429` maps to `RateLimited`; a thrown transport exception maps
+    to `Transport`; a thrown `CancellationException` is asserted to propagate (not be
+    swallowed). New sanitized fixtures added to `BlockfrostFixtures.kt`
+    (`SUBMIT_ACCEPTED`/`SUBMIT_ACCEPTED_UNQUOTED`/`SUBMIT_ACCEPTED_TOO_SHORT`/
+    `SUBMIT_ACCEPTED_NOT_HEX`/`SUBMIT_REJECTED_BODY`/`FORBIDDEN_BODY`) — not live captures, no
+    real project id.
+  - **No automated live-network submit test added.** Unlike the read-only provider's opt-in
+    `BLOCKFROST_PROJECT_ID` integration test, `submit` is a mutating, non-idempotent action that
+    would consume real preprod test UTxOs on every run; exercising it live is left to the
+    Block 1.11c manual Android checkpoint.
+  - **Docs updated.** `provider-blockfrost/README.md`: documents `BlockfrostTxSubmitProvider`,
+    the `/tx/submit` endpoint/error mapping, the "no automated live submit test" rationale, and
+    that the API key is still runtime-only/redacted for both providers; its banned
+    `Not audited.` wording was replaced with factual "pre-alpha, experimental. Testnet/preprod
+    only. No real funds." wording. `docs/PHASE_1_PLAN.md` §1.11 (`1.11b` → complete) and
+    `docs/ROADMAP.md` §1.11 (same) updated. This file.
+  - **Verification — all PASS:** `./gradlew :provider-blockfrost:jvmTest`; `./gradlew
+    :provider-blockfrost:testAndroidHostTest`; `./gradlew
+    :provider-blockfrost:compileKotlinIosArm64`. `git diff --check` clean; banned-word/
+    restricted-claim scan of touched files found none (the only prior occurrence,
+    `provider-blockfrost/README.md`'s `Not audited.`, was replaced as required). No
+    `:shared`/`:wallet`/`:tx`/`:crypto`/`:crypto-signing-backend`/`:core` file changed; no
+    `:shared` submit UI added. **Next step: Block 1.11c** (`:shared` Playground "Submit
+    Transaction" checkpoint).
+
+### Session Summary (Block 1.11a `:provider` transaction-submission boundary)
 
 Date: 2026-07-13
 

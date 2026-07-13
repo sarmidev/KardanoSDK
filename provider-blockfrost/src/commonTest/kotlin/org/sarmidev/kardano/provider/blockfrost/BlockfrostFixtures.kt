@@ -109,4 +109,43 @@ internal object BlockfrostFixtures {
         (0 until count).joinToString(separator = ",", prefix = "[", postfix = "]") {
             utxoEntry(it, "1000000")
         }
+
+    /**
+     * A sanitized, structurally-valid `POST /tx/submit` success response: a JSON string
+     * containing a 64-hex-character placeholder transaction id, quoted exactly as the real
+     * Blockfrost API returns it. Not captured from a live submission; no real funds involved.
+     */
+    val SUBMIT_ACCEPTED: String = "\"$TX_HASH_A\""
+
+    /** A submit success body missing the surrounding quotes (still valid hex). */
+    val SUBMIT_ACCEPTED_UNQUOTED: String = TX_HASH_A
+
+    /** A submit success body whose "hex" is too short to be a 32-byte transaction id. */
+    val SUBMIT_ACCEPTED_TOO_SHORT: String = "\"abcd\""
+
+    /** A submit success body that is not valid hex at all. */
+    val SUBMIT_ACCEPTED_NOT_HEX: String = "\"not-hex-at-all!!\""
+
+    /**
+     * A sanitized `400` Blockfrost error envelope, as returned when the node rejects a
+     * malformed or conflicting transaction. Not a live capture; no real project id.
+     */
+    val SUBMIT_REJECTED_BODY: String =
+        """
+        {
+          "status_code": 400,
+          "error": "Bad Request",
+          "message": "sanitized: transaction submit failed to validate"
+        }
+        """.trimIndent()
+
+    /** A `403` Blockfrost error envelope (for example an invalid `project_id`). */
+    val FORBIDDEN_BODY: String =
+        """
+        {
+          "status_code": 403,
+          "error": "Forbidden",
+          "message": "sanitized: invalid project token"
+        }
+        """.trimIndent()
 }

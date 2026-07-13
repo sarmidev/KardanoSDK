@@ -44,3 +44,15 @@ internal data class BlockfrostBlockDto(
     val slot: Long,
     val height: Long,
 )
+
+/**
+ * Blockfrost's JSON error envelope, returned alongside non-2xx statuses (for example from
+ * `POST /tx/submit`). All fields are optional/nullable because not every non-2xx response is
+ * this exact shape (some are backend-level HTML/plaintext, not this JSON envelope).
+ */
+@Serializable
+internal data class BlockfrostErrorDto(
+    @SerialName("status_code") val statusCode: Int? = null,
+    val error: String? = null,
+    val message: String? = null,
+)

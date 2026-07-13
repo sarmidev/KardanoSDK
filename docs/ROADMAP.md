@@ -1154,8 +1154,11 @@ Proposed block sequence:
 - `1.11` Submit Transaction — submit a signed transaction to preprod. Split into `1.11a`/`1.11b`/
   `1.11c` (ADR-0017). `1.11a` (`:provider` boundary — `TxSubmitProvider`, `SubmitError`,
   `InMemoryTxSubmitProvider`, which never fakes success) — **Status: complete.** `1.11b`
-  (`:provider-blockfrost` submit implementation) and `1.11c` (`:shared` Playground checkpoint) —
-  not started.
+  (`:provider-blockfrost`'s `BlockfrostTxSubmitProvider`: `POST /tx/submit`,
+  `Content-Type: application/cbor`, quoted-hex-string response mapped to `TxHash`, HTTP status
+  mapped to `SubmitError` including a parsed Blockfrost error-envelope `detail`; MockEngine
+  tests only, no automated live submit test) — **Status: complete.** `1.11c` (`:shared`
+  Playground checkpoint) — not started.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 

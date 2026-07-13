@@ -1122,7 +1122,22 @@ Split into `1.11a` / `1.11b` / `1.11c` (ADR-0017,
   never uses it. `submit` takes raw signed transaction CBOR bytes rather than a `:tx`/`:wallet`
   type because `:provider` must not depend on `:tx` (which already depends on `:provider`).
   No Blockfrost implementation and no `:shared` change in this sub-block.
-- `1.11b` `:provider-blockfrost` Blockfrost submit implementation — **Status: not started.**
+- `1.11b` `:provider-blockfrost` Blockfrost submit implementation — **Status: complete.** Added
+  `BlockfrostTxSubmitProvider` implementing `TxSubmitProvider`: `POST
+  {config.network.baseUrl}/tx/submit`, `Content-Type: application/cbor`, `project_id` from the
+  existing `configureBlockfrost` default request, and the raw (defensively copied)
+  `transactionCbor` as the body. Empty input is rejected with `SubmitError.EmptyTransaction`
+  before any HTTP call. A successful (`200`) response is Blockfrost's JSON string containing a
+  64-hex-character transaction id; the surrounding quotes are stripped from the raw response
+  text deliberately (not via JSON content negotiation) before hex-decoding into a `TxHash`, and
+  a malformed/wrong-length result becomes `SubmitError.Deserialization`. Non-2xx statuses map
+  to `SubmitError.Rejected` (`400`), `SubmitError.RateLimited` (`429`), or
+  `SubmitError.RemoteStatus` (any other non-2xx, for example `403`/`404`/`418`/`425`/`500`),
+  with `detail` parsed from Blockfrost's JSON error envelope (`message`/`error`) falling back
+  to the raw body; transport exceptions map to `SubmitError.Transport`, and
+  `CancellationException` is rethrown, not swallowed. No automated live-network submit test:
+  submitting is a mutating, non-idempotent action that consumes real preprod test UTxOs, unlike
+  the read-only provider's opt-in live test. No `:shared` change in this sub-block.
 - `1.11c` `:shared` Android "Submit Transaction" Playground checkpoint — **Status: not
   started.**
 
