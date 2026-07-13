@@ -566,8 +566,8 @@ Date: 2026-07-13
 Summary:
 
 - **Block 1.10c `:shared` "Signed Transaction (not submitted)" Playground checkpoint — DONE.
-  Result: implemented and verified (compile/JVM/Android-host/iOS-compile); Android on-device
-  runtime checkpoint is a pending manual step for the project owner.** Precondition checked and
+  Result: implemented and verified (compile/JVM/Android-host/iOS-compile plus manual Android
+  runtime checkpoint).** Precondition checked and
   satisfied: working tree was clean and Block 1.10b (`d1acb80`) was already committed before this
   change started.
   - **`PlaygroundPresenter.kt`.** Extracted the draft-building steps already inlined in the
@@ -610,15 +610,13 @@ Summary:
     `:tx`/`:wallet`/`:core`/provider/app behavior changed beyond the forced `presentWalletError`/
     `presentTxBuildError` compile-gap fix described above, which is itself `:shared`-only
     formatting code. No submission code was added anywhere.
-  - **Android runtime checkpoint: pending, manual.** Signing reaches `:crypto`'s native backend
-    and a `Success` state needs a funded UTxO; under the default mock the on-device section
-    honestly shows "no UTxOs", same as the 1.9c draft section did before it. Project-owner manual
-    checkpoint: build and run the Android app, enable "Use live Blockfrost (preprod)", paste a
-    preprod `project_id`, fund the generated `addr_test1…` address from a preprod faucet, tap
-    "Sign transaction", and confirm the section shows a transaction id, witness count `1`, a
-    truncated signed-CBOR preview, and the "signed, not submitted — testnet-only, test fixture,
-    no real funds" label.
-  - **Block 1.10 is now complete** except for that one manual Android checkpoint. Docs updated
+  - **Android runtime checkpoint: manual PASS (2026-07-13).** The owner ran the Android app
+    against live Blockfrost preprod. An initial `403` was traced to an incorrect preprod
+    `project_id`; after correcting it, tapping "Sign transaction" showed a transaction id
+    (`48e7d8ad...`), witness count `1`, a truncated signed-CBOR preview (`288B total`), and the
+    "signed, not submitted — testnet-only, test fixture, no real funds" label. No submit action
+    was present or invoked.
+  - **Block 1.10 is now complete.** Docs updated
     in this change: `docs/PHASE_1_PLAN.md` §1.10 (1.10c → complete, "next step" → 1.11),
     `docs/ROADMAP.md` §1.10 (1.10c → complete), `shared/README.md` (new "Signed Transaction"
     section + status/testing refresh), this file. **Next step: Block 1.11** (Submit Transaction).

@@ -1126,7 +1126,7 @@ Proposed block sequence:
     device and an emulator; `compileKotlinIosArm64` for all four modules; and
     `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`.
   - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:
-    complete (Android on-device/emulator checkpoint pending as a manual project-owner step).**
+    complete, including manual Android runtime checkpoint.**
     `PlaygroundPresenter` gained a shared `buildTransactionDraft` helper (extracted from the
     1.9c `presentTransactionDraft`, reused unchanged by both checkpoints so they build the
     identical unsigned draft) and `presentSignedTransaction`, which signs that draft by calling
@@ -1146,7 +1146,11 @@ Proposed block sequence:
     and `PlaygroundSignedTransactionDesktopTest` (`jvmTest`-only, end-to-end sign-and-display,
     plus the honest "no UTxOs" default-mock case). All verification commands pass:
     `:shared:jvmTest`, `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`,
-    `:shared:compileKotlinIosSimulatorArm64`.
+    `:shared:compileKotlinIosSimulatorArm64`. The project owner then verified the new section
+    manually on Android with live Blockfrost preprod: after correcting the preprod `project_id`,
+    "Sign transaction" displayed a transaction id, witness count `1`, a truncated signed-CBOR
+    preview (`288B total`), and the "signed, not submitted — testnet-only, test fixture, no real
+    funds" label, with no submit action invoked.
 - `1.11` Submit Transaction — submit a signed transaction to preprod.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.

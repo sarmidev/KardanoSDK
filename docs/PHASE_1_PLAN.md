@@ -1073,7 +1073,7 @@ Sub-blocks:
   note for the full verification matrix (all JVM/Android-host/Android-device/iOS
   compile-and-link commands pass).
 - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:
-  complete (Android runtime checkpoint pending — see below).** Built the same unsigned draft as
+  complete, including manual Android runtime checkpoint.** Built the same unsigned draft as
   1.9c (extracted into a shared `buildTransactionDraft` helper reused by both checkpoints), signs
   it by calling `:wallet`'s `ReadOnlyWallet.signTransaction` with the cited `TestWalletFixture`
   words/path and `Network.TESTNET` explicitly (ADR-0015 §2a — `:wallet` is not fixture-aware;
@@ -1087,11 +1087,13 @@ Sub-blocks:
   them (plus a new `presentSigningError` for `SigningError`) was the tiny compile-forced fix this
   block's guardrail allows, not a behavior change to any SDK module. All verification commands
   pass: `:shared:jvmTest`, `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`,
-  `:shared:compileKotlinIosSimulatorArm64`. Android on-device/emulator runtime verification of the
-  new section is a manual checkpoint for the project owner (see the Android checkpoint note
-  below) — this change adds no CI/device automation.
+  `:shared:compileKotlinIosSimulatorArm64`. Android runtime verification was then completed
+  manually by the project owner using live Blockfrost preprod: after correcting the preprod
+  `project_id`, tapping "Sign transaction" showed a transaction id, witness count `1`, a
+  truncated signed-CBOR preview (`288B total`), and the "signed, not submitted — testnet-only,
+  test fixture, no real funds" label. No submit action was present or invoked.
 
-Android checkpoint:
+Android checkpoint (manual PASS, 2026-07-13):
 
 - Build and sign a transaction, showing the tx id and signed CBOR without submitting it yet.
 
@@ -1233,6 +1235,5 @@ device and an emulator; `compileKotlinIosArm64` for
 `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`.
 
 `1.10c` (the `:shared` Android "Signed Transaction (not submitted)" checkpoint, ADR-0015 §7) is
-now **complete**: see its own entry above for what was added and verified. Block 1.10 is complete
-overall pending only the manual Android on-device checkpoint. **The next step is Block 1.11**
-(Submit Transaction).
+now **complete**: see its own entry above for what was added and verified, including the manual
+Android runtime checkpoint. **The next step is Block 1.11** (Submit Transaction).
