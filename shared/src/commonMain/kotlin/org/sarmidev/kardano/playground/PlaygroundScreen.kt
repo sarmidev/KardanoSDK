@@ -29,40 +29,50 @@ import org.sarmidev.kardano.Greeting
 import org.sarmidev.kardano.address.Address
 import org.sarmidev.kardano.provider.ChainQueryProvider
 import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
+import org.sarmidev.kardano.provider.InMemoryTxSubmitProvider
+import org.sarmidev.kardano.provider.TxSubmitProvider
 import org.sarmidev.kardano.provider.blockfrost.BlockfrostChainQueryProvider
 import org.sarmidev.kardano.provider.blockfrost.BlockfrostConfig
+import org.sarmidev.kardano.provider.blockfrost.BlockfrostTxSubmitProvider
 
 /**
  * The SDK Playground screen: a diagnostic surface for visually verifying existing `:core`,
- * `:crypto`, `:wallet`, and `:tx` SDK behavior on Android (Blocks 1.2, 1.3, 1.6d, 1.7b, 1.8b,
- * 1.9c, and 1.10c).
+ * `:crypto`, `:wallet`, `:tx`, and `:provider` SDK behavior on Android (Blocks 1.2, 1.3, 1.6d,
+ * 1.7b, 1.8b, 1.9c, 1.10c, and 1.11).
  *
  * Covers [Address.parse] with typed [org.sarmidev.kardano.address.AddressError] display,
  * a Hex decoder, a CBOR decoder, a test-wallet derivation + address-generation checkpoint, a
  * read-only Provider section, a read-only Wallet Balance checkpoint, an unsigned Transaction
- * Draft checkpoint, and a Signed Transaction (not submitted) checkpoint. The test-wallet
- * section restores [TestWalletFixture]'s cited test-only mnemonic and shows only the resulting
- * CIP-1852 paths, Blake2b-224 credential hashes, and generated address — never the mnemonic,
- * seed, or any raw key bytes; all derivation, public-key projection, hashing, and
- * address-encoding logic is `:crypto`'s/`:core`'s, called through [KeyDerivation]/[Hashing]/
- * [Address] and formatted here, not reimplemented. The Wallet Balance section restores the same
- * fixture through `:wallet`'s `ReadOnlyWallet.restore` (always `Network.TESTNET`) and queries
- * whichever provider is currently active for that wallet's balance; a zero balance under the
- * mock is the expected result, not a failure. The Transaction Draft section restores the same
- * fixture again and calls `:tx`'s `TransactionBuilder.build` to build a minimal, unsigned,
- * single-payment ADA transaction from that wallet's UTxOs — no signing, no witness
- * construction, no transaction id, no submission; under the mock, the restored address has no
- * seeded UTxOs, so this normally reports "no UTxOs", the expected mock result. The Signed
- * Transaction section (Block 1.10c) builds that same unsigned draft again and signs it through
- * `:wallet`'s `ReadOnlyWallet.signTransaction`, always passing [TestWalletFixture.words] and
- * `Network.TESTNET` explicitly, then shows only the transaction id, witness count, a truncated
- * signed-transaction CBOR preview, and an explicit "signed, not submitted" label — no
- * submission (Block 1.11). The provider section defaults to the in-memory mock
- * ([InMemoryChainQueryProvider], fake/test-only, no network); a "Use live Blockfrost (preprod)"
- * toggle switches to a live [BlockfrostChainQueryProvider] built from a runtime `project_id`.
- * That key is held only in non-persistent Compose state (never stored or logged) and live calls
- * hit real preprod (test funds). This is sample/diagnostic code in `:shared` and is not part of
- * the SDK public API. No submission logic anywhere in this screen.
+ * Draft checkpoint, a Signed Transaction (not submitted) checkpoint, and a Submit Transaction
+ * (preprod) checkpoint. The test-wallet section restores [TestWalletFixture]'s cited test-only
+ * mnemonic and shows only the resulting CIP-1852 paths, Blake2b-224 credential hashes, and
+ * generated address — never the mnemonic, seed, or any raw key bytes; all derivation,
+ * public-key projection, hashing, and address-encoding logic is `:crypto`'s/`:core`'s, called
+ * through [KeyDerivation]/[Hashing]/[Address] and formatted here, not reimplemented. The Wallet
+ * Balance section restores the same fixture through `:wallet`'s `ReadOnlyWallet.restore`
+ * (always `Network.TESTNET`) and queries whichever provider is currently active for that
+ * wallet's balance; a zero balance under the mock is the expected result, not a failure. The
+ * Transaction Draft section restores the same fixture again and calls `:tx`'s
+ * `TransactionBuilder.build` to build a minimal, unsigned, single-payment ADA transaction from
+ * that wallet's UTxOs — no signing, no witness construction, no transaction id, no submission;
+ * under the mock, the restored address has no seeded UTxOs, so this normally reports "no
+ * UTxOs", the expected mock result. The Signed Transaction section (Block 1.10c) builds that
+ * same unsigned draft again and signs it through `:wallet`'s `ReadOnlyWallet.signTransaction`,
+ * always passing [TestWalletFixture.words] and `Network.TESTNET` explicitly, then shows only
+ * the transaction id, witness count, a truncated signed-transaction CBOR preview, and an
+ * explicit "signed, not submitted" label — no submission until Block 1.11c below. The Submit
+ * Transaction (preprod) section (Block 1.11c) builds and signs that same draft once more, then
+ * calls `:provider`'s [TxSubmitProvider.submit] with the signed CBOR: under the default mock
+ * ([InMemoryTxSubmitProvider]) submission always reports the honest, explicit
+ * "does not support submission" failure (it never fakes an accepted id); only live Blockfrost
+ * preprod ([BlockfrostTxSubmitProvider]) can accept a real submission, and only after the
+ * fixture address is funded from a preprod faucet. The provider section defaults to the
+ * in-memory mock ([InMemoryChainQueryProvider], fake/test-only, no network); a "Use live
+ * Blockfrost (preprod)" toggle switches both the query and submit provider to their live
+ * Blockfrost preprod counterparts, built from the same runtime `project_id`. That key is held
+ * only in non-persistent Compose state (never stored or logged) and live calls hit real preprod
+ * (test funds). This is sample/diagnostic code in `:shared` and is not part of the SDK public
+ * API. No mainnet anywhere in this screen.
  */
 @Composable
 internal fun PlaygroundScreen() {
@@ -95,6 +105,18 @@ internal fun PlaygroundScreen() {
     val activeProvider: ChainQueryProvider =
         if (useLive && liveProvider != null) liveProvider else mockProvider
 
+    // Submit-transaction boundary (Block 1.11c), wired the same way as activeProvider above:
+    // a fake/test-only in-memory mock by default, a live Blockfrost preprod provider once the
+    // toggle and the same project_id field above are both set. No second key field is added.
+    val mockSubmitProvider = remember { InMemoryTxSubmitProvider() }
+    val liveSubmitProvider = remember(projectId) {
+        projectId.trim().takeIf { it.isNotBlank() }?.let { key ->
+            BlockfrostTxSubmitProvider.create(BlockfrostConfig(projectId = key))
+        }
+    }
+    val activeSubmitProvider: TxSubmitProvider =
+        if (useLive && liveSubmitProvider != null) liveSubmitProvider else mockSubmitProvider
+
     var utxosResult by remember {
         mutableStateOf<ProviderUtxosPresentation>(ProviderUtxosPresentation.Empty)
     }
@@ -118,6 +140,11 @@ internal fun PlaygroundScreen() {
         mutableStateOf<SignedTransactionPresentation>(SignedTransactionPresentation.Empty)
     }
     var signedTransactionRequest by remember { mutableStateOf(0) }
+
+    var submitTransactionResult by remember {
+        mutableStateOf<SubmitTransactionPresentation>(SubmitTransactionPresentation.Empty)
+    }
+    var submitTransactionRequest by remember { mutableStateOf(0) }
 
     // One-shot suspend loads triggered by incrementing a request token. Using LaunchedEffect
     // keeps the screen dependent only on the Compose runtime (no extra coroutine artifact).
@@ -153,6 +180,17 @@ internal fun PlaygroundScreen() {
         if (signedTransactionRequest == 0) return@LaunchedEffect
         signedTransactionResult = SignedTransactionPresentation.Loading
         signedTransactionResult = PlaygroundPresenter.presentSignedTransaction(activeProvider)
+    }
+    // Builds and signs the same draft as signedTransactionRequest above, then calls
+    // activeSubmitProvider.submit(...) directly — under the mock this always reports the
+    // honest "does not support submission" failure (Block 1.11a/b), never a fake accepted id;
+    // only live Blockfrost preprod can actually accept a submission. No polling: the accepted
+    // id (if any) is shown once, for manual explorer lookup.
+    LaunchedEffect(submitTransactionRequest) {
+        if (submitTransactionRequest == 0) return@LaunchedEffect
+        submitTransactionResult = SubmitTransactionPresentation.Loading
+        submitTransactionResult =
+            PlaygroundPresenter.presentSubmitTransaction(activeProvider, activeSubmitProvider)
     }
 
     Column(
@@ -414,6 +452,31 @@ internal fun PlaygroundScreen() {
             Text("Sign transaction")
         }
         SignedTransactionCard(signedTransactionResult)
+
+        // --- Submit Transaction (preprod; Block 1.11c) ---
+        HorizontalDivider()
+        Text("Submit Transaction (preprod)", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Builds and signs the same fixture transaction as above (always testnet), " +
+                "then submits it through whichever submit provider is currently active. Under " +
+                "the mock (default), submission always reports an explicit \"does not support " +
+                "submission\" failure — it never fakes an accepted transaction id. Enable " +
+                "\"Use live Blockfrost (preprod)\" above and provide a project_id to submit " +
+                "for real: Blockfrost preprod only, never mainnet, and only test ADA (never " +
+                "real funds). On acceptance this shows only the accepted transaction id, the " +
+                "locally-signed transaction id, whether they match, and an explicit " +
+                "submitted/preprod/test-fixture label — no automatic polling; use the shown id " +
+                "to look the transaction up manually on a preprod explorer.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = { submitTransactionRequest += 1 },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Submit transaction")
+        }
+        SubmitTransactionCard(submitTransactionResult)
     }
 }
 
@@ -617,6 +680,29 @@ private fun SignedTransactionCard(presentation: SignedTransactionPresentation) {
             }
         }
         is SignedTransactionPresentation.Failure -> ErrorCard(presentation.message)
+    }
+}
+
+@Composable
+private fun SubmitTransactionCard(presentation: SubmitTransactionPresentation) {
+    when (presentation) {
+        is SubmitTransactionPresentation.Empty -> Unit
+        is SubmitTransactionPresentation.Loading -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "Loading…",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        is SubmitTransactionPresentation.Success -> ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                presentation.rows.forEach { row -> ResultRow(row.label, row.value) }
+            }
+        }
+        is SubmitTransactionPresentation.Failure -> ErrorCard(presentation.message)
     }
 }
 

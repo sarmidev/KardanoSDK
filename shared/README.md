@@ -11,10 +11,11 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
 
 - Hosts the SDK Playground (`playground/PlaygroundScreen.kt`, `playground/PlaygroundPresenter.kt`),
   introduced in Block 1.2, as the Android-facing diagnostic surface for existing `:core`/
-  `:crypto`/`:wallet`/`:tx` SDK behavior (address parsing, Hex, CBOR, test-wallet derivation +
-  address generation, read-only wallet balance, an unsigned transaction-draft checkpoint, and a
-  signed-but-not-submitted transaction checkpoint) and, from Block 1.3a, a read-only "Provider"
-  section (mock by default, with an optional live-Blockfrost toggle added in Block 1.3b).
+  `:crypto`/`:wallet`/`:tx`/`:provider` SDK behavior (address parsing, Hex, CBOR, test-wallet
+  derivation + address generation, read-only wallet balance, an unsigned transaction-draft
+  checkpoint, a signed-but-not-submitted transaction checkpoint, and a submit-transaction
+  checkpoint) and, from Block 1.3a, a read-only "Provider" section (mock by default, with an
+  optional live-Blockfrost toggle added in Block 1.3b).
 - Hosts `App.kt` (theme wrapper that renders `PlaygroundScreen`) and the iOS UI entry point
   (`MainViewController.kt`).
 - Retains the sample glue (`Greeting.kt`, `GreetingUtil.kt`) used by `PlaygroundScreen` to
@@ -23,14 +24,17 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   `Address.toBech32()`, `AddressCredential`, `Hex`, `Cbor`, `Platform`), on `:crypto` for the
   test-wallet derivation checkpoint (`Mnemonic`, `IcarusMasterKey`, `KeyDerivation`, `Hashing`
   — see "Test Wallet & Address Generation" below), on `:provider` for the read-only query
-  boundary (`ChainQueryProvider`) and its in-memory mock, on `:provider-blockfrost` for the
-  live Blockfrost provider, on `:wallet` (Block 1.8b) for the read-only wallet-balance
-  checkpoint (`ReadOnlyWallet`, `WalletBalance`, `WalletError` — see "Wallet Balance" below),
-  and, from Block 1.9c, on `:tx` for the unsigned transaction-draft checkpoint
+  boundary (`ChainQueryProvider`) and its in-memory mock, and, from Block 1.11a, the submit
+  boundary (`TxSubmitProvider`, `SubmitError`) and its in-memory mock, on `:provider-blockfrost`
+  for the live Blockfrost query provider and, from Block 1.11b, the live Blockfrost submit
+  provider (`BlockfrostTxSubmitProvider`), on `:wallet` (Block 1.8b) for the read-only
+  wallet-balance checkpoint (`ReadOnlyWallet`, `WalletBalance`, `WalletError` — see "Wallet
+  Balance" below), and, from Block 1.9c, on `:tx` for the unsigned transaction-draft checkpoint
   (`TransactionBuilder`, `TransactionBuildRequest`, `TransactionDraft`, `TxBuildError` — see
-  "Transaction Draft" below). Block 1.10c (signing) reuses these same `:wallet`/`:tx`
-  dependencies — `ReadOnlyWallet.signTransaction` and `WalletSignedTransaction` — with no new
-  Gradle module added (see "Signed Transaction" below).
+  "Transaction Draft" below). Block 1.10c (signing) and Block 1.11c (submission) reuse these
+  same `:wallet`/`:tx`/`:provider` dependencies — `ReadOnlyWallet.signTransaction`,
+  `WalletSignedTransaction`, and `TxSubmitProvider.submit` — with no new Gradle module added
+  (see "Signed Transaction" and "Submit Transaction" below).
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
   `iosApp` via `MainViewControllerKt.MainViewController()`.
 
@@ -148,6 +152,35 @@ real draft only after that address is funded with test ADA from a preprod faucet
 submission anywhere in this checkpoint** — submitting a transaction is Block 1.11, see
 [docs/DECISIONS/0015-transaction-signing.md](../docs/DECISIONS/0015-transaction-signing.md).
 
+### Submit Transaction (preprod) section (Block 1.11c)
+
+The "Submit Transaction (preprod)" section builds and signs the same fixture transaction as
+the Signed Transaction section above — through `PlaygroundPresenter.presentSubmitTransaction`,
+which reuses the exact same `buildTransactionDraft` + `ReadOnlyWallet.signTransaction` sequence
+— then calls `:provider`'s `TxSubmitProvider.submit(signed.signedTransaction.cbor())` directly
+on the resulting `WalletSignedTransaction`. **No new `:wallet` orchestration method was added
+for this** (ADR-0017 "Non-goals"): the presenter sequences build → sign → submit itself, and
+the accepted-id/local-id comparison lives in the presenter, not in `:wallet` or `:provider`.
+
+A new `activeSubmitProvider: TxSubmitProvider` is wired alongside the existing `activeProvider:
+ChainQueryProvider`, gated by the same "Use live Blockfrost (preprod)" toggle and `project_id`
+field the Provider section already uses (no second key field is added): the default is
+`InMemoryTxSubmitProvider()` (fake/test-only — it always returns
+`SubmitError.SubmissionNotSupported`, per ADR-0017, never a fake accepted id); enabling the
+toggle with a `project_id` switches to a live `BlockfrostTxSubmitProvider.create(BlockfrostConfig(projectId
+= key))` (real preprod submission, test funds only, never mainnet). On success the screen
+shows only the accepted transaction id, the locally-signed transaction id, whether the two
+match (with a readable mismatch note if they do not), and an explicit `submitted to preprod —
+testnet-only, test fixture, no real funds` label. On failure the screen shows a message
+distinguishing the cause, covering every `SubmitError` variant (including
+`SubmissionNotSupported`'s explicit "this provider does not support submission (mock)"
+message) and every upstream draft-building/signing failure the Transaction Draft and Signed
+Transaction sections can already report. **No automatic polling**: once a submission is
+accepted, the screen shows the accepted id once, for a manual preprod-explorer lookup — a
+single-shot submit-and-display checkpoint has no justification yet for the added complexity
+(see `PlaygroundPresenter.presentSubmitTransaction`'s KDoc). See
+[docs/DECISIONS/0017-transaction-submission-boundary.md](../docs/DECISIONS/0017-transaction-submission-boundary.md).
+
 **SDK logic and the protocol/cryptographic test-vector suites belong in `:core`/`:crypto`/
 `:wallet`/`:tx`, not here.** `:shared` only calls `:core`/`:crypto`/`:provider`/`:wallet`/`:tx`
 APIs and formats/displays results. `PlaygroundPresenter` is a display-only mapping layer with no
@@ -209,8 +242,22 @@ transaction checkpoint (Block 1.10c) follows the same split:
 asserting the honest "no UTxOs" result under the default mock, and — once the mock is seeded
 with a UTxO for the restored wallet's own address — a successful signed transaction whose rows
 carry a well-formed 32-byte hex transaction id, exactly one witness, a truncated CBOR preview,
-the exact not-submitted/testnet/fixture label, and none of the fixture's mnemonic words. See
-[docs/TESTING.md](../docs/TESTING.md) for the testing strategy and test-vector policy.
+the exact not-submitted/testnet/fixture label, and none of the fixture's mnemonic words. The
+submit-transaction checkpoint (Block 1.11c) follows a related but slightly different split:
+`PlaygroundSubmitTransactionPresenterTest` (`commonTest`) is native-free and, unlike the
+signed-transaction split, covers **both** branches of its raw-result mapper
+(`mapSubmitTransactionResult`) — its accepted-id parameter is a plain `TxHash` (a `:core` value
+constructible from any 32 bytes, no native call needed), not a `:wallet`-internal type — so
+both the accepted/local-id match-and-mismatch cases and every `SubmitError` variant
+(`presentSubmitError`) are exercised directly; `PlaygroundSubmitTransactionDesktopTest`
+(`jvmTest`-only) is the only place `presentSubmitTransaction` runs end to end (it reaches
+`ReadOnlyWallet.signTransaction`'s native backend), asserting the honest "no UTxOs" result
+under the default mock and, once the mock query provider is seeded with a UTxO for the
+restored wallet's own address, that the mock submit provider still reports its honest
+not-supported failure rather than a fake accepted id — there is no automated end-to-end
+*success* path, since an actual accepted submission only comes from a live Blockfrost preprod
+call, which these tests must not perform. See [docs/TESTING.md](../docs/TESTING.md) for the
+testing strategy and test-vector policy.
 
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host tests: `./gradlew :shared:testAndroidHostTest`

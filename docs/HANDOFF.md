@@ -541,12 +541,16 @@ Do not implement:
   `Signing`, `:tx` witness/transaction assembly, `:wallet` orchestration) is complete** (ADR-0015
   §9 result note); do not widen it beyond the ADR-0015 §2 scope above without a new explicit
   block/ADR.
-- Real transaction submission to any network from the app. Block 1.11a added the
-  provider-neutral `TxSubmitProvider`/`SubmitError` boundary and a non-submitting
-  `InMemoryTxSubmitProvider` (ADR-0017); Block 1.11b added `BlockfrostTxSubmitProvider`, a
-  verified (MockEngine-tested) real preprod submit implementation. There is still **no
-  `:shared` submit UI/checkpoint** — no way to trigger a submission from the Playground — until
-  Block 1.11c.
+- Real transaction submission to any network from the app beyond preprod test funds. Block
+  1.11a added the provider-neutral `TxSubmitProvider`/`SubmitError` boundary and a
+  non-submitting `InMemoryTxSubmitProvider` (ADR-0017); Block 1.11b added
+  `BlockfrostTxSubmitProvider`, a verified (MockEngine-tested) real preprod submit
+  implementation; Block 1.11c added the `:shared` "Submit Transaction (preprod)" Playground
+  checkpoint, wiring both into the app UI (implementation complete, verified by
+  `:shared:jvmTest`/`:shared:testAndroidHostTest`/`compileKotlinIosArm64`). **The mandatory
+  manual Android checkpoint for Block 1.11 — submitting a real, fixture-derived,
+  faucet-funded preprod transaction from the running app — has not yet been performed; do not
+  claim it passed until an owner actually runs it and records the result here.**
 - Real wallet flows.
 - Plutus support.
 - Staking or delegation.
@@ -565,6 +569,83 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.11c `:shared` Android Playground "Submit Transaction (preprod)" checkpoint —
+  implementation DONE; mandatory manual Android checkpoint PENDING.** Precondition checked and
+  satisfied: working tree was clean and Block 1.11b (`1c6e5c0`) was already committed before
+  this change started.
+  - **`PlaygroundPresenter.kt` additions.** `SubmitTransactionPresentation` sealed interface
+    (`Empty`/`Loading`/`Success(rows)`/`Failure(message)`, matching the existing
+    `SignedTransactionPresentation` shape) and `suspend fun presentSubmitTransaction(queryProvider:
+    ChainQueryProvider, submitProvider: TxSubmitProvider): SubmitTransactionPresentation`. It
+    reuses the existing `buildTransactionDraft(queryProvider)` + `ReadOnlyWallet.signTransaction(
+    TestWalletFixture.words, Network.TESTNET, draft)` sequence (same as Block 1.10c's
+    `presentSignedTransaction`) to obtain a `WalletSignedTransaction`, then calls
+    `submitProvider.submit(signed.signedTransaction.cbor())` directly — **no new `:wallet`
+    orchestration method was added** (ADR-0017 "Non-goals"); the accepted-id/local-id comparison
+    lives in a new non-suspend, `internal` `mapSubmitTransactionResult(localTransactionId: TxHash,
+    result: KardanoResult<TxHash, SubmitError>)` in the presenter. On a matching id it shows only
+    `Ids match = yes`; on a mismatch it adds a readable `Note` row, never silently picking one id.
+    Every failure path is covered: a new `internal fun presentSubmitError(error: SubmitError):
+    String` maps all eight `SubmitError` variants (`SubmissionNotSupported` gets an explicit
+    "this provider does not support submission (mock) — enable live Blockfrost preprod to submit
+    for real" message; `EmptyTransaction`, `Rejected(code, detail)`, `Transport(message)`,
+    `RemoteStatus(code, detail?)`, `RateLimited`, `Deserialization(detail)`, `Unknown` each get a
+    distinguishable message), and draft-building/signing failures reuse the existing
+    `presentTxBuildError`/`presentWalletError` mappers unchanged. Every success/failure row is
+    explicitly labeled `submitted to preprod — testnet-only, test fixture, no real funds`; never
+    the mnemonic, seed, private key bytes, or the full (untruncated) signed CBOR.
+  - **`PlaygroundScreen.kt` additions.** A new "Submit Transaction (preprod)" section below
+    "Signed Transaction (not submitted)", same request-token + `LaunchedEffect` pattern as every
+    other checkpoint, with a "Submit transaction" button and a new `SubmitTransactionCard`
+    composable. A new `activeSubmitProvider: TxSubmitProvider` is wired alongside the existing
+    `activeProvider: ChainQueryProvider`: default/mock is `InMemoryTxSubmitProvider()`; live is
+    `BlockfrostTxSubmitProvider.create(BlockfrostConfig(projectId = key))`, built from the exact
+    same `project_id` Compose state the read-only Provider section already uses — **no second key
+    field added**. Under the mock, the button always calls through to
+    `InMemoryTxSubmitProvider.submit`, which always returns `SubmitError.SubmissionNotSupported`
+    (Block 1.11a) — displayed as an explicit failure, never a silent or fake success; this was
+    judged the simplest UI pattern consistent with every other section on this screen (none of
+    which disable their buttons under the mock). **No polling was added**: a code comment/KDoc on
+    `presentSubmitTransaction` records the justification (a single-shot submit-and-display
+    checkpoint has no need yet for the added complexity) per ADR-0017/`PHASE_1_PLAN.md` §1.11's
+    "optional, if explicitly justified" polling note.
+  - **Tests added.** `PlaygroundSubmitTransactionPresenterTest.kt` (`commonTest`, native-free):
+    covers both branches of `mapSubmitTransactionResult` (matching ids, mismatched ids with a
+    `Note` row, and an `Err` delegating to `presentSubmitError`) plus all eight `SubmitError`
+    variants via `presentSubmitError` — possible without any native call because the accepted/
+    local ids are plain `TxHash` values (`TxHash.of` needs no native backend), unlike
+    `WalletSignedTransaction` in the Block 1.10c split.
+    `PlaygroundSubmitTransactionDesktopTest.kt` (`jvmTest`-only): end-to-end with
+    `InMemoryChainQueryProvider` + `InMemoryTxSubmitProvider`, asserting the default mock's honest
+    "no UTxOs" failure, and — once the query provider is seeded with a UTxO for the restored
+    wallet's own address so build+sign succeed — that the mock submit provider still reports its
+    explicit not-supported failure rather than a fake accepted id. No live network submit
+    performed in any test.
+  - **Docs updated.** `docs/PHASE_1_PLAN.md` §1.11 (`1.11c` → implementation complete, manual
+    checkpoint pending; Block 1.11 not yet fully complete; "Next step" updated), `docs/ROADMAP.md`
+    §1.11 (same), `shared/README.md` (new "Submit Transaction (preprod) section" + testing
+    refresh), this file (this entry + the "What Not To Do Yet" submission bullet).
+  - **Mandatory manual Android checkpoint — NOT YET RUN.** Per `docs/PHASE_1_PLAN.md`'s
+    "Mandatory Android checkpoints" list for `1.11`: an owner must run the Android app, enable
+    live Blockfrost preprod, enter a preprod `project_id`, ensure the fixture wallet has test ADA,
+    tap "Submit transaction", and confirm either an accepted tx id or a readable typed error is
+    shown. **This has not been performed. Block 1.11 is implementation-complete but not fully
+    complete until this checkpoint is actually run and its result (pass/fail, date) is recorded
+    here.**
+  - **Verification — all PASS:** `./gradlew :shared:jvmTest`; `./gradlew
+    :shared:testAndroidHostTest`; `./gradlew :shared:compileKotlinIosArm64`. `git diff --check`
+    clean; banned-word/restricted-claim scan of touched files found none. No `:wallet`/`:tx`/
+    `:crypto`/`:crypto-signing-backend`/`:core` file changed; no new `:wallet` orchestration
+    method added; no mainnet, no real mnemonics/private keys/funds anywhere. **Next step: run and
+    record the Block 1.11 manual Android checkpoint above; once recorded, Block 1.12** (Phase 1
+    Closure / MVP Review).
+
+### Session Summary (Block 1.11b `:provider-blockfrost` transaction-submission implementation)
 
 Date: 2026-07-13
 

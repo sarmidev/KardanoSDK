@@ -1138,13 +1138,36 @@ Split into `1.11a` / `1.11b` / `1.11c` (ADR-0017,
   `CancellationException` is rethrown, not swallowed. No automated live-network submit test:
   submitting is a mutating, non-idempotent action that consumes real preprod test UTxOs, unlike
   the read-only provider's opt-in live test. No `:shared` change in this sub-block.
-- `1.11c` `:shared` Android "Submit Transaction" Playground checkpoint — **Status: not
-  started.**
+- `1.11c` `:shared` Android "Submit Transaction" Playground checkpoint — **Status:
+  implementation complete; manual Android checkpoint pending.** Added a "Submit Transaction
+  (preprod)" Playground section below "Signed Transaction (not submitted)": it builds and
+  signs the same fixture draft as Block 1.10c through `PlaygroundPresenter.presentSubmitTransaction`,
+  then calls `TxSubmitProvider.submit(signed.signedTransaction.cbor())` directly — no new
+  `:wallet` orchestration method was added (ADR-0017 "Non-goals"). Wired a new
+  `activeSubmitProvider: TxSubmitProvider` alongside the existing `activeProvider:
+  ChainQueryProvider`, defaulting to `InMemoryTxSubmitProvider()` and switching to
+  `BlockfrostTxSubmitProvider.create(BlockfrostConfig(projectId = key))` under the same live
+  toggle and `project_id` field the read-only Provider section already uses (no second key
+  field). On success the screen shows the accepted transaction id, the locally-signed
+  transaction id, whether they match (with a readable mismatch note if not), and an explicit
+  `submitted to preprod — testnet-only, test fixture, no real funds` label. On failure every
+  `SubmitError` variant (including `SubmissionNotSupported`'s explicit "this provider does not
+  support submission (mock)" message) and every upstream draft-building/signing error the
+  existing checkpoints can already produce is mapped to a readable message. **No polling**: the
+  accepted id is shown once for manual explorer lookup (justified in
+  `PlaygroundPresenter.presentSubmitTransaction`'s KDoc — a single-shot submit-and-display
+  checkpoint has no justification yet for the added complexity). Tests:
+  `PlaygroundSubmitTransactionPresenterTest` (`commonTest`, native-free — every `SubmitError`
+  variant plus the accepted/local-id match and mismatch cases, since `TxHash` needs no native
+  call) and `PlaygroundSubmitTransactionDesktopTest` (`jvmTest`-only — end to end with
+  `InMemoryChainQueryProvider` + `InMemoryTxSubmitProvider`, asserting the mock's honest
+  not-supported failure even once signing succeeds; no live network submit in tests).
 
 Android checkpoint:
 
 - Submit a preprod transaction from the app and see either an accepted result or an
-  explainable error. (Deferred to 1.11c.)
+  explainable error. **Status: pending** — owner-run result not yet recorded (see
+  `docs/HANDOFF.md`).
 
 ### 1.12 Phase 1 Closure / MVP Review
 
@@ -1174,7 +1197,9 @@ Open the Android app and verify functionality after:
 - `1.8`: balance/UTxOs visible.
 - `1.9`: transaction draft visible.
 - `1.10`: signed transaction visible.
-- `1.11`: transaction submitted to preprod.
+- `1.11`: transaction submitted to preprod. **Status: pending** — implementation (`1.11a`/
+  `1.11b`/`1.11c`) is complete, but the owner-run manual result is not yet recorded (see
+  `docs/HANDOFF.md`); Block 1.11 is not complete until this checkpoint is run and recorded.
 
 ## Deferred or conditional work
 
@@ -1268,5 +1293,13 @@ device and an emulator; `compileKotlinIosArm64` for
 `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`.
 
 `1.10c` (the `:shared` Android "Signed Transaction (not submitted)" checkpoint, ADR-0015 §7) is
-now **complete**: see its own entry above for what was added and verified, including the manual
-Android runtime checkpoint. **The next step is Block 1.11** (Submit Transaction).
+**complete**: see its own entry above for what was added and verified, including the manual
+Android runtime checkpoint.
+
+`1.11a` (`:provider` submission boundary), `1.11b` (`:provider-blockfrost` Blockfrost submit
+implementation), and `1.11c` (the `:shared` Android "Submit Transaction (preprod)" checkpoint,
+ADR-0017) are all **implementation-complete**: see their own entries above for what was added
+and verified. **Block 1.11 is not yet fully complete**: its mandatory manual Android checkpoint
+(submitting a real, fixture-derived, faucet-funded preprod transaction from the app) has not
+yet been run — see `docs/HANDOFF.md`. **The next step is to run that manual checkpoint and
+record its result; after that, Block 1.12** (Phase 1 Closure / MVP Review) follows.

@@ -21,10 +21,13 @@ import org.sarmidev.kardano.encoding.hex.HexError
 import org.sarmidev.kardano.getOrNull
 import org.sarmidev.kardano.primitives.Lovelace
 import org.sarmidev.kardano.primitives.Network
+import org.sarmidev.kardano.primitives.TxHash
 import org.sarmidev.kardano.provider.ChainQueryProvider
 import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
 import org.sarmidev.kardano.provider.ProtocolParameters
 import org.sarmidev.kardano.provider.ProviderError
+import org.sarmidev.kardano.provider.SubmitError
+import org.sarmidev.kardano.provider.TxSubmitProvider
 import org.sarmidev.kardano.provider.Utxo
 import org.sarmidev.kardano.tx.TransactionBuildRequest
 import org.sarmidev.kardano.tx.TransactionBuilder
@@ -154,6 +157,26 @@ internal sealed interface SignedTransactionPresentation {
     data class Failure(val message: String) : SignedTransactionPresentation
 }
 
+/**
+ * Result of presenting the submit-transaction checkpoint ([TxSubmitProvider.submit], Block
+ * 1.11c).
+ *
+ * Carries only public metadata: the accepted transaction id returned by the provider, the
+ * locally-signed transaction id computed by [ReadOnlyWallet.signTransaction] (Block 1.10c),
+ * whether the two match, and an explicit submitted/preprod/test-fixture label. Never the
+ * mnemonic, seed, private/root key bytes, or the full (untruncated) signed CBOR. [Failure]
+ * covers every [SubmitError] variant [TxSubmitProvider.submit] can return, plus the same
+ * draft-building and signing failures [SignedTransactionPresentation.Failure] can report —
+ * building and signing happen first, so this checkpoint only calls `submit` on an
+ * already-signed draft.
+ */
+internal sealed interface SubmitTransactionPresentation {
+    data object Empty : SubmitTransactionPresentation
+    data object Loading : SubmitTransactionPresentation
+    data class Success(val rows: List<LabeledRow>) : SubmitTransactionPresentation
+    data class Failure(val message: String) : SubmitTransactionPresentation
+}
+
 // ---------------------------------------------------------------------------
 // Presenter — maps :core results to display models; no SDK logic of its own
 // ---------------------------------------------------------------------------
@@ -162,8 +185,8 @@ internal sealed interface SignedTransactionPresentation {
  * Maps results from `:core`, `:crypto`, `:provider`, `:wallet`, and `:tx` APIs to
  * [AddressPresentation], [HexPresentation], [CborPresentation], [WalletPresentation],
  * [ProviderUtxosPresentation], [ProviderParamsPresentation], [WalletBalancePresentation],
- * [TransactionDraftPresentation], and [SignedTransactionPresentation] for display in
- * [PlaygroundScreen].
+ * [TransactionDraftPresentation], [SignedTransactionPresentation], and
+ * [SubmitTransactionPresentation] for display in [PlaygroundScreen].
  *
  * This object only formats and labels results. It never re-parses, re-validates, or
  * reimplements any protocol rule, derivation, hashing, address-generation, balance-summation,
@@ -867,6 +890,130 @@ internal object PlaygroundPresenter {
         val prefixLength = minOf(SIGNED_CBOR_PREVIEW_BYTES, bytes.size)
         val hex = Hex.encode(bytes.copyOf(prefixLength))
         return if (bytes.size > prefixLength) "$hex… (${bytes.size}B total)" else hex
+    }
+
+    // --- Submit Transaction (Block 1.11c) ---
+
+    /**
+     * The explicit submitted label shown alongside every accepted submission: this checkpoint
+     * always targets preprod, this fixture, and never real funds.
+     */
+    private const val SUBMITTED_LABEL: String =
+        "submitted to preprod — testnet-only, test fixture, no real funds"
+
+    /**
+     * Builds the same unsigned draft as [presentTransactionDraft] (Block 1.9c) via
+     * [buildTransactionDraft], signs it exactly as [presentSignedTransaction] (Block 1.10c)
+     * does — [TestWalletFixture]'s cited test-only mnemonic and [Network.TESTNET] explicit at
+     * this call site — and, only once that signed draft exists, calls
+     * [TxSubmitProvider.submit] with its CBOR bytes.
+     *
+     * Delegates entirely to `:tx` ([TransactionBuilder]) for the draft, `:wallet`
+     * ([ReadOnlyWallet.signTransaction]) for signing, and `:provider`
+     * ([TxSubmitProvider.submit]) for submission; this presenter does not build, sign, or
+     * submit anything itself — it only sequences the three calls and formats the result. No
+     * new `:wallet` orchestration method is added for this (ADR-0017 "Non-goals"): the
+     * id-comparison in [mapSubmitTransactionResult] lives here, in the presenter.
+     *
+     * [queryProvider] is the provider-agnostic read boundary the earlier checkpoints already
+     * use (mock or live Blockfrost preprod). [submitProvider] is the provider-agnostic submit
+     * boundary from Block 1.11a/b: the caller decides whether it is
+     * [org.sarmidev.kardano.provider.InMemoryTxSubmitProvider] (fake/test-only — it always
+     * returns [SubmitError.SubmissionNotSupported], never a fake accepted id, per ADR-0017) or
+     * a live [org.sarmidev.kardano.provider.blockfrost.BlockfrostTxSubmitProvider] (real
+     * preprod submission, test funds only).
+     *
+     * **No polling.** Once a submission is accepted, this checkpoint displays the accepted
+     * transaction id for a manual explorer lookup and stops — Block 1.11's scope (ADR-0017,
+     * `PHASE_1_PLAN.md` §1.11) treats polling as optional and only worth adding with an
+     * explicit justification; a single-shot submit-and-display checkpoint has none yet, so
+     * none is added here.
+     */
+    suspend fun presentSubmitTransaction(
+        queryProvider: ChainQueryProvider,
+        submitProvider: TxSubmitProvider,
+    ): SubmitTransactionPresentation {
+        val draft = when (val outcome = buildTransactionDraft(queryProvider)) {
+            is DraftBuildOutcome.Failed -> return SubmitTransactionPresentation.Failure(outcome.message)
+            is DraftBuildOutcome.Built -> when (val result = outcome.result) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return SubmitTransactionPresentation.Failure(presentTxBuildError(result.error))
+            }
+        }
+        val signed = when (
+            val result = ReadOnlyWallet.signTransaction(TestWalletFixture.words, Network.TESTNET, draft)
+        ) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err ->
+                return SubmitTransactionPresentation.Failure(presentWalletError(result.error))
+        }
+        val submitResult = submitProvider.submit(signed.signedTransaction.cbor())
+        return mapSubmitTransactionResult(signed.transactionId, submitResult)
+    }
+
+    /**
+     * Maps a raw [TxSubmitProvider.submit] result (for a transaction whose locally-computed id
+     * is [localTransactionId]) to a [SubmitTransactionPresentation]. Non-suspend and `internal`
+     * so it can be unit-tested by constructing a [TxHash] (a plain `:core` value, no native
+     * call needed — unlike [WalletSignedTransaction], whose constructor is `:wallet`-internal)
+     * and a [SubmitError] directly, without restoring a mnemonic, reaching native cryptography,
+     * or querying a provider.
+     */
+    internal fun mapSubmitTransactionResult(
+        localTransactionId: TxHash,
+        result: KardanoResult<TxHash, SubmitError>,
+    ): SubmitTransactionPresentation = when (result) {
+        is KardanoResult.Ok ->
+            SubmitTransactionPresentation.Success(submitTransactionRows(localTransactionId, result.value))
+        is KardanoResult.Err -> SubmitTransactionPresentation.Failure(presentSubmitError(result.error))
+    }
+
+    private fun submitTransactionRows(
+        localTransactionId: TxHash,
+        acceptedTransactionId: TxHash,
+    ): List<LabeledRow> {
+        val matches = localTransactionId == acceptedTransactionId
+        return buildList {
+            add(LabeledRow("Accepted transaction id", Hex.encode(acceptedTransactionId.toByteArray())))
+            add(LabeledRow("Locally signed transaction id", Hex.encode(localTransactionId.toByteArray())))
+            add(LabeledRow("Ids match", if (matches) "yes" else "no"))
+            if (!matches) {
+                add(
+                    LabeledRow(
+                        "Note",
+                        "Accepted id differs from the locally computed id — use the accepted id " +
+                            "for explorer lookup.",
+                    ),
+                )
+            }
+            add(LabeledRow("Status", SUBMITTED_LABEL))
+        }
+    }
+
+    /**
+     * Maps a [SubmitError] to a human-readable single-line message, distinguishing every cause
+     * (not-supported mock, empty transaction, rejection, transport, remote status, rate limit,
+     * deserialization, unknown).
+     *
+     * Internal so tests can exercise all variants by constructing them directly.
+     */
+    internal fun presentSubmitError(error: SubmitError): String = when (error) {
+        is SubmitError.SubmissionNotSupported ->
+            "This provider does not support submission (mock) — enable live Blockfrost " +
+                "preprod to submit for real."
+        is SubmitError.EmptyTransaction -> "Empty transaction: nothing to submit"
+        is SubmitError.Rejected -> "Transaction rejected (status ${error.code}): ${error.detail}"
+        is SubmitError.Transport -> "Transport error: ${error.message}"
+        is SubmitError.RemoteStatus ->
+            if (error.detail != null) {
+                "Remote status: ${error.code} (${error.detail})"
+            } else {
+                "Remote status: ${error.code}"
+            }
+        is SubmitError.RateLimited -> "Rate limited"
+        is SubmitError.Deserialization -> "Decode error: ${error.detail}"
+        is SubmitError.Unknown -> "Unknown submission error"
     }
 
     // --- Helpers ---

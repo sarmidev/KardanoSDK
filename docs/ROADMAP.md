@@ -1158,7 +1158,15 @@ Proposed block sequence:
   `Content-Type: application/cbor`, quoted-hex-string response mapped to `TxHash`, HTTP status
   mapped to `SubmitError` including a parsed Blockfrost error-envelope `detail`; MockEngine
   tests only, no automated live submit test) — **Status: complete.** `1.11c` (`:shared`
-  Playground checkpoint) — not started.
+  "Submit Transaction (preprod)" Playground checkpoint: builds and signs the same fixture
+  draft as Block 1.10c, then calls `TxSubmitProvider.submit(...)` directly — no new `:wallet`
+  orchestration method; `activeSubmitProvider` wired alongside `activeProvider`, defaulting to
+  `InMemoryTxSubmitProvider()` and switching to `BlockfrostTxSubmitProvider` under the existing
+  live toggle/`project_id`; shows the accepted id, local id, match status, and a
+  submitted/preprod/fixture label on success, every `SubmitError` variant on failure, no
+  polling) — **Status: implementation complete; mandatory manual Android checkpoint pending**
+  (see `docs/HANDOFF.md`). Block 1.11 as a whole is not complete until that checkpoint is run
+  and recorded.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 
