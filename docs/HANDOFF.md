@@ -483,18 +483,27 @@ These should be resolved before or during Phase 0/Phase 1 implementation:
    Last Session Summary above). `cryptography-kotlin` is not added to this repository.
    Ed25519-BIP32 derivation = `org.hyperledger.identus:bip32-ed25519:1.8.8` (1.6c, swapped in via
    ADR-0010; public-key projection via Ionspin libsodium on JVM/iOS + `com.goterl:lazysodium-android`
-   on Android). **The transaction-signing backend is still open and is the top Block 1.10 risk:**
-   ADR-0015 (Block 1.10a) verified from resolved artifacts that the pinned `bip32-ed25519:1.8.8`
-   wrapper exposes no `sign`, Apollo (JVM) exposes no extended Ed25519-BIP32 signing, and libsodium
-   `crypto_sign` cannot sign a pre-expanded 64-byte extended scalar — so **no shipped dependency
-   can sign a Cardano extended key today.** The signing backend must be resolved and verified by the
-   blocking, docs-only **Block 1.10b-pre gate** (extended-key backend across JVM + Android runtime +
-   iOS compile/link, plus a citable extended-key signature KAT — a plain Ed25519 vector does not
-   pass) before any signing code; no dependency/Gradle change is authorized until then.
+   on Android).    **The transaction-signing backend is the top Block 1.10 risk, and the Block 1.10b-pre gate
+   landed BLOCKED (ADR-0016):** ADR-0015 (Block 1.10a) and then ADR-0016 (Block 1.10b-pre) verified
+   at symbol level that the pinned `bip32-ed25519:1.8.8` native library exports only the three
+   derive functions (no `sign` in the shipped Rust cdylib), Apollo's `KMMEdPrivateKey.sign` is
+   BouncyCastle standard **seed-based** RFC-8032 Ed25519, and the ionspin/lazysodium libsodium API
+   is seed-based (`ed25519SkToSeed` confirms the `seed‖pk` layout) — so **no resolved/published KMP
+   dependency can sign a Cardano extended key today.** The Block 1.10b-pre gate is **complete
+   (docs-only) with result BLOCKED**: the **extended-key KAT is pinned** (reference
+   `ed25519-bip32 0.4.2`, MIT OR Apache-2.0, `xprv_sign` test — 64-byte extended scalar signs
+   `"Hello World"` ⇒ fixed 64-byte signature via `XPrv::sign`; CIP-0100 32-byte-body-hash vector as
+   a secondary reproduce-to-confirm example), but no all-target backend is resolved. A backend path
+   is identified (the resolved derivation backend is a uniffi wrapper of that same `ed25519-bip32`
+   crate, so expose its already-present `XPrv::sign`/`verify` the same way), but it requires a
+   separately-authorized backend-provisioning task plus real-runtime verification (JVM + Android
+   runtime + iOS compile/link) before any 1.10b signing code; no dependency/Gradle change is
+   authorized until then.
    See `docs/DECISIONS/0004-crypto-strategy.md` (open questions),
    `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`,
-   `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`, and
-   `docs/DECISIONS/0015-transaction-signing.md` (signing backend gate).
+   `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`,
+   `docs/DECISIONS/0015-transaction-signing.md` (signing decision), and
+   `docs/DECISIONS/0016-transaction-signing-backend-gate.md` (signing backend gate result).
 
 5. Test vector sources:
    - The authoritative spec sources are now documented in `docs/TESTING.md` (Bech32/Bech32m
@@ -540,6 +549,53 @@ At the end of each session, update this section.
 Date: 2026-07-13
 
 Summary:
+
+- **Block 1.10b-pre (Signing backend + vector-source gate) — delivered (docs-only). Gate result:
+  BLOCKED.** Added `docs/DECISIONS/0016-transaction-signing-backend-gate.md` (ADR-0016, `Accepted`
+  as the gate-result record; authorizes no signing code and no Gradle/dependency change).
+  - **Resolved-artifact inspection (symbol level, not docs claims).** Confirmed **none of the three
+    resolved crypto backends can sign an extended key**: `org.hyperledger.identus:bip32-ed25519:1.8.8`'s
+    four bundled native libs (`nm -gU`) export **only** `..._fn_func_derive_bytes`,
+    `..._fn_func_derive_bytes_pub`, `..._fn_func_from_nonextended` — there is **no `sign` symbol in
+    the shipped Rust cdylib itself**, so even a custom binding could not reach one; Apollo's
+    `KMMEdPrivateKey.sign` (`javap -c`) delegates to BouncyCastle `Ed25519PrivateKeyParameters` +
+    `Ed25519Signer` — standard **seed-based** RFC-8032 Ed25519, not extended; and the
+    ionspin/lazysodium libsodium `Signature` API is seed-based (`ed25519SkToSeed`/`ed25519SkToPk`
+    confirm the `seed‖pk` layout), with no way to sign a pre-expanded 64-byte `kL‖kR` scalar.
+  - **Extended-key KAT pinned (PASS on the vector requirement).** Primary: the reference
+    `ed25519-bip32` crate `0.4.2` (crates.io, immutable; repo `typed-io/rust-ed25519-bip32`; MIT OR
+    Apache-2.0) `xprv_sign`/`verify_signature` tests — a 96-byte XPrv (64-byte extended scalar +
+    chain code) signing ASCII `"Hello World"` to a fixed 64-byte signature via `XPrv::sign`, which
+    calls `signature_extended(message, kL‖kR)` (confirmed in `src/key.rs`) — unambiguously extended,
+    so a plain seed-based Ed25519 vector cannot reproduce it. Secondary (reproduce-to-confirm, not
+    the gate KAT): CIP-0100's `test-vector.md` (CC-BY-4.0), which signs a **32-byte Blake2b-256 body
+    hash** with a 64-byte extended key — structurally identical to `bodyHash`, but recorded as
+    ambiguous ("Ed25519 Online Tool" wording) until reproduced by the chosen backend. No invented
+    vectors.
+  - **Gate decision: BLOCKED.** KAT pinned, but **no resolved/published all-target KMP backend
+    signs an extended key.** A concrete unblock path is identified: the resolved derivation backend
+    is a uniffi wrapper of the same `ed25519-bip32` crate, so expose the crate's already-present
+    `XPrv::sign`/`verify` through the identical uniffi mechanism (JVM/Android/iOS). That is a
+    build/dependency/toolchain change requiring its own authorization — **not** this docs-only
+    block, and **not** signing code. `cardano-multiplatform-lib`/CSL are not KMP/iOS-uniform;
+    bloxbean/CSL remain JVM-only vector oracles (ADR-0008 posture). A per-platform seam collapses
+    into the same provisioning task (no resolved per-platform lib exports extended sign).
+  - **Target coverage plan (ADR-0016 §4):** JVM KAT + labeled sign/verify self-consistency; Android
+    **real runtime** `connectedAndroidDeviceTest` (required before code is accepted); iOS
+    compile/link at minimum, runtime honest future work; typed "unavailable on this platform" error
+    for any unsatisfiable target rather than handwritten crypto.
+  - **Exact dependency to pin later (no Gradle edit now):** a uniffi wrapper exporting `sign` built
+    from `ed25519-bip32 0.4.2` (project-owned coordinate TBD), or a future/forked `bip32-ed25519`
+    version confirmed at symbol level to export a sign function. `docs/AI_WORKING_AGREEMENT.md`
+    needs a one-time reconciliation at the start of 1.10b (gate landed BLOCKED, not PASS).
+  - Docs touched: new ADR-0016; `docs/DECISIONS/0015-transaction-signing.md` (§4 gate-result note +
+    §6 pinned-vector note); `docs/PHASE_1_PLAN.md` §1.10b-pre status + "Next step";
+    `docs/ROADMAP.md` §1.10b-pre; this file (this entry + Open Decisions #4 + "Next recommended
+    task"). No Kotlin/Gradle/source/iOS/Android changes.
+  - Verification: banned-word scan and a stale-wording scan (phrases implying plain Ed25519 is
+    enough, mainnet, real funds, general wallet signing, or readiness claims) on the touched docs
+    came back clean — all matches are factual/negated policy text; `git status` shows docs only; no
+    Gradle build was required beyond dependency/artifact inspection.
 
 - **Block 1.10a microfix (fixture-only enforcement boundary + guardrail wording) — delivered
   (docs-only).** Two fixes to ADR-0015 before closing 1.10a:
@@ -878,16 +934,20 @@ Summary:
 
 Next recommended task:
 
-- **Block 1.10b-pre** (Signing backend + vector-source gate, docs-only, blocking): from
-  resolved-artifact evidence only, identify and verify an **extended** Ed25519-BIP32 signing
-  backend (pre-expanded 64-byte `kL ‖ kR` scalar) across JVM + Android (real runtime,
-  `connectedAndroidDeviceTest`) + iOS (compile/link at minimum), with no handwritten crypto, and
-  pin a citable **extended-key** signature known-answer vector (a plain RFC-8032 Ed25519 vector
-  does not pass). This gate must PASS and name the exact dependency before any Block 1.10b signing
-  code; ADR-0015 §4 records the starting facts (no shipped dependency signs a Cardano extended key
-  today). Given the unresolved backend, an Opus review of ADR-0015 and ownership of the 1.10b-pre
-  gate is recommended before implementation; Sonnet is sufficient for 1.10b/1.10c once the backend
-  and vectors are pinned.
+- **Backend-provisioning task for extended Ed25519-BIP32 signing (new, blocking; requires its own
+  Gradle/dependency/toolchain authorization).** Block 1.10b-pre landed **BLOCKED** (ADR-0016): the
+  extended-key KAT is pinned, but no resolved/published KMP artifact signs an extended key. The
+  unblock is to provision a backend that exports extended `sign`/`verify` and verify it per
+  ADR-0016 §4. Preferred path: expose the reference `ed25519-bip32 0.4.2` crate's already-present
+  `XPrv::sign` (the resolved derivation backend is a uniffi wrapper of that same crate) through the
+  identical uniffi mechanism, then verify JVM + Android **real runtime**
+  (`connectedAndroidDeviceTest`) + iOS compile/link. Confirm any candidate at symbol level (`nm`)
+  before assuming it exports `sign`. This is **not signing code and not this docs-only block's
+  scope** — it is a dependency/build change to authorize separately. Only after it lands and names
+  the exact dependency may **Block 1.10b** signing code begin (ADR-0015 §1/§3/§5/§6). Given the
+  backend/toolchain judgment involved, an Opus review of ADR-0015/ADR-0016 and ownership of the
+  provisioning task is recommended; Sonnet is sufficient for 1.10b/1.10c once the backend is pinned
+  and verified. Also reconcile `docs/AI_WORKING_AGREEMENT.md` at the start of 1.10b (ADR-0016 §6).
 - **Manual Android checkpoint remaining for the project owner:** open the Android app, use the
   Provider section's "Use live Blockfrost (preprod)" toggle with a `project_id` and fund the
   restored test wallet's address from a preprod faucet (or otherwise seed UTxOs for it), then

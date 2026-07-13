@@ -210,6 +210,8 @@ test wallet.
 
 ### 4. Crypto backend: a blocking Block 1.10b-pre gate must resolve and verify an extended Ed25519-BIP32 signing backend before any signing code
 
+> **Gate result (Block 1.10b-pre): see ADR-0016 (`docs/DECISIONS/0016-transaction-signing-backend-gate.md`) — BLOCKED.** Symbol-level inspection of the resolved artifacts confirmed the Context finding (`bip32-ed25519:1.8.8`'s native lib exports only the three derive functions; Apollo signs standard seed-based Ed25519; libsodium is seed-based), so **no resolved/published all-target KMP backend can sign an extended key.** A concrete unblock path is identified (expose the reference `ed25519-bip32` crate's `XPrv::sign` through the same uniffi mechanism as derivation), and the extended-key KAT below is pinned — but the backend PASS condition in this section is **not yet met**, so Block 1.10b stays blocked pending a separately-authorized backend-provisioning task.
+
 Because no currently-shipped dependency can sign a Cardano extended key (see Context), signing
 implementation is gated. **Block 1.10b-pre is a blocking, docs-only gate** (mirroring the 1.5a
 compatibility spike, the 1.5b-pre / 1.6a vector gates, and the ADR-0010 backend investigation)
@@ -281,13 +283,19 @@ dependency change is authorized until that gate passes and names the exact depen
   `kotlin-tests-and-docs.mdc`.
 - **A citable extended Ed25519-BIP32 signature KAT is pinned by the Block 1.10b-pre gate** (URL +
   pinned commit + license), and it must be an **extended-key** vector, not plain Ed25519 (§4).
-  Candidate citable sources to evaluate: IOG `ed25519-bip32` crate test vectors, CIP-3 / Cardano
-  test suites that include an extended-key signature, or a vector produced by a cited JVM oracle
-  (bloxbean/CSL) over the cited test-only key material already pinned in `:crypto`.
+  **Pinned by ADR-0016 §3:** the reference `ed25519-bip32` crate (`0.4.2`, MIT OR Apache-2.0)
+  `xprv_sign` test vector (extended scalar + `"Hello World"` ⇒ fixed 64-byte signature), with the
+  CIP-0100 32-byte-body-hash vector recorded as a secondary reproduce-to-confirm example.
 - **If no full signed-transaction golden exists** (as in ADR-0014 §9, none was locatable for a
   minimal ADA-only body), tests are split:
   - **Backend known-answer test** (`jvmTest`, and Android device test): a fixed extended key +
-    fixed 32-byte message ⇒ fixed 64-byte signature, from the pinned vector.
+    fixed message ⇒ fixed 64-byte signature, from the pinned ADR-0016 vector. The pinned primary
+    vector's message is the reference crate's own `"Hello World"` test string (11 bytes, not 32) —
+    it proves the extended-scalar signing primitive itself, which is message-length-agnostic; it is
+    not required to be 32 bytes. The actual Block 1.10 signing path always signs the 32-byte
+    `bodyHash` (§3), not this KAT's message. The CIP-0100 vector, which does sign a 32-byte
+    Blake2b-256 body hash, remains secondary/reproduce-to-confirm for that exact shape (ADR-0016
+    §3) and is not itself the pinned backend KAT.
   - **Structural witness/full-transaction CBOR tests** (`commonTest`): assemble the witness set
     and full `transaction`, decode back through `:core` `Cbor.decode`, and assert the CDDL shape
     (`[body, witness_set, true, null]`; witness set `{0: [[vkey(32), sig(64)], ...]}`).

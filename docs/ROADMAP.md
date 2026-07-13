@@ -1079,16 +1079,21 @@ Proposed block sequence:
     runtime verification); the Playground checkpoint; and the guardrail reconciliation. Narrows
     the "No transaction signing" guardrail to Block 1.10 scope while keeping every other ban. No
     Kotlin/Gradle/dependency/source changes.
-  - `1.10b-pre` Signing backend + vector-source gate — **Status: pending (docs-only, blocking).**
-    From resolved-artifact evidence only, identify and verify an **extended** Ed25519-BIP32
-    signing backend (pre-expanded 64-byte `kL ‖ kR` scalar) across JVM + Android (real runtime,
-    `connectedAndroidDeviceTest`) + iOS (compile/link), with no handwritten crypto, and pin a
-    citable **extended-key** signature known-answer vector — a plain (RFC 8032) Ed25519 vector
-    does **not** pass. Starting fact: the pinned `org.hyperledger.identus:bip32-ed25519:1.8.8`
-    wrapper exposes only `deriveBytes`/`deriveBytesPub`/`fromNonextended` (no `sign`), Apollo (JVM)
-    exposes no extended-key signing, and libsodium `crypto_sign` cannot sign a pre-expanded scalar.
-    Must PASS (and name the exact dependency) before any 1.10b signing code; no Gradle/dependency
-    change is authorized until then.
+  - `1.10b-pre` Signing backend + vector-source gate — **Status: complete (docs-only). Gate
+    result: BLOCKED** (ADR-0016, `docs/DECISIONS/0016-transaction-signing-backend-gate.md`).
+    Symbol-level inspection of the resolved artifacts confirmed **none can sign an extended key**:
+    `org.hyperledger.identus:bip32-ed25519:1.8.8`'s native library exports only
+    `derive_bytes`/`derive_bytes_pub`/`from_nonextended` (no `sign` symbol in the shipped Rust
+    cdylib), Apollo's `KMMEdPrivateKey.sign` is BouncyCastle standard **seed-based** RFC-8032
+    Ed25519, and the ionspin/lazysodium libsodium API is seed-based (`ed25519SkToSeed` confirms the
+    `seed‖pk` layout). The **extended-key KAT is pinned**: the reference `ed25519-bip32 0.4.2`
+    (MIT OR Apache-2.0) `xprv_sign` vector (64-byte extended scalar signs `"Hello World"` ⇒ fixed
+    64-byte signature via `XPrv::sign`), with the CIP-0100 32-byte-body-hash vector as a secondary
+    reproduce-to-confirm example; a plain RFC-8032 Ed25519 vector does **not** pass. A backend path
+    is identified (the resolved derivation backend is a uniffi wrapper of that same crate, so expose
+    its already-present `XPrv::sign`/`verify` the same way), but it is **not a resolved artifact
+    yet** — a backend-provisioning task (its own Gradle/dependency authorization) plus real-runtime
+    verification is required before any 1.10b signing code.
   - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
     (blocked on 1.10b-pre).**
   - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:

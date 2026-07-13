@@ -1020,19 +1020,25 @@ Sub-blocks:
   blocking backend gate (§4), the error model (§5), the test/vector policy (§6), the Playground
   checkpoint (§7), and the guardrail reconciliation (§8). No Kotlin/Gradle/dependency/source
   changes.
-- `1.10b-pre` Signing backend + vector-source gate — **Status: pending (docs-only, blocking).**
-  A blocking gate before any signing code: from resolved-artifact evidence only, identify and
-  verify an **extended** Ed25519-BIP32 signing backend (signing with the pre-expanded 64-byte
-  `kL ‖ kR` scalar) across JVM + Android (real runtime, `connectedAndroidDeviceTest`) + iOS
-  (compile/link at minimum), with no handwritten crypto, and pin a citable **extended-key**
-  signature known-answer vector. **The KAT must be for Cardano extended Ed25519-BIP32 signing —
-  a plain (RFC 8032, seed-based) Ed25519 vector does NOT pass the gate.** Verified fact this gate
-  starts from: the pinned `org.hyperledger.identus:bip32-ed25519:1.8.8` wrapper exposes only
-  `deriveBytes`/`deriveBytesPub`/`fromNonextended` (no `sign`), Apollo (JVM) exposes no
-  extended-key signing, and libsodium `crypto_sign` cannot sign a pre-expanded scalar — so a new
-  backend (or a per-platform seam like the ADR-0010 projection seam) must be found and verified
-  before 1.10b. No Gradle/dependency change is authorized until this gate passes and names the
-  exact dependency.
+- `1.10b-pre` Signing backend + vector-source gate — **Status: complete (docs-only). Gate result:
+  BLOCKED** (ADR-0016, `docs/DECISIONS/0016-transaction-signing-backend-gate.md`). Symbol-level
+  inspection of the resolved artifacts confirmed **none can sign an extended key**: the pinned
+  `org.hyperledger.identus:bip32-ed25519:1.8.8` native library exports only
+  `derive_bytes`/`derive_bytes_pub`/`from_nonextended` (no `sign` symbol at all — the gap is in the
+  shipped Rust cdylib, not just the Kotlin binding); Apollo's `KMMEdPrivateKey.sign` delegates to
+  BouncyCastle standard **seed-based** RFC-8032 Ed25519; and the ionspin/lazysodium libsodium
+  signing API is seed-based (`ed25519SkToSeed` confirms the `seed‖pk` layout), with no way to sign
+  a pre-expanded 64-byte scalar. **The extended-key KAT is PINNED** (ADR-0016 §3): the reference
+  `ed25519-bip32` crate `0.4.2` (MIT OR Apache-2.0) `xprv_sign` test vector — a 64-byte extended
+  scalar signing `"Hello World"` to a fixed 64-byte signature via `XPrv::sign`/`signature_extended`
+  (unambiguously extended; a plain seed-based Ed25519 vector does **not** pass), with the CIP-0100
+  32-byte-body-hash vector recorded as a secondary reproduce-to-confirm example. **Backend path
+  identified but not yet a resolved artifact:** the resolved derivation backend is a uniffi wrapper
+  of that same `ed25519-bip32` crate, so the clean unblock is to expose the crate's already-present
+  `XPrv::sign`/`verify` through the identical uniffi mechanism (JVM/Android/iOS) — a
+  build/dependency/toolchain change requiring its own authorization. **Block 1.10b stays blocked**
+  until a backend that exports extended `sign` is provisioned and verified (JVM + Android real
+  runtime + iOS compile/link). No Gradle/dependency change is authorized until then.
 - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
   (blocked on 1.10b-pre).** Add `:crypto`'s backend-neutral `Signing` (sign the `bodyHash` with an
   `ExtendedPrivateKey`; add the module-internal full-extended-scalar accessor and a sealed
@@ -1164,9 +1170,13 @@ records the signing ownership/boundary, the exact scope and its fixture-only enf
 (§2a — a Phase 1 call-site/checkpoint/test policy, not a `:wallet`-internal check, since `:wallet`
 cannot depend on `:shared`'s `TestWalletFixture`; Block 1.10 introduces no general-purpose wallet
 signing API), the signing message, artifact, error model, test policy, and the blocking backend
-gate, but authorizes no signing code. **The next step is `1.10b-pre`**: a
-blocking, docs-only gate that must identify and verify an extended Ed25519-BIP32 signing backend
-across JVM + Android (real runtime) + iOS (compile/link) and pin a citable **extended-key**
-signature vector — the pinned `bip32-ed25519:1.8.8` wrapper exposes no `sign`, so no shipped
-dependency can sign a Cardano extended key today. No signing code (Block 1.10b) may start until
-that gate passes and names the exact dependency.
+gate, but authorizes no signing code. `1.10b-pre` (Signing backend + vector-source gate, ADR-0016)
+is also **complete (docs-only)** and landed **BLOCKED**: symbol-level inspection confirmed no
+resolved/published KMP backend can sign a Cardano extended key (`bip32-ed25519:1.8.8` exports only
+derive functions, Apollo is seed-based RFC-8032, libsodium is seed-based), while the **extended-key
+KAT is pinned** (reference `ed25519-bip32 0.4.2` `xprv_sign` vector). **The next step is a scoped
+backend-provisioning task** (not signing code): expose the reference `ed25519-bip32` crate's
+already-present `XPrv::sign`/`verify` through the same uniffi mechanism used for derivation, then
+verify it on JVM + Android real runtime + iOS compile/link. That is a Gradle/dependency/toolchain
+change requiring its own explicit authorization; Block 1.10b signing code stays blocked until it
+lands and names the exact dependency.
