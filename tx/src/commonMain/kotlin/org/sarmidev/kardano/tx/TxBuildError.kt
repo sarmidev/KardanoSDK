@@ -27,10 +27,14 @@ import org.sarmidev.kardano.primitives.UtxoRef
  * loop (ADR-0014 §6-7), which is what makes [InsufficientFunds], [InvalidOutputAmount],
  * [ChangeBelowMinimum], [ExceedsMaxTxSize], [FeeCalculationOverflow],
  * [InvalidProtocolParameters], and [FeeEstimateDidNotConverge] reachable. [UnsupportedFeature]
- * (Block 1.11d) became reachable once [org.sarmidev.kardano.provider.Value] gained the
+ * (Block 1.11d, narrowed in 1.11d-2) became reachable once
+ * [org.sarmidev.kardano.provider.Value] gained the
  * [org.sarmidev.kardano.provider.Value.hasNativeAssets] presence flag: [TransactionBuilder.build]
- * now rejects any candidate input carrying it, before coin selection. Each variant's KDoc below
- * states which entry point produces it.
+ * drops every candidate input carrying it before coin selection, and returns
+ * [UnsupportedFeature] only if that leaves no candidates at all — not whenever any single input
+ * carried native assets, which would otherwise decline a request that a mix of ADA-only and
+ * native-asset UTxOs could still satisfy. Each variant's KDoc below states which entry point
+ * produces it.
  *
  * Block 1.10b (ADR-0015 §5) extends this same sealed type — rather than adding a sibling
  * sealed type — for witness/full-`transaction` assembly errors: [InvalidVerificationKeyLength],
@@ -113,10 +117,14 @@ public sealed interface TxBuildError {
      *
      * Reachable today: [TransactionBuilder.build] returns this once its largest-first
      * selection has exhausted [TransactionBuildRequest.candidateInputs] without reaching the
-     * required total.
+     * required total. Since Block 1.11d-2, any candidate with
+     * [org.sarmidev.kardano.provider.Value.hasNativeAssets] set is dropped before selection
+     * even starts, so [available] here only ever totals the ADA-only candidates — a
+     * native-asset UTxO's lovelace is never counted toward covering the shortfall.
      *
      * @property required the lovelace amount required.
-     * @property available the lovelace amount the candidate inputs actually total.
+     * @property available the lovelace amount the (ADA-only, native-asset-filtered) candidate
+     *   inputs actually total.
      */
     public data class InsufficientFunds(
         public val required: Long,
@@ -205,14 +213,16 @@ public sealed interface TxBuildError {
     /**
      * A supplied input or output uses a feature this MVP does not support.
      *
-     * Reachable today (Block 1.11d): [TransactionBuilder.build] rejects the entire request —
-     * before any coin selection — if **any** of [TransactionBuildRequest.candidateInputs] has
-     * [org.sarmidev.kardano.provider.Value.hasNativeAssets] set. This MVP declines rather than
-     * silently dropping the caller's native assets/tokens (ADR-0014 §8): rejecting the whole
-     * candidate list, rather than silently filtering out just the flagged inputs, avoids a
-     * partial/surprising fund selection and needs no ledger-rule engine to decide which of the
-     * remaining ADA-only inputs would still be spendable. Quantities, policy ids, and asset
-     * names are never inspected — [TransactionBuilder] only reads the boolean presence flag.
+     * Reachable today (Block 1.11d, narrowed in 1.11d-2): [TransactionBuilder.build] first
+     * drops every [TransactionBuildRequest.candidateInputs] entry with
+     * [org.sarmidev.kardano.provider.Value.hasNativeAssets] set — Phase 1 never spends a
+     * native-asset UTxO (ADR-0014 §8) — and only returns this if that filtering leaves **no**
+     * candidates at all. A request with a mix of ADA-only and native-asset candidates instead
+     * builds from the ADA-only ones (or reports [InsufficientFunds] against just their total,
+     * if that total cannot cover `payment + fee`); no ledger-rule engine decides which
+     * native-asset inputs to keep, because none of them are ever kept. Quantities, policy ids,
+     * and asset names are never inspected — [TransactionBuilder] only reads the boolean
+     * presence flag.
      *
      * @property detail a human-readable description of the unsupported feature.
      */

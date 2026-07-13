@@ -1152,8 +1152,9 @@ Proposed block sequence:
     preview (`288B total`), and the "signed, not submitted — testnet-only, test fixture, no real
     funds" label, with no submit action invoked.
 - `1.11` Submit Transaction — submit a signed transaction to preprod. Split into
-  `1.11a`/`1.11b`/`1.11c`/`1.11d` (ADR-0017, plus the ADR-0006/0007/0014 2026-07-13 addenda for
-  `1.11d`). `1.11a` (`:provider` boundary — `TxSubmitProvider`, `SubmitError`,
+  `1.11a`/`1.11b`/`1.11c`/`1.11d`/`1.11d-2` (ADR-0017, plus the ADR-0006/0007/0014 2026-07-13
+  addenda for `1.11d`, and a second ADR-0006/0014 2026-07-13 addendum for `1.11d-2`). `1.11a`
+  (`:provider` boundary — `TxSubmitProvider`, `SubmitError`,
   `InMemoryTxSubmitProvider`, which never fakes success) — **Status: complete.** `1.11b`
   (`:provider-blockfrost`'s `BlockfrostTxSubmitProvider`: `POST /tx/submit`,
   `Content-Type: application/cbor`, quoted-hex-string response mapped to `TxHash`, HTTP status
@@ -1169,21 +1170,32 @@ Proposed block sequence:
   and found a real bug: a preprod address funded with mixed (ADA + native-asset) UTxOs let a
   draft build and sign, then the node rejected the submitted transaction with
   `ValueNotConservedUTxO` — the build silently dropped the native assets those inputs carried.
-  `1.11d` (ADA-only enforcement — **Status: implementation complete; manual re-validation
-  pending**) fixes this honestly rather than working around it: `:provider`'s `Value` gains a
-  `hasNativeAssets: Boolean = false` presence flag (no quantities/policy ids/asset names);
-  `:provider-blockfrost`'s `mapUtxo` sets it whenever a Blockfrost `amount` entry's
-  `unit != "lovelace"`, instead of silently dropping that entry; `:tx`'s
-  `TransactionBuilder.build` rejects the **entire** candidate list with
-  `TxBuildError.UnsupportedFeature` — right after the existing `NoInputs` check, before any coin
-  selection — if any candidate input has the flag set (rejecting the whole list rather than
-  silently filtering, since filtering would need a ledger-rule engine this MVP does not have);
-  `:shared`'s `presentTxBuildError` gives that variant a dedicated message ("This wallet has
-  UTxOs containing native assets/tokens. Phase 1 only builds ADA-only transactions."). New/
-  updated tests across all four modules (see `docs/PHASE_1_PLAN.md` `1.11d` for the full list).
-  Block 1.11 as a whole is not complete until a full manual re-validation (native-asset address
-  → readable rejection before submit; ADA-only address → accepted id or a different readable
-  error) is run and recorded (see `docs/HANDOFF.md`).
+  `1.11d` (ADA-only rejection — **Status: superseded by `1.11d-2` below**) first fixed this
+  honestly rather than working around it: `:provider`'s `Value` gains a
+  `hasNativeAssets: Boolean = false` presence flag (no quantities/policy ids/asset names, still
+  current); `:provider-blockfrost`'s `mapUtxo` sets it whenever a Blockfrost `amount` entry's
+  `unit != "lovelace"`, instead of silently dropping that entry (still current); but `:tx`'s
+  `TransactionBuilder.build` initially rejected the **entire** candidate list with
+  `TxBuildError.UnsupportedFeature` if any candidate input had the flag set — too broad for a
+  real wallet with a *mix* of ADA-only and native-asset UTxOs, which `1.11d-2` immediately
+  narrows. `1.11d-2` (ADA-only UTxO filtering, not whole-wallet rejection — **Status:
+  implementation complete; manual re-validation partial pass**): `TransactionBuilder.build` now
+  drops every candidate with the flag set **before** coin selection, then builds normally from
+  the remaining ADA-only candidates — `TxBuildError.UnsupportedFeature` is returned only if
+  that leaves no candidates at all, and the usual `TxBuildError.InsufficientFunds` (its
+  `available` total reflecting only the ADA-only candidates) fires if those remaining
+  candidates still cannot cover `payment + fee`; a native-asset UTxO is never selected as an
+  input either way. `:shared`'s `presentTxBuildError` rewords the `UnsupportedFeature` message
+  to "This wallet has no ADA-only UTxOs to spend — only UTxOs containing native assets/tokens.
+  Phase 1 only builds ADA-only transactions." New/updated tests across `:tx` and `:shared` cover
+  the mixed-sufficient success case, the mixed-insufficient failure case (proving the
+  native-asset UTxO's lovelace is excluded), and the all-native-asset failure case (see
+  `docs/PHASE_1_PLAN.md` `1.11d`/`1.11d-2` for the full list). Manual Android re-validation has
+  a partial pass: the mixed ADA-only + native-asset case built, signed, and submitted from
+  ADA-only UTxOs, and the accepted transaction id matched the locally signed id
+  (`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`). Block 1.11 as a whole
+  is not complete until the remaining all-native-asset rejection and ADA-only-only build/submit
+  checks are run and recorded (see `docs/HANDOFF.md`).
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 

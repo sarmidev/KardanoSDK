@@ -114,7 +114,9 @@ class TransactionBuilderTest {
         assertIs<TxBuildError.NoInputs>(err.error)
     }
 
-    // --- ADA-only enforcement (Block 1.11d): candidate inputs carrying native assets ---
+    // --- ADA-only filtering (Block 1.11d, narrowed in 1.11d-2): candidate inputs carrying
+    // native assets are dropped before selection, not treated as a reason to decline the whole
+    // request, as long as the remaining ADA-only candidates can still cover payment + fee. ---
 
     @Test
     fun soleCandidateWithNativeAssetsReturnsUnsupportedFeature() {
@@ -124,28 +126,59 @@ class TransactionBuilderTest {
         )
         val unsupported = assertIs<TxBuildError.UnsupportedFeature>(err.error)
         assertTrue(
-            unsupported.detail.contains("native assets", ignoreCase = true),
+            unsupported.detail.contains("native", ignoreCase = true),
             "got: ${unsupported.detail}",
         )
     }
 
     @Test
-    fun mixedCandidateListWithOneNativeAssetUtxoIsRejectedEntirely() {
-        // The architecture choice (ADR-0014 §8, Block 1.11d) is to reject the whole candidate
-        // list, not to silently filter out just the flagged input(s): even though the
-        // ADA-only fakeUtxo(2, ...) below could alone cover payment + fee, this proves the
-        // native-asset input is not simply skipped from selection.
-        val adaOnly = fakeUtxo(2, 0L, 50_000_000L)
-        val nativeAssetUtxo = fakeNativeAssetUtxo(1, 0L, 50_000_000L)
+    fun onlyNativeAssetCandidatesAcrossMultipleUtxosReturnsUnsupportedFeature() {
+        // No single candidate is ADA-only, so filtering leaves nothing to select from — this
+        // must fail clearly, not silently succeed with an empty/degenerate selection.
+        val nativeAssetOne = fakeNativeAssetUtxo(1, 0L, 50_000_000L)
+        val nativeAssetTwo = fakeNativeAssetUtxo(2, 0L, 20_000_000L)
         val err = assertIs<KardanoResult.Err<TxBuildError>>(
-            TransactionBuilder.build(request(candidateInputs = listOf(adaOnly, nativeAssetUtxo))),
+            TransactionBuilder.build(request(candidateInputs = listOf(nativeAssetOne, nativeAssetTwo))),
         )
-        assertIs<TxBuildError.UnsupportedFeature>(err.error)
+        val unsupported = assertIs<TxBuildError.UnsupportedFeature>(err.error)
+        assertTrue(unsupported.detail.contains("2"), "expected the candidate count in: ${unsupported.detail}")
     }
 
     @Test
-    fun adaOnlyCandidatesStillBuildNormallyAlongsideNativeAssetCheck() {
-        // Regression: the new check must not affect the existing ADA-only success path.
+    fun mixedCandidatesWithSufficientAdaOnlyUtxoSelectsOnlyThatUtxo() {
+        // A native-asset candidate must be ignored, not rejected outright, when an ADA-only
+        // candidate alone can already cover payment + fee.
+        val payment = paymentOutput()
+        val adaOnlyRef = utxoRef(2, 0L)
+        val adaOnly = fakeUtxo(2, 0L, payment.amount.value + 20_000_000L)
+        val nativeAssetUtxo = fakeNativeAssetUtxo(1, 0L, 50_000_000L)
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBuilder.build(
+                request(candidateInputs = listOf(nativeAssetUtxo, adaOnly), payment = payment),
+            ),
+        ).value
+        assertEquals(listOf(adaOnlyRef), draft.selectedInputs)
+    }
+
+    @Test
+    fun mixedCandidatesWithInsufficientAdaOnlyFundsReturnsInsufficientFundsWithoutNativeAssetUtxo() {
+        // The ADA-only candidate alone cannot cover payment + fee, and the large native-asset
+        // candidate must never be counted toward covering the shortfall.
+        val payment = paymentOutput()
+        val tinyAdaOnly = fakeUtxo(2, 0L, 1_000_000L)
+        val largeNativeAssetUtxo = fakeNativeAssetUtxo(1, 0L, 50_000_000L)
+        val err = assertIs<KardanoResult.Err<TxBuildError>>(
+            TransactionBuilder.build(
+                request(candidateInputs = listOf(tinyAdaOnly, largeNativeAssetUtxo), payment = payment),
+            ),
+        )
+        val insufficient = assertIs<TxBuildError.InsufficientFunds>(err.error)
+        assertEquals(1_000_000L, insufficient.available, "native-asset UTxO must not be counted")
+    }
+
+    @Test
+    fun adaOnlyCandidatesStillBuildNormallyAlongsideNativeAssetFilter() {
+        // Regression: the filtering step must not affect the existing ADA-only success path.
         val payment = paymentOutput()
         val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
             TransactionBuilder.build(

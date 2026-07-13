@@ -126,15 +126,18 @@ faucet. **No signing, no witness construction, no transaction id hashing, and no
 anywhere in this checkpoint — see
 [docs/DECISIONS/0014-minimal-ada-transaction-builder.md](../docs/DECISIONS/0014-minimal-ada-transaction-builder.md).
 
-**ADA-only enforcement (Block 1.11d).** A manual Android checkpoint found that a preprod address
-funded with mixed (ADA + native-asset) UTxOs let a draft build and sign, then get rejected by
-the node at submit time (`ValueNotConservedUTxO`) once the built transaction implicitly
-dropped the native assets those inputs carried. `:tx`'s `TransactionBuilder` now rejects the
-whole candidate list up front — before building anything — if any UTxO's `Value.hasNativeAssets`
-is set (via `TxBuildError.UnsupportedFeature`), and `presentTxBuildError` shows a dedicated
-message: "This wallet has UTxOs containing native assets/tokens. Phase 1 only builds ADA-only
-transactions." This is honest early rejection, not multi-asset support: no token quantities,
-policy ids, sending, or change-preserving logic were added anywhere in this stack.
+**ADA-only filtering (Block 1.11d, narrowed in 1.11d-2).** A manual Android checkpoint found
+that a preprod address funded with mixed (ADA + native-asset) UTxOs let a draft build and sign,
+then get rejected by the node at submit time (`ValueNotConservedUTxO`) once the built
+transaction implicitly dropped the native assets those inputs carried. `:tx`'s
+`TransactionBuilder` now drops every UTxO with `Value.hasNativeAssets` set before selecting
+inputs, so a wallet with a mix of ADA-only and native-asset UTxOs still builds normally from
+just the ADA-only ones; it only fails (`TxBuildError.UnsupportedFeature`) when that leaves no
+candidates at all, and `presentTxBuildError` then shows a dedicated message: "This wallet has
+no ADA-only UTxOs to spend — only UTxOs containing native assets/tokens. Phase 1 only builds
+ADA-only transactions." This is honest filtering, not multi-asset support: no token quantities,
+policy ids, sending, or change-preserving logic were added anywhere in this stack, and a
+native-asset UTxO is never selected as an input.
 
 ### Signed Transaction (not submitted) section (Block 1.10c)
 
@@ -243,11 +246,13 @@ fake UTxOs and cited CIP-19 addresses (no mnemonic, no native call) and feeding 
 (`jvmTest`-only) is the only place `presentTransactionDraft` and `ReadOnlyWallet.restore` run end
 to end together, asserting the honest "no UTxOs" result under the default mock and a successful
 draft once the mock is seeded with a UTxO for the restored wallet's own address.
-`PlaygroundTransactionDraftPresenterTest` also covers the Block 1.11d ADA-only enforcement: a
-hand-built `Utxo` with `Value.hasNativeAssets = true` fed through the real `TransactionBuilder`
-is rejected with `TxBuildError.UnsupportedFeature`, and the resulting presenter message is
-asserted to mention "native assets" and "ADA-only"; `PlaygroundTransactionDraftDesktopTest`
-covers the same rejection end to end, once seeded for the restored wallet's own address, without
+`PlaygroundTransactionDraftPresenterTest` also covers the Block 1.11d/1.11d-2 ADA-only
+filtering: a hand-built, sole `Utxo` with `Value.hasNativeAssets = true` fed through the real
+`TransactionBuilder` is rejected with `TxBuildError.UnsupportedFeature` (message asserted to
+mention "native" and "ADA-only"), while a *mixed* candidate list (one native-asset UTxO plus a
+sufficient ADA-only one) builds successfully and selects only the ADA-only input;
+`PlaygroundTransactionDraftDesktopTest` covers both the sole-native-asset rejection and the
+mixed-candidates success end to end, once seeded for the restored wallet's own address, without
 a live Blockfrost call. The signed-
 transaction checkpoint (Block 1.10c) follows the same split:
 `PlaygroundSignedTransactionPresenterTest` (`commonTest`) is native-free, feeding constructed

@@ -551,15 +551,25 @@ Do not implement:
   manual Android checkpoint was attempted and found a real ADA-only gap**: a preprod address
   funded with mixed (ADA + native-asset) UTxOs let a draft build and sign, then the node
   rejected the submitted transaction with `ValueNotConservedUTxO` — the build silently dropped
-  the native assets those inputs carried. Block 1.11d closes this gap: `:provider`'s `Value` gains
-  a `hasNativeAssets` presence flag, `:provider-blockfrost` sets it instead of silently
-  dropping non-`lovelace` amounts, `:tx`'s `TransactionBuilder` rejects the whole candidate list
-  before building if any input has it set, and `:shared` shows a dedicated readable message.
-  Native-asset UTxOs are still never spendable and never will be in Phase 1 — no multi-asset
-  CBOR output, no token sending, no token-preserving change. **A full manual re-validation
-  (native-asset address → readable rejection before submit; ADA-only address → accepted id or a
-  different readable error) has not yet been performed; do not claim Block 1.11 passed until an
-  owner actually runs it and records the result here.**
+  the native assets those inputs carried. Block 1.11d first closed this gap by having
+  `:provider`'s `Value` gain a `hasNativeAssets` presence flag, `:provider-blockfrost` set it
+  instead of silently dropping non-`lovelace` amounts, `:tx`'s `TransactionBuilder` reject the
+  *whole* candidate list before building if *any* input had it set, and `:shared` show a
+  dedicated readable message — but that whole-list rejection turned out to be too broad: a real
+  wallet with a *mix* of ADA-only and native-asset UTxOs could not build a transaction at all,
+  even with plenty of spendable ADA. Block 1.11d-2 narrows this: `TransactionBuilder` now
+  *filters out* just the native-asset UTxOs before selection and builds from the remaining
+  ADA-only ones, only failing with `UnsupportedFeature` if that leaves no candidates at all (or
+  the usual `InsufficientFunds`, counting only the ADA-only total, if those remaining
+  candidates still cannot cover the payment). Native-asset UTxOs are still never spendable and
+  never will be in Phase 1 — no multi-asset CBOR output, no token sending, no token-preserving
+  change. **Manual re-validation is now partial:** the mixed ADA-only + native-asset case was
+  owner-run on Android after `1.11d-2` and passed (build/sign/submit succeeded using ADA-only
+  UTxOs; accepted transaction id matched the locally signed id:
+  `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`). Block 1.11 is still
+  not fully complete until the remaining cases are recorded: all-native-asset address →
+  readable rejection before submit; ADA-only-only address → same build/submit outcome as the
+  mixed case.
 - Real wallet flows.
 - Plutus support.
 - Staking or delegation.
@@ -583,7 +593,93 @@ Date: 2026-07-13
 
 Summary:
 
-- **Block 1.11d ADA-only enforcement for the submit flow — implementation DONE; manual Android
+- **Block 1.11d-2 ADA-only UTxO filtering instead of whole-wallet rejection — implementation
+  DONE; manual Android re-validation PARTIAL PASS.** Precondition:
+  working tree was clean and Block 1.11d (previous session, see the summary immediately below)
+  was already committed before this change started. Context: manual preprod testing under
+  `1.11d` found that a real wallet/address routinely has *some* UTxOs carrying native assets
+  and *other* UTxOs that are plain ADA — `1.11d`'s "reject the entire candidate list if any
+  input has `hasNativeAssets`" behavior meant a caller with plenty of spendable ADA-only UTxOs
+  still could not build a transaction at all, purely because the wallet also happened to hold
+  an unrelated token. This block narrows `1.11d` to filter, not reject-if-any.
+  - **`:tx` (`TransactionBuilder.kt`, `TxBuildError.kt`).** `build` no longer rejects the whole
+    request over one flagged input. It now computes `adaOnlyCandidates =
+    request.candidateInputs.filterNot { it.value.hasNativeAssets }` immediately after the
+    existing `NoInputs` check, returns `TxBuildError.UnsupportedFeature` (detail names how many
+    candidates were dropped) only if `adaOnlyCandidates` is empty, and otherwise runs the
+    existing coin-selection/fee loop against `adaOnlyCandidates` instead of
+    `request.candidateInputs` — so `InputSelection`'s existing `InsufficientFunds` path (its
+    `available` field) now naturally reflects only the ADA-only total, with no new ledger-rule
+    engine needed (coin selection already knew how to report a shortfall). Updated the `build`
+    KDoc, the type-level "Reachability" KDoc, `UnsupportedFeature`'s KDoc, and
+    `InsufficientFunds`'s KDoc (now notes `available` excludes filtered native-asset
+    candidates) in `TxBuildError.kt`. Replaced the old
+    `mixedCandidateListWithOneNativeAssetUtxoIsRejectedEntirely` test (which asserted the *old*
+    whole-list-reject behavior) with `mixedCandidatesWithSufficientAdaOnlyUtxoSelectsOnlyThatUtxo`
+    (mixed candidates, ADA-only alone suffices → success, `selectedInputs` contains only the
+    ADA-only ref) and `mixedCandidatesWithInsufficientAdaOnlyFundsReturnsInsufficientFundsWithoutNativeAssetUtxo`
+    (mixed candidates, ADA-only alone insufficient → `InsufficientFunds` with `available` equal
+    to just the ADA-only total, proving the large native-asset UTxO was never counted); added
+    `onlyNativeAssetCandidatesAcrossMultipleUtxosReturnsUnsupportedFeature` (two native-asset-only
+    candidates, nothing ADA-only → clear failure); kept the sole-native-asset-candidate test and
+    the ADA-only regression test (renamed
+    `adaOnlyCandidatesStillBuildNormallyAlongsideNativeAssetCheck` →
+    `...NativeAssetFilter` for accuracy, behavior unchanged).
+  - **`:shared` (`PlaygroundPresenter.kt`).** `presentTxBuildError`'s `UnsupportedFeature` case
+    now shows: `"This wallet has no ADA-only UTxOs to spend — only UTxOs containing native
+    assets/tokens. Phase 1 only builds ADA-only transactions. (<detail>)"` — reworded from
+    `1.11d`'s "This wallet has UTxOs containing native assets/tokens..." because the failure now
+    only means *no* ADA-only UTxO existed at all, not that *some* UTxO carried a native asset
+    (which no longer fails the build). Updated the KDoc paragraph explaining this. Updated
+    `PlaygroundTransactionDraftPresenterTest.kt`'s existing sole-native-asset test (renamed
+    `nativeAssetCandidate_...` → `onlyNativeAssetCandidate_...`) and added
+    `mixedCandidatesWithSufficientAdaOnlyUtxo_buildsSuccessfullyIgnoringNativeAssetUtxo`;
+    updated `PlaygroundTransactionDraftDesktopTest.kt`'s existing end-to-end rejection test
+    (renamed `...withNativeAssetUtxoForRestoredAddress...` →
+    `...withOnlyNativeAssetUtxoForRestoredAddress...`) and added
+    `presentTransactionDraft_withMixedUtxosForRestoredAddress_reportsSuccessUsingOnlyAdaOnlyUtxo`
+    (mock provider seeded with both a native-asset UTxO and a sufficient ADA-only UTxO for the
+    restored wallet's own address → `Success` with exactly one selected input).
+  - **Docs updated.** `docs/DECISIONS/0014-minimal-ada-transaction-builder.md` gained a second
+    2026-07-13 addendum ("filter, not reject-if-any") narrowing the first one, plus a §8
+    wording fix; `docs/DECISIONS/0006-provider-boundary-and-strategy.md`'s first addendum's
+    closing sentence was corrected to describe filtering instead of rejection.
+    `tx/README.md` and `shared/README.md` updated for the new filtering behavior and message
+    wording. `docs/PHASE_1_PLAN.md` §1.11 (new `1.11d-2` entry, `1.11d`'s entry marked
+    superseded, Android-checkpoint/"Mandatory Android checkpoints"/"Next step" updated) and
+    `docs/ROADMAP.md` §1.11 (same) updated. This file (this entry + the "What Not To Do Yet"
+    submission bullet).
+  - **Manual Android re-validation — PARTIAL PASS (2026-07-13).** The mixed ADA-only +
+    native-asset case was owner-run on Android after this filtering change: `Sign transaction`
+    succeeded, `Submit transaction` was accepted by preprod, and the accepted transaction id
+    matched the locally signed transaction id:
+    `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`. This confirms the app
+    can build/sign/submit from ADA-only UTxOs while ignoring native-asset UTxOs on the same
+    wallet/address. Remaining owner checks: (1) an address whose UTxOs are *all* native-asset —
+    the app should show the readable ADA-only rejection *before* submit; (2) an address funded
+    with ADA-only UTxOs only — same expected build/submit outcome as the mixed case. **Block
+    1.11 is not complete until the remaining two checks are run and their results (pass/fail,
+    date) are recorded here.**
+  - **Verification — all PASS:** `./gradlew :tx:jvmTest :shared:jvmTest
+    :shared:testAndroidHostTest :tx:testAndroidHostTest :tx:compileKotlinIosArm64
+    :shared:compileKotlinIosArm64`. No `:provider`/`:provider-blockfrost` behavior changed in
+    this block (their `1.11d` `hasNativeAssets` flagging is untouched), so their test suites
+    were not re-run beyond what `1.11d` already verified. `git diff --check` clean;
+    banned-word/restricted-claim scan of touched files found none. No `:wallet`/`:crypto`/
+    `:crypto-signing-backend`/`:core` file changed; no mainnet, no real mnemonics/private
+    keys/funds anywhere; no multi-asset support, token sending, token-preserving change, or
+    ledger-rule engine added — coin selection's existing `InsufficientFunds` path did all the
+    "is this enough" work it already did before. **Next step: run and record the two remaining
+    manual Android checks above; once both are recorded, Block 1.12** (Phase 1 Closure / MVP
+    Review).
+
+### Session Summary (Block 1.11d ADA-only rejection for the submit flow)
+
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.11d ADA-only rejection for the submit flow — implementation DONE; manual Android
   re-validation PENDING.** Precondition: the owner ran the `1.11c` mandatory manual Android
   checkpoint (enabled live Blockfrost preprod, entered a preprod `project_id`, tapped "Submit
   transaction") and **the submit reached Blockfrost/preprod but was rejected** with

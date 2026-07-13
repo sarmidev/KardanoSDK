@@ -240,21 +240,22 @@ class PlaygroundTransactionDraftPresenterTest {
 
     @Test
     fun presentTxBuildError_unsupportedFeature_mentionsNativeAssetsAndAdaOnly() {
-        // Block 1.11d: today's one reachable cause of UnsupportedFeature (a candidate UTxO
-        // carrying native assets/tokens) gets a dedicated, readable message — not just the
-        // raw detail string.
+        // Block 1.11d, narrowed in 1.11d-2: today's one reachable cause of UnsupportedFeature
+        // is that *every* candidate UTxO carried native assets/tokens (no ADA-only UTxO at
+        // all) — gets a dedicated, readable message, not just the raw detail string.
         val msg = PlaygroundPresenter.presentTxBuildError(
-            TxBuildError.UnsupportedFeature("candidate UTxO ... carries native assets/tokens"),
+            TxBuildError.UnsupportedFeature("all 1 candidate UTxO(s) carry native assets/tokens"),
         )
-        assertTrue(msg.contains("native assets", ignoreCase = true), "got: $msg")
+        assertTrue(msg.contains("native", ignoreCase = true), "got: $msg")
         assertTrue(msg.contains("tokens", ignoreCase = true), "got: $msg")
         assertTrue(msg.contains("ADA-only", ignoreCase = true), "got: $msg")
     }
 
-    // --- Native-asset UTxO rejection, built through the real TransactionBuilder (Block 1.11d) ---
+    // --- Native-asset UTxO filtering, built through the real TransactionBuilder (Block 1.11d,
+    // narrowed in 1.11d-2: filter, not reject-if-any) ---
 
     @Test
-    fun nativeAssetCandidate_isRejectedBeforeBuildingAndReportsReadableFailure() {
+    fun onlyNativeAssetCandidate_isRejectedBeforeBuildingAndReportsReadableFailure() {
         val nativeAssetUtxo = Utxo(
             requireNotNull(
                 UtxoRef.of(
@@ -271,8 +272,30 @@ class PlaygroundTransactionDraftPresenterTest {
         val presentation = PlaygroundPresenter.mapTransactionDraftResult(draftResult)
 
         val failure = assertIs<TransactionDraftPresentation.Failure>(presentation)
-        assertTrue(failure.message.contains("native assets", ignoreCase = true), "got: ${failure.message}")
+        assertTrue(failure.message.contains("native", ignoreCase = true), "got: ${failure.message}")
         assertTrue(failure.message.contains("ADA-only", ignoreCase = true), "got: ${failure.message}")
+    }
+
+    @Test
+    fun mixedCandidatesWithSufficientAdaOnlyUtxo_buildsSuccessfullyIgnoringNativeAssetUtxo() {
+        // Block 1.11d-2: a native-asset UTxO alongside a sufficient ADA-only UTxO must not
+        // block the build — the native-asset one is simply excluded from selection.
+        val nativeAssetUtxo = Utxo(
+            requireNotNull(
+                UtxoRef.of(
+                    requireNotNull(TxHash.of(ByteArray(TxHash.SIZE) { 0x77 }).getOrNull()),
+                    0L,
+                ).getOrNull(),
+            ),
+            Value(lovelace(50_000_000L), hasNativeAssets = true),
+        )
+        val adaOnlyUtxo = fakeUtxo(0x59, 0L, 20_000_000L)
+        val draftResult = TransactionBuilder.build(buildRequest(listOf(nativeAssetUtxo, adaOnlyUtxo)))
+        val draft = assertIs<KardanoResult.Ok<org.sarmidev.kardano.tx.TransactionDraft>>(draftResult).value
+        assertEquals(listOf(adaOnlyUtxo.ref), draft.selectedInputs)
+
+        val presentation = PlaygroundPresenter.mapTransactionDraftResult(draftResult)
+        assertIs<TransactionDraftPresentation.Success>(presentation)
     }
 
     @Test

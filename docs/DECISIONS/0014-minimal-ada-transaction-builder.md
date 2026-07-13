@@ -427,9 +427,10 @@ public sealed interface TxBuildError {
 - `FeeCalculationOverflow` — `Long` overflow anywhere in the fee/change arithmetic (§6).
 - `Serialization` — wraps a `:core` `CborError` if body encoding fails.
 - `NetworkMismatch` — the payment address, change address, or request `network` disagree.
-- `UnsupportedFeature` — a supplied `Utxo` whose `Value` carries native assets; the ADA-only
-  MVP declines rather than silently dropping assets. Reachable as of Block 1.11d — see the
-  2026-07-13 addendum below.
+- `UnsupportedFeature` — every supplied `Utxo` whose `Value` carries native assets is filtered
+  out before selection; the ADA-only MVP declines rather than silently dropping assets, but
+  only if that filtering leaves no candidates at all. Reachable as of Block 1.11d, narrowed in
+  1.11d-2 — see the two 2026-07-13 addenda below.
 - `DuplicateInput` — two supplied inputs share the same `(transaction_id, index)` pair.
   Implementation-discovered addition (Block 1.9b-1): §4 requires duplicate-input rejection, but
   this sketch originally named no dedicated variant for it.
@@ -636,4 +637,29 @@ ledger-rule engine this MVP does not have to decide whether the *remaining* ADA-
 still sufficient, and could otherwise surprise a caller with a smaller, silently-changed input
 set. No native-asset quantities, policy ids, or asset names are inspected or represented — this
 is honest early rejection of what the MVP cannot fully represent, not multi-asset support. No
+other decision in this ADR changes.
+
+---
+
+## Addendum (2026-07-13): filter, not reject-if-any (Block 1.11d-2)
+
+The previous addendum's "reject the whole request if any candidate is flagged" turned out to be
+too broad in practice: a real preprod wallet/address routinely has *some* UTxOs carrying native
+assets and *other* UTxOs that are plain ADA — the manual checkpoint's find was that a mix
+exists, not that every UTxO on a funded address does. Declining the whole request whenever any
+one candidate carried a native asset meant a caller with plenty of spendable ADA-only UTxOs
+still could not build a transaction at all, purely because the wallet also happened to hold an
+unrelated token.
+
+This addendum narrows the check: `TransactionBuilder.build` now filters
+`TransactionBuildRequest.candidateInputs`, dropping every entry with `Value.hasNativeAssets`
+set, **before** coin selection runs — the "ledger-rule engine" concern the previous addendum
+raised does not apply here, because coin selection already knows how to fail cleanly
+(`InsufficientFunds`) when the candidates it is given cannot cover `payment + fee`; no new
+engine is needed to decide which ADA-only inputs are "still sufficient", selection just tries
+and reports the shortfall as usual. `UnsupportedFeature` is now returned only if the filtering
+step leaves **no** candidates at all (i.e. every candidate carried a native asset), with a
+detail message naming how many were dropped. A native-asset UTxO is still never selected as an
+input — `TransactionDraft.selectedInputs` can never contain one — and no native-asset
+quantities, policy ids, or asset names are inspected or represented anywhere in this change. No
 other decision in this ADR changes.

@@ -70,11 +70,12 @@ class PlaygroundTransactionDraftDesktopTest {
     }
 
     @Test
-    fun presentTransactionDraft_withNativeAssetUtxoForRestoredAddress_reportsReadableFailure() = runTest {
-        // Block 1.11d: the ADA-only MVP must reject, not silently build around, a UTxO the
-        // mock/live provider flagged as carrying native assets/tokens — reproducing (without
-        // a live preprod call) the manual Android finding that a funded-but-mixed address
-        // caused a preprod ValueNotConservedUTxO rejection at submit time.
+    fun presentTransactionDraft_withOnlyNativeAssetUtxoForRestoredAddress_reportsReadableFailure() = runTest {
+        // Block 1.11d, narrowed in 1.11d-2: when there is no ADA-only UTxO at all — every
+        // candidate the mock/live provider flagged as carrying native assets/tokens — the
+        // ADA-only MVP must reject, not silently build around, the request. This reproduces
+        // (without a live preprod call) the manual Android finding that a funded-but-mixed
+        // address caused a preprod ValueNotConservedUTxO rejection at submit time.
         val wallet = when (val result = ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)) {
             is KardanoResult.Ok -> result.value
             is KardanoResult.Err -> error("restore should succeed: ${result.error}")
@@ -90,7 +91,36 @@ class PlaygroundTransactionDraftDesktopTest {
         val presentation = PlaygroundPresenter.presentTransactionDraft(provider)
 
         val failure = assertIs<TransactionDraftPresentation.Failure>(presentation)
-        assertTrue(failure.message.contains("native assets", ignoreCase = true), "got: ${failure.message}")
+        assertTrue(failure.message.contains("native", ignoreCase = true), "got: ${failure.message}")
         assertTrue(failure.message.contains("ADA-only", ignoreCase = true), "got: ${failure.message}")
+    }
+
+    @Test
+    fun presentTransactionDraft_withMixedUtxosForRestoredAddress_reportsSuccessUsingOnlyAdaOnlyUtxo() = runTest {
+        // Block 1.11d-2: a wallet whose address has both a native-asset UTxO and a sufficient
+        // ADA-only UTxO must still build successfully, selecting only the ADA-only one.
+        val wallet = when (val result = ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err -> error("restore should succeed: ${result.error}")
+        }
+        val nativeAssetTxHash = requireNotNull(TxHash.of(ByteArray(TxHash.SIZE) { 0xAA.toByte() }).getOrNull())
+        val nativeAssetRef = requireNotNull(UtxoRef.of(nativeAssetTxHash, 0L).getOrNull())
+        val nativeAssetCoin = requireNotNull(Lovelace.of(50_000_000L).getOrNull())
+        val nativeAssetUtxo = Utxo(nativeAssetRef, Value(nativeAssetCoin, hasNativeAssets = true))
+
+        val adaOnlyTxHash = requireNotNull(TxHash.of(ByteArray(TxHash.SIZE) { 0xBB.toByte() }).getOrNull())
+        val adaOnlyRef = requireNotNull(UtxoRef.of(adaOnlyTxHash, 0L).getOrNull())
+        val adaOnlyCoin = requireNotNull(Lovelace.of(20_000_000L).getOrNull())
+        val adaOnlyUtxo = Utxo(adaOnlyRef, Value(adaOnlyCoin))
+
+        val provider = InMemoryChainQueryProvider(
+            utxosByAddress = mapOf(wallet.address to listOf(nativeAssetUtxo, adaOnlyUtxo)),
+        )
+
+        val presentation = PlaygroundPresenter.presentTransactionDraft(provider)
+
+        val success = assertIs<TransactionDraftPresentation.Success>(presentation)
+        val rowByLabel = success.rows.associate { it.label to it.value }
+        assertTrue(rowByLabel["Selected inputs"] == "1", "got: ${rowByLabel["Selected inputs"]}")
     }
 }

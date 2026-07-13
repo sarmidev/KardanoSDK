@@ -785,12 +785,17 @@ internal object PlaygroundPresenter {
      * [TxBuildError.InvalidSignatureLength], [TxBuildError.EmptyWitnessSet] — reachable via
      * [WalletError.TransactionAssembly]) in the text.
      *
-     * [TxBuildError.UnsupportedFeature] (Block 1.11d) gets a dedicated, plain-language message
-     * rather than the generic `"Unsupported feature: ..."` phrasing every other variant's
-     * message pattern might suggest, because — as of this block — it has exactly one reachable
-     * cause: a candidate UTxO carrying native assets/tokens (see that variant's KDoc). If a
-     * future block adds a second, unrelated cause, this mapping must be revisited to
-     * distinguish them (for example by inspecting [TxBuildError.UnsupportedFeature.detail]).
+     * [TxBuildError.UnsupportedFeature] (Block 1.11d, narrowed in 1.11d-2) gets a dedicated,
+     * plain-language message rather than the generic `"Unsupported feature: ..."` phrasing
+     * every other variant's message pattern might suggest, because — as of this block — it has
+     * exactly one reachable cause: *every* candidate UTxO carried native assets/tokens, leaving
+     * no ADA-only UTxO to build from at all (see that variant's KDoc). A wallet with a *mix* of
+     * ADA-only and native-asset UTxOs never reaches this branch: [TransactionBuilder.build]
+     * builds from the ADA-only ones instead, or reports [TxBuildError.InsufficientFunds] (whose
+     * message below is unchanged) if even those cannot cover `payment + fee`. If a future block
+     * adds a second, unrelated cause for [TxBuildError.UnsupportedFeature], this mapping must be
+     * revisited to distinguish them (for example by inspecting
+     * [TxBuildError.UnsupportedFeature.detail]).
      *
      * Internal so tests can exercise all variants by constructing them directly.
      */
@@ -817,8 +822,8 @@ internal object PlaygroundPresenter {
         is TxBuildError.NetworkMismatch ->
             "Network mismatch: expected ${error.expected.name}, got ${error.actual.name}"
         is TxBuildError.UnsupportedFeature ->
-            "This wallet has UTxOs containing native assets/tokens. Phase 1 only builds " +
-                "ADA-only transactions. (${error.detail})"
+            "This wallet has no ADA-only UTxOs to spend — only UTxOs containing native " +
+                "assets/tokens. Phase 1 only builds ADA-only transactions. (${error.detail})"
         is TxBuildError.DuplicateInput -> "Duplicate input detected"
         is TxBuildError.InvalidVerificationKeyLength ->
             "Invalid verification key length: expected ${error.expectedBytes}B, got ${error.actualBytes}B"

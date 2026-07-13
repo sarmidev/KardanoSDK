@@ -60,14 +60,20 @@ public object TransactionBuilder {
     /**
      * Builds a [TransactionDraft] for [request].
      *
-     * Order of checks (ADR-0014 §6-7, extended by Block 1.11d): [TxBuildError.InvalidProtocolParameters]
+     * Order of checks (ADR-0014 §6-7, extended by Block 1.11d/1.11d-2): [TxBuildError.InvalidProtocolParameters]
      * if [TransactionBuildRequest.protocolParameters] has a negative
      * `minFeeCoefficient`/`minFeeConstant`/`maxTxSize`/`coinsPerUtxoByte`, then network
      * validation, then [TxBuildError.NoInputs] if
-     * [TransactionBuildRequest.candidateInputs] is empty, then [TxBuildError.UnsupportedFeature]
-     * if **any** candidate input has [org.sarmidev.kardano.provider.Value.hasNativeAssets] set
-     * (Phase 1 stays ADA-only: this MVP declines the whole candidate list rather than silently
-     * building a transaction around, or filtering out, a UTxO it cannot fully represent), then
+     * [TransactionBuildRequest.candidateInputs] is empty. [TransactionBuildRequest.candidateInputs]
+     * is then filtered to drop every candidate with
+     * [org.sarmidev.kardano.provider.Value.hasNativeAssets] set (Phase 1 stays ADA-only and never
+     * spends a native-asset UTxO), and [TxBuildError.UnsupportedFeature] is returned if that
+     * filtering leaves no candidates at all — only then, not whenever *any* input carried native
+     * assets. Otherwise building proceeds normally from the filtered, ADA-only candidates, so a
+     * wallet with a mix of ADA-only and native-asset UTxOs can still build/sign/submit using just
+     * the ADA-only ones; if the ADA-only ones alone cannot cover `payment + fee`, the usual
+     * [TxBuildError.InsufficientFunds] is returned (its `available` total reflects only the
+     * ADA-only candidates, since the native-asset ones were never counted). Next,
      * [TxBuildError.InvalidOutputAmount] if the payment itself is below its min-ADA. It then
      * runs the largest-first coin-selection / fee fixed-point loop (see the type-level KDoc) —
      * which can itself fail with [TxBuildError.FeeEstimateDidNotConverge] if even the final
@@ -98,12 +104,17 @@ public object TransactionBuilder {
             return KardanoResult.Err(TxBuildError.NoInputs)
         }
 
-        val nativeAssetInput = request.candidateInputs.firstOrNull { it.value.hasNativeAssets }
-        if (nativeAssetInput != null) {
+        // Phase 1 never spends a native-asset UTxO (ADR-0014 §8, Block 1.11d), but a wallet with
+        // a mix of ADA-only and native-asset UTxOs must still be able to build from the ADA-only
+        // ones (Block 1.11d-2) rather than have the whole request declined because one candidate
+        // happened to carry a token.
+        val adaOnlyCandidates = request.candidateInputs.filterNot { it.value.hasNativeAssets }
+        if (adaOnlyCandidates.isEmpty()) {
             return KardanoResult.Err(
                 TxBuildError.UnsupportedFeature(
-                    "candidate UTxO ${nativeAssetInput.ref} carries native assets/tokens; " +
-                        "Phase 1 builds ADA-only transactions only",
+                    "all ${request.candidateInputs.size} candidate UTxO(s) carry native " +
+                        "assets/tokens; Phase 1 requires at least one ADA-only UTxO to build a " +
+                        "transaction",
                 ),
             )
         }
@@ -120,7 +131,7 @@ public object TransactionBuilder {
             )
         }
 
-        val selection = InputSelection(request.candidateInputs)
+        val selection = InputSelection(adaOnlyCandidates)
 
         var fee = request.protocolParameters.minFeeConstant
         var attempt = when (val r = evaluateAttempt(request, selection, fee)) {

@@ -183,7 +183,8 @@ This addendum records the resulting, narrowly-scoped change:
   not the multiasset support §4 already anticipated as a future, compatibility-unconstrained
   addition.
 - A concrete `ChainQueryProvider` (`:provider-blockfrost`, Block 1.11d) sets the flag when it
-  detects a non-`lovelace` amount unit; `:tx`'s `TransactionBuilder` (ADR-0014 §8) rejects any
-  candidate input carrying it before building, with `TxBuildError.UnsupportedFeature`.
+  detects a non-`lovelace` amount unit; `:tx`'s `TransactionBuilder` (ADR-0014 §8, narrowed in
+  the 1.11d-2 addendum) filters out every candidate input carrying it before building, only
+  failing with `TxBuildError.UnsupportedFeature` if that leaves no candidates at all.
 
 No other decision in this ADR changes.
