@@ -73,6 +73,12 @@ kotlin {
             // the wrapper's deriveBytes/deriveBytesPub/fromNonextended are directly callable
             // from commonMain on every target (Design A) — no expect/actual seam needed.
             implementation(libs.bip32.ed25519)
+            // Cardano extended Ed25519-BIP32 signing (ADR-0015 Block 1.10b, backend adopted per
+            // ADR-0016 §9): bip32-ed25519:1.8.8 above has no signing function (ADR-0015 Context),
+            // so signing delegates to this project-owned module's sign/verify/deriveXpub seam
+            // instead. `:crypto-signing-backend`'s generated bindings are directly callable from
+            // commonMain on every target — no additional expect/actual seam needed here.
+            implementation(projects.cryptoSigningBackend)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

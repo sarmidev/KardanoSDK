@@ -1,9 +1,10 @@
 # :crypto
 
 The cryptographic boundary for Kardano SDK: hashing (Phase 1 Block 1.5b), BIP-39/CIP-3
-mnemonic + Icarus master-key derivation (Phase 1 Block 1.6b), and Ed25519-BIP32/CIP-1852
+mnemonic + Icarus master-key derivation (Phase 1 Block 1.6b), Ed25519-BIP32/CIP-1852
 private- and public-key derivation (Phase 1 Block 1.6c + 1.6c-follow-up + 1.6c-follow-up-2,
-ADR-0010).
+ADR-0010), and extended Ed25519-BIP32 transaction-body-hash signing (Phase 1 Block 1.10b,
+ADR-0015/ADR-0016).
 
 ## Status
 
@@ -42,6 +43,15 @@ now work on JVM, real Android runtime, and iOS compile/link.**
   (`:crypto:compileKotlinIosSimulatorArm64`, `:crypto:compileKotlinIosArm64`, and an actual
   test-binary link all succeed). iOS runtime execution of the vectors is still future
   verification, same status as 1.6b.
+- **Signing (Block 1.10b, ADR-0015/ADR-0016): implemented and verified.**
+  `Signing.sign(bodyHash, key)` delegates to the adopted, project-owned
+  `:crypto-signing-backend` module (ADR-0016 §9i), which wraps the reference `ed25519-bip32`
+  Rust crate's `XPrv::sign` — extended Ed25519-BIP32 signing, not plain seed-based RFC 8032
+  Ed25519. Verified on `:crypto:jvmTest` (reproduces the ADR-0016 §3 `D1_H0` KAT through this
+  module's own dependency wiring, then a labeled sign-then-verify self-consistency check
+  against a real Blake2b-256 body hash) and `:crypto:testAndroidHostTest` (native-free
+  length-rejection paths); the backend itself is verified on real Android runtime and iOS
+  compile/link by `:crypto-signing-backend`'s own test suite.
 
 ## Role
 
@@ -84,7 +94,18 @@ now work on JVM, real Android runtime, and iOS compile/link.**
   constructor, defensive copies, structural `toString()`, best-effort `clear()`).
   `ExtendedPrivateKey` has no public raw-byte accessor; `ExtendedPublicKey.publicKeyBytes()`
   is the one raw-byte accessor in this module (a copy — the public key is not secret, but the
-  underlying array is never exposed directly).
+  underlying array is never exposed directly). `ExtendedPrivateKey` additionally exposes a
+  **module-internal** `extendedPrivateKeyBytesForSigning()` (the full 96-byte `xsk ‖ chainCode`)
+  for the signing adapter only — the "no public private-key byte accessor" rule is unchanged.
+- Defines `Signing`: a minimal, backend-neutral interface (Block 1.10b, ADR-0015 §1/§3) that
+  signs exactly one thing — the 32-byte Blake2b-256 hash of a Cardano `transaction_body`
+  (`bodyHash = Blake2b-256(TransactionDraft.bodyCbor())`, also the transaction id) — with an
+  `ExtendedPrivateKey`, returning the raw 64-byte signature. Never signs the raw body bytes or
+  an arbitrary-length message. Ships one implementation, `Signing.default()`, an internal
+  adapter delegating to `:crypto-signing-backend`; the temporary `xprv` copy is cleared in a
+  `finally` block.
+- Defines the sealed, backend-neutral `SigningError` (`InvalidBodyHashLength`,
+  `InvalidKeyMaterial`, `BackendFailed`, `SigningUnavailable`).
 
 All operations return `KardanoResult` and never throw, which keeps the API compatible with
 Swift/ObjC interop.
@@ -103,6 +124,8 @@ did for `:core` before Block 0.7. No behavior changed; only packages/imports did
 - `org.sarmidev.kardano.crypto.derivation` — `KeyDerivation`, `KeyDerivationError`,
   `Bip32Ed25519KeyDerivation`, `Cip1852Path`, `IcarusMasterKey`, `ExtendedPrivateKey`,
   `ExtendedPublicKey`.
+- `org.sarmidev.kardano.crypto.signing` — `Signing`, `SigningError`, `Ed25519Bip32Signing`
+  (Block 1.10b, ADR-0015/ADR-0016).
 - `org.sarmidev.kardano.crypto.internal.pbkdf2` — the `pbkdf2HmacSha512` platform seam
   (`expect` + JVM/Android/iOS `actual`s).
 - `org.sarmidev.kardano.crypto.internal.projection` — the `projectPublicKey` platform seam
@@ -118,9 +141,11 @@ without being widened to `public`; splitting into separate modules would force t
 
 ## Scope
 
-- **Hashing (1.5b), mnemonic/Icarus-master-key derivation (1.6b), and CIP-1852 private and
-  public derivation (1.6c + 1.6c-follow-up + 1.6c-follow-up-2/ADR-0010) only.** There is no
-  signing, no wallet, no transaction, and no address generation here.
+- **Hashing (1.5b), mnemonic/Icarus-master-key derivation (1.6b), CIP-1852 private and
+  public derivation (1.6c + 1.6c-follow-up + 1.6c-follow-up-2/ADR-0010), and extended
+  Ed25519-BIP32 body-hash signing (1.10b, ADR-0015 §1) only.** `Signing` signs only a 32-byte
+  transaction body hash — it performs no wallet operation, no transaction assembly, and no
+  address generation; those remain `:wallet`'s and `:tx`'s responsibility.
 - No real mnemonics, private keys, or funds are involved anywhere — every mnemonic in this
   module's tests is a public, cited test vector, clearly labeled as such.
 - English BIP-39 wordlist only; other wordlists, and the Byron/Ledger/Trezor scheme
@@ -135,7 +160,12 @@ without being widened to `public`; splitting into separate modules would force t
   support), and, for public-key projection (ADR-0010): on `jvmMain`/`iosArm64Main`/
   `iosSimulatorArm64Main`, `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5`
   plus `kotlinx-coroutines-core`; on `androidMain`, `com.goterl:lazysodium-android:5.2.0` plus a
-  pinned `net.java.dev.jna:jna:5.17.0`. `:core` does not depend on `:crypto`.
+  pinned `net.java.dev.jna:jna:5.17.0`. Block 1.10b (ADR-0015 §1) added a `commonMain`
+  dependency on the sibling `:crypto-signing-backend` module (extended Ed25519-BIP32 signing;
+  see that module's README) — its generated bindings are directly callable from `commonMain` on
+  every target, no additional `expect`/`actual` seam needed here. `:core` does not depend on
+  `:crypto`, and `:crypto-signing-backend`'s public bindings never appear in this module's
+  public API (the `Ed25519Bip32Signing` adapter that calls them is `internal`).
 - No backend type appears in any public API. Per
   [ADR-0008](../docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md),
   Apollo 1.8.8 does not ship a Blake2b implementation, so hashing is backed by KotlinCrypto
@@ -200,11 +230,13 @@ wired up.
 Tests use only official, cited vectors copied verbatim: Blake2b-224 from CIP-19, Blake2b-256
 from the IntersectMBO/plutus conformance goldens, BIP-39 entropy/mnemonic pairs from
 `trezor/python-mnemonic` `vectors.json`, the CIP-3 `Icarus.md` master-key vectors (with
-and without a passphrase), and the `IntersectMBO/cardano-addresses` Shelley golden (CIP-1852
-private- and public-derivation) vectors. No expected digest, entropy, or key is generated by
-this SDK or any backend library. Invalid-input cases for `Mnemonic.parse` are derived rule
-tests built by mutating a cited vector one property at a time (see `MnemonicRuleTest`), per
-`docs/TESTING.md`.
+and without a passphrase), the `IntersectMBO/cardano-addresses` Shelley golden (CIP-1852
+private- and public-derivation) vectors, and (Block 1.10b) the reference `ed25519-bip32`
+crate's `D1_H0` extended-key signature KAT pinned by ADR-0016 §3. No expected digest, entropy,
+key, or signature is generated by this SDK or any backend library. Invalid-input cases for
+`Mnemonic.parse` are derived rule tests built by mutating a cited vector one property at a
+time (see `MnemonicRuleTest`), per `docs/TESTING.md`; `Signing.sign`'s `bodyHash`-length
+rejection is covered the same way (`SigningLengthValidationTest`).
 
 **Placement rule for CIP-1852 vector tests (`crypto/jvmTest`, not `commonTest`):** any test
 that calls the real `bip32-ed25519`/libsodium/lazysodium backends lives in `crypto/src/jvmTest`

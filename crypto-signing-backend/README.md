@@ -8,10 +8,13 @@ provisioning spike (ADR-0016 §8), landed per **ADR-0016 §9, Option R1**.
 - **No handwritten crypto.** The Rust wrapper (`src/commonMain/rust/lib.rs`) delegates directly to
   `ed25519_bip32::XPrv::sign` / `XPub::verify` (the primitive cited in ADR-0016 §3 / CIP-3). It is
   not plain RFC-8032 seed-based Ed25519.
-- **Thin seam only.** The module currently exposes only the generated backend seam
+- **Thin seam only.** The module exposes only the generated backend seam
   (`sign` / `verify` / `deriveXpub` in package `org.sarmidev.kardano.crypto.signing.backend.internal`).
   There is no high-level `Signing` API, no witness/transaction assembly, and no wallet
-  orchestration here — those are Block 1.10b, and **`:crypto` does not depend on this module yet.**
+  orchestration in *this* module — those landed in `:crypto`/`:tx`/`:wallet` respectively in
+  Block 1.10b (ADR-0015), which added a `commonMain` dependency from `:crypto` on this module.
+  `:crypto`'s internal `Ed25519Bip32Signing` adapter is the only caller of this module's `sign`;
+  this module's generated bindings never appear in `:crypto`'s public API.
 
 ## Option R1: how the module is built (no Rust/Cargo/Gobley Gradle plugin)
 

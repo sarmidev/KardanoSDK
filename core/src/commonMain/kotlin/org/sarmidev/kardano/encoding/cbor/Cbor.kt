@@ -24,10 +24,12 @@ import org.sarmidev.kardano.encoding.cbor.CborError.TrailingBytes
 import org.sarmidev.kardano.encoding.cbor.CborError.UnexpectedEndOfInput
 import org.sarmidev.kardano.encoding.cbor.CborError.UnsignedValueNegative
 import org.sarmidev.kardano.encoding.cbor.CborValue.CborArray
+import org.sarmidev.kardano.encoding.cbor.CborValue.CborBool
 import org.sarmidev.kardano.encoding.cbor.CborValue.CborByteString
 import org.sarmidev.kardano.encoding.cbor.CborValue.CborEntry
 import org.sarmidev.kardano.encoding.cbor.CborValue.CborMap
 import org.sarmidev.kardano.encoding.cbor.CborValue.CborNegative
+import org.sarmidev.kardano.encoding.cbor.CborValue.CborNull
 import org.sarmidev.kardano.encoding.cbor.CborValue.CborTextString
 import org.sarmidev.kardano.encoding.cbor.CborValue.CborUnsigned
 
@@ -41,8 +43,10 @@ import org.sarmidev.kardano.encoding.cbor.CborValue.CborUnsigned
  * and never normalized:
  *
  * - tags (major type 6, including bignum tags 2 and 3) are out of scope;
- * - floats and simple values (major type 7), including `false`/`true`/`null`/`undefined`,
- *   are out of scope;
+ * - of major type 7, only the fixed simple values `false`, `true` ([CborValue.CborBool]) and
+ *   `null` ([CborValue.CborNull]) are supported (added narrowly for Block 1.10b's full signed
+ *   `transaction` wrapper, ADR-0015 §3); `undefined`, every other simple value, and all floats
+ *   remain out of scope;
  * - indefinite-length encodings, reserved additional-info values, non-canonical integer,
  *   length, or count encodings, out-of-range integers, malformed UTF-8, over-limit input,
  *   collections past the named element-count or nesting-depth limits, and trailing bytes
@@ -123,6 +127,16 @@ public object Cbor {
     private const val MAJOR_TEXT_STRING: Int = 3
     private const val MAJOR_ARRAY: Int = 4
     private const val MAJOR_MAP: Int = 5
+    private const val MAJOR_SIMPLE: Int = 7
+
+    /** Major-type-7 additional-info value for the simple value `false`. */
+    private const val SIMPLE_FALSE: Long = 20L
+
+    /** Major-type-7 additional-info value for the simple value `true`. */
+    private const val SIMPLE_TRUE: Long = 21L
+
+    /** Major-type-7 additional-info value for the simple value `null`. */
+    private const val SIMPLE_NULL: Long = 22L
 
     /**
      * Decodes a single top-level CBOR value from [input].
@@ -228,6 +242,11 @@ public object Cbor {
 
             is CborArray -> encodeArray(value, depth)
             is CborMap -> encodeMap(value, depth)
+
+            is CborBool ->
+                KardanoResult.Ok(encodeHead(MAJOR_SIMPLE, if (value.value) SIMPLE_TRUE else SIMPLE_FALSE))
+
+            is CborNull -> KardanoResult.Ok(encodeHead(MAJOR_SIMPLE, SIMPLE_NULL))
         }
 
     private fun encodeArray(value: CborArray, depth: Int): KardanoResult<ByteArray, CborError> {
@@ -328,8 +347,24 @@ public object Cbor {
             MAJOR_ARRAY -> readArray(input, offset, additionalInfo, depth)
             MAJOR_MAP -> readMap(input, offset, additionalInfo, depth)
             6 -> ReadOutcome.Fail(TagsNotSupported)
-            else -> ReadOutcome.Fail(FloatOrSimpleNotSupported(additionalInfo)) // major == 7
+            else -> readSimple(additionalInfo, offset) // major == 7
         }
+    }
+
+    /**
+     * Reads a major-type-7 value at [offset]. Only the three fixed simple values `false`
+     * (20), `true` (21), and `null` (22) are supported (added narrowly for Block 1.10b's full
+     * signed `transaction` wrapper, ADR-0015 §3); every other major-type-7 value (`undefined`,
+     * every other simple value, and all floats) is rejected. None of the three supported
+     * values has a longer encoded form to reject as non-canonical: [additionalInfo] `20`..`22`
+     * is already the argument itself (mirrors [isCanonicalArgument]'s `additionalInfo < 24`
+     * case), so no extra canonical check is needed here.
+     */
+    private fun readSimple(additionalInfo: Int, offset: Int): ReadOutcome = when (additionalInfo.toLong()) {
+        SIMPLE_FALSE -> ReadOutcome.Ok(CborBool(false), offset + 1)
+        SIMPLE_TRUE -> ReadOutcome.Ok(CborBool(true), offset + 1)
+        SIMPLE_NULL -> ReadOutcome.Ok(CborNull, offset + 1)
+        else -> ReadOutcome.Fail(FloatOrSimpleNotSupported(additionalInfo))
     }
 
     private fun readUnsigned(input: ByteArray, offset: Int, additionalInfo: Int): ReadOutcome {

@@ -86,6 +86,30 @@ class ExtendedPrivateKeyTest {
     }
 
     @Test
+    fun extendedPrivateKeyBytesForSigning_returnsXskFollowedByChainCode() {
+        val key = okKey(ExtendedPrivateKey.of(fixtureXsk, fixtureChainCode))
+
+        val bytes = key.extendedPrivateKeyBytesForSigning()
+
+        assertEquals(96, bytes.size)
+        assertTrue(bytes.copyOfRange(0, 64).contentEquals(fixtureXsk))
+        assertTrue(bytes.copyOfRange(64, 96).contentEquals(fixtureChainCode))
+    }
+
+    @Test
+    fun extendedPrivateKeyBytesForSigning_returnsIndependentCopy() {
+        val key = okKey(ExtendedPrivateKey.of(fixtureXsk, fixtureChainCode))
+
+        val first = key.extendedPrivateKeyBytesForSigning()
+        first[0] = 0x7F
+
+        assertFalse(
+            key.extendedPrivateKeyBytesForSigning()[0] == 0x7F.toByte(),
+            "mutating a returned copy must not affect the ExtendedPrivateKey's internal bytes",
+        )
+    }
+
+    @Test
     fun clear_wipesKeyBytesOnThisInstanceOnly() {
         val key = okKey(ExtendedPrivateKey.of(fixtureXsk, fixtureChainCode))
 

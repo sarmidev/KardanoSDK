@@ -194,3 +194,28 @@ exists and is enforced with a typed error.
 - **Block 0.7 — address parsing** after Bech32 exists.
 
 **Reviewer sign-off:** maintainer (this ADR / Block 0.4 closure).
+
+---
+
+## Addendum (2026-07-13): narrow simple-value addition for Block 1.10b
+
+This ADR's CBOR policy above lists floats and simple values (major type 7), including
+`false`/`true`/`null`/`undefined`, as explicitly out of scope for Phase 0, **"unless a later
+ADR adds them."** `docs/DECISIONS/0015-transaction-signing.md` §3 (Accepted) is that later ADR:
+it specifies Block 1.10b's full signed `transaction` wrapper as
+`[transaction_body, transaction_witness_set, true, null]` — the fixed `is_valid` flag and the
+MVP `auxiliary_data` placeholder — and its §6 test policy requires decoding that wrapper back
+through this module's own `Cbor.decode`.
+
+This addendum records the resulting, narrowly-scoped change made in Block 1.10b:
+
+- `CborValue` gains exactly two additions: `CborBool` (`true`/`false`) and `CborNull` (`null`).
+- `Cbor.decode`/`Cbor.encode` support exactly the three fixed major-type-7 simple values
+  `false` (20), `true` (21), and `null` (22) — their single canonical one-byte encodings only.
+- Every other major-type-7 value — `undefined`, every other simple value, and all floats — and
+  every other Phase 0 restriction (indefinite lengths, tags, bignums, non-canonical encodings,
+  out-of-range integers, the named limits) remain unchanged and rejected exactly as before.
+
+No other CBOR policy in this ADR changes. This is not a general reopening of the "floats and
+simple values are out of scope" rule — a future addition of `undefined`, floats, or any other
+major-type-7 value still requires its own explicit ADR update, per this ADR's original policy.

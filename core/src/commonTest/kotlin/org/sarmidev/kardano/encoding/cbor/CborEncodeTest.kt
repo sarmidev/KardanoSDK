@@ -102,12 +102,24 @@ class CborEncodeTest {
             CborValue.CborByteString(ByteArray(0)),
             CborValue.CborTextString("IETF"),
             CborValue.CborTextString("\u6c34"),
+            CborValue.CborBool(false),
+            CborValue.CborBool(true),
+            CborValue.CborNull,
         )
         for (value in values) {
             val encoded = assertIs<KardanoResult.Ok<ByteArray>>(Cbor.encode(value)).value
             val decoded = assertIs<KardanoResult.Ok<CborValue>>(Cbor.decode(encoded)).value
             assertEquals(value, decoded, "round-trip for $value")
         }
+    }
+
+    // RFC 8949 Appendix A — the three fixed simple values added narrowly in Block 1.10b
+    // (ADR-0015 §3): false, true, and null.
+    @Test
+    fun encodesAppendixASimpleValues() {
+        assertEncodes(CborValue.CborBool(false), "f4")
+        assertEncodes(CborValue.CborBool(true), "f5")
+        assertEncodes(CborValue.CborNull, "f6")
     }
 
     // RFC 8949 Appendix A — arrays encode to their canonical definite-length form.

@@ -30,6 +30,9 @@ kotlin {
             implementation(projects.core)
             implementation(projects.crypto)
             implementation(projects.provider)
+            // Transaction signing orchestration (ADR-0015 Block 1.10b): assembling a signed
+            // transaction artifact from a caller-supplied TransactionDraft + witness set.
+            implementation(projects.tx)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

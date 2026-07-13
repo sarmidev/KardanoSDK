@@ -78,8 +78,10 @@ this reorganization, but fully qualified names and imports moved into the packag
   Supported types, exposed as the sealed `CborValue`: unsigned integers (`CborUnsigned`) and
   negative integers (`CborNegative`) within the signed `Long` range, definite-length byte
   strings (`CborByteString`), definite-length UTF-8 text strings (`CborTextString`),
-  definite-length arrays (`CborArray`), and definite-length maps (`CborMap`, an ordered list of
-  `CborEntry` pairs — not a Kotlin `Map`). `Cbor.decode` returns a `KardanoResult<CborValue,
+  definite-length arrays (`CborArray`), definite-length maps (`CborMap`, an ordered list of
+  `CborEntry` pairs — not a Kotlin `Map`), and (added narrowly in Block 1.10b, ADR-0015 §3 /
+  ADR-0001 addendum) the three fixed major-type-7 simple values `false`/`true` (`CborBool`) and
+  `null` (`CborNull`). `Cbor.decode` returns a `KardanoResult<CborValue,
   CborError>` and `Cbor.encode` returns a `KardanoResult<ByteArray, CborError>` (neither
   throws). The encoder emits canonical (shortest-form) definite-length output. SDK-owned named
   limits (`CBOR_MAX_INPUT_BYTES`, `CBOR_MAX_BYTESTRING_BYTES`, `CBOR_MAX_STRING_BYTES`,
@@ -91,10 +93,10 @@ this reorganization, but fully qualified names and imports moved into the packag
   violate this (`NonCanonicalMapKeyOrder` / `DuplicateMapKey`) and the encoder requires
   already-ordered, duplicate-free entries and rejects rather than reordering. This Phase 0
   deterministic rule is not asserted to be final Cardano transaction-serialization
-  compatibility. Tags (incl. bignum tags 2/3), floats/simple/null/undefined, indefinite
-  lengths, reserved additional info, non-canonical encodings, out-of-range integers/counts,
-  over-deep nesting, over-large collections, malformed UTF-8, over-limit input, and trailing
-  bytes are rejected with a typed `CborError`, never normalized.
+  compatibility. Tags (incl. bignum tags 2/3), `undefined`, every other simple value, floats,
+  indefinite lengths, reserved additional info, non-canonical encodings, out-of-range
+  integers/counts, over-deep nesting, over-large collections, malformed UTF-8, over-limit
+  input, and trailing bytes are rejected with a typed `CborError`, never normalized.
 - `Address` — structural CIP-19 address parsing (Block 0.7). `Address.parse(bech32)`
   returns a `KardanoResult<Address, AddressError>` (never throws) for the Shelley address
   types parsed so far: base (`addr` / `addr_test`, CIP-19 header types 0-3), pointer
@@ -162,9 +164,10 @@ this reorganization, but fully qualified names and imports moved into the packag
   [docs/DECISIONS/0004-crypto-strategy.md](../docs/DECISIONS/0004-crypto-strategy.md) for
   the future cryptography strategy.
 - Network/IO, providers, or wallet behavior.
-- The CBOR subset above covers primitives plus definite-length arrays and maps only (no tags,
-  bignums, floats, simple values, or indefinite lengths) and does not interpret Cardano
-  semantics. The `Bech32` codec is generic and does not restrict the HRP to Cardano prefixes;
+- The CBOR subset above covers primitives plus definite-length arrays and maps, plus the three
+  fixed simple values `false`/`true`/`null` (no tags, bignums, floats, `undefined`, or any
+  other simple value, and no indefinite lengths) and does not interpret Cardano semantics. The
+  `Bech32` codec is generic and does not restrict the HRP to Cardano prefixes;
   the `CardanoBech32` wrappers add the HRP allowlist but perform no address parsing or CIP-19
   structural validation (that belongs to `Address`). Primitive-specific hex helpers (e.g.
   `TxHash.fromHex`) are intentionally not added; use the generic `Hex` utility.

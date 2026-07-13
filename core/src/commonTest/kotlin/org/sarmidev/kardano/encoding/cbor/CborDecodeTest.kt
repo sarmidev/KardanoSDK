@@ -278,11 +278,13 @@ class CborDecodeTest {
     }
 
     // Hand-written: an unsupported child value inside a collection is rejected through the
-    // normal child decode — a tag (0xc0) and a simple value (0xf5) inside a one-element array.
+    // normal child decode — a tag (0xc0) and an unsupported simple value, `undefined` (0xf7),
+    // inside a one-element array. 0xf5 (`true`) is deliberately not used here: it is a
+    // supported simple value as of Block 1.10b (see decodesAppendixASimpleValues).
     @Test
     fun rejectsNestedUnsupportedValues() {
         assertEquals(CborError.TagsNotSupported, decodeError("81c000"))
-        assertEquals(CborError.FloatOrSimpleNotSupported(21), decodeError("81f5"))
+        assertEquals(CborError.FloatOrSimpleNotSupported(23), decodeError("81f7"))
     }
 
     // Hand-written: an empty array (0x80) is one complete value; the trailing 0x00 is rejected.
@@ -311,13 +313,22 @@ class CborDecodeTest {
         assertEquals(CborError.TagsNotSupported, decodeError("c3"))
     }
 
-    // Floats and simple values (major 7) are out of scope for Phase 0.
+    // RFC 8949 Appendix A — the three fixed simple values (major type 7) added narrowly in
+    // Block 1.10b (ADR-0015 §3): false, true, and null. See rejectsUnsupportedSimpleValues for
+    // every other major-type-7 value, which remains out of scope.
     @Test
-    fun rejectsFloatsAndSimpleValues() {
-        assertEquals(CborError.FloatOrSimpleNotSupported(20), decodeError("f4")) // false
-        assertEquals(CborError.FloatOrSimpleNotSupported(21), decodeError("f5")) // true
-        assertEquals(CborError.FloatOrSimpleNotSupported(22), decodeError("f6")) // null
+    fun decodesAppendixASimpleValues() {
+        assertEquals(CborValue.CborBool(false), decoded("f4"))
+        assertEquals(CborValue.CborBool(true), decoded("f5"))
+        assertEquals(CborValue.CborNull, decoded("f6"))
+    }
+
+    // Floats, undefined, and every other simple value (major 7) remain out of scope.
+    @Test
+    fun rejectsUnsupportedSimpleValues() {
         assertEquals(CborError.FloatOrSimpleNotSupported(23), decodeError("f7")) // undefined
+        assertEquals(CborError.FloatOrSimpleNotSupported(24), decodeError("f820")) // simple(32), 1-byte form
+        assertEquals(CborError.FloatOrSimpleNotSupported(25), decodeError("f93c00")) // float16
         assertEquals(CborError.FloatOrSimpleNotSupported(26), decodeError("fa47c35000")) // float32
         assertEquals(CborError.FloatOrSimpleNotSupported(27), decodeError("fb3ff199999999999a")) // float64
     }

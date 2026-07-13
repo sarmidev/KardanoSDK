@@ -2,9 +2,9 @@
 
 | Field   | Value                                                                 |
 |---------|------------------------------------------------------------------------|
-| Status  | **Accepted** (Block 1.10a decision record; authorizes no signing code — signing implementation is gated on Block 1.10b-pre passing) |
+| Status  | **Accepted**; Block 1.10b (`:crypto` `Signing`, `:tx` witness/transaction assembly, `:wallet` signing orchestration) **implemented and verified** — see §9 result note. Block 1.10c (Playground checkpoint) remains open. |
 | Scope   | Block 1.10a — signing ownership/module boundary, exact signing scope, fixture-only enforcement boundary, signing message, signing artifact, crypto-backend gate, error model, test/vector policy, Playground checkpoint, guardrail reconciliation, sub-block split |
-| Phase   | Phase 1 (Block 1.10a)                                                  |
+| Phase   | Phase 1 (Block 1.10a/1.10b)                                            |
 | Updated | 2026-07-13                                                            |
 
 ---
@@ -350,6 +350,37 @@ rule; any edit there is a Block 1.10b concern if the API text needs it).
   `WalletError.Signing`), and the split tests (§6). May be split into `1.10b-1` (`:crypto`
   signing) and `1.10b-2` (`:tx` assembly + `:wallet` orchestration) if the diff would exceed the
   ~300–400-line review target.
+
+  > **Result (Block 1.10b): IMPLEMENTED.** All three pieces landed exactly as designed above,
+  > with no scope widening:
+  > - `:crypto` gained `Signing`/`SigningError`/`Ed25519Bip32Signing` (an internal adapter over
+  >   the adopted `:crypto-signing-backend`, ADR-0016 §9i) plus
+  >   `ExtendedPrivateKey.extendedPrivateKeyBytesForSigning()`, a second module-internal
+  >   accessor alongside the existing test-only `xskBytesForTesting()` — no public
+  >   private-key-byte accessor was added (ADR-0009 §7 stands).
+  > - `:tx` gained `VerificationKeyWitness`, `TransactionWitnessSet`, `SignedTransaction`, and
+  >   `TransactionAssembler` (+ three new `TxBuildError` variants:
+  >   `InvalidVerificationKeyLength`, `InvalidSignatureLength`, `EmptyWitnessSet`). `:tx` gained
+  >   no `:crypto` dependency and stayed crypto-free, as designed. Assembling the full
+  >   `[body, witness_set, true, null]` array required `:core`'s CBOR subset to support the
+  >   fixed simple values `true`/`false`/`null` (major type 7) — a narrow, out-of-band addition
+  >   to the ADR-0001 policy, recorded as an addendum to
+  >   `docs/DECISIONS/0001-cbor-and-parser-policy.md` rather than re-opening this ADR's scope.
+  > - `:wallet` gained the `:wallet → :tx` dependency and
+  >   `ReadOnlyWallet.signTransaction(words, network, draft)` — the same explicit
+  >   `(words, network)` shape `restore` already takes, plus a `TransactionDraft` — returning a
+  >   new `WalletSignedTransaction(signedTransaction, transactionId)` pairing type, plus two new
+  >   `WalletError` variants (`Signing`, `TransactionAssembly`). No `:wallet → :shared`
+  >   dependency was added; the fixture-only scope remains a call-site discipline (§2a).
+  > - Verified per §6: `:crypto:jvmTest`, `:tx:jvmTest`, `:wallet:jvmTest`,
+  >   `:crypto-signing-backend:jvmTest` pass; `:crypto:testAndroidHostTest`,
+  >   `:tx:testAndroidHostTest`, `:wallet:testAndroidHostTest` pass;
+  >   `:crypto-signing-backend:connectedAndroidDeviceTest` passes on a real device and an
+  >   emulator; `:crypto:compileKotlinIosArm64`, `:tx:compileKotlinIosArm64`,
+  >   `:wallet:compileKotlinIosArm64`, `:crypto-signing-backend:compileKotlinIosArm64`, and
+  >   `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` all pass.
+  > - No submission, mainnet path, or general-purpose wallet signing API was introduced. Block
+  >   1.10c (the `:shared` Playground checkpoint, §7) remains open.
 - **1.10c** — the `:shared` Android Playground "Signed Transaction (not submitted)" checkpoint
   (§7) plus Android runtime verification.
 

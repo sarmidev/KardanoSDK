@@ -1057,17 +1057,21 @@ Sub-blocks:
   is macOS-only by design (no CI in-repo; Linux/Windows = future work, ADR-0016 §9 R3). **Block
   1.10b (the signing API) is unblocked**, but the adoption block itself added **no** signing code,
   **no** `:crypto`→backend dependency, and no change to any other SDK module.
-- `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
-  (unblocked — 1.10b-pre backend adopted + verified, ADR-0016 §9i; not yet started).** Add
-  `:crypto`'s backend-neutral `Signing` (sign the `bodyHash` with an
-  `ExtendedPrivateKey`; add the module-internal full-extended-scalar accessor and a sealed
-  `SigningError`, keeping no public private-key byte accessor); `:tx`'s witness-set/full-
-  `transaction` CBOR assembly from supplied `(vkey, signature)` pairs (`SignedTransaction` +
-  typed errors, still crypto-free); `:wallet`'s signing orchestration (derive → hash → sign →
-  assemble, `WalletError.Signing`, clear key material in `finally`); and the split tests (backend
-  KAT + structural CBOR + labeled sign/verify self-consistency; Android runtime test required).
-  May split into `1.10b-1` (`:crypto`) / `1.10b-2` (`:tx` + `:wallet`) if the diff exceeds the
-  review target.
+- `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: complete.**
+  Added `:crypto`'s backend-neutral `Signing`/`SigningError`/`Ed25519Bip32Signing` (sign the
+  32-byte `bodyHash` with an `ExtendedPrivateKey`, delegating to the adopted
+  `:crypto-signing-backend`; added the module-internal
+  `extendedPrivateKeyBytesForSigning()` accessor, no public private-key byte accessor); `:tx`'s
+  `VerificationKeyWitness`/`TransactionWitnessSet`/`SignedTransaction`/`TransactionAssembler`
+  (witness-set/full-`transaction` CBOR assembly from supplied `(vkey, signature)` pairs, three
+  new `TxBuildError` variants, still crypto-free — `:core`'s CBOR subset gained narrow
+  `true`/`false`/`null` support to encode the wrapper, addendum to ADR-0001); `:wallet`'s
+  `ReadOnlyWallet.signTransaction(words, network, draft)` orchestration (derive → hash → sign →
+  assemble, returning `WalletSignedTransaction`; new `WalletError.Signing`/`.TransactionAssembly`;
+  key material cleared in `finally`); and the split tests (backend KAT + structural CBOR +
+  labeled sign/verify self-consistency; Android runtime test required). See ADR-0015 §9 result
+  note for the full verification matrix (all JVM/Android-host/Android-device/iOS
+  compile-and-link commands pass).
 - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status: pending.**
   Build the same unsigned draft as 1.9c, sign it by calling `:wallet`'s entry point with the cited
   `TestWalletFixture` words/path and `Network.TESTNET` explicitly (ADR-0015 §2a — `:wallet` is not
@@ -1200,8 +1204,21 @@ module**: `jvmTest` 4/4 (macOS arm64); `connectedAndroidDeviceTest` 4/4 on a phy
 `linkDebugTestIosSimulatorArm64` green (cinterop over the committed static libs); and `nm`/`llvm-nm`
 symbol proof on all 8 artifacts. The disposable `scratch-signing-backend` /
 `scratch-signing-backend:android` modules are deleted. JVM native coverage is macOS-only by design
-(no CI in-repo; Linux/Windows JVM hosts are future work, ADR-0016 §9 Option R3). **The next step is
-the Block 1.10b signing implementation** (`:crypto`'s `Signing` API, the `:crypto`→`:crypto-signing-backend`
-dependency, witness/transaction assembly, wallet orchestration) under ADR-0015 scope — now unblocked
-(ADR-0016 §9i) but **not** started in the adoption block, which added no signing code and touched no
-other SDK module.
+(no CI in-repo; Linux/Windows JVM hosts are future work, ADR-0016 §9 Option R3).
+
+`1.10b` (the signing implementation) is **complete** (ADR-0015 §9 result note): `:crypto` gained
+the `Signing`/`SigningError` API delegating to `:crypto-signing-backend`
+(`extendedPrivateKeyBytesForSigning()` module-internal accessor, no public private-key byte
+exposure); `:tx` gained witness-set/full-`transaction` CBOR assembly
+(`VerificationKeyWitness`/`TransactionWitnessSet`/`SignedTransaction`/`TransactionAssembler`,
+still crypto-free — `:core`'s CBOR subset gained the narrow `true`/`false`/`null` simple values
+this required, per the ADR-0001 addendum); `:wallet` gained the `:wallet → :tx` dependency and
+`ReadOnlyWallet.signTransaction(words, network, draft)` orchestration returning
+`WalletSignedTransaction`. Every verification command in ADR-0015 §6/§9 passes: `jvmTest` for
+`:crypto`/`:tx`/`:wallet`/`:crypto-signing-backend`; `testAndroidHostTest` for
+`:crypto`/`:tx`/`:wallet`; `:crypto-signing-backend:connectedAndroidDeviceTest` on a physical
+device and an emulator; `compileKotlinIosArm64` for
+`:crypto`/`:tx`/`:wallet`/`:crypto-signing-backend`; and
+`:crypto-signing-backend:linkDebugTestIosSimulatorArm64`. **The next step is Block 1.10c** (the
+`:shared` Android "Signed Transaction (not submitted)" checkpoint, ADR-0015 §7), which is
+**not** implemented by this change.

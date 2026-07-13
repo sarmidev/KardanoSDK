@@ -1112,8 +1112,19 @@ Proposed block sequence:
     is macOS-only by design (no CI in-repo; Linux/Windows = future work, ADR-0016 §9 R3). **Block
     1.10b is unblocked**, though the adoption block added no signing code and no `:crypto`→backend
     dependency.
-  - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status: pending
-    (unblocked — 1.10b-pre backend adopted + verified, ADR-0016 §9i; not yet started).**
+  - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status:
+    complete** (ADR-0015 §9 result note). `:crypto` gained `Signing`/`SigningError` over the
+    adopted `:crypto-signing-backend` plus a module-internal `extendedPrivateKeyBytesForSigning()`
+    accessor (no public private-key byte exposure); `:tx` gained
+    `VerificationKeyWitness`/`TransactionWitnessSet`/`SignedTransaction`/`TransactionAssembler`
+    (still crypto-free; `:core`'s CBOR subset gained narrow `true`/`false`/`null` simple-value
+    support this required, per the ADR-0001 addendum); `:wallet` gained the `:wallet → :tx`
+    dependency and `ReadOnlyWallet.signTransaction(words, network, draft)` returning
+    `WalletSignedTransaction`. All verification commands pass: `jvmTest` for
+    `:crypto`/`:tx`/`:wallet`/`:crypto-signing-backend`; `testAndroidHostTest` for
+    `:crypto`/`:tx`/`:wallet`; `:crypto-signing-backend:connectedAndroidDeviceTest` on a physical
+    device and an emulator; `compileKotlinIosArm64` for all four modules; and
+    `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`.
   - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:
     pending.** Signs by calling `:wallet`'s entry point with the cited fixture words/path and
     `Network.TESTNET` explicitly (ADR-0015 §2a). Displays the tx id, witness count, a truncated

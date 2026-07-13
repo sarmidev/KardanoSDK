@@ -11,10 +11,16 @@ import org.sarmidev.kardano.crypto.derivation.IcarusMasterKey
 import org.sarmidev.kardano.crypto.derivation.KeyDerivation
 import org.sarmidev.kardano.crypto.hashing.Hashing
 import org.sarmidev.kardano.crypto.mnemonic.Mnemonic
+import org.sarmidev.kardano.crypto.signing.Signing
 import org.sarmidev.kardano.primitives.Lovelace
 import org.sarmidev.kardano.primitives.Network
+import org.sarmidev.kardano.primitives.TxHash
 import org.sarmidev.kardano.provider.ChainQueryProvider
 import org.sarmidev.kardano.provider.Utxo
+import org.sarmidev.kardano.tx.TransactionAssembler
+import org.sarmidev.kardano.tx.TransactionDraft
+import org.sarmidev.kardano.tx.TransactionWitnessSet
+import org.sarmidev.kardano.tx.VerificationKeyWitness
 
 /**
  * A read-only handle over a restored wallet's public metadata: its [network], its testnet/
@@ -25,15 +31,19 @@ import org.sarmidev.kardano.provider.Utxo
  * restoration, key derivation, hashing) with `:core` (credential and address construction).
  * A [ReadOnlyWallet] retains no mnemonic, seed, entropy, root/private key bytes, or raw public
  * key bytes — only [network], the built [Address], and the two [Cip1852Path] values, none of
- * which are secret. This type introduces no persistence: an instance lives only as long as the
- * caller keeps the in-memory reference. See
+ * which are secret. See
  * [ADR-0013](../../../../../../docs/DECISIONS/0013-wallet-boundary-and-read-only-state.md) for
  * the full design rationale, including why this module exists and why it does not depend on
  * `:provider-blockfrost`.
  *
- * This is structural and read-only: it can restore a wallet, derive its address, and query a
- * provider for a balance, but it never builds, signs, or submits a transaction, and it never
- * persists anything.
+ * This type can restore a wallet, derive its address, query a provider for a balance
+ * ([balance]), and — as of Block 1.10b, ADR-0015 §1 — sign an already-built
+ * [org.sarmidev.kardano.tx.TransactionDraft] into a signed, unsubmitted artifact
+ * ([signTransaction]). [signTransaction] does not build or alter a transaction body/fee itself,
+ * and it is not a general-purpose wallet signing API — see its own KDoc for the exact scope
+ * (ADR-0015 §2a). This type never submits a transaction (submission is Block 1.11) and
+ * introduces no persistence: an instance lives only as long as the caller keeps the in-memory
+ * reference.
  *
  * @property network the network [address] was generated for.
  * @property address the wallet's generated testnet/mainnet base address.
@@ -191,6 +201,123 @@ public class ReadOnlyWallet private constructor(
                 paymentPublicKey?.clear()
                 stakePrivateKey?.clear()
                 stakePublicKey?.clear()
+            }
+        }
+
+        /**
+         * Signs [draft] with the payment key derived from [words], returning the full signed
+         * `transaction` and the transaction id (ADR-0015 §1-§3, Block 1.10b).
+         *
+         * This is **not** a general-purpose wallet signing API (ADR-0015 §2a): it authorizes
+         * signing only for the Phase 1 testnet test-fixture flow already used by [restore] —
+         * `Network.TESTNET`, the cited test-only mnemonic, and an ADA-only single-payment
+         * [TransactionDraft] produced by `TransactionBuilder`/`TransactionBodySerializer`. It
+         * takes whatever [words]/[network]/[draft] it is given and has no way to verify that
+         * [words] is the Phase 1 fixture or that [network] is testnet; that guarantee is a
+         * call-site/checkpoint discipline, not a runtime check this function performs.
+         *
+         * Derives the account-0 payment key ([PAYMENT_PATH]) exactly as [restore] does, then:
+         * hashes [draft]'s body ([Hashing.blake2b256]) to the 32-byte `bodyHash` / transaction
+         * id; signs that hash with the derived payment key ([Signing.sign]) — never the raw
+         * body bytes; projects the payment public key ([KeyDerivation.publicKey]) for the
+         * witness's `vkey`; and assembles the single-witness [TransactionWitnessSet] and full
+         * signed `transaction` CBOR through [TransactionAssembler.assemble]. [draft]'s body and
+         * fee are read, never rebuilt or altered (ADR-0015 §3): the exact
+         * [TransactionDraft.bodyCbor] bytes are what is hashed, signed, and embedded.
+         *
+         * The mnemonic, master key, and both derived payment key handles are cleared before
+         * returning, on every path (success or failure); the returned
+         * [WalletSignedTransaction] retains none of them.
+         *
+         * **[network] is intentionally not read by this function's implementation.** Payment-key
+         * derivation ([PAYMENT_PATH]) and signing are network-independent, and this function
+         * builds no address, so there is nothing here for [network] to affect. It is kept as an
+         * explicit parameter — rather than dropped — purely so this entry point's signature
+         * mirrors [restore]'s `(words, network)` shape exactly, per ADR-0015 §1's design, and so
+         * it reads at every call site as the same explicit network declaration [restore] already
+         * requires. Enforcing [network] `==` [Network.TESTNET] is a **Phase 1 call-site/test
+         * discipline, not a runtime check this function performs** (ADR-0015 §2a): `:wallet`
+         * cannot itself recognize the Phase 1 test fixture or reject mainnet, so every Phase 1
+         * caller must pass [Network.TESTNET] and the cited fixture explicitly.
+         *
+         * @param words the candidate BIP-39 mnemonic words for the signing key. Phase 1
+         *   call sites must pass the cited test-only fixture.
+         * @param network the network this call site declares it is signing for. Not read by
+         *   this function's implementation (see above); Phase 1 call sites must pass
+         *   [Network.TESTNET].
+         * @param draft the already-built, unsigned draft to sign. Not rebuilt or altered.
+         * @return [KardanoResult.Ok] with the [WalletSignedTransaction], or
+         *   [KardanoResult.Err] with a [WalletError] describing the first failure
+         *   ([WalletError.Mnemonic], [WalletError.Derivation], [WalletError.Hashing],
+         *   [WalletError.Signing], or [WalletError.TransactionAssembly]). Never throws.
+         */
+        @Suppress("UNUSED_PARAMETER")
+        public fun signTransaction(
+            words: List<String>,
+            network: Network,
+            draft: TransactionDraft,
+        ): KardanoResult<WalletSignedTransaction, WalletError> {
+            val mnemonic = when (val result = Mnemonic.parse(words)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return KardanoResult.Err(WalletError.Mnemonic(result.error))
+            }
+            var master: IcarusMasterKey? = null
+            var paymentPrivateKey: ExtendedPrivateKey? = null
+            var paymentPublicKey: ExtendedPublicKey? = null
+            try {
+                master = when (val result = IcarusMasterKey.fromMnemonic(mnemonic)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
+                }
+                val derivation = KeyDerivation.default()
+
+                paymentPrivateKey = when (val result = derivation.derivePrivate(master, PAYMENT_PATH)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
+                }
+                paymentPublicKey = when (val result = derivation.publicKey(paymentPrivateKey)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
+                }
+
+                val bodyHash = when (val result = Hashing.default().blake2b256(draft.bodyCbor())) {
+                    is KardanoResult.Ok -> result.value.toByteArray()
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Hashing(result.error))
+                }
+
+                val signature = when (val result = Signing.default().sign(bodyHash, paymentPrivateKey)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Signing(result.error))
+                }
+
+                val witness = when (
+                    val result = VerificationKeyWitness.of(paymentPublicKey.publicKeyBytes(), signature)
+                ) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.TransactionAssembly(result.error))
+                }
+                val witnessSet = when (val result = TransactionWitnessSet.of(listOf(witness))) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.TransactionAssembly(result.error))
+                }
+                val signedTransaction = when (val result = TransactionAssembler.assemble(draft, witnessSet)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.TransactionAssembly(result.error))
+                }
+
+                val transactionId = when (val result = TxHash.of(bodyHash)) {
+                    is KardanoResult.Ok -> result.value
+                    // Unreachable: Hashing.blake2b256 always returns a 32-byte HashDigest, and
+                    // TxHash.SIZE is 32.
+                    is KardanoResult.Err -> error("blake2b256 body hash is unexpectedly not 32 bytes")
+                }
+
+                return KardanoResult.Ok(WalletSignedTransaction(signedTransaction, transactionId))
+            } finally {
+                mnemonic.clear()
+                master?.clear()
+                paymentPrivateKey?.clear()
+                paymentPublicKey?.clear()
             }
         }
 

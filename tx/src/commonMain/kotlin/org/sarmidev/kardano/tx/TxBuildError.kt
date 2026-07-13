@@ -29,6 +29,11 @@ import org.sarmidev.kardano.primitives.UtxoRef
  * [InvalidProtocolParameters], and [FeeEstimateDidNotConverge] reachable. Only
  * [UnsupportedFeature] remains unreachable: nothing in `:tx` yet consumes a multi-asset
  * `Value`. Each variant's KDoc below states which entry point produces it.
+ *
+ * Block 1.10b (ADR-0015 §5) extends this same sealed type — rather than adding a sibling
+ * sealed type — for witness/full-`transaction` assembly errors: [InvalidVerificationKeyLength],
+ * [InvalidSignatureLength], and [EmptyWitnessSet]. `:tx` stays crypto-free (ADR-0015 §1): these
+ * validate byte lengths and structure only, never cryptographic correctness.
  */
 public sealed interface TxBuildError {
 
@@ -219,4 +224,44 @@ public sealed interface TxBuildError {
      * @property ref the duplicated input reference.
      */
     public data class DuplicateInput(public val ref: UtxoRef) : TxBuildError
+
+    /**
+     * A supplied verification key (`vkey`) was not exactly [VerificationKeyWitness.VKEY_BYTES]
+     * bytes.
+     *
+     * Reachable today: [VerificationKeyWitness.of] (Block 1.10b, ADR-0015 §3/§5) rejects any
+     * other length before assembling a witness — `:tx` never hashes, signs, or trims a `vkey`
+     * to fit.
+     *
+     * @property expectedBytes the exact number of bytes expected ([VerificationKeyWitness.VKEY_BYTES]).
+     * @property actualBytes the number of bytes actually supplied.
+     */
+    public data class InvalidVerificationKeyLength(
+        public val expectedBytes: Int,
+        public val actualBytes: Int,
+    ) : TxBuildError
+
+    /**
+     * A supplied signature was not exactly [VerificationKeyWitness.SIGNATURE_BYTES] bytes.
+     *
+     * Reachable today: [VerificationKeyWitness.of] (Block 1.10b, ADR-0015 §3/§5) rejects any
+     * other length before assembling a witness.
+     *
+     * @property expectedBytes the exact number of bytes expected
+     *   ([VerificationKeyWitness.SIGNATURE_BYTES]).
+     * @property actualBytes the number of bytes actually supplied.
+     */
+    public data class InvalidSignatureLength(
+        public val expectedBytes: Int,
+        public val actualBytes: Int,
+    ) : TxBuildError
+
+    /**
+     * A [TransactionWitnessSet] was assembled with no verification-key witnesses.
+     *
+     * Reachable today: [TransactionWitnessSet.of] (Block 1.10b) rejects an empty witness list —
+     * a "signed" transaction with zero witnesses is not meaningfully signed for this MVP's
+     * single-key ADA-only scope (ADR-0015 §2).
+     */
+    public data object EmptyWitnessSet : TxBuildError
 }

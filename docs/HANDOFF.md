@@ -533,13 +533,14 @@ Do not implement:
   existing test fixture/restored wallet only, ADA-only single-payment `TransactionBuilder` drafts
   only). No mainnet, non-fixture/user wallet, native assets, scripts, metadata, or multisig
   signing. **No general-purpose or public wallet signing API** — `:wallet`'s Block 1.10 signing
-  entry point takes explicit `(words, network, draft)` inputs and is not fixture-aware; the
-  fixture-only scope is a Phase 1 call-site/checkpoint/test policy (`:shared`/tests pass the cited
-  fixture words/path and `Network.TESTNET` explicitly), not a `:wallet`-internal check, because
-  `:wallet` cannot depend on `:shared` (ADR-0015 §2a). The Block 1.10b-pre backend gate has now
-  passed (ADR-0016 §9i: the vendored `:crypto-signing-backend` module is verified across
-  JVM/Android/iOS), so the Block 1.10b signing implementation is unblocked — but it was **not**
-  started in the adoption block and must still stay within the ADR-0015 §2 scope above.
+  entry point (`ReadOnlyWallet.signTransaction`, implemented in Block 1.10b) takes explicit
+  `(words, network, draft)` inputs and is not fixture-aware; the fixture-only scope is a Phase 1
+  call-site/checkpoint/test policy (`:shared`/tests pass the cited fixture words/path and
+  `Network.TESTNET` explicitly), not a `:wallet`-internal check, because `:wallet` cannot depend
+  on `:shared` (ADR-0015 §2a). **Block 1.10b (the signing implementation itself — `:crypto`
+  `Signing`, `:tx` witness/transaction assembly, `:wallet` orchestration) is complete** (ADR-0015
+  §9 result note); do not widen it beyond the ADR-0015 §2 scope above without a new explicit
+  block/ADR.
 - Transaction submission.
 - Real wallet flows.
 - Plutus support.
@@ -559,6 +560,92 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-13
+
+Summary:
+
+- **Block 1.10b signing implementation — DONE. Result: `:crypto` `Signing`, `:tx` witness/full-
+  `transaction` assembly, and `:wallet` signing orchestration implemented and verified (ADR-0015
+  §9 result note).** Implements ADR-0015 §1/§3/§5/§6 now that the Block 1.10b-pre backend gate is
+  adopted and verified (ADR-0016 §9i). `:shared`'s Playground checkpoint (Block 1.10c) is **not**
+  part of this change.
+  - **First step: reconciled `docs/AI_WORKING_AGREEMENT.md` and
+    `.cursor/rules/kardano-sdk-guardrails.mdc`** — narrowed the blanket "no transaction signing"
+    ban to the ADR-0015 Block 1.10 scope (testnet/preprod only, the existing test fixture,
+    ADA-only single-payment drafts, signing the 32-byte body hash via the adopted backend), noting
+    the backend gate is adopted/verified. Every other ban (no mainnet, no real
+    mnemonics/keys/funds, no general-purpose wallet signing, no handwritten crypto, no
+    readiness/audit claims) stays verbatim.
+  - **`:crypto`.** Added `implementation(projects.cryptoSigningBackend)` to `commonMain`. New
+    `Signing` interface (`sign(bodyHash: ByteArray, key: ExtendedPrivateKey):
+    KardanoResult<ByteArray, SigningError>`, `BODY_HASH_BYTES = 32`, `SIGNATURE_BYTES = 64`,
+    `default()`), a sealed `SigningError` (`InvalidBodyHashLength`, `InvalidKeyMaterial`,
+    `BackendFailed`, `SigningUnavailable`), and the internal `Ed25519Bip32Signing` adapter that
+    delegates to `:crypto-signing-backend`'s `sign`. `ExtendedPrivateKey` gained a second
+    module-internal accessor, `extendedPrivateKeyBytesForSigning()` (96-byte `xsk ‖ chainCode`),
+    alongside the existing test-only `xskBytesForTesting()` — no public private-key byte
+    accessor was added (ADR-0009 §7 stands). The adapter clears the `xprv` copy in a `finally`
+    block on every path.
+  - **`:core`.** Assembling the full `transaction` array `[body, witness_set, true, null]`
+    needed CBOR support for the fixed simple values `true`/`false`/`null` (major type 7), which
+    the Phase 0 subset (ADR-0001) did not cover. Added `CborValue.CborBool`/`CborValue.CborNull`,
+    encode/decode support in `Cbor` for exactly `0xf4`/`0xf5`/`0xf6` (every other major-type-7
+    value, including `undefined` and floats, is still rejected), and recorded this as a
+    2026-07-13 addendum to `docs/DECISIONS/0001-cbor-and-parser-policy.md` rather than reopening
+    that ADR's scope.
+  - **`:tx`.** Added `VerificationKeyWitness` (32-byte vkey + 64-byte signature, length-validated),
+    `TransactionWitnessSet` (non-empty list of witnesses), `SignedTransaction` (full signed
+    `transaction` CBOR bytes + witness set), and `TransactionAssembler.assemble(draft,
+    witnessSet)`, which embeds `draft.bodyCbor()` unchanged as field `0`, encodes the
+    `{0: [[vkey, sig], ...]}` witness-set map as field `1`, and fixes fields `2`/`3` to
+    `true`/`null`. Three new `TxBuildError` variants: `InvalidVerificationKeyLength`,
+    `InvalidSignatureLength`, `EmptyWitnessSet`. `:tx` gained no `:crypto` dependency and stays
+    crypto-free, as designed — it never hashes or signs, only assembles caller-supplied bytes.
+  - **`:wallet`.** Added the `:wallet → :tx` dependency and
+    `ReadOnlyWallet.signTransaction(words, network, draft)` — the same explicit `(words,
+    network)` shape `restore` already takes, plus a `TransactionDraft`. It re-derives the
+    account-0 payment key, hashes `draft.bodyCbor()` (`Blake2b-256`) to the 32-byte `bodyHash` /
+    transaction id, signs that hash (never the raw body bytes) with `Signing.sign`, projects the
+    payment public key for the witness `vkey`, and assembles a single-witness
+    `TransactionWitnessSet`/`SignedTransaction` via `TransactionAssembler`. Returns a new
+    `WalletSignedTransaction(signedTransaction, transactionId)`. Two new `WalletError` variants:
+    `Signing`, `TransactionAssembly`. The mnemonic, master key, and both derived payment key
+    handles are cleared in `finally` on every path. No `:wallet → :shared` dependency was added;
+    per ADR-0015 §2a the fixture-only/testnet-only scope stays a call-site/test discipline, not a
+    `:wallet`-internal check — `signTransaction` takes whatever `words`/`network`/`draft` it is
+    given.
+  - **Tests added** (no invented protocol vectors): `:crypto` — `SigningLengthValidationTest`
+    (native-free `bodyHash` length rejection), `Ed25519Bip32SigningRuleTest` (native-free
+    throwable-mapping), `Ed25519Bip32SigningKatTest` (JVM, reproduces the ADR-0016 §3 `D1_H0` KAT
+    through `:crypto`'s own dependency wiring, then a labeled sign-then-verify self-consistency
+    check against a real Blake2b-256 body hash). `:tx` — `VerificationKeyWitnessTest`,
+    `TransactionWitnessSetTest`, `TransactionAssemblerTest` (witness/full-`transaction` CBOR
+    shape via `:core` `Cbor.decode`, tx-id-shape field checks, no body/fee mutation, and a
+    structural guard that the witness-set map has only key `0` — no script/bootstrap/Plutus
+    fields are representable). `:wallet` — `ReadOnlyWalletSignTransactionMnemonicTest`
+    (native-free mnemonic rejection), `ReadOnlyWalletSignTransactionDesktopTest` (JVM,
+    self-consistency: independently re-derives the same payment vkey and body hash and checks
+    `signTransaction`'s output against them; also asserts no body/fee mutation), plus new
+    `WalletErrorTest` cases for the two new variants.
+  - **Verification — all PASS:** `:crypto:jvmTest`, `:tx:jvmTest`, `:wallet:jvmTest`,
+    `:crypto-signing-backend:jvmTest`; `:crypto:testAndroidHostTest`, `:tx:testAndroidHostTest`,
+    `:wallet:testAndroidHostTest`; `:crypto-signing-backend:connectedAndroidDeviceTest` on
+    `SM-A356B` (Android 15, physical) and `kardano_api24` (API 24 emulator);
+    `:crypto:compileKotlinIosArm64`, `:tx:compileKotlinIosArm64`, `:wallet:compileKotlinIosArm64`,
+    `:crypto-signing-backend:compileKotlinIosArm64`, and
+    `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`.
+  - **Scope confirmed:** no `:shared` Playground code, no transaction submission code, no
+    mainnet/general-purpose wallet signing scope was introduced.
+  - Docs: `docs/AI_WORKING_AGREEMENT.md` and `.cursor/rules/kardano-sdk-guardrails.mdc` (signing
+    rule narrowed to "adopted and verified"), `docs/DECISIONS/0015-transaction-signing.md` (§9
+    result note), `docs/DECISIONS/0001-cbor-and-parser-policy.md` (simple-value addendum),
+    `core/README.md` (CBOR subset description), `docs/PHASE_1_PLAN.md`/`docs/ROADMAP.md`
+    (§1.10b → complete), this file. **Next step: Block 1.10c** — the `:shared` Android "Signed
+    Transaction (not submitted)" Playground checkpoint (ADR-0015 §7) plus Android runtime
+    verification.
+
+### Session Summary (Block 1.10b backend adoption/pinning + Android packaging follow-up)
 
 Date: 2026-07-13
 

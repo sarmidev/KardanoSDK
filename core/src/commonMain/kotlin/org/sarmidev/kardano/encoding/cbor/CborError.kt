@@ -11,7 +11,8 @@ import org.sarmidev.kardano.KardanoResult
  *
  * The Phase 0 subset supports only definite-length unsigned integers, negative integers,
  * byte strings, and text strings within the signed [Long] range, plus definite-length arrays
- * and maps within the named nesting and element-count limits; everything else maps to a
+ * and maps within the named nesting and element-count limits, plus (added narrowly in Block
+ * 1.10b, ADR-0015 §3) the fixed simple values `false`/`true`/`null`; everything else maps to a
  * variant here.
  *
  * @see <a href="https://www.rfc-editor.org/rfc/rfc8949">RFC 8949 (CBOR)</a>
@@ -117,9 +118,12 @@ public sealed interface CborError {
     public data object TagsNotSupported : CborError
 
     /**
-     * A CBOR float or simple value (major type 7), including `false`, `true`, `null`, and
-     * `undefined`, was encountered. These are out of scope for the Phase 0 subset and are
-     * rejected.
+     * An unsupported CBOR float or simple value (major type 7) was encountered.
+     *
+     * `false`, `true` ([CborValue.CborBool]) and `null` ([CborValue.CborNull]) are supported,
+     * added narrowly for Block 1.10b's full signed `transaction` wrapper (ADR-0015 §3).
+     * `undefined`, every other simple value, and all floats remain out of scope and are
+     * rejected with this error.
      *
      * @property additionalInfo the additional-info value of the major-type-7 head byte.
      */

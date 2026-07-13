@@ -4,8 +4,10 @@ import org.sarmidev.kardano.address.AddressError
 import org.sarmidev.kardano.crypto.derivation.KeyDerivationError
 import org.sarmidev.kardano.crypto.hashing.CryptoError
 import org.sarmidev.kardano.crypto.mnemonic.MnemonicError
+import org.sarmidev.kardano.crypto.signing.SigningError
 import org.sarmidev.kardano.primitives.Network
 import org.sarmidev.kardano.provider.ProviderError
+import org.sarmidev.kardano.tx.TxBuildError
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -66,6 +68,20 @@ class WalletErrorTest {
         val error = WalletError.BalanceOverflow(partialCount = 3)
 
         assertEquals(3, error.partialCount)
+    }
+
+    @Test
+    fun signingVariant_wrapsUnderlyingSigningError() {
+        val error = WalletError.Signing(SigningError.BackendFailed("signing failed"))
+
+        assertEquals(SigningError.BackendFailed("signing failed"), error.error)
+    }
+
+    @Test
+    fun transactionAssemblyVariant_wrapsUnderlyingTxBuildError() {
+        val error = WalletError.TransactionAssembly(TxBuildError.EmptyWitnessSet)
+
+        assertEquals(TxBuildError.EmptyWitnessSet, error.error)
     }
 
     @Test

@@ -41,7 +41,16 @@ Pure-Kotlin, deterministic, **no cryptography required**:
 ## Forbidden actions
 
 - Do **not** implement cryptographic algorithms by hand (Blake2b, Ed25519, SHA, etc.).
-- Do **not** add transaction signing.
+- Transaction signing is allowed **only** inside the Block 1.10 scope authorized by
+  ADR-0015 (`docs/DECISIONS/0015-transaction-signing.md`): testnet/preprod only; the
+  existing Phase 1 test fixture/restored-wallet checkpoint only; ADA-only single-payment
+  `TransactionBuilder` drafts only; signing the 32-byte transaction body hash via a
+  verified backend, never a handwritten signing algorithm. The Block 1.10b-pre backend
+  gate (ADR-0016, `docs/DECISIONS/0016-transaction-signing-backend-gate.md`) is adopted
+  and verified via the pinned `:crypto-signing-backend` module. Signing outside that
+  scope — mainnet, any non-fixture/user-supplied wallet, native assets, scripts,
+  metadata, multisig, or a general-purpose wallet signing API — remains disallowed
+  until a future explicit block/ADR widens it.
 - Do **not** add real mnemonics, private keys, or anything touching real funds —
   not in code, tests, fixtures, or docs.
 - Do **not** use banned marketing/security words (see below).
@@ -251,7 +260,9 @@ Prefer factual wording:
 
 ## Review checklist (before accepting generated code)
 
-- [ ] No handwritten crypto, no signing, no real keys/mnemonics/funds.
+- [ ] No handwritten crypto; signing (if any) stays inside the ADR-0015 Block 1.10 scope
+  and delegates to the adopted `:crypto-signing-backend` (ADR-0016); no real
+  keys/mnemonics/funds.
 - [ ] No banned marketing/security words.
 - [ ] SDK core stays UI-free; no unauthorized dependencies added.
 - [ ] New/changed public APIs have KDoc (including `@Throws` where applicable).
@@ -286,5 +297,6 @@ Prefer factual wording:
 - [ ] Security-sensitive behavior has cited external test vectors.
 - [ ] Public APIs have KDoc; validators say "structural only" where applicable.
 - [ ] Developer-facing docs are updated in the same change.
-- [ ] No banned words or unsafe crypto/signing/production claims were introduced.
+- [ ] No banned words or unsafe crypto/production claims were introduced; any signing
+  code stays inside the ADR-0015 Block 1.10 scope.
 - [ ] Diff is small enough to review manually (target < ~400 lines).

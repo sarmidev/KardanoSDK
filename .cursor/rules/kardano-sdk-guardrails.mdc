@@ -16,9 +16,10 @@ Full details in `docs/AI_WORKING_AGREEMENT.md`. UI-free Kotlin Multiplatform Car
   (ADR-0015): testnet/preprod only; the existing Phase 1 test fixture/restored-wallet checkpoint
   only; ADA-only single-payment `TransactionBuilder` drafts only. No mainnet, no
   non-fixture/user-supplied wallet, no native assets, no scripts, no metadata, no multisig.
-  Implementation is additionally blocked until the Block 1.10b-pre gate passes with a verified
-  extended Ed25519-BIP32 signing backend and a citable extended-key vector — do not implement
-  signing ahead of that gate.
+  The Block 1.10b-pre backend gate (ADR-0016) has passed: the extended Ed25519-BIP32 signing
+  backend is adopted and verified via the pinned `:crypto-signing-backend` module — Block 1.10b
+  signing code may delegate to it, but must not implement any signing algorithm by hand and
+  must not widen scope beyond the paragraph above.
 - No real mnemonics, private keys, or anything touching real funds — anywhere.
 - No banned words: `secure`, `safe`, `hardened`, `audited`, `production-ready`,
   `guaranteed`, `cryptographically safe`. Use factual wording instead.

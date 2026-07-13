@@ -30,6 +30,24 @@ public class ExtendedPrivateKey private constructor(xsk: ByteArray, chainCode: B
     internal fun xskBytesForTesting(): ByteArray = xsk.copyOf() + chainCode.copyOf()
 
     /**
+     * Returns a defensive copy of the 64-byte extended private key followed by the 32-byte
+     * chain code (96 bytes total) — the exact `xprv` layout Cardano extended Ed25519-BIP32
+     * signing needs (`kL` ‖ `kR` ‖ chain code).
+     *
+     * Module-internal: the only caller is [org.sarmidev.kardano.crypto.signing.Ed25519Bip32Signing],
+     * the Block 1.10b signing backend adapter. This is a second, signing-specific accessor
+     * alongside [xskBytesForTesting] (they happen to return the same bytes today because both
+     * need the full 96-byte layout, but are kept distinct so this one's caller and contract are
+     * documented for production use, not just tests). It does not widen the "no public
+     * private-key byte accessor" rule (ADR-0009 §7): the bytes never leave the module, and the
+     * signing adapter clears them in a `finally` block immediately after the backend call
+     * returns.
+     *
+     * @return a fresh 96-byte copy of xsk || chain code.
+     */
+    internal fun extendedPrivateKeyBytesForSigning(): ByteArray = xsk.copyOf() + chainCode.copyOf()
+
+    /**
      * Returns the left 32-byte scalar (`kL`) of the extended private key, and a defensive copy
      * of the 32-byte chain code, for public-key projection.
      *
