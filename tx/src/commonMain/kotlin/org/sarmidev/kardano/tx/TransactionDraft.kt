@@ -7,14 +7,18 @@ import org.sarmidev.kardano.primitives.UtxoRef
  * The result of [TransactionBodySerializer.serialize]: the canonical unsigned
  * `transaction_body` CBOR bytes plus the structured summary that produced them.
  *
- * This is an unsigned, unsubmitted structural artifact only (ADR-0014 §2): it carries no
- * witness set, is not a full `transaction`, and [fee] is whatever the caller supplied — this
- * sub-block computes no fee. The transaction id (`Blake2b-256` of [bodyCbor]) is left to a
- * caller that already depends on `:crypto` (ADR-0014 §2); `:tx` never hashes or signs.
+ * Every [TransactionDraft] is produced by [TransactionBodySerializer.serialize]. It may be
+ * reached directly, with a caller-supplied [fee], or indirectly through
+ * [TransactionBuilder.build], which selects inputs and estimates/decides [fee] before
+ * delegating to [TransactionBodySerializer.serialize] for the actual encoding.
  *
- * Instances are only produced by [TransactionBodySerializer.serialize], which guarantees the
- * bytes returned by [bodyCbor] are the exact encoding of [selectedInputs] (in ledger order),
- * [outputs], [fee], and [ttl].
+ * This is an unsigned, unsubmitted structural artifact only (ADR-0014 §2): it carries no
+ * witness set, is not a full `transaction`, and has no signature or transaction id. The
+ * transaction id (`Blake2b-256` of [bodyCbor]) is left to a caller that already depends on
+ * `:crypto` (ADR-0014 §2); `:tx` never hashes or signs.
+ *
+ * Instances guarantee the bytes returned by [bodyCbor] are the exact encoding of
+ * [selectedInputs] (in ledger order), [outputs], [fee], and [ttl].
  *
  * @property selectedInputs the inputs that were encoded, in the ledger
  *   `(transaction_id, index)` ascending order (ADR-0014 §4) — not necessarily the order the
