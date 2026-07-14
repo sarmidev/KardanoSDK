@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -40,6 +41,54 @@ class PlaygroundReducerTest {
         assertEquals(SubmitTransactionPresentation.Empty, state.submit)
         assertTrue(state.technicalDetailsExpanded.isEmpty())
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS, state.providerAddressInput)
+        assertFalse(state.codeExamplesExpanded)
+        assertEquals(PlaygroundSection.OVERVIEW, state.section)
+        assertEquals(RoadmapPhase.PHASE_1, state.selectedRoadmapPhase)
+    }
+
+    // --- Section navigation (Block 1.12-pre-c-2) ---
+
+    @Test
+    fun navigationIntents_switchSectionOnly() {
+        val state = PlaygroundState.initial()
+
+        val trySdk = PlaygroundReducer.reduce(state, PlaygroundIntent.NavigateToTrySdk)
+        assertEquals(PlaygroundSection.TRY_SDK, trySdk.section)
+        // Navigation touches nothing but the section.
+        assertEquals(state.copy(section = PlaygroundSection.TRY_SDK), trySdk)
+
+        val roadmap = PlaygroundReducer.reduce(trySdk, PlaygroundIntent.NavigateToRoadmap)
+        assertEquals(PlaygroundSection.ROADMAP, roadmap.section)
+
+        val overview = PlaygroundReducer.reduce(roadmap, PlaygroundIntent.NavigateToOverview)
+        assertEquals(PlaygroundSection.OVERVIEW, overview.section)
+    }
+
+    // --- Roadmap phase selection: tap to expand, tap again to collapse ---
+
+    @Test
+    fun selectRoadmapPhase_selectsNewPhaseThenTogglesItOff() {
+        val state = PlaygroundState.initial()
+        assertEquals(RoadmapPhase.PHASE_1, state.selectedRoadmapPhase)
+
+        val phase2 = PlaygroundReducer.reduce(
+            state,
+            PlaygroundIntent.SelectRoadmapPhase(RoadmapPhase.PHASE_2),
+        )
+        assertEquals(RoadmapPhase.PHASE_2, phase2.selectedRoadmapPhase)
+
+        // Tapping the already-selected phase collapses its detail.
+        val collapsed = PlaygroundReducer.reduce(
+            phase2,
+            PlaygroundIntent.SelectRoadmapPhase(RoadmapPhase.PHASE_2),
+        )
+        assertNull(collapsed.selectedRoadmapPhase)
+
+        val phase0 = PlaygroundReducer.reduce(
+            collapsed,
+            PlaygroundIntent.SelectRoadmapPhase(RoadmapPhase.PHASE_0),
+        )
+        assertEquals(RoadmapPhase.PHASE_0, phase0.selectedRoadmapPhase)
     }
 
     // --- Provider selection: project id + live toggle ---
@@ -93,6 +142,22 @@ class PlaygroundReducerTest {
             PlaygroundIntent.ToggleTechnicalDetails(PlaygroundStep.FUNDS),
         )
         assertEquals(setOf(PlaygroundStep.SIGN), collapsedFunds.technicalDetailsExpanded)
+    }
+
+    // --- Landing "Code examples" toggle (Block 1.12-pre-c) ---
+
+    @Test
+    fun toggleCodeExamples_flipsFlagAndTouchesNothingElse() {
+        val state = PlaygroundState.initial()
+
+        val expanded = PlaygroundReducer.reduce(state, PlaygroundIntent.ToggleCodeExamples)
+        assertTrue(expanded.codeExamplesExpanded)
+        // The landing toggle is presentation-only: it leaves the rest of the state untouched.
+        assertEquals(state.copy(codeExamplesExpanded = true), expanded)
+
+        val collapsed = PlaygroundReducer.reduce(expanded, PlaygroundIntent.ToggleCodeExamples)
+        assertFalse(collapsed.codeExamplesExpanded)
+        assertEquals(state, collapsed)
     }
 
     // --- Reset flow: clears guided-flow results, keeps provider config + diagnostics ---

@@ -15,8 +15,9 @@ import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
 /**
  * Pure, non-suspend state transitions for [PlaygroundState].
  *
- * [reduce] handles every intent that needs no SDK/provider call — provider selection, text-field
- * updates, seed-address fill, technical-details toggling, and [PlaygroundIntent.ResetFlow].
+ * [reduce] handles every intent that needs no SDK/provider call — section navigation and roadmap
+ * phase selection, provider selection, text-field updates, seed-address fill, technical-details
+ * toggling, the landing "Code examples" toggle, and [PlaygroundIntent.ResetFlow].
  * Intents that call `:core`/`:crypto`/`:wallet`/`:tx`/`:provider` APIs (restoring the wallet,
  * querying funds, building/signing/submitting, parsing/decoding, loading provider data) are
  * intercepted by [PlaygroundViewModel] before reaching [reduce]; it calls the relevant use case
@@ -30,6 +31,19 @@ internal object PlaygroundReducer {
 
     /** Handles every intent that requires no SDK/provider call. See class KDoc for the split. */
     fun reduce(state: PlaygroundState, intent: PlaygroundIntent): PlaygroundState = when (intent) {
+        is PlaygroundIntent.NavigateToOverview -> state.copy(section = PlaygroundSection.OVERVIEW)
+        is PlaygroundIntent.NavigateToTrySdk -> state.copy(section = PlaygroundSection.TRY_SDK)
+        is PlaygroundIntent.NavigateToRoadmap -> state.copy(section = PlaygroundSection.ROADMAP)
+
+        // Tapping the already-selected phase collapses its detail; tapping another expands it.
+        is PlaygroundIntent.SelectRoadmapPhase -> state.copy(
+            selectedRoadmapPhase = if (state.selectedRoadmapPhase == intent.phase) {
+                null
+            } else {
+                intent.phase
+            },
+        )
+
         is PlaygroundIntent.ToggleLiveBlockfrost -> state.copy(useLiveBlockfrost = intent.enabled)
         is PlaygroundIntent.UpdateProjectId -> state.copy(projectId = intent.value)
 
@@ -40,6 +54,9 @@ internal object PlaygroundReducer {
                 state.technicalDetailsExpanded + intent.step
             },
         )
+
+        is PlaygroundIntent.ToggleCodeExamples ->
+            state.copy(codeExamplesExpanded = !state.codeExamplesExpanded)
 
         // Resets only the five guided-flow step results (and the Wallet step's loading flag);
         // provider selection and diagnostics inputs/results are intentionally preserved so

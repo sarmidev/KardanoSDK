@@ -21,6 +21,23 @@ internal enum class SeedAddressKind {
  */
 internal sealed interface PlaygroundIntent {
 
+    // --- Section navigation (Block 1.12-pre-c-2, sample-app only) ---
+
+    /** Shows the landing [PlaygroundSection.OVERVIEW] section. */
+    data object NavigateToOverview : PlaygroundIntent
+
+    /** Shows the interactive [PlaygroundSection.TRY_SDK] transaction-flow section. */
+    data object NavigateToTrySdk : PlaygroundIntent
+
+    /** Shows the [PlaygroundSection.ROADMAP] screen. */
+    data object NavigateToRoadmap : PlaygroundIntent
+
+    /**
+     * Selects (or, if already selected, collapses) the roadmap card whose detail is shown.
+     * Presentation only — it drives [PlaygroundState.selectedRoadmapPhase] and calls no SDK.
+     */
+    data class SelectRoadmapPhase(val phase: RoadmapPhase) : PlaygroundIntent
+
     // --- Provider selection ---
 
     /** Toggles the "Use live Blockfrost (preprod)" switch. */
@@ -57,6 +74,12 @@ internal sealed interface PlaygroundIntent {
 
     /** Toggles the expanded/technical view for one guided-flow step. */
     data class ToggleTechnicalDetails(val step: PlaygroundStep) : PlaygroundIntent
+
+    /**
+     * Toggles the landing overview's "Code examples" section (Block 1.12-pre-c). Presentation
+     * only — it shows/hides static illustrative snippets and calls no SDK.
+     */
+    data object ToggleCodeExamples : PlaygroundIntent
 
     // --- Diagnostics: Address Parser, Hex Decoder, CBOR Decoder, Provider explorer ---
 

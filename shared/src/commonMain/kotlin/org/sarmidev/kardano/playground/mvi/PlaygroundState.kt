@@ -26,6 +26,31 @@ internal enum class PlaygroundStep {
 }
 
 /**
+ * Which top-level Playground section is currently shown (Block 1.12-pre-c-2). This is a
+ * sample-app navigation concept only — a lightweight in-state switch between the landing
+ * overview, the interactive transaction flow, and the roadmap screen. It is not an SDK concept
+ * and is not part of any public API.
+ */
+internal enum class PlaygroundSection {
+    OVERVIEW,
+    TRY_SDK,
+    ROADMAP,
+}
+
+/**
+ * A phase in the sample-app roadmap screen (Block 1.12-pre-c-2). Phase 0/1 describe shipped
+ * work; Phase 2/3 are **candidate/future direction, not a commitment**. This enum only selects
+ * which roadmap card's detail is expanded ([PlaygroundState.selectedRoadmapPhase]); the phase
+ * copy itself lives in the roadmap UI. It is not a public API contract.
+ */
+internal enum class RoadmapPhase {
+    PHASE_0,
+    PHASE_1,
+    PHASE_2,
+    PHASE_3,
+}
+
+/**
  * Immutable state for the Playground's guided flow and diagnostics tools (Block 1.12-pre-a).
  *
  * This is the single source of truth [org.sarmidev.kardano.playground.PlaygroundScreen] renders
@@ -63,6 +88,21 @@ internal enum class PlaygroundStep {
  *
  * [technicalDetailsExpanded] names which steps currently show their expanded/technical view
  * (for example a full hex preview instead of a summary row); collapsed by default.
+ *
+ * ### Landing/overview (Block 1.12-pre-c)
+ *
+ * [codeExamplesExpanded] tracks whether the landing overview's "Code examples" section is
+ * expanded; collapsed by default. It is a presentation-only flag for the developer-facing
+ * landing area shown above the guided flow — it carries no SDK semantics and gates nothing but
+ * the visibility of static, illustrative snippets.
+ *
+ * ### Section navigation + roadmap (Block 1.12-pre-c-2)
+ *
+ * [section] selects which top-level sample-app section is shown — the landing [OVERVIEW]
+ * [PlaygroundSection.OVERVIEW], the interactive [TRY_SDK][PlaygroundSection.TRY_SDK] flow, or the
+ * [ROADMAP][PlaygroundSection.ROADMAP] screen; it defaults to `OVERVIEW`.
+ * [selectedRoadmapPhase] is the roadmap card whose detail is expanded (null = none expanded).
+ * Both are presentation-only navigation state with no SDK semantics.
  */
 internal data class PlaygroundState(
     val useLiveBlockfrost: Boolean,
@@ -83,9 +123,15 @@ internal data class PlaygroundState(
     val providerAddressInput: String,
     val providerUtxos: ProviderUtxosPresentation,
     val providerParams: ProviderParamsPresentation,
+    val codeExamplesExpanded: Boolean = false,
+    val section: PlaygroundSection = PlaygroundSection.OVERVIEW,
+    val selectedRoadmapPhase: RoadmapPhase? = RoadmapPhase.PHASE_1,
 ) {
     companion object {
-        /** The initial state: mock provider, every step empty/collapsed, no diagnostics input. */
+        /**
+         * The initial state: the Overview section, the Phase 1 roadmap card pre-expanded, mock
+         * provider, every guided step empty/collapsed, and the diagnostics defaults.
+         */
         fun initial(): PlaygroundState = PlaygroundState(
             useLiveBlockfrost = false,
             projectId = "",
@@ -105,6 +151,9 @@ internal data class PlaygroundState(
             providerAddressInput = InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS,
             providerUtxos = ProviderUtxosPresentation.Empty,
             providerParams = ProviderParamsPresentation.Empty,
+            codeExamplesExpanded = false,
+            section = PlaygroundSection.OVERVIEW,
+            selectedRoadmapPhase = RoadmapPhase.PHASE_1,
         )
     }
 }

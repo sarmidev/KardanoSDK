@@ -1205,8 +1205,85 @@ Proposed block sequence:
   errors, submit id comparison), no new architecture library, no Gradle/dependency change, and no
   visual redesign yet. **Block 1.12-pre-a is complete** (see `docs/PHASE_1_PLAN.md` and
   `docs/HANDOFF.md`).
-- `1.12-pre-b` Playground visual refresh — build an intuitive, branded guided-UX presentation on
-  top of the `1.12-pre-a` architecture. Not started.
+- `1.12-pre-b` Playground visual refresh — **Status: complete.** Outcome: a sample-app
+  visual/UX refresh built on the `1.12-pre-a` MVI foundation, presentation-only (no SDK behavior,
+  no SDK public API, no new dependency, no `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/
+  `:provider-blockfrost` change). A new `playground/ui/` package holds presentation-shell
+  composables — a Kotlin/KMP-inspired Material 3 theme (purple/blue/orange, light/dark),
+  `PlaygroundHeader` (hero + a Compose-drawn geometric mark, no external logo asset + a
+  completed-step `FlowStepper`), `StatusBadge`/status chips (`MOCK`/`LIVE PREPROD`/`TESTNET`/
+  `ADA-only`/`SIGNED`/`SUBMITTED`), `FlowStepCard` (numbered step with title, microcopy, status,
+  one action, key output, and a "Technical details" toggle), and a visually secondary,
+  collapsed-by-default `DiagnosticsSection`. `PlaygroundScreen` still reads `PlaygroundState` and
+  dispatches `PlaygroundIntent`s — no SDK orchestration moved into composables — and reuses the
+  exact `PlaygroundPresenter` display messages; per-step loading and inline errors were added.
+  `App.kt` now wraps the screen in `KardanoPlaygroundTheme`. Behavior unchanged (same fixture
+  wallet, mock/live provider selection, Blockfrost preprod-only submit boundary, ADA-only
+  filtering, no mainnet, no real mnemonic/private-key display, no arbitrary-mnemonic input, no
+  full CBOR display, no polling, no multi-asset support). Existing MVI/presenter tests kept
+  unchanged (no UI-text assertions to update). Verified: `:shared:jvmTest`,
+  `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`; `git diff --check` clean; no
+  banned words. **Follow-up polish (same block):** manual Android screenshots found a white root
+  background clashing with the darker hero/cards and no inset padding around the
+  already-edge-to-edge `:androidApp` (`enableEdgeToEdge()`, Block 1.2) — fixed by giving
+  `PlaygroundScreen`'s root container a theme-derived `surface`→`background` gradient and
+  `Modifier.safeDrawingPadding()` (a Compose-Multiplatform-common `expect`/`actual` API, no
+  Android-specific inset code). See `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12-pre-c` Playground landing section and developer-friendly copy — **Status: complete.**
+  Outcome: the `:shared` Playground now opens like a small developer-facing landing/demo page
+  above the existing guided flow. UX/content only — the `1.12-pre-a` MVI architecture and all SDK
+  behavior are preserved; no SDK public API, no provider/wallet/tx change, no new dependency, no
+  non-`:shared` module touched. The hero (`PlaygroundHeader`) gained the value statement, a
+  platform/scope badge row (`KMP`/`Android`/`iOS`/`JVM`/`Preprod`/`ADA-only MVP`), and a CTA that
+  scrolls to the flow; a new `LandingSection.kt` (`PlaygroundLanding`) adds *What the SDK does
+  today* capability cards, a developer-friendly *transaction flow* preview, collapsible
+  `simplified`-tagged *code examples* (illustrative pseudo-snippets — never a real mnemonic/private
+  key/full signed CBOR), and an honest *roadmap and scope* with a current-limitations list
+  (testnet/preprod-focused demo, ADA-only MVP, no multi-asset, no mainnet flow, no real wallet
+  import). All visuals are Compose-drawn — no external image/logo asset is bundled (deferred until
+  added with an explicit source/license). One presentation-only MVI flag was added
+  (`PlaygroundState.codeExamplesExpanded` + `PlaygroundIntent.ToggleCodeExamples` + a reducer
+  branch) gating only the snippet visibility. Guided-step titles were softened to
+  developer-friendly labels ("Create a test wallet" … "Send it to preprod"), with exact technical
+  detail still behind the per-step toggle. `PlaygroundReducerTest` gained a toggle test; no
+  behavioral coverage removed. Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+  `:shared:compileKotlinIosArm64`; `git diff --check` clean; no banned words. See
+  `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12-pre-c-2` Roadmap screen and friendlier wallet copy — **Status: complete.** Outcome: the
+  `:shared` Playground is now split into navigable Overview / Try SDK / Roadmap sections, with a
+  dedicated tap-to-expand Roadmap screen and softened Wallet-step copy. UX/content only — the
+  1.12-pre-a MVI architecture and all SDK behavior are preserved; no SDK public API, no
+  provider/wallet/tx change, no new dependency, no non-`:shared` module touched. Presentation-only
+  navigation was added to the MVI state (`PlaygroundState.section` +
+  `selectedRoadmapPhase`, new `PlaygroundSection`/`RoadmapPhase` enums, `NavigateTo*` +
+  `SelectRoadmapPhase` intents, reducer branches; `SelectRoadmapPhase` toggles the expanded card).
+  A new `RoadmapScreen` shows Phase 0/1 (shipped) and Phase 2/3 as **aspirational candidate
+  direction, explicitly not a commitment or schedule** — each a card with a Done/Current/Planned/
+  Future badge, tagline, highlights, and a scope note; all Compose-drawn, no external asset. The
+  hero CTA and a new landing `RoadmapTeaser` navigate between sections (the 1.12-pre-c scroll-anchor
+  code was removed). The Wallet step now reads "Create test wallet" in the main UX while its
+  Technical-details block keeps the precise `ReadOnlyWallet.restore(...)` cited-test-only-fixture
+  wording; no arbitrary-mnemonic input or real wallet import was added. `PlaygroundReducerTest`
+  gained navigation + roadmap-selection tests; no behavioral coverage removed. The Roadmap screen is
+  sample-app presentation, not a public API contract. Verified: `:shared:jvmTest`,
+  `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`; `git diff --check` clean; no
+  banned words. See `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12-pre-c-3` Seed mock Playground UTxOs for the guided transaction flow — **Status: complete.**
+  Outcome: the default mock mode now runs the whole Wallet → Funds → Build → Sign flow offline
+  instead of stopping at "no UTxOs". **Playground/sample mock data only** — not chain data, no SDK
+  public API, no `:provider`/`:wallet`/`:tx` change, no live Blockfrost change, and no faked network
+  submission. A new `:shared` sample object `PlaygroundMockSampleData` builds the default mock
+  `ChainQueryProvider` from `InMemoryChainQueryProvider.defaultSeed()` and adds two deterministic
+  fake ADA-only UTxOs (5 + 8 = 13 ADA; `hasNativeAssets = false`) for the demo wallet's own restored
+  address. `PlaygroundProviderFactory` builds its mock query provider from it, lazily. Submit stays
+  honest: the mock `InMemoryTxSubmitProvider` still reports "does not support submission (mock)" —
+  the Submit step now reaches it rather than failing for lack of UTxOs. The demo wallet address is
+  distinct from both provider seed addresses, so the Provider-explorer "has UTxOs"/"empty" examples
+  are unchanged. The provider card copy states mock mode uses "fake local UTxOs, test-only, no
+  network"; live mode is unchanged. A new `PlaygroundMockFlowDesktopTest` covers the seeded flow end
+  to end; existing presenter/desktop tests (bare `:provider` default) are unchanged. Verified:
+  `:shared:jvmTest`, `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`; `git diff
+  --check` clean; no banned words. See `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 

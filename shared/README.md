@@ -46,8 +46,9 @@ architecture, under `playground/mvi/`, `playground/domain/`, and `playground/dat
 **architecture-only** change to the sample/diagnostic code in `:shared` — it is not part of the
 SDK public API, and every SDK-calling behavior each checkpoint below documents (fixture wallet,
 mock/live provider selection, ADA-only filtering, error messages, submit id comparison, and so
-on) is unchanged. **Visual redesign/branding is deferred to Block 1.12-pre-b** — this block keeps
-the existing Material3 cards/buttons/dividers style, only reordering and regrouping them.
+on) is unchanged. The guided visual/UX presentation built on top of this architecture landed in
+**Block 1.12-pre-b** (see "Playground visual flow" below); Block 1.12-pre-a itself kept the
+existing Material3 cards/buttons/dividers style, only reordering and regrouping them.
 
 - `playground/mvi/PlaygroundState.kt` — a single immutable `PlaygroundState` data class holding
   provider selection (mock vs. live Blockfrost preprod, the in-memory-only `project_id`), the
@@ -113,6 +114,162 @@ the existing Material3 cards/buttons/dividers style, only reordering and regroup
   to the fixture wallet, folded into the same `PlaygroundState`/`PlaygroundIntent` model rather
   than kept as separate ad hoc Compose state.
 
+## Playground visual flow (Block 1.12-pre-b)
+
+Block 1.12-pre-b is a **sample-app visual/UX refresh** built on the Block 1.12-pre-a MVI
+foundation — it changes presentation only. It adds no SDK behavior, no SDK public API, no new
+dependency, and no `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost` change;
+`PlaygroundState`, `PlaygroundIntent`, `PlaygroundReducer`, `PlaygroundViewModel`, the use
+cases, the provider factory, and `PlaygroundPresenter` are all unchanged. The screen still reads
+`PlaygroundState` and dispatches `PlaygroundIntent`s — no SDK orchestration moved into the
+composables.
+
+- New `playground/ui/` package holds only presentation-shell composables (none reach an SDK
+  API): `PlaygroundTheme.kt` (a Kotlin/KMP-inspired Material 3 color scheme — purple lead, blue
+  secondary, orange tertiary, at restrained contrast, following the system light/dark setting),
+  `PlaygroundHeader.kt` (a hero header with the "Kardano SDK" title, the "Kotlin Multiplatform
+  Cardano transaction flow" subtitle, always-on `TESTNET`/`ADA-only`/provider-mode badges, and a
+  `FlowStepper` that highlights completed steps), `StatusBadge.kt` (the `MOCK` / `LIVE PREPROD` /
+  `TESTNET` / `ADA-only` / `SIGNED` / `SUBMITTED` badges and per-step status chips),
+  `FlowStepCard.kt` (a numbered step card with title, one-line explanation, status chip, primary
+  action button with an in-button spinner, key output, and a "Technical details" toggle, plus
+  shared `ResultRow`/`LabeledRows`/`ErrorInline`/`LoadingInline` primitives), and
+  `DiagnosticsSection.kt` (the Address Parser, Hex Decoder, CBOR Decoder, and Provider explorer
+  in a visually secondary, collapsed-by-default area).
+- The **hero mark is drawn entirely with Compose shapes** (a rounded-square gradient with two
+  white forward chevrons) — it is intentionally not the Kotlin or Cardano logo, and **no
+  external image asset is bundled**, so there is no third-party artwork license to track for this
+  sample app.
+- Each guided-flow step (`PlaygroundScreen.kt`) shows a title, short microcopy, its current
+  status, one main action, and its key output (Wallet → generated address; Funds → balance +
+  UTxO count; Build → selected inputs, fee, change; Sign → transaction id + witness count;
+  Submit → accepted tx id + id-match), with the full `PlaygroundPresenter` row list kept behind
+  the per-step "Technical details" toggle (`PlaygroundIntent.ToggleTechnicalDetails`). Loading is
+  shown per step (an in-button spinner plus an inline "Working…"), and errors render inline
+  directly under the step that produced them, reusing the exact `PlaygroundPresenter` messages.
+- Behavior is unchanged: the same fixture wallet, the same mock/live provider selection and
+  Blockfrost preprod-only submit boundary, the same ADA-only filtering, the same no-mainnet
+  policy, no real mnemonic/private-key display, no arbitrary-mnemonic input, no full CBOR
+  display, no polling, and no multi-asset support. `App.kt` now wraps `PlaygroundScreen` in
+  `KardanoPlaygroundTheme` instead of the default `MaterialTheme`.
+
+**Background/inset polish (same block).** `PlaygroundScreen`'s root container paints a subtle
+theme-derived gradient (`MaterialTheme.colorScheme.surface` into `background` — the same tone
+`PlaygroundHeader`'s own gradient ends on) instead of relying on the platform's default (white)
+window background, and applies `Modifier.safeDrawingPadding()` so the hero never starts under
+the status bar and the reset/diagnostics controls at the bottom are never hidden behind the
+navigation bar. `safeDrawingPadding()` is a Compose-Multiplatform-common `expect`/`actual` API
+(`androidx.compose.foundation.layout`) — no Android-specific inset code was added; `:androidApp`
+already calls `enableEdgeToEdge()` (Block 1.2), which this polish now actually accounts for.
+
+## Playground landing section (Block 1.12-pre-c)
+
+Block 1.12-pre-c is a **sample-app UX/content change** on top of the 1.12-pre-b refresh: it makes
+the Playground open like a small developer-facing landing/demo page, then keeps the existing
+guided flow below it. It preserves the 1.12-pre-a MVI architecture and all SDK behavior — no SDK
+public API, no provider/wallet/tx change, no new dependency, and no
+`:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost` change. `PlaygroundScreen`
+still only reads `PlaygroundState` and dispatches `PlaygroundIntent`s.
+
+Top-to-bottom, the screen now reads: **hero → landing overview → the interactive flow →
+Diagnostics**.
+
+- **Hero** (`PlaygroundHeader.kt`, reworked): the "Kardano SDK" title, the "Kotlin Multiplatform
+  Cardano SDK" subtitle, the value statement *"Build Cardano wallet and transaction flows from
+  shared Kotlin code."*, a platform/scope badge row (`KMP` / `Android` / `iOS` / `JVM` / `Preprod`
+  / `ADA-only MVP`), the same test-only framing line, and a CTA button (*"Try the transaction flow
+  below ↓"*) that smooth-scrolls to the flow. The active provider mode is shown by the flow's
+  provider card and per-step badges, so the hero no longer carries it.
+- **Landing overview** (`LandingSection.kt` — `PlaygroundLanding`, all presentation, no SDK call):
+  - *What the SDK does today* — five compact capability cards (parse/validate addresses, restore a
+    test wallet, query UTxOs/balance through the provider boundary, build ADA-only drafts, sign
+    locally and submit to preprod).
+  - *The transaction flow* — a preview of the five steps with developer-friendly labels ("Create a
+    test wallet" … "Send it to preprod") and a note that exact technical detail stays behind the
+    per-step toggles below.
+  - *Code examples* — three collapsible monospace snippet cards, each tagged `simplified`. These
+    are deliberately illustrative pseudo-snippets — **never** a real mnemonic, private key, or full
+    signed CBOR. The collapse is driven by `PlaygroundState.codeExamplesExpanded` /
+    `PlaygroundIntent.ToggleCodeExamples` (a presentation-only reducer flag, default collapsed).
+  - *Roadmap and scope* — Phase 0 / Phase 1 / Next cards plus an honest "Current limitations" list:
+    testnet/preprod-focused demo, ADA-only MVP, no multi-asset transactions yet, no mainnet flow,
+    and no real wallet import in the Playground (it uses a fixed test-only fixture).
+- All landing visuals are **Compose-drawn** (accent dots, numbered dots, the existing hero mark);
+  **no external image/logo asset is bundled** — logos/illustrations are deferred until added with
+  an explicit source/license.
+- The guided steps' titles were softened to the developer-friendly labels above (e.g. Wallet →
+  "Create a test wallet"), with a one-line explanation each; the exact hex/fees/witnesses/ids stay
+  behind the per-step "Technical details" toggle. The step actions and outputs dispatch the same
+  intents and render the same `PlaygroundPresenter` data as before.
+
+## Playground sections and roadmap screen (Block 1.12-pre-c-2)
+
+Block 1.12-pre-c-2 splits the sample app into three navigable sections and adds a dedicated,
+tappable roadmap screen, and softens the Wallet step's main-UX wording. It is **sample-app
+UX/content only** — the 1.12-pre-a MVI architecture and all SDK behavior are preserved (no SDK
+public API, no provider/wallet/tx change, no new dependency, no non-`:shared` module touched).
+`PlaygroundScreen` still only reads `PlaygroundState` and dispatches `PlaygroundIntent`s.
+
+- **Top navigation.** A `SectionNav` row switches between three sections, driven by
+  `PlaygroundState.section` (`PlaygroundSection.OVERVIEW` / `TRY_SDK` / `ROADMAP`, default
+  `OVERVIEW`): the selected tab is a filled button, the others outlined. Navigation intents
+  (`NavigateToOverview` / `NavigateToTrySdk` / `NavigateToRoadmap`) are presentation-only reducer
+  transitions.
+  - **Overview** — the hero + `PlaygroundLanding` (capabilities, transaction-flow preview, code
+    examples, and a compact `RoadmapTeaser`). The hero CTA and the teaser navigate to Try SDK /
+    Roadmap (replacing 1.12-pre-c's in-page scroll). The inline roadmap/limitations block moved into
+    the dedicated Roadmap screen.
+  - **Try SDK** — the unchanged guided **Wallet → Funds → Build → Sign → Submit** flow, the reset
+    control, and the visually secondary, collapsed-by-default Diagnostics.
+  - **Roadmap** — the new `RoadmapScreen`.
+- **Roadmap screen** (`RoadmapScreen.kt`): one clickable card per phase, driven by
+  `PlaygroundState.selectedRoadmapPhase` (`RoadmapPhase?`, default `PHASE_1`) and
+  `PlaygroundIntent.SelectRoadmapPhase` (tapping the selected phase again collapses it). Each card
+  shows a title, a status badge (**Done** / **Current** / **Planned** / **Future**), and a tagline;
+  when selected it also shows a highlights list and a scope note. **Phase 0 (Foundation)** and
+  **Phase 1 (MVP transaction flow)** describe shipped work; **Phase 2 (wallet/provider expansion)**
+  and **Phase 3 (advanced transaction/ecosystem features)** are aspirational **candidate direction,
+  explicitly not a commitment and with no dates**. The screen is Compose-drawn (no external asset)
+  and is **sample-app presentation, not a committed public API or delivery schedule**.
+- **Wallet copy.** The Wallet step now reads **"Create test wallet"** (title + action, status
+  "Creating…") with the explanation *"Set up the built-in test-only wallet and generate its testnet
+  address."* Its "Technical details" block keeps the precise wording that the demo calls
+  `ReadOnlyWallet.restore(...)` with a **cited public test-only mnemonic fixture — never a real
+  wallet, mnemonic, or private key, and never real funds**. No arbitrary-mnemonic input and no real
+  wallet import were added; the underlying `RestoreWallet` intent and all SDK calls are unchanged.
+
+## Seeded mock UTxOs for the guided flow (Block 1.12-pre-c-3)
+
+Block 1.12-pre-c-3 is a **sample-app/mock-data change only**: it lets the *default mock mode* run
+the whole **Wallet → Funds → Build → Sign** flow offline, instead of stopping at "no UTxOs". It
+adds **no SDK public API**, does **not** change `:provider`, `:wallet`, or `:tx` behavior, does
+**not** change the live Blockfrost path, and does **not** fake a network submission.
+
+- **Why it was needed.** The guided flow restores `TestWalletFixture` and queries the active
+  provider for *that wallet's own* self-generated testnet address. `:provider`'s default seed has
+  no UTxOs for that address, so under the plain in-memory mock, Build/Sign/Submit failed early with
+  "no UTxOs".
+- **What changed.** A new `:shared` sample object, `playground/data/PlaygroundMockSampleData.kt`,
+  builds the Playground's default mock `ChainQueryProvider`. It starts from
+  `InMemoryChainQueryProvider.defaultSeed()` (which keeps `SEED_ADDRESS_WITH_UTXOS` funded and
+  `SEED_ADDRESS_EMPTY` empty for the Provider explorer) and **adds two deterministic, fake, ADA-only
+  UTxOs for the demo wallet's own restored address** (5 ADA + 8 ADA = 13 ADA — enough for the fixed
+  2 ADA demo payment plus fee and change). It restores `TestWalletFixture` only to obtain that
+  address; if the restore fails, the entry is omitted and mock mode degrades to the earlier honest
+  "no UTxOs" behavior rather than crashing. `PlaygroundProviderFactory` now builds its mock query
+  provider from this object (lazily, so the derivation runs once on first mock use). The fake UTxOs
+  are **not chain data**: fixed sentinel transaction hashes, no native assets
+  (`hasNativeAssets = false`), no network, no funds, no secrets.
+- **Submit stays honest.** The mock submit provider is unchanged — `InMemoryTxSubmitProvider`
+  always returns `SubmitError.SubmissionNotSupported`. In mock mode the Submit step now *reaches*
+  that provider (because Build/Sign succeed) and shows its readable "this provider does not support
+  submission (mock)" message, rather than failing earlier for lack of UTxOs.
+- **Copy.** The provider card states mock mode uses **"fake local UTxOs, test-only, no network.
+  Submit is not supported here."** while live mode keeps **"real network calls, test funds only."**
+- **Expected default mock flow.** Create test wallet ✓ · Check available test ADA → non-zero
+  (13 ADA, 2 UTxOs) ✓ · Prepare transaction ✓ · Sign locally ✓ · Send to preprod → honest
+  "submission not supported". Live preprod mode is unchanged (real calls, faucet-funded address).
+
 ### Test Wallet & Address Generation section (Block 1.6d, extended by Block 1.7b)
 
 The "Test Wallet & Address Generation" section restores `playground/TestWalletFixture.kt`'s
@@ -144,7 +301,9 @@ CIP-19 testnet vectors) drive the mock checkpoint:
 - Has UTxOs: `addr_test1vz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzerspjrlsz`
   (`InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS`).
 - Empty: `addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs68faae`
-  (`InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY`).
+  (`InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY`). This is a different address from the guided
+  flow's demo wallet (which Block 1.12-pre-c-3 seeds with fake UTxOs), so it still shows the empty
+  state.
 
 The screen provides one-tap buttons to fill either seed address.
 
@@ -169,11 +328,14 @@ section above (mock or live) via `wallet.balance(provider)` and displays only th
 seed, entropy, or any private/raw key bytes. `:shared` reimplements none of mnemonic parsing,
 derivation, hashing, address generation, or balance summation; all of that logic belongs to
 `:wallet`/`:crypto`/`:core`, and `PlaygroundPresenter.presentWalletBalance` only calls it and
-formats the result. A zero balance/UTxO count under the default `InMemoryChainQueryProvider` is
-the expected, honest result (ADR-0013 §7) — that provider has no fake UTxOs seeded for this
-generated address — and is displayed as a normal success, not an error; a live Blockfrost
-preprod provider can show a non-zero balance only after the generated address is funded with
-test ADA from a preprod faucet.
+formats the result. A zero balance/UTxO count under `:provider`'s own bare
+`InMemoryChainQueryProvider()` default is the honest result (ADR-0013 §7) — that seed has no fake
+UTxOs for this generated address — and is displayed as a normal success, not an error. Note that
+since Block 1.12-pre-c-3 the *Playground's* default mock provider is built by
+`PlaygroundMockSampleData` (not the bare `:provider` default) and **does** seed this address with
+fake ADA-only UTxOs so mock mode can run the flow; the bare `:provider` default and the presenter
+desktop tests that use it directly are unchanged. A live Blockfrost preprod provider can show a
+non-zero balance only after the generated address is funded with test ADA from a preprod faucet.
 
 ### Transaction Draft section (Block 1.9c)
 

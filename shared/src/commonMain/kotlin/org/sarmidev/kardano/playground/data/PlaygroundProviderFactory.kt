@@ -12,9 +12,12 @@ import org.sarmidev.kardano.provider.blockfrost.BlockfrostTxSubmitProvider
  * Selects the active [ChainQueryProvider]/[TxSubmitProvider] pair for the Playground, moved out
  * of the Compose layer so [org.sarmidev.kardano.playground.mvi.PlaygroundViewModel] can build
  * providers from [org.sarmidev.kardano.playground.mvi.PlaygroundState] without a `remember`
- * block. Behavior is unchanged from the pre-1.12-pre-a screen: the default is the in-memory
- * mock ([InMemoryChainQueryProvider]/[InMemoryTxSubmitProvider], fake/test-only, no network);
- * passing `useLive = true` with a non-blank `projectId` switches both to live Blockfrost preprod
+ * block. The default is the in-memory mock ([InMemoryChainQueryProvider]/[InMemoryTxSubmitProvider],
+ * fake/test-only, no network). Since Block 1.12-pre-c-3 the mock query provider is built by
+ * [PlaygroundMockSampleData.buildMockQueryProvider], which seeds fake ADA-only UTxOs for the demo
+ * wallet address so mock mode can run the whole Wallet -> Funds -> Build -> Sign flow offline; the
+ * mock submit provider is unchanged and still honestly reports "submission not supported".
+ * Passing `useLive = true` with a non-blank `projectId` switches both to live Blockfrost preprod
  * ([BlockfrostChainQueryProvider]/[BlockfrostTxSubmitProvider]) built from the same
  * `project_id`. A blank `projectId` falls back to the mock even when `useLive` is `true`, same
  * as before.
@@ -28,7 +31,11 @@ import org.sarmidev.kardano.provider.blockfrost.BlockfrostTxSubmitProvider
  */
 internal class PlaygroundProviderFactory {
 
-    private val mockQueryProvider: ChainQueryProvider = InMemoryChainQueryProvider()
+    // Built lazily: buildMockQueryProvider restores the fixture wallet (native derivation) once,
+    // on first mock use, rather than at every ViewModel construction. Stable instance thereafter.
+    private val mockQueryProvider: ChainQueryProvider by lazy {
+        PlaygroundMockSampleData.buildMockQueryProvider()
+    }
     private val mockSubmitProvider: TxSubmitProvider = InMemoryTxSubmitProvider()
 
     private var cachedProjectId: String? = null
