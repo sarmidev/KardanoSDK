@@ -1,7 +1,7 @@
-# AI Working Agreement — Kardano SDK (Phase 0)
+# AI Working Agreement — Kardano SDK
 
-This document governs how AI agents and contributors make changes to this repository
-during Phase 0. Kardano will eventually handle keys and funds; the discipline starts now.
+This document governs how AI agents and contributors make changes to this repository. The
+foundation rules remain in force as the SDK expands beyond Phase 0.
 
 ---
 
@@ -13,27 +13,26 @@ The SDK **core must be UI-free** (no Compose dependency).
 
 ---
 
-## Phase 0 scope
+## Foundation baseline
 
-Pure-Kotlin, deterministic, **no cryptography required**:
+The following foundation capabilities are implemented and remain governed by these rules:
 
 - Byte primitives and helpers (immutable, length-checked).
 - Hex encoding/decoding.
 - Bech32 / Bech32m (BIP-173 / BIP-350, CIP-5 prefixes).
 - A minimal, documented CBOR subset (RFC 8949).
 - Structural address validation/parsing (CIP-19) — parsing only, not derivation.
-- Crypto strategy doc and `expect` declarations only (no implementations).
+- Documented cryptography/backend strategy and pinned implementation seams.
 - Project hygiene: license, READMEs, CI, KDoc/Dokka.
 
 ---
 
-## Non-goals (Phase 0)
+## Scope boundaries
 
-- No transaction building, serialization for submission, or signing.
-- No key generation, mnemonics (BIP-39), or HD derivation.
-- No address derivation from keys (only structural validation of existing addresses).
-- No network/IO, node clients, or wallet connection.
-- No full CBOR/COSE — only the documented subset.
+- No mainnet or user-supplied wallet flow without a future explicit decision.
+- No full CBOR/COSE beyond the documented subset.
+- No full Plutus framework, staking/delegation, governance, Hydra, or Mithril without future
+  explicit scope.
 - No over-modularization before there is code to justify it.
 
 ---

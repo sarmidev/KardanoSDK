@@ -1,0 +1,75 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  portable-jvm-and-android-host:
+    name: Portable JVM and Android host tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Run portable JVM tests
+        run: >-
+          ./gradlew --no-daemon
+          :core:jvmTest
+          :provider:jvmTest
+          :provider-blockfrost:jvmTest
+          :tx:jvmTest
+      - name: Run Android host tests
+        run: >-
+          ./gradlew --no-daemon
+          :core:testAndroidHostTest
+          :crypto:testAndroidHostTest
+          :provider:testAndroidHostTest
+          :provider-blockfrost:testAndroidHostTest
+          :wallet:testAndroidHostTest
+          :tx:testAndroidHostTest
+
+  macos-signing-and-ios:
+    name: macOS signing tests and iOS compile
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Run macOS signing-path JVM tests
+        run: >-
+          ./gradlew --no-daemon
+          :crypto:jvmTest
+          :crypto-signing-backend:jvmTest
+          :wallet:jvmTest
+          :shared:jvmTest
+      - name: Run shared Android host tests
+        run: ./gradlew --no-daemon :shared:testAndroidHostTest
+      - name: Compile iOS targets
+        run: >-
+          ./gradlew --no-daemon
+          :core:compileKotlinIosArm64
+          :crypto:compileKotlinIosArm64
+          :crypto-signing-backend:compileKotlinIosArm64
+          :provider:compileKotlinIosArm64
+          :provider-blockfrost:compileKotlinIosArm64
+          :wallet:compileKotlinIosArm64
+          :tx:compileKotlinIosArm64
+          :shared:compileKotlinIosArm64

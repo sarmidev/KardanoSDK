@@ -1323,49 +1323,73 @@ Acceptance criteria (reconciled by Block 1.1 / ADR-0005 to Android-primary):
   (Block 1.12) or Phase 2 unless a future block explicitly revisits this.
 - Tests and docs are updated.
 
-## Phase 2 - Plutus Lite And Provider Expansion
+## Funding Readiness Track
+
+Status: implementation baseline complete; owner-led public release, pilot discovery, and funding
+outreach remain in progress.
+
+Before widening transaction scope, make delivered Phase 1 evidence understandable to prospective
+integrators, contributors, and funding reviewers.
+
+Deliverables:
+
+- Reconciled public project brief, roadmap, quickstart, and scope limits.
+- Apache-2.0 licensing direction and release-time third-party notice review.
+- CI, contribution guidance, changelog, release process, and public demo material.
+- Pilot discovery for a loyalty/ticketing native-asset use case.
+- Milestone-based funding dossier for future Intersect, Catalyst, pilot, or sponsor discussions.
+
+The detailed owner work is in [FUNDING_AND_PILOT_PLAYBOOK.md](FUNDING_AND_PILOT_PLAYBOOK.md).
+
+## Phase 2 - Native-Asset Pilot And Provider Expansion
 
 Goal:
 
-Support simple dApp-like mobile flows without trying to replace full advanced Plutus tooling.
+Support one loyalty/ticketing mobile flow involving an existing Cardano native asset, using shared
+Kotlin code on Android and iOS.
 
-Candidate capabilities:
+Sequence:
 
-- Datum representation.
-- Redeemer representation.
-- Script hash.
-- Inline datum.
-- Reference inputs.
-- Simple script interaction example.
-- Ogmios provider.
-- Kupo provider.
-- Koios or Maestro provider.
+1. Pilot and architecture gate: validate an external use case and choose a provider through a
+   documented capability evaluation.
+2. Cross-platform integration proof: execute documented Android and iOS sample flows.
+3. Multi-asset value foundation: preserve policy ids, asset names, and quantities from queried UTxOs.
+4. Native-asset transaction vertical: select inputs, preserve change, and submit one minimal
+   preprod asset transfer.
+5. Provider and pilot validation: add the selected provider and run an external experiment.
+6. Conditional script interaction: only if the pilot needs a narrowly-scoped datum/redeemer or
+   reference-input flow and a dedicated ADR approves it.
 
-Non-goal:
+Non-goals:
 
 - Full Plutus framework.
+- Mainnet as a prerequisite.
+- Arbitrary wallet import or general-purpose signing without a dedicated decision.
+- Minting, marketplace logic, staking, governance, metadata, multisig, or hardware-wallet support.
+
+See [PHASE_2_PLAN.md](PHASE_2_PLAN.md) for exit criteria, evidence, and scope boundaries.
 
 ## Phase 3 - Ecosystem Adoption
 
 Goal:
 
-Make Kardano SDK visible and credible in the Cardano ecosystem.
+Make the native mobile integration path useful to external teams and sustainable as an open-source
+project.
 
 Deliverables:
 
-- Public docs.
-- Sample videos.
-- Benchmarks.
-- External pilot.
-- Catalyst or Intersect proposal.
-- Contributor guide.
-- Issues labeled for new contributors.
+- Versioned public documentation and API reference.
+- Sample videos, integration guides, and benchmark methodology.
+- At least one public pilot outcome or documented integration report.
+- Contributor guide, issue labels, and maintainer process.
+- A funding proposal built from Phase 2 delivery evidence.
+- Future transaction capabilities only where adoption evidence justifies them.
 
 Success criteria:
 
-- At least one wallet or dApp experiments with the SDK.
-- The demo is easy to run.
-- The project can credibly request funding based on delivered work.
+- At least one external mobile, wallet, or dApp team experiments with the SDK.
+- A developer can run the documented demo and understand known limits.
+- A funding request is grounded in released work, pilot feedback, and measurable milestones.
 
 ## Operating Principle
 

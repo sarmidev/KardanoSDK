@@ -15,15 +15,24 @@ Current project identity:
 - Name: Kardano SDK.
 - Package/group: `org.sarmidev.kardano`.
 - Main targets: Android, iOS, JVM/Desktop.
-- Current status: **Phase 0 (Core Foundation) is complete** (Blocks 0.1 through 0.9).
-  **Phase 1 Block 1.1 (Scope And Architecture Plan) is also complete** — a
-  planning/documentation block with no wallet, crypto, provider, tx, or Android UI code, no
-  Gradle or dependency changes. The next step is **Block 1.2 (Android SDK Playground)**, the
-  first Phase 1 implementation block. Block-by-block detail follows. Blocks 0.1 (Project Governance And AI Rules),
-  0.2 (SDK-Oriented Module Structure), and 0.3 (Testing Infrastructure) are complete: a
-  UI-free `:core` module exists, `:shared` depends on it, and the testing foundation
-  (test source-set strategy, fixture layout, test-vector policy in `docs/TESTING.md`) is
-  in place. Block 0.4 (Core Primitives) is complete: `KardanoResult`, `Network`,
+- Current status: **Phase 0 and Phase 1 implementation are complete.** Phase 1 includes the
+  Android-primary, fixture-scoped, ADA-only preprod flow and the shared Playground. The active
+  work is Phase 1 closure plus funding readiness: public project materials, contribution/release
+  hygiene, pilot discovery, and Phase 2 architecture planning. No Phase 2 protocol capability is
+  implemented yet.
+- Current strategic direction: Phase 2 is a loyalty/ticketing native-asset pilot with provider
+  expansion; it is gated by an ADR, external problem validation, and a preserved-value transaction
+  model. See `docs/PHASE_2_PLAN.md` and `docs/FUNDING_AND_PILOT_PLAYBOOK.md`.
+- Current Phase 1 limits: testnet/preprod fixture flow, ADA-only transaction construction,
+  Android-primary runtime validation; no mainnet, imported wallets, general-purpose signing, or
+  native-asset transaction construction.
+
+## Historical Implementation Detail
+
+Blocks 0.1 (Project Governance And AI Rules), 0.2 (SDK-Oriented Module Structure), and 0.3
+(Testing Infrastructure) are complete: a UI-free `:core` module exists, `:shared` depends on it,
+and the testing foundation (test source-set strategy, fixture layout, test-vector policy in
+`docs/TESTING.md`) is in place. Block 0.4 (Core Primitives) is complete: `KardanoResult`, `Network`,
   `Lovelace`, and the byte-backed primitives (`TxHash`, `PolicyId`, `AssetName`, `UtxoRef`)
   and their tests have landed in `:core`. ADR-0001 (CBOR/parser policy) is now Accepted
   (constrained internal Bech32/Bech32m and CBOR subset; no external dependency). Block 0.5
@@ -591,6 +600,56 @@ At the end of each session, update this section.
 Date: 2026-07-14
 
 Summary:
+
+- **Funding readiness and Phase 2 pilot strategy — implementation baseline DONE; owner-led
+  external work pending.** Context: after the Phase 1 Playground/MVI/UX work, the project needed
+  a funding-oriented path before widening protocol scope. The project direction is now
+  **open-source Kotlin Multiplatform infrastructure for native Cardano mobile apps**, with a
+  loyalty/ticketing native-asset pilot as Phase 2's first vertical. Phase 2 does not begin with a
+  generic Plutus framework.
+  - **Public project materials.** The root `README.md` now describes the implemented Phase 1
+    fixture/preprod ADA-only flow and its limits rather than Phase 0 only; it links to the new
+    `docs/QUICKSTART.md`, `docs/PHASE_2_PLAN.md`, `docs/FUNDING_AND_PILOT_PLAYBOOK.md`,
+    `docs/RELEASING.md`, and `docs/THIRD_PARTY_NOTICES.md`. `docs/PROJECT_BRIEF.md`,
+    `docs/SECURITY.md`, `docs/TESTING.md`, and the top of this file were reconciled to the
+    delivered scope. The Phase 1 plan's stale `1.11` status was corrected; Block 1.12 closure is
+    in progress.
+  - **Open-source/release baseline.** Added Apache-2.0 `LICENSE`, `CONTRIBUTING.md`,
+    `CODE_OF_CONDUCT.md`, and `CHANGELOG.md`. The owner confirmed the copyright holder as
+    Javier Sarmiento Mañus (Sarmidev); the public contact is `sarmidev@outlook.es`. The
+    `docs/THIRD_PARTY_NOTICES.md` file records a preliminary component inventory and a required
+    release-time review; it is not a completed legal review. `docs/RELEASING.md` records the
+    release checklist.
+  - **CI.** Added `.github/workflows/verify.yml`: portable JVM/Android-host checks on Ubuntu and
+    macOS JVM signing-path tests plus iOS compilation. The split is deliberate: committed JVM
+    signing artifacts target macOS, so signing tests are not presented as Linux-host coverage.
+    The workflow must still run on GitHub after the branch is pushed.
+  - **Phase 2 strategy.** `docs/PHASE_2_PLAN.md` defines `2.0` pilot/architecture gate, `2.1`
+    cross-platform integration proof, `2.2` multi-asset value foundation, `2.3` native-asset
+    transfer vertical, `2.4` provider/pilot validation, and a conditional `2.5` script
+    interaction. `docs/ROADMAP.md` and the Playground `RoadmapScreen` now use the same Phase 2
+    native-asset-pilot / Phase 3 ecosystem-adoption story.
+  - **Owner work.** The detailed non-code checklist is in
+    `docs/FUNDING_AND_PILOT_PLAYBOOK.md`: confirm copyright ownership, prepare public project
+    homes and contact path, record a short demo, publish a light landing page, identify 15–25
+    pilot candidates, run discovery calls, build DRep context, and prepare a milestone budget.
+    The Intersect 2026 window is closed; do not assume 2027 dates or fees until they are
+    officially published.
+  - **History/secret audit — PASS locally.** Current tracked files, all reachable Git blobs,
+    commit/reflog messages, 101 unreachable blobs, and the two unreachable commits were scanned
+    for private-key, cloud/service-token, Blockfrost project-id, and credential-assignment
+    patterns. No real credential or private-key material was detected; the only two matches were
+    deliberately fake/redacted test values in `BlockfrostConfigTest`. `.gitignore` now also
+    excludes `.env*`, common credential JSON, and key-store/certificate formats. The unreachable
+    objects were not deleted; do not publish a prior remote history without separately reviewing
+    that remote's refs.
+  - **Verification — PASS locally.** `:shared:jvmTest`, `:shared:testAndroidHostTest`, and
+    `:shared:compileKotlinIosArm64` passed after the Playground roadmap update. The CI-equivalent
+    JVM, Android-host, and iOS compile matrix passed locally on macOS; Gradle reports the existing
+    cinterop-commonization warning for `:crypto` and `:crypto-signing-backend`. `git diff --check`
+    passed. Next: complete the owner-led readiness checklist, push CI, complete Block 1.12's
+    public/release review, then start Phase 2 Block 2.0 rather than implementing multi-assets
+    immediately.
 
 - **Block 1.12-pre-c-3: Seed mock Playground UTxOs for the guided transaction flow — DONE.**
   Precondition: Block 1.12-pre-c-2 (below) was already committed. Context: with the visual

@@ -1491,6 +1491,10 @@ files. **Next: Block 1.12 (Phase 1 Closure / MVP Review).**
 
 Close Phase 1 with a review of the full flow.
 
+Status: in progress. The implementation and manual preprod checkpoint are complete; the remaining
+closure work reconciles public documentation, release readiness, target limitations, and the
+Phase 2 handoff.
+
 Objective:
 
 - Verify that the full Android flow works on preprod.
@@ -1623,14 +1627,8 @@ Android runtime checkpoint.
 implementation), `1.11c` (the `:shared` Android "Submit Transaction (preprod)" checkpoint,
 ADR-0017), `1.11d` (ADA-only rejection for the submit flow, ADR-0006/0007/0014 2026-07-13
 addenda), and `1.11d-2` (ADA-only UTxO filtering instead of whole-wallet rejection, second
-ADR-0006/0014 2026-07-13 addenda) are all **implementation-complete**: see their own entries
-above for what was added and verified. **Block 1.11 is not yet fully complete**: the `1.11c`
-manual Android checkpoint was attempted and found a real ADA-only gap (a mixed-UTxO preprod
-address caused a node-side `ValueNotConservedUTxO` rejection at submit time); `1.11d` first
-closed it by rejecting the whole candidate list whenever any UTxO carried a native asset, and
-`1.11d-2` then narrowed that to filtering out just the native-asset UTxOs so a mixed wallet can
-still build from its ADA-only ones. Manual Android re-validation is now PASS: the
-mixed address case built, signed, and submitted successfully from ADA-only UTxOs, with accepted
-transaction id `331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416` matching the
-locally signed id; the owner also reported the all-native-asset rejection and ADA-only-only
-build/sign/submit checks OK. **The next step is Block 1.12** (Phase 1 Closure / MVP Review).
+ADR-0006/0014 2026-07-13 addenda) are **complete**. The manual Android re-validation PASS
+includes a mixed ADA-only/native-asset transaction accepted by preprod with transaction id
+`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`, plus owner-reported
+all-native-asset rejection and ADA-only-only checks. The active work is Block 1.12 closure and
+the funding-readiness track; Phase 2 planning is in `docs/PHASE_2_PLAN.md`.

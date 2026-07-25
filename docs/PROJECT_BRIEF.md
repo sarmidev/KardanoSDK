@@ -2,15 +2,18 @@
 
 ## 1. Project Summary
 
-Kardano SDK is an open-source Kotlin Multiplatform SDK for native Cardano mobile applications.
+Kardano SDK is an Apache-2.0 Kotlin Multiplatform SDK for native Cardano mobile applications.
 
-The goal is to provide a mobile-first Cardano infrastructure layer that lets Android and iOS apps share core Cardano logic without relying on WebViews, JavaScript runtimes, duplicated platform logic, or unsafe ad-hoc wrappers.
+The goal is to provide a mobile-first Cardano infrastructure layer that lets Android and iOS apps share core Cardano logic without relying on WebViews, JavaScript runtimes, duplicated platform logic, or ad-hoc platform wrappers.
 
-The first product thesis is intentionally narrow:
+The current product thesis is intentionally narrow:
 
-> A native Android/iOS app should be able to create or restore a Cardano wallet, validate addresses, query UTxOs, build a basic transaction, sign locally, and submit it through a provider using shared Kotlin Multiplatform logic.
+> A native Android/iOS app should be able to demonstrate a bounded, test-only Cardano wallet and
+> transaction flow through shared Kotlin Multiplatform logic.
 
-Phase 0 does not implement the full MVP. Phase 0 exists to build a safe, tested, documented foundation.
+Phase 0 established the foundation. Phase 1 delivered an Android-primary, ADA-only preprod
+demonstration: a cited fixture wallet, provider query, transaction building, scoped local signing,
+and Blockfrost submission. The full delivery record is in `docs/ROADMAP.md`.
 
 ## 2. Why This Exists
 
@@ -56,33 +59,35 @@ Examples:
 - Enterprise app that needs mobile transaction signing.
 - Simple wallet demo for preprod/testnet.
 
-## 5. MVP Definition
+## 5. Delivered MVP Scope
 
-The MVP should allow a developer to:
+The delivered Phase 1 demonstration lets a developer:
 
-1. Create or restore a wallet.
-2. Generate a Cardano address.
-3. Query UTxOs through a provider.
-4. Build a transaction sending ADA.
-5. Build a transaction sending native assets.
-6. Calculate fee and change.
-7. Sign locally.
-8. Submit the transaction to preprod/mainnet through a provider.
-9. Reuse the same core logic from Android and iOS.
+1. Create a test wallet backed by a cited public fixture.
+2. Generate and display its testnet address.
+3. Query mock UTxOs or Blockfrost preprod UTxOs.
+4. Build an ADA-only transaction draft with fees and change.
+5. Sign the fixture transaction locally.
+6. Submit the signed transaction to Blockfrost preprod.
+7. Reuse the Playground and SDK logic from Android, iOS, and JVM/Desktop targets.
 
-The MVP must include:
+The current limits are deliberate:
 
-- Android sample app.
-- iOS sample app.
-- JVM/Desktop sample or CLI for fast testing.
-- Public documentation.
-- Unit tests and compatibility fixtures.
+- The transaction flow is ADA-only.
+- The signed flow is testnet/preprod and fixture-scoped.
+- Mainnet, imported wallets, user-supplied mnemonics, general-purpose signing, and native-asset
+  transaction construction are not implemented.
+- Android is the Phase 1 runtime validation target; iOS and JVM/Desktop have shared sample hosts
+  and documented compile/link limits.
+
+Phase 2 plans native-asset support for a loyalty/ticketing pilot. See
+`docs/PHASE_2_PLAN.md`.
 
 ## 6. Phase 0 Definition
 
 Phase 0 is not the MVP.
 
-Phase 0 is the safe foundation for the SDK.
+Phase 0 is the documented foundation for the SDK.
 
 Phase 0 scope:
 
@@ -103,7 +108,7 @@ Phase 0 must not include:
 - Custom cryptography.
 - Real mnemonic/private key examples.
 - Real funds.
-- Production-ready claims.
+- Readiness claims beyond the evidence.
 - Plutus V3 support.
 - Staking/delegation.
 - WalletConnect.
@@ -118,14 +123,14 @@ Kardano SDK should not be positioned as:
 - A full Cardano node.
 - A full wallet application.
 - A full Plutus framework.
-- A production-audited security product in early versions.
+- A general-purpose wallet product in early versions.
 
 It should be positioned as:
 
 - A native mobile Cardano SDK.
 - A Kotlin Multiplatform shared core for Android and iOS.
 - A developer-friendly infrastructure layer.
-- A clean, tested, documented starting point for Cardano mobile apps.
+- A documented starting point for Cardano mobile integrations.
 
 Suggested claim:
 
@@ -133,7 +138,8 @@ Suggested claim:
 
 Suggested subclaim:
 
-> Shared Android/iOS wallet, transaction building, signing and provider integration without JavaScript runtimes or WebView bridges.
+> Shared Android/iOS Cardano transaction and provider integration without JavaScript runtimes or
+> WebView bridges.
 
 ## 8. Differentiation
 
@@ -142,16 +148,16 @@ Kardano SDK should differentiate through:
 - KMP-first architecture.
 - Mobile-first ergonomics.
 - Android and iOS shared logic.
-- Strong unit tests from the beginning.
+- Cited test vectors and cross-target checks.
 - Public developer documentation.
-- Conservative security posture.
+- Explicit scope boundaries.
 - Provider abstraction.
 - Clear scope boundaries.
 - Real sample apps.
 
 The goal is not to support every Cardano feature first.
 
-The goal is to make the first mobile-native integration path feel obvious, safe and maintainable.
+The goal is to make the first mobile-native integration path understandable and maintainable.
 
 ## 9. Monetization And Funding
 
@@ -165,36 +171,35 @@ Potential funding paths:
 - Paid integration work.
 - Enterprise support.
 - Architecture reviews.
-- Security hardening consulting.
+- Key-material and transaction-architecture consulting.
 - Long-term maintenance contracts.
 - Potential institutional partnership if the SDK becomes widely adopted.
 
 Initial grant positioning should focus on:
 
-> Cardano Mobile Core KMP: shared Android/iOS wallet, transaction signing and provider SDK.
+> Native Cardano Mobile Infrastructure: shared Kotlin Multiplatform provider, wallet, and
+> transaction capabilities for Android and iOS teams.
 
-Grant proposals should be based on working milestones, not promises.
+Funding requests must be based on delivered milestones, pilot evidence, and reviewable work
+packages. The current process is documented in `docs/FUNDING_AND_PILOT_PLAYBOOK.md`.
 
 ## 10. Success Criteria
 
-Phase 0 is successful when:
+Phase 1 is complete when:
 
-- The repo structure supports SDK development.
-- Documentation is clear enough for outside contributors.
-- AI coding rules prevent unsafe generation.
-- Core primitives and parsers have unit tests.
-- CBOR and parser policy is documented.
-- No unsafe cryptography or signing code exists.
-- Android, iOS and JVM/Desktop targets remain healthy.
+- A developer can follow the quickstart and run the mock demonstration.
+- The Android Playground can build, sign, and submit the scoped test flow to preprod.
+- Tests cover meaningful valid, invalid, and edge behavior.
+- Documented target limitations are visible to an integrator.
 
-The MVP is successful when:
+Phase 2 is successful when:
 
-- A developer can follow a quickstart and run the demo.
-- Android and iOS share the same Cardano core logic.
-- A preprod transaction can be built, signed and submitted.
-- Native assets are supported.
-- Tests cover important valid, invalid and edge cases.
-- The project can credibly apply for ecosystem funding.
+- Android and iOS demonstrate the documented integration path.
+- Native assets can be represented and transferred without losing selected input value.
+- A provider capability decision is documented.
+- An external loyalty/ticketing team has attempted the integration or given a written indication
+  that it will do so.
+- The project can submit a milestone-based ecosystem funding request.
 
 ## 11. Communication Style
 
@@ -203,22 +208,17 @@ Public communication should be:
 - Serious.
 - Honest.
 - Technical.
-- Conservative about security.
+- Clear about key-material and transaction scope.
 - Clear about experimental status.
 
 Avoid unsupported words such as:
 
-- secure
-- audited
-- hardened
-- guaranteed
-- battle-tested
-- production-ready
+- readiness claims that exceed the evidence
 
 Prefer:
 
 - experimental
-- not audited
+- not independently reviewed
 - validates structurally
 - rejects malformed input
 - pre-MVP

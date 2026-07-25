@@ -1,4 +1,4 @@
-# Testing Guide — Kardano SDK (Phase 0)
+# Testing Guide — Kardano SDK
 
 How tests, fixtures, and external test vectors are organized in this repository. This
 guide complements the testing rules in
@@ -6,8 +6,8 @@ guide complements the testing rules in
 "Test integrity rules" sections) and does not replace them. If anything here ever
 conflicts with the working agreement, the working agreement wins.
 
-> Phase 0 status: pre-alpha, experimental. Not audited. Not for real funds. No
-> cryptography, key handling, or transaction signing is implemented or tested.
+> The Phase 1 demo is experimental and testnet/preprod-focused. It includes scoped fixture
+> restoration, signing, and submission; it does not cover mainnet or user-supplied key material.
 
 ---
 
@@ -39,12 +39,13 @@ Guidance:
 
 ### Where tests live today
 
-- `:core` — UI-free SDK core. Shared logic tests go in `core/src/commonTest`. A minimal
-  `core/src/jvmTest` smoke test verifies JVM test wiring for the module. As Phase 0
-  primitives and parsers land, their tests belong in `core/src/commonTest`.
-- `:shared` — sample/UI host. It already carries example tests in `commonTest`, `jvmTest`,
-  `androidHostTest`, and `iosTest` that demonstrate the wiring per target. Protocol
-  vectors and SDK-logic tests belong in `:core`, not here.
+- `:core` — UI-free primitives, encodings, structural addresses, and CBOR.
+- `:crypto` — mnemonic parsing, seed/key derivation, hashing, and scoped signing adapters.
+- `:crypto-signing-backend` — generated/native signing backend seam and known-answer tests.
+- `:provider` and `:provider-blockfrost` — provider-neutral models plus Blockfrost wire mapping.
+- `:wallet` and `:tx` — wallet orchestration and ADA-only transaction behavior.
+- `:shared` — Playground MVI, sample-flow wiring, and presentation mapping. Protocol vectors and
+  SDK behavior remain owned by their corresponding SDK module rather than the Compose UI.
 
 ---
 
@@ -102,9 +103,22 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
 - Core (JVM) tests: `./gradlew :core:jvmTest`
 - Core Android host (JVM-hosted) tests: `./gradlew :core:testAndroidHostTest`
 - Core iOS test sources compile: `./gradlew :core:compileTestKotlinIosSimulatorArm64`
+- Crypto, wallet, shared, and signing-backend JVM tests: run on macOS because the committed JVM
+  signing artifacts target macOS hosts:
+  `./gradlew :crypto:jvmTest :crypto-signing-backend:jvmTest :wallet:jvmTest :shared:jvmTest`
+- Provider (JVM) tests: `./gradlew :provider:jvmTest :provider-blockfrost:jvmTest`
+- Wallet and transaction (JVM) tests: `./gradlew :wallet:jvmTest :tx:jvmTest`
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`
 - iOS simulator tests: `./gradlew :shared:iosSimulatorArm64Test`
+
+The full Phase 1 target matrix is intentionally not equivalent across platforms:
+
+- Android is the runtime validation surface for the Playground.
+- iOS simulator/device execution requires a local macOS/Xcode environment; compile/link checks are
+  run where that environment is unavailable.
+- JVM signing runtime coverage currently requires the committed macOS native artifacts. Linux and
+  Windows JVM signing artifacts are not included.
 
 Documentation checks (no banned marketing/security words; keyword presence):
 
