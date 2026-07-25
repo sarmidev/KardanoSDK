@@ -1,82 +1,95 @@
 # Kardano SDK
 
-Open-source Kotlin Multiplatform SDK for native Cardano mobile apps, with shared core
-logic for Android, iOS, and JVM/Desktop. Group: `org.sarmidev.kardano`.
+Kardano SDK is an Apache-2.0 Kotlin Multiplatform SDK for native Cardano mobile apps. It keeps
+shared Cardano logic in Kotlin for Android, iOS, and JVM/Desktop while keeping the SDK modules
+free of UI dependencies.
 
 ## Status
 
-> **Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.**
+> **Phase 1 MVP is implemented for a test-only, preprod transaction flow.**
+> It is experimental, has not received an independent review, and is not for mainnet funds or
+> user-supplied private keys.
 
-Phase 0 builds a tested, documented foundation before any wallet creation, transaction
-signing, or real network flows. The SDK core is UI-free. This is not the MVP and must not
-be used with mainnet funds or real private keys.
+The implemented Playground flow restores a cited public fixture, queries mock or Blockfrost
+preprod UTxOs, builds an ADA-only transaction, signs it locally through the scoped fixture flow,
+and can submit to preprod. It is a developer demo, not a general-purpose wallet.
 
-## In scope (Phase 0)
+## What works today
 
-- Project structure, module boundaries, and governance/AI working rules.
-- Testing infrastructure and test-vector policy.
-- Core primitives (byte wrappers, value types).
-- Hex and base encoding utilities.
-- Bech32 / Bech32m investigation and implementation decision.
-- Minimal documented CBOR subset policy and implementation decision.
-- Structural address parsing and validation (CIP-19).
-- Crypto strategy documentation (`expect`/strategy only — no implementations).
+- UI-free core primitives, bounded hex/Bech32/CBOR handling, and structural CIP-19 address
+  parsing.
+- Icarus/CIP-3 test-wallet restoration and CIP-1852 address generation.
+- Provider-neutral UTxO, protocol-parameter, and submit boundaries.
+- In-memory demo data plus Blockfrost preprod query and submission providers.
+- ADA-only transaction draft building, scoped local signing, and preprod submission from the
+  test fixture.
+- Android-first Playground demo with shared Android/iOS/JVM/Desktop UI code.
 
-## Out of scope (Phase 0)
+## Current limits
 
-- Transaction building, serialization for submission, or signing.
-- Custom cryptography or handwritten cryptographic algorithms.
-- Key generation, mnemonics (BIP-39), or HD derivation.
-- Real mnemonics, private keys, or anything touching real funds.
-- Network/IO, node clients, wallet connection, or provider integration.
-- Plutus support, staking/delegation, governance, Hydra, or Mithril.
-- Full CIP-30/CIP-95 support.
+- The shipped transaction flow is testnet/preprod-focused, ADA-only, and uses a public
+  test-only fixture.
+- Mainnet, arbitrary wallet import, general-purpose wallet signing, native-asset transactions,
+  scripts, staking, metadata, and hardware-wallet support are not implemented.
+- iOS and JVM/Desktop compile as shared targets; Phase 1 runtime validation is Android-primary.
+- The signing backend includes macOS JVM artifacts, Android artifacts, and iOS static libraries;
+  Linux and Windows JVM signing artifacts are future work.
 
 ## Documentation
 
-- [docs/PROJECT_BRIEF.md](docs/PROJECT_BRIEF.md) — product summary, positioning, scope.
-- [docs/ROADMAP.md](docs/ROADMAP.md) — phases and Phase 0 work blocks.
-- [docs/HANDOFF.md](docs/HANDOFF.md) — current state and session handoff.
-- [docs/AI_WORKING_AGREEMENT.md](docs/AI_WORKING_AGREEMENT.md) — how humans and AI agents change this repo.
-- [docs/TESTING.md](docs/TESTING.md) — test source sets, fixture layout, and test-vector policy.
-- [docs/SECURITY.md](docs/SECURITY.md) — security policy and reporting.
-- [docs/DECISIONS/](docs/DECISIONS/) — architecture decision records (ADRs).
+- [Project brief](docs/PROJECT_BRIEF.md) — product positioning and delivered scope.
+- [Quickstart](docs/QUICKSTART.md) — run the Playground in mock mode.
+- [Roadmap](docs/ROADMAP.md) — completed work and planned direction.
+- [Phase 2 plan](docs/PHASE_2_PLAN.md) — native-asset loyalty/ticketing pilot direction.
+- [Funding and pilot playbook](docs/FUNDING_AND_PILOT_PLAYBOOK.md) — public evidence,
+  outreach, and proposal preparation.
+- [Testing guide](docs/TESTING.md) — target matrix, fixtures, and test-vector policy.
+- [Release process](docs/RELEASING.md) — public release prerequisites and verification.
+- [Third-party notices](docs/THIRD_PARTY_NOTICES.md) — initial dependency notice inventory.
+- [Decision records](docs/DECISIONS/) — architecture decisions and scope boundaries.
+- [Security reporting](docs/SECURITY.md) — private reporting path and known scope limits.
 
-## Building and testing
+## Try the Playground
 
-This is a Kotlin Multiplatform project targeting Android, iOS, and JVM/Desktop. Current
-modules:
+The default mock mode is the quickest way to see the guided flow without a network key:
 
-- `:core` — UI-free SDK core seed (no Compose). See [core/README.md](core/README.md).
-- `:shared` — temporary sample/UI host; builds the iOS `Shared` framework. See [shared/README.md](shared/README.md).
-- `:androidApp`, `:desktopApp` — sample apps (plus the `iosApp` Xcode entry point).
+```bash
+./gradlew :desktopApp:run
+```
 
-Build:
+The mock provides deterministic ADA-only sample UTxOs so the demo reaches build and signing. Mock
+submission reports that it does not submit to a network. Live Blockfrost mode is preprod only and
+requires the operator's own project id. See the [quickstart](docs/QUICKSTART.md) before using live
+mode.
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- Desktop app:
-  - Hot reload: `./gradlew :desktopApp:hotRun --auto`
-  - Standard run: `./gradlew :desktopApp:run`
-- iOS app: open the `iosApp` directory in Xcode and run it from there.
+## Build and test
 
-Test (run per module, e.g. `:core` and `:shared`). See [docs/TESTING.md](docs/TESTING.md)
-for source-set expectations, fixture layout, and the test-vector policy:
+```bash
+# Portable JVM tests
+./gradlew :core:jvmTest :provider:jvmTest :provider-blockfrost:jvmTest :tx:jvmTest
 
-- Core (JVM) tests: `./gradlew :core:jvmTest`
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- Desktop tests: `./gradlew :shared:jvmTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
+# macOS JVM signing-path tests
+./gradlew :crypto:jvmTest :crypto-signing-backend:jvmTest :wallet:jvmTest :shared:jvmTest
 
-## Security and contact
+# iOS target compilation
+./gradlew :shared:compileKotlinIosArm64
+```
 
-Kardano SDK is in Phase 0 (pre-alpha) and has not been audited. Do not use it with mainnet
-funds or real private keys. To report a security issue, please follow the process in
-[docs/SECURITY.md](docs/SECURITY.md): open a GitHub Security Advisory on this repository, or
-email the maintainer directly, instead of filing a public issue.
+See [docs/TESTING.md](docs/TESTING.md) for Android-host commands, the complete target matrix, and
+environment limits.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Changes to transaction,
+key-material, provider, or serialization behavior require tests and matching documentation.
 
 ## License
 
-A license has not yet been selected for this repository.
+Copyright 2026 Javier Sarmiento Mañus (Sarmidev).
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+
+Project contact: [sarmidev@outlook.es](mailto:sarmidev@outlook.es).
 
 ---
 

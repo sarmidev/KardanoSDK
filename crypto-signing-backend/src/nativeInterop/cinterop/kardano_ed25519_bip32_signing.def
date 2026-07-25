@@ -1,0 +1,10 @@
+# Kotlin/Native cinterop for the committed iOS static library (ADR-0016 §9, Option R1).
+#
+# The `package` MUST be `kardano_ed25519_bip32_signing.cinterop` — the pre-generated
+# `src/nativeMain/kotlin/.../kardano_ed25519_bip32_signing.native.kt` references the C FFI symbols
+# through exactly that fully-qualified package. The header (declaring the UniFFI C ABI) and the
+# per-target static-library search path are supplied from `build.gradle.kts` (`includeDirs` +
+# `-libraryPath`), because the `.a` differs per iOS target (device vs simulator).
+package = kardano_ed25519_bip32_signing.cinterop
+headers = kardano_ed25519_bip32_signing.h
+staticLibraries = libkardano_ed25519_bip32_signing.a

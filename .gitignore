@@ -5,6 +5,17 @@
 xcuserdata
 !src/**/build/
 local.properties
+.env
+.env.*
+!.env.example
+secrets*.properties
+credentials*.json
+service-account*.json
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
 .idea
 .DS_Store
 captures

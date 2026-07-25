@@ -1,0 +1,12 @@
+# Config for regenerating this module's Kotlin UniFFI bindings offline via the
+# `gobley-uniffi-bindgen` CLI in library mode (ADR-0016 §9, Option R1 — no Gobley/Cargo/Rust
+# Gradle plugin runs in this permanent module; the bindings + native artifacts are pre-built and
+# committed). See `README.md` for the full regeneration commands and pinned toolchain versions.
+#
+# NOTE: `gobley-uniffi-bindgen`'s CLI reads these keys at the TOML ROOT (not nested under
+# `[bindings.kotlin]` as upstream mozilla/uniffi-rs would) — confirmed against v0.3.7's
+# `gobley_uniffi_bindgen::KotlinBindingGenerator::new_config`.
+package_name = "org.sarmidev.kardano.crypto.signing.backend.internal"
+cdylib_name = "kardano_ed25519_bip32_signing"
+kotlin_multiplatform = true
+kotlin_targets = ["jvm", "android", "native"]

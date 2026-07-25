@@ -1,0 +1,93 @@
+---
+description: Kardano SDK Phase 0/1 guardrails — scope, security, non-goals, DoD
+alwaysApply: true
+---
+
+# Kardano SDK — Phase 0/1 Guardrails
+
+Full details in `docs/AI_WORKING_AGREEMENT.md`. UI-free Kotlin Multiplatform Cardano SDK
+(Android/iOS/JVM), group `org.sarmidev.kardano`.
+
+## Hard rules (never violate)
+
+- No handwritten cryptographic algorithms (Blake2b, Ed25519, SHA, etc.) — always delegate to
+  a verified backend (KotlinCrypto, BouncyCastle, libsodium, Apple CommonCrypto).
+- Transaction signing is allowed only inside the explicitly authorized Block 1.10 scope
+  (ADR-0015): testnet/preprod only; the existing Phase 1 test fixture/restored-wallet checkpoint
+  only; ADA-only single-payment `TransactionBuilder` drafts only. No mainnet, no
+  non-fixture/user-supplied wallet, no native assets, no scripts, no metadata, no multisig.
+  The Block 1.10b-pre backend gate (ADR-0016) has passed: the extended Ed25519-BIP32 signing
+  backend is adopted and verified via the pinned `:crypto-signing-backend` module — Block 1.10b
+  signing code may delegate to it, but must not implement any signing algorithm by hand and
+  must not widen scope beyond the paragraph above.
+- No real mnemonics, private keys, or anything touching real funds — anywhere.
+- No banned words: `secure`, `safe`, `hardened`, `audited`, `production-ready`,
+  `guaranteed`, `cryptographically safe`. Use factual wording instead.
+- Keep SDK modules UI-free and lean; no dependency without a documented rationale.
+- Do not modify Gradle, Kotlin source, iOS, or Android project files unless the task
+  explicitly authorizes it.
+- No dynamic (`+`) or unpinned dependency versions.
+
+## Scope: Phase 0 complete, Phase 1 in progress
+
+Phase 0 shipped the dependency-free `:core` primitives: byte/hex utilities, Bech32/Bech32m,
+a minimal documented CBOR subset, and structural CIP-19 address validation (parsing only).
+Phase 1 has since landed `:crypto` (Blake2b hashing, BIP-39 mnemonic restore, Icarus/CIP-3
+master-key derivation, CIP-1852 + Ed25519-BIP32 private/public key derivation — see
+ADR-0009/ADR-0010) and the read-only `:provider`/`:provider-blockfrost` chain-query path
+(ADR-0006/0007). Crypto is real, backend-delegated code now, not docs-only. Before
+implementing CBOR or Bech32, check `docs/DECISIONS/0001-cbor-and-parser-policy.md`. Before
+adding a package or module, check `docs/DECISIONS/0011-phase-1-architecture-standards.md`.
+
+## Package and module conventions
+
+- Packages before modules: organize by sub-package inside an existing module first; extract
+  a new Gradle module only under real dependency-direction or ownership pressure
+  (ADR-0002/0003/0005/0011).
+- Internal platform seams (`expect`/`actual`) live under an `internal.*` sub-package
+  (for example `:crypto`'s `internal.pbkdf2`, `internal.projection`), not in a
+  public-facing API package.
+- No compatibility typealiases when moving a type between packages — this SDK is pre-alpha;
+  record the import change in the change's docs instead.
+
+## Parser safety (applies to CBOR, Bech32, hex, address)
+
+- Never allocate a buffer from an untrusted length field.
+- Enforce named constants: `MAX_INPUT_BYTES`, `MAX_NESTING_DEPTH`, `MAX_COLLECTION_ELEMENTS`.
+- Reject malformed, non-canonical, or unsupported input — never normalize it.
+- Reject out-of-range numeric values; never truncate silently.
+
+## KMP error policy
+
+- Public APIs that can fail return a sealed error or `Result` type — no throwing.
+- Any unavoidable thrower must have `@Throws` and be documented in KDoc.
+- Throwing across the Swift/ObjC boundary crashes iOS.
+
+## ByteArray correctness
+
+- Use `contentEquals` / `contentHashCode` — never `ByteArray ==`.
+- Defensive copy on construction and accessors.
+- Never expose a mutable internal `ByteArray`.
+
+## Test integrity
+
+- Never invent test vectors — copy them verbatim from cited specs.
+- Never weaken a validator to make a test pass.
+- `decode(encode(x)) == x` is safe. `encode(decode(y)) == y` must not silently accept
+  non-canonical input — if tested, also assert non-canonical input is rejected.
+
+## Working style
+
+- One logical change per diff; target < ~300–400 changed lines.
+- Broad refactors require a short written plan before editing.
+- A change is not done until tests and docs are updated.
+
+## Definition of done
+
+- Compiles: common, JVM, Android (where applicable), iOS simulator (where applicable).
+- Tests pass; new behavior has valid/invalid/edge tests.
+- Security-sensitive behavior cites external test vectors (BIP-173/350, RFC 8949, CIP-19).
+- Public APIs have KDoc; validators say "structural only" where applicable.
+- Docs updated in the same change.
+- No banned words or unsafe claims.
+- Diff is manually reviewable.

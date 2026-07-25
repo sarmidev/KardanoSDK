@@ -7,33 +7,49 @@ import org.sarmidev.kardano.primitives.Network
 import org.sarmidev.kardano.primitives.NetworkError
 
 /**
- * A typed error produced when [Address.parse] rejects its input.
+ * A typed error produced when parsing, constructing, or encoding an [Address] rejects its
+ * input.
  *
- * [Address.parse] never throws; it returns one of these variants inside a
- * [org.sarmidev.kardano.KardanoResult.Err]. These errors describe **structural**
- * validation failures only (Bech32 decoding, bit conversion, header byte, network id,
- * HRP/network and HRP/family agreement, and byte lengths). They make no claim about
- * ownership, on-chain existence, controllability, spendability, or balance.
+ * [Address.parse] is the original source of every variant here, but this type is not
+ * parse-only: [AddressCredential.keyHash], [AddressCredential.scriptHash], and
+ * [Address.baseAddress] (Block 1.7a) also return it, and none of these APIs ever throw —
+ * each returns one of these variants inside a [org.sarmidev.kardano.KardanoResult.Err].
+ * Whether produced by parsing, structural construction from raw bytes, or encoding, every
+ * variant describes a **structural** failure only (Bech32 decoding/encoding, bit
+ * conversion, header byte, network id, HRP/network and HRP/family agreement, and byte
+ * lengths). None of them make any claim about ownership, on-chain existence,
+ * controllability, spendability, or balance.
  *
  * @see <a href="https://cips.cardano.org/cip/CIP-19">CIP-19</a>
  */
 public sealed interface AddressError {
 
     /**
-     * The Cardano-facing Bech32 decoder rejected the input string.
+     * The Cardano-facing Bech32 layer rejected the operation, on either decode or encode.
      *
-     * Wraps the underlying [CardanoBech32Error] verbatim (for example an invalid checksum,
-     * an out-of-charset character, a non-allowlisted HRP, or a Bech32m variant).
+     * On [Address.parse] this means the input string was rejected on decode (for example an
+     * invalid checksum, an out-of-charset character, a non-allowlisted HRP, or a Bech32m
+     * variant). On [Address.toBech32] or [Address.baseAddress] (Block 1.7a) it means the
+     * canonical re-encoding was rejected instead — in practice unreachable for those two,
+     * since they only ever encode a length and HRP that already passed validation, but the
+     * variant is shared rather than duplicated for the two directions. Wraps the underlying
+     * [CardanoBech32Error] verbatim either way.
      *
      * @property error the underlying Cardano Bech32 error.
      */
     public data class Bech32(public val error: CardanoBech32Error) : AddressError
 
     /**
-     * The 5-bit-to-8-bit conversion of the decoded data part failed.
+     * The bit conversion between the 5-bit Bech32 data part and the 8-bit payload bytes
+     * failed.
      *
-     * This happens when the Bech32 data part does not pack into whole bytes with zero
-     * padding (for example non-zero leftover bits). Wraps the underlying [Bech32Error].
+     * This is produced in the decode direction (5-bit to 8-bit) when the Bech32 data part
+     * does not pack into whole bytes with zero padding (for example non-zero leftover
+     * bits), and, in principle, in the encode direction (8-bit to 5-bit, used by
+     * [Address.toBech32] and [Address.baseAddress]) if the underlying conversion ever
+     * rejected a payload — in practice unreachable for that direction, since every 8-bit
+     * byte packs into 5-bit groups with padding without ambiguity. Wraps the underlying
+     * [Bech32Error].
      *
      * @property error the underlying bit-conversion error.
      */
@@ -104,11 +120,14 @@ public sealed interface AddressError {
     ) : AddressError
 
     /**
-     * A credential hash slice was not the required length.
+     * A candidate credential hash was not the required length.
      *
-     * In this step a valid payload always yields a correctly sized credential, so this is
-     * unreachable from valid input; it makes the credential length invariant explicit at
-     * the credential boundary.
+     * Produced in two places: internally by [Address.parse], where a valid payload always
+     * yields a correctly sized credential slice, so it is unreachable there from valid
+     * input; and publicly by [AddressCredential.keyHash] / [AddressCredential.scriptHash]
+     * (Block 1.7a), where it is a normal, reachable rejection of caller-supplied bytes that
+     * are not exactly 28 bytes. Either way it makes the same credential-length invariant
+     * explicit at the credential boundary.
      *
      * @property expected the exact number of bytes a credential hash requires.
      * @property actual the number of bytes that were provided.

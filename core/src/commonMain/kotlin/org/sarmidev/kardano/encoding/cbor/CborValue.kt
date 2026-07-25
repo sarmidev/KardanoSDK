@@ -6,9 +6,12 @@ package org.sarmidev.kardano.encoding.cbor
  * This subset (RFC 8949) covers four primitive types — unsigned integers ([CborUnsigned]),
  * negative integers ([CborNegative]), byte strings ([CborByteString]), and text strings
  * ([CborTextString]) — plus two definite-length collection types: arrays ([CborArray]) and
- * maps ([CborMap]). Tags, floats, simple values, `null`/`undefined`, and indefinite-length
- * encodings are intentionally outside this type and are rejected by [Cbor.decode] with a
- * typed [CborError]; they are not represented here.
+ * maps ([CborMap]), plus the two fixed major-type-7 simple values [CborBool] (`true`/`false`)
+ * and [CborNull] (`null`), added narrowly for Block 1.10b's full signed `transaction` wrapper
+ * (ADR-0015 §3; see the addendum note in
+ * `docs/DECISIONS/0001-cbor-and-parser-policy.md`). Tags, floats, `undefined`, every other
+ * simple value, and indefinite-length encodings remain intentionally outside this type and are
+ * rejected by [Cbor.decode] with a typed [CborError]; they are not represented here.
  *
  * Integers are restricted to the signed [Long] range so that no value is silently
  * truncated. See [Cbor] for the decode/encode entry points and the named nesting and
@@ -176,4 +179,26 @@ public sealed interface CborValue {
         /** Structural description that does not render the entries. */
         override fun toString(): String = "CborMap(size=${entries.size})"
     }
+
+    /**
+     * A CBOR boolean (major type 7, simple value 20 `false` or 21 `true`).
+     *
+     * Added narrowly for the exact fixed value Cardano's full signed `transaction` wrapper's
+     * `is_valid` flag needs (ADR-0015 §3 / Block 1.10b) — not general major-type-7 support.
+     * Every other major-type-7 value (`undefined`, every other simple value, and all floats)
+     * remains out of scope and is rejected by [Cbor.decode] with
+     * [CborError.FloatOrSimpleNotSupported].
+     *
+     * @property value `true` or `false`.
+     */
+    public data class CborBool(public val value: Boolean) : CborValue
+
+    /**
+     * A CBOR `null` (major type 7, simple value 22).
+     *
+     * Added narrowly for the exact fixed value Cardano's full signed `transaction` wrapper's
+     * MVP `auxiliary_data` placeholder needs (ADR-0015 §3 / Block 1.10b). See [CborBool]'s doc
+     * for what remains out of scope.
+     */
+    public data object CborNull : CborValue
 }

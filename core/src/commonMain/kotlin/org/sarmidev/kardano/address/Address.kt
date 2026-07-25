@@ -45,6 +45,14 @@ import org.sarmidev.kardano.primitives.Network
  * @property network the network resolved from the header network nibble.
  * @property type the structural address type.
  * @property hrp the human-readable part the address was encoded with.
+ * @property bech32 the validated source representation. For an [Address] produced by
+ *   [parse], this is the exact Bech32 string that was passed in and accepted — the original
+ *   input that structural validation confirmed, not an independently encoded value. For an
+ *   [Address] produced by [baseAddress] there is no separate source string, so this holds
+ *   the same canonical value [toBech32] returns. See [toBech32] for the canonical
+ *   re-encoding, which is always derived from the address's own bytes regardless of how the
+ *   address was constructed. [bech32] is excluded from [equals], [hashCode], and [toString]
+ *   so the structural equality contract is unchanged.
  * @property paymentCredential the payment credential (CIP-19 payment part), or null for a
  *   reward/stake address. Non-null for base, pointer, and enterprise addresses.
  * @property stakeCredential the stake credential (CIP-19 delegation part), or null for an
@@ -63,10 +71,14 @@ public class Address private constructor(
     public val paymentCredential: AddressCredential?,
     public val stakeCredential: AddressCredential?,
     public val pointer: AddressPointer?,
+    public val bech32: String,
     rawBytes: ByteArray,
+    canonicalBech32: String,
 ) {
 
     private val rawBytes: ByteArray = rawBytes.copyOf()
+
+    private val canonicalBech32: String = canonicalBech32
 
     /**
      * Returns a copy of the full address bytes, including the header byte.
@@ -74,6 +86,22 @@ public class Address private constructor(
      * @return a fresh [ByteArray]; mutating it does not affect this [Address].
      */
     public fun toByteArray(): ByteArray = rawBytes.copyOf()
+
+    /**
+     * Returns the canonical lowercase Bech32 encoding of this address.
+     *
+     * Unlike [bech32] (which, for a [parse]d address, is the original source string), this
+     * is always freshly derived from this address's own bytes and [hrp] — via the same
+     * 8-bit-to-5-bit conversion and [CardanoBech32] encoding regardless of whether this
+     * [Address] came from [parse] or [baseAddress]. It is computed once at construction, so
+     * this getter cannot fail.
+     *
+     * This is a structural re-encoding only: it does not prove the address exists on-chain,
+     * is owned, is controllable, or is spendable.
+     *
+     * @return the canonical Bech32 string (for example `addr_test1...` or `addr1...`).
+     */
+    public fun toBech32(): String = canonicalBech32
 
     /**
      * Value equality based on [network], [type], [hrp], [paymentCredential],
@@ -233,7 +261,7 @@ public class Address private constructor(
             // variable-length chain pointer), so they use a dedicated path instead of the
             // fixed-size check below. paymentKind is non-null (KEY or SCRIPT) for pointer.
             if (type == AddressType.POINTER && paymentKind != null) {
-                return parsePointer(network, hrp, paymentKind, payload)
+                return parsePointer(network, hrp, paymentKind, payload, bech32)
             }
 
             val expectedSize =
@@ -266,9 +294,121 @@ public class Address private constructor(
                 null
             }
 
+            val canonicalBech32 = when (val result = encodeCanonical(hrp, payload)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return KardanoResult.Err(result.error)
+            }
             return KardanoResult.Ok(
-                Address(network, type, hrp, paymentCredential, stakeCredential, null, payload),
+                Address(
+                    network,
+                    type,
+                    hrp,
+                    paymentCredential,
+                    stakeCredential,
+                    null,
+                    bech32,
+                    payload,
+                    canonicalBech32,
+                ),
             )
+        }
+
+        /**
+         * Builds a Shelley base address (CIP-19 header types 0-3) from an already-computed
+         * payment credential, an already-computed stake (delegation) credential, and a
+         * [network], and encodes it to canonical Bech32.
+         *
+         * This is a **structural construction and encoding** operation only (Block 1.7a; see
+         * [docs/DECISIONS/0012-address-encoding-and-roundtrip.md](
+         * ../../../../../../docs/DECISIONS/0012-address-encoding-and-roundtrip.md)): it does
+         * not verify that [paymentCredential] or [stakeCredential] correspond to a real key
+         * or script, and it does not prove the resulting address exists on-chain, is owned,
+         * is controllable, or is spendable. It is the inverse of [parse]'s base-address
+         * decoding: the header type nibble is chosen from the two credentials' [CredentialKind]
+         * exactly as [parse] would classify it back, and the network nibble is [Network.id].
+         *
+         * Only base addresses are built by this factory. Enterprise, reward/stake, and
+         * pointer builders are deferred to a future block; [parse] already models all of
+         * them structurally, and [toBech32] already canonicalizes every parsed type.
+         *
+         * @param network the network the address is generated for. The caller is
+         *   responsible for only ever passing [Network.TESTNET] where a "no mainnet"
+         *   boundary applies (for example this SDK's own sample app); this factory itself
+         *   accepts either network so it stays a pure function usable by tests against both
+         *   cited CIP-19 mainnet and testnet vectors.
+         * @param paymentCredential the payment credential (key or script hash).
+         * @param stakeCredential the stake (delegation) credential (key or script hash).
+         * @return [KardanoResult.Ok] with the generated, structurally valid [Address], or
+         *   [KardanoResult.Err] with an [AddressError] if canonical encoding fails. Never
+         *   throws.
+         * @see <a href="https://cips.cardano.org/cip/CIP-19">CIP-19</a>
+         */
+        public fun baseAddress(
+            network: Network,
+            paymentCredential: AddressCredential,
+            stakeCredential: AddressCredential,
+        ): KardanoResult<Address, AddressError> {
+            val typeNibble = baseTypeNibble(paymentCredential.kind, stakeCredential.kind)
+            val header = ((typeNibble shl 4) or network.id).toByte()
+            val payload = byteArrayOf(header) +
+                paymentCredential.hashBytes() +
+                stakeCredential.hashBytes()
+            val hrp = if (network == Network.MAINNET) CardanoHrp.ADDR else CardanoHrp.ADDR_TEST
+
+            val canonicalBech32 = when (val result = encodeCanonical(hrp, payload)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return KardanoResult.Err(result.error)
+            }
+            return KardanoResult.Ok(
+                Address(
+                    network,
+                    AddressType.BASE,
+                    hrp,
+                    paymentCredential,
+                    stakeCredential,
+                    null,
+                    canonicalBech32,
+                    payload,
+                    canonicalBech32,
+                ),
+            )
+        }
+
+        /**
+         * Resolves the CIP-19 base-address header type nibble (0-3) from the payment and
+         * stake credential kinds. Exact inverse of the base branch of [classifyHeader]: the
+         * payment part sets [PAYMENT_SCRIPT_BIT] when it is a script hash, and the stake
+         * (delegation) part sets [DELEGATION_SCRIPT_BIT] when it is a script hash.
+         */
+        private fun baseTypeNibble(
+            paymentKind: CredentialKind,
+            stakeKind: CredentialKind,
+        ): Int {
+            var nibble = 0
+            if (paymentKind == CredentialKind.SCRIPT) nibble = nibble or PAYMENT_SCRIPT_BIT
+            if (stakeKind == CredentialKind.SCRIPT) nibble = nibble or DELEGATION_SCRIPT_BIT
+            return nibble
+        }
+
+        /**
+         * Encodes [payload] (full address bytes, including the header) to canonical
+         * lowercase Bech32 under [hrp]: 8-bit-to-5-bit conversion followed by
+         * [CardanoBech32.encode]. Used for both the canonical re-encoding of a [parse]d
+         * address and the encoding step of [baseAddress].
+         */
+        private fun encodeCanonical(
+            hrp: CardanoHrp,
+            payload: ByteArray,
+        ): KardanoResult<String, AddressError> {
+            val data5Bit = when (val result = Bech32.convertBits(payload, 8, 5, pad = true)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err ->
+                    return KardanoResult.Err(AddressError.InvalidBitConversion(result.error))
+            }
+            return when (val result = CardanoBech32.encode(hrp, data5Bit)) {
+                is KardanoResult.Ok -> KardanoResult.Ok(result.value)
+                is KardanoResult.Err -> KardanoResult.Err(AddressError.Bech32(result.error))
+            }
         }
 
         /**
@@ -281,6 +421,7 @@ public class Address private constructor(
             hrp: CardanoHrp,
             paymentKind: CredentialKind,
             payload: ByteArray,
+            bech32: String,
         ): KardanoResult<Address, AddressError> {
             if (payload.size < MIN_POINTER_PAYLOAD_SIZE) {
                 return KardanoResult.Err(AddressError.TruncatedPointer)
@@ -323,6 +464,10 @@ public class Address private constructor(
                 is KardanoResult.Err -> return KardanoResult.Err(result.error)
             }
 
+            val canonicalBech32 = when (val result = encodeCanonical(hrp, payload)) {
+                is KardanoResult.Ok -> result.value
+                is KardanoResult.Err -> return KardanoResult.Err(result.error)
+            }
             return KardanoResult.Ok(
                 Address(
                     network,
@@ -331,7 +476,9 @@ public class Address private constructor(
                     paymentCredential,
                     null,
                     pointer,
+                    bech32,
                     payload,
+                    canonicalBech32,
                 ),
             )
         }

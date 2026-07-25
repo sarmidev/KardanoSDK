@@ -1,0 +1,334 @@
+package org.sarmidev.kardano.playground.mvi
+
+import org.sarmidev.kardano.playground.LabeledRow
+import org.sarmidev.kardano.playground.SignedTransactionPresentation
+import org.sarmidev.kardano.playground.SubmitTransactionPresentation
+import org.sarmidev.kardano.playground.TransactionDraftPresentation
+import org.sarmidev.kardano.playground.WalletBalancePresentation
+import org.sarmidev.kardano.playground.WalletPresentation
+import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * Unit tests for [PlaygroundReducer] (Block 1.12-pre-a).
+ *
+ * [PlaygroundReducer] is pure and non-suspend, so every test here constructs a
+ * [PlaygroundState] and/or a `*Presentation` value directly and calls [PlaygroundReducer]
+ * functions synchronously — no coroutine, no native backend, no provider call. This runs on
+ * every target, including `:shared:testAndroidHostTest`, the same native-backend constraint
+ * [org.sarmidev.kardano.playground.PlaygroundWalletPresenterTest] documents.
+ */
+class PlaygroundReducerTest {
+
+    // --- Default mock initial state ---
+
+    @Test
+    fun initialState_defaultsToMockAndEmptyEverySteps() {
+        val state = PlaygroundState.initial()
+
+        assertFalse(state.useLiveBlockfrost)
+        assertEquals("", state.projectId)
+        assertEquals(WalletPresentation.Empty, state.wallet)
+        assertFalse(state.walletLoading)
+        assertEquals(WalletBalancePresentation.Empty, state.funds)
+        assertEquals(TransactionDraftPresentation.Empty, state.draft)
+        assertEquals(SignedTransactionPresentation.Empty, state.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, state.submit)
+        assertTrue(state.technicalDetailsExpanded.isEmpty())
+        assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS, state.providerAddressInput)
+        assertFalse(state.codeExamplesExpanded)
+        assertEquals(PlaygroundSection.OVERVIEW, state.section)
+        assertEquals(RoadmapPhase.PHASE_1, state.selectedRoadmapPhase)
+    }
+
+    // --- Section navigation (Block 1.12-pre-c-2) ---
+
+    @Test
+    fun navigationIntents_switchSectionOnly() {
+        val state = PlaygroundState.initial()
+
+        val trySdk = PlaygroundReducer.reduce(state, PlaygroundIntent.NavigateToTrySdk)
+        assertEquals(PlaygroundSection.TRY_SDK, trySdk.section)
+        // Navigation touches nothing but the section.
+        assertEquals(state.copy(section = PlaygroundSection.TRY_SDK), trySdk)
+
+        val roadmap = PlaygroundReducer.reduce(trySdk, PlaygroundIntent.NavigateToRoadmap)
+        assertEquals(PlaygroundSection.ROADMAP, roadmap.section)
+
+        val overview = PlaygroundReducer.reduce(roadmap, PlaygroundIntent.NavigateToOverview)
+        assertEquals(PlaygroundSection.OVERVIEW, overview.section)
+    }
+
+    // --- Roadmap phase selection: tap to expand, tap again to collapse ---
+
+    @Test
+    fun selectRoadmapPhase_selectsNewPhaseThenTogglesItOff() {
+        val state = PlaygroundState.initial()
+        assertEquals(RoadmapPhase.PHASE_1, state.selectedRoadmapPhase)
+
+        val phase2 = PlaygroundReducer.reduce(
+            state,
+            PlaygroundIntent.SelectRoadmapPhase(RoadmapPhase.PHASE_2),
+        )
+        assertEquals(RoadmapPhase.PHASE_2, phase2.selectedRoadmapPhase)
+
+        // Tapping the already-selected phase collapses its detail.
+        val collapsed = PlaygroundReducer.reduce(
+            phase2,
+            PlaygroundIntent.SelectRoadmapPhase(RoadmapPhase.PHASE_2),
+        )
+        assertNull(collapsed.selectedRoadmapPhase)
+
+        val phase0 = PlaygroundReducer.reduce(
+            collapsed,
+            PlaygroundIntent.SelectRoadmapPhase(RoadmapPhase.PHASE_0),
+        )
+        assertEquals(RoadmapPhase.PHASE_0, phase0.selectedRoadmapPhase)
+    }
+
+    // --- Provider selection: project id + live toggle ---
+
+    @Test
+    fun updateProjectId_updatesOnlyProjectId() {
+        val state = PlaygroundState.initial()
+
+        val next = PlaygroundReducer.reduce(state, PlaygroundIntent.UpdateProjectId("abc123"))
+
+        assertEquals("abc123", next.projectId)
+        assertFalse(next.useLiveBlockfrost)
+    }
+
+    @Test
+    fun toggleLiveBlockfrost_updatesOnlyTheToggle() {
+        val state = PlaygroundState.initial().copy(projectId = "abc123")
+
+        val next = PlaygroundReducer.reduce(state, PlaygroundIntent.ToggleLiveBlockfrost(true))
+
+        assertTrue(next.useLiveBlockfrost)
+        assertEquals("abc123", next.projectId)
+
+        val backOff = PlaygroundReducer.reduce(next, PlaygroundIntent.ToggleLiveBlockfrost(false))
+        assertFalse(backOff.useLiveBlockfrost)
+    }
+
+    // --- Technical details toggling ---
+
+    @Test
+    fun toggleTechnicalDetails_expandsThenCollapsesOnlyThatStep() {
+        val state = PlaygroundState.initial()
+
+        val expanded = PlaygroundReducer.reduce(
+            state,
+            PlaygroundIntent.ToggleTechnicalDetails(PlaygroundStep.FUNDS),
+        )
+        assertEquals(setOf(PlaygroundStep.FUNDS), expanded.technicalDetailsExpanded)
+
+        val stillExpandedForOtherStep = PlaygroundReducer.reduce(
+            expanded,
+            PlaygroundIntent.ToggleTechnicalDetails(PlaygroundStep.SIGN),
+        )
+        assertEquals(
+            setOf(PlaygroundStep.FUNDS, PlaygroundStep.SIGN),
+            stillExpandedForOtherStep.technicalDetailsExpanded,
+        )
+
+        val collapsedFunds = PlaygroundReducer.reduce(
+            stillExpandedForOtherStep,
+            PlaygroundIntent.ToggleTechnicalDetails(PlaygroundStep.FUNDS),
+        )
+        assertEquals(setOf(PlaygroundStep.SIGN), collapsedFunds.technicalDetailsExpanded)
+    }
+
+    // --- Landing "Code examples" toggle (Block 1.12-pre-c) ---
+
+    @Test
+    fun toggleCodeExamples_flipsFlagAndTouchesNothingElse() {
+        val state = PlaygroundState.initial()
+
+        val expanded = PlaygroundReducer.reduce(state, PlaygroundIntent.ToggleCodeExamples)
+        assertTrue(expanded.codeExamplesExpanded)
+        // The landing toggle is presentation-only: it leaves the rest of the state untouched.
+        assertEquals(state.copy(codeExamplesExpanded = true), expanded)
+
+        val collapsed = PlaygroundReducer.reduce(expanded, PlaygroundIntent.ToggleCodeExamples)
+        assertFalse(collapsed.codeExamplesExpanded)
+        assertEquals(state, collapsed)
+    }
+
+    // --- Reset flow: clears guided-flow results, keeps provider config + diagnostics ---
+
+    @Test
+    fun resetFlow_clearsGuidedStepsButKeepsProviderConfigAndDiagnostics() {
+        val walletRow = LabeledRow("Generated address", "addr_test1abc")
+        val dirty = PlaygroundState.initial().copy(
+            useLiveBlockfrost = true,
+            projectId = "abc123",
+            wallet = WalletPresentation.Success(listOf(walletRow), fingerprintMatchesVector = true),
+            walletLoading = true,
+            funds = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "0 lovelace"))),
+            draft = TransactionDraftPresentation.Failure("No UTxOs available to build a transaction from."),
+            signed = SignedTransactionPresentation.Loading,
+            submit = SubmitTransactionPresentation.Loading,
+            technicalDetailsExpanded = setOf(PlaygroundStep.BUILD),
+            addressInput = "addr_test1xyz",
+            providerAddressInput = InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY,
+        )
+
+        val reset = PlaygroundReducer.reduce(dirty, PlaygroundIntent.ResetFlow)
+
+        assertEquals(WalletPresentation.Empty, reset.wallet)
+        assertFalse(reset.walletLoading)
+        assertEquals(WalletBalancePresentation.Empty, reset.funds)
+        assertEquals(TransactionDraftPresentation.Empty, reset.draft)
+        assertEquals(SignedTransactionPresentation.Empty, reset.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, reset.submit)
+
+        // Provider config and diagnostics input/expanded-details are preserved.
+        assertTrue(reset.useLiveBlockfrost)
+        assertEquals("abc123", reset.projectId)
+        assertEquals(setOf(PlaygroundStep.BUILD), reset.technicalDetailsExpanded)
+        assertEquals("addr_test1xyz", reset.addressInput)
+        assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, reset.providerAddressInput)
+    }
+
+    // --- Diagnostics text inputs + seed fill ---
+
+    @Test
+    fun updateAddressInput_updatesOnlyAddressInput() {
+        val state = PlaygroundState.initial()
+        val next = PlaygroundReducer.reduce(state, PlaygroundIntent.UpdateAddressInput("addr_test1abc"))
+        assertEquals("addr_test1abc", next.addressInput)
+    }
+
+    @Test
+    fun fillSeedAddress_withUtxos_setsProviderAddressInputToWithUtxosVector() {
+        val state = PlaygroundState.initial().copy(providerAddressInput = "")
+        val next = PlaygroundReducer.reduce(
+            state,
+            PlaygroundIntent.FillSeedAddress(SeedAddressKind.WITH_UTXOS),
+        )
+        assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS, next.providerAddressInput)
+    }
+
+    @Test
+    fun fillSeedAddress_empty_setsProviderAddressInputToEmptyVector() {
+        val state = PlaygroundState.initial()
+        val next = PlaygroundReducer.reduce(
+            state,
+            PlaygroundIntent.FillSeedAddress(SeedAddressKind.EMPTY),
+        )
+        assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, next.providerAddressInput)
+    }
+
+    // --- Loading transitions ---
+
+    @Test
+    fun startFundsLoading_setsFundsToLoading() {
+        val next = PlaygroundReducer.startFundsLoading(PlaygroundState.initial())
+        assertEquals(WalletBalancePresentation.Loading, next.funds)
+    }
+
+    @Test
+    fun startWalletLoading_setsWalletLoadingFlag() {
+        val next = PlaygroundReducer.startWalletLoading(PlaygroundState.initial())
+        assertTrue(next.walletLoading)
+    }
+
+    // --- applyX: fold a *Presentation result back into state ---
+
+    @Test
+    fun applyWalletResult_setsWalletAndClearsLoading() {
+        val loading = PlaygroundReducer.startWalletLoading(PlaygroundState.initial())
+        val result = WalletPresentation.Success(
+            rows = listOf(LabeledRow("Generated address", "addr_test1abc")),
+            fingerprintMatchesVector = true,
+        )
+
+        val next = PlaygroundReducer.applyWalletResult(loading, result)
+
+        assertEquals(result, next.wallet)
+        assertFalse(next.walletLoading)
+    }
+
+    @Test
+    fun applyFundsResult_success_isSurfacedInState() {
+        val result = WalletBalancePresentation.Success(
+            listOf(LabeledRow("UTxO count", "2"), LabeledRow("Balance", "5000000 lovelace")),
+        )
+        val next = PlaygroundReducer.applyFundsResult(PlaygroundState.initial(), result)
+        assertIs<WalletBalancePresentation.Success>(next.funds)
+        assertEquals(result, next.funds)
+    }
+
+    @Test
+    fun applyFundsResult_failure_isSurfacedInState() {
+        val result = WalletBalancePresentation.Failure("Network mismatch: provider=MAINNET, address=TESTNET")
+        val next = PlaygroundReducer.applyFundsResult(PlaygroundState.initial(), result)
+        val failure = assertIs<WalletBalancePresentation.Failure>(next.funds)
+        assertTrue(failure.message.contains("Network mismatch"))
+    }
+
+    @Test
+    fun applyDraftResult_success_isSurfacedInState() {
+        val result = TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "170000 lovelace")))
+        val next = PlaygroundReducer.applyDraftResult(PlaygroundState.initial(), result)
+        assertEquals(result, next.draft)
+    }
+
+    @Test
+    fun applyDraftResult_adaOnlyNativeAssetFailure_isSurfacedInState() {
+        // Block 1.11d/1.11d-2 ADA-only filtering message, unchanged by this refactor.
+        val message = "This wallet has no ADA-only UTxOs to spend — only UTxOs containing " +
+            "native assets/tokens. Phase 1 only builds ADA-only transactions. (all candidate " +
+            "UTxOs carry native assets)"
+        val result = TransactionDraftPresentation.Failure(message)
+
+        val next = PlaygroundReducer.applyDraftResult(PlaygroundState.initial(), result)
+
+        val failure = assertIs<TransactionDraftPresentation.Failure>(next.draft)
+        assertTrue(failure.message.contains("native", ignoreCase = true))
+        assertTrue(failure.message.contains("ADA-only"))
+    }
+
+    @Test
+    fun applySignedResult_success_isSurfacedInState() {
+        val result = SignedTransactionPresentation.Success(
+            listOf(LabeledRow("Witnesses", "1"), LabeledRow("Status", "signed, not submitted")),
+        )
+        val next = PlaygroundReducer.applySignedResult(PlaygroundState.initial(), result)
+        assertEquals(result, next.signed)
+    }
+
+    @Test
+    fun applySignedResult_failure_isSurfacedInState() {
+        val result = SignedTransactionPresentation.Failure("Signing failed: backend failed: boom")
+        val next = PlaygroundReducer.applySignedResult(PlaygroundState.initial(), result)
+        val failure = assertIs<SignedTransactionPresentation.Failure>(next.signed)
+        assertTrue(failure.message.contains("Signing failed"))
+    }
+
+    @Test
+    fun applySubmitResult_success_isSurfacedInState() {
+        val result = SubmitTransactionPresentation.Success(
+            listOf(LabeledRow("Ids match", "yes"), LabeledRow("Status", "submitted to preprod")),
+        )
+        val next = PlaygroundReducer.applySubmitResult(PlaygroundState.initial(), result)
+        assertEquals(result, next.submit)
+    }
+
+    @Test
+    fun applySubmitResult_failure_isSurfacedInState() {
+        val result = SubmitTransactionPresentation.Failure(
+            "This provider does not support submission (mock) — enable live Blockfrost preprod " +
+                "to submit for real.",
+        )
+        val next = PlaygroundReducer.applySubmitResult(PlaygroundState.initial(), result)
+        val failure = assertIs<SubmitTransactionPresentation.Failure>(next.submit)
+        assertTrue(failure.message.contains("not support", ignoreCase = true))
+    }
+}

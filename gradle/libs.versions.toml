@@ -13,11 +13,56 @@ composeMultiplatform = "1.11.1"
 junit = "4.13.2"
 kotlin = "2.4.0"
 kotlinx-coroutines = "1.11.0"
+kotlinx-serialization = "1.11.0"
+kotlincrypto-blake2 = "0.8.0"
+kotlincrypto-sha2 = "0.8.0"
+bouncycastle-bcprov = "1.84"
+bip32-ed25519 = "1.8.8"
+androidx-test-runner = "1.7.0"
+ionspin-libsodium = "0.9.5"
+# 1.6c-follow-up-2 gate result (ADR-0010): Android public-key-projection backend, verified by
+# on-device execution on API 24/35/36. See ADR-0010 for the full evidence.
+lazysodium-android = "5.2.0"
+jna = "5.17.0"
+ktor = "3.5.1"
 material3 = "1.11.0-alpha07"
+# ADR-0016 §9 (Block 1.10b backend adoption): the pre-generated UniFFI bindings in
+# :crypto-signing-backend use kotlinx.atomicfu for their handle-map counter. Version matches what
+# the disposable spike's Gobley toolchain resolved (ADR-0016 §8, scratch README).
+atomicfu = "0.26.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+kotlinx-coroutinesTest = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+kotlincrypto-blake2 = { module = "org.kotlincrypto.hash:blake2", version.ref = "kotlincrypto-blake2" }
+kotlincrypto-sha2 = { module = "org.kotlincrypto.hash:sha2", version.ref = "kotlincrypto-sha2" }
+bouncycastle-bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle-bcprov" }
+# 1.6c-follow-up gate result: swapped from the dev.allain republish to the upstream
+# org.hyperledger.identus coordinate, whose bip32-ed25519-android AAR ships the native
+# jni/<abi>/*.so (dev.allain's did not) — verified on real Android runtime. See ADR-0010.
+bip32-ed25519 = { module = "org.hyperledger.identus:bip32-ed25519", version.ref = "bip32-ed25519" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidx-test-runner" }
+# 1.6c-follow-up gate result: public-key projection backend for JVM + iOS (see ADR-0010). The
+# published Android native library is missing the crypto_scalarmult_ed25519_* symbols
+# (confirmed UnsatisfiedLinkError on real Android runtime across every published version), so
+# this is not an androidMain dependency there; Android uses lazysodium-android instead (below).
+ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings", version.ref = "ionspin-libsodium" }
+kotlinx-coroutinesCore = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
+# 1.6c-follow-up-2 gate result (ADR-0010): Android-only public-key-projection backend — its AAR
+# bundles a full libsodium .so exporting crypto_scalarmult_ed25519_base_noclamp on all four ABIs,
+# verified by symbol inspection and by on-device execution (API 24/35/36). androidMain-only.
+lazysodium-android = { module = "com.goterl:lazysodium-android", version.ref = "lazysodium-android" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
+kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 junit = { module = "junit:junit", version.ref = "junit" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-testExt-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
@@ -42,3 +87,5 @@ composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMul
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlinJvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+atomicfu = { id = "org.jetbrains.kotlin.plugin.atomicfu", version.ref = "kotlin" }

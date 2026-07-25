@@ -42,6 +42,11 @@ kotlin {
         }
         commonMain.dependencies {
             implementation(projects.core)
+            implementation(projects.crypto)
+            implementation(projects.provider)
+            implementation(projects.providerBlockfrost)
+            implementation(projects.wallet)
+            implementation(projects.tx)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -53,6 +58,9 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+        }
+        jvmTest.dependencies {
+            implementation(libs.kotlinx.coroutinesTest)
         }
     }
 }

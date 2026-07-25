@@ -16,8 +16,55 @@ Selected targets:
 
 Current priority:
 
-> Phase 0 is closed. The next step is **Phase 1 planning** (scope, module extraction, and
-> per-algorithm crypto library selection) — not Phase 1 implementation.
+> Phase 0 is closed. Phase 1 Block 1.1 (planning), Block 1.2 (Android SDK Playground),
+> Block 1.3a (Provider Read-Only Boundary — interface, models, and mock in `:provider`),
+> Block 1.3b-pre (`Address.bech32` source string in `:core`), Block 1.3b (Blockfrost
+> preprod provider in `:provider-blockfrost`, with a live Playground toggle), Block 1.4
+> (Crypto Evaluation And Module Decision, docs-only; ADR-0008), Block 1.5a (Kotlin-2.4.0
+> compatibility spike, **PASS**), Block 1.5b-pre (crypto vector-source gate, docs-only), and
+> Block 1.5b (create `:crypto`, wire Blake2b-224/256 behind `Hashing`) are complete. The
+> vector gate **passed for both digest sizes**: Blake2b-224 pinned to CIP-19 and Blake2b-256
+> pinned to the IntersectMBO Plutus `blake2b_256` conformance goldens (`IntersectMBO/plutus`
+> @`5e18824e`, Apache-2.0; ADR-0008 §7). Block 1.5b found that Apollo 1.8.8 ships no Blake2b,
+> so the hashing-only backend is KotlinCrypto `org.kotlincrypto.hash:blake2` `0.8.0` (Apollo
+> and `bip32-ed25519` not added this block; reserved for 1.6 / 1.10; ADR-0008 §8). Block 1.6
+> (mnemonic / seed / key derivation) is split into 1.6a–1.6d (ADR-0009). **Block 1.6a is
+> complete** (docs-only): the scheme is pinned to the Icarus/CIP-3 restoration path only
+> (Byron/Ledger/Trezor variants deferred; restore-only, generation deferred), the
+> per-algorithm dependency table is verified against published artifacts (the main Apollo
+> artifact does not enter 1.6 — its mnemonic API lacks checksum validation and its PBKDF2
+> takes a String salt; Ed25519-BIP32 arrives via the standalone
+> `dev.allain:bip32-ed25519:2.3.0` in 1.6c; 1.6b uses cryptography-kotlin PBKDF2 +
+> KotlinCrypto `sha2`), and the vector gate passed for all three families (Trezor
+> `vectors.json` @`b57a5ad7` MIT; CIP-3 `Icarus.md` @`a36e1ebc` CC-BY-4.0;
+> `IntersectMBO/cardano-addresses` golden `addresses_5574d91d` @`46d01319` Apache-2.0).
+> **Block 1.6b closed its `To verify in 1.6b` gate: cryptography-kotlin's PBKDF2 failed on
+> Android** (its JDK provider needs JCA `PBKDF2WithHmacSHA512`, API 26+, vs this repo's
+> `minSdk = 24`), so 1.6b adopted the ADR-0009 §3 platform-seam fallback instead — BouncyCastle
+> on JVM/Android, Apple CommonCrypto on iOS; no hand-written PBKDF2. `Mnemonic.parse` and
+> `IcarusMasterKey.fromMnemonic` are implemented and pass the cited Trezor/CIP-3 vectors on JVM
+> and Android. On iOS, an inline C interop shim (`kardano_ccpbkdf2_hmac_sha512` in
+> `pbkdf2raw.def`) adapts `CCKeyDerivationPBKDF`'s password to a raw byte pointer, and **both
+> iOS compile targets pass** (`:crypto:compileKotlinIosSimulatorArm64` and
+> `:crypto:compileKotlinIosArm64`). **iOS runtime execution of the vectors is still future
+> verification** — no iOS-simulator/device test run has exercised this binding. **Block
+> 1.6c's original gate narrowed it to private derivation only** (ADR-0009); its first
+> follow-up (ADR-0010) then **swapped the derivation backend's coordinate to
+> `org.hyperledger.identus:bip32-ed25519:1.8.8`** (identical wrapper API) and **verified
+> private derivation on real Android runtime** — `KeyDerivation.derivePrivate` now works
+> on Android, JVM, and compiles/links on iOS; the earlier Android-derivation blocker is
+> resolved, not merely downgraded. The same follow-up added `ExtendedPublicKey` and
+> `KeyDerivation.publicKey(...)` for JVM/iOS, backed by libsodium's
+> `crypto_scalarmult_ed25519_base_noclamp`, verified byte-for-byte against the cited
+> `addr_xvk` goldens on JVM (iOS compile/link verified) — but opened a separate, Android
+> public-key-projection blocker (the published Android build of that backend was missing the
+> required symbol). **A second follow-up then closed that Android-projection blocker too**:
+> `KeyDerivation.publicKey` now delegates on Android to `com.goterl:lazysodium-android:5.2.0`
+> (a fuller libsodium build than the JVM/iOS backend's Android native library), verified on
+> real Android runtime — a physical device (API 35) plus API 24/36 emulators — reproducing
+> the cited `addr_xvk` golden and cross-checked against the CIP-19 payment credential.
+> `KeyDerivationError.PublicKeyProjectionUnavailable` remains declared but no current target
+> returns it. Full write-up: ADR-0009 "Block 1.6c gate result" and ADR-0010.
 
 ## Phase 0 - Core Foundation
 
@@ -82,6 +129,9 @@ Outcome:
 Current modules:
 
 - `:core` (UI-free SDK core seed)
+- `:provider` (read-only chain query boundary + in-memory mock; added in Block 1.3a)
+- `:provider-blockfrost` (Blockfrost preprod provider: Ktor + kotlinx-serialization; added in
+  Block 1.3b; depends on `:provider` + `:core`)
 - `:shared` (sample/UI host; builds the iOS `Shared` framework)
 - `:androidApp`
 - `:desktopApp`
@@ -92,7 +142,6 @@ Deferred candidate future modules (names are not final; do not create yet):
 - `:crypto`
 - `:wallet`
 - `:tx`
-- `:provider`
 - `:sample:android`
 - `:sample:ios`
 - `:sample:desktop`
@@ -656,17 +705,593 @@ Acceptance criteria:
 
 ## Phase 1 - MVP Transaction Flow
 
-Next step (immediately after Phase 0 closure): **Phase 1 planning, not implementation.**
-Before any wallet/tx/provider code, plan the scope and resolve the decisions Phase 0
-deliberately left open — per-algorithm crypto library/binding selection (ADR-0004) and the
-module-extraction structure (`:crypto` / `:wallet` / `:tx` / `:provider`; ADR-0002/0003).
+Block 1.1 (Phase 1 Scope And Architecture Plan) is complete. It was a planning/documentation
+block — no wallet, crypto, provider, tx, or Android UI code, no Gradle or dependency changes.
+Implementation starts at **Block 1.2**, not in Block 1.1. The working Phase 1 block plan is
+recorded in `docs/PHASE_1_PLAN.md`.
 
 Goal:
 
 Enable a native mobile app to create or restore a wallet, query UTxOs, build a simple transaction, sign locally and submit to Cardano preprod.
 
-Expected modules:
+Planning principle:
 
+Phase 1 should progress through small blocks with Android checkpoints. The Android app
+must become a recurring validation surface, not something checked only at the end.
+
+Proposed block sequence:
+
+- `1.1` Phase 1 Scope And Architecture Plan — **Status: complete.** Outcome: MVP flow fixed
+  (create/restore test wallet, derive address, query UTxOs, build a minimal ADA-only tx, sign
+  locally, submit to preprod, show result in Android); native assets placed out of the first
+  MVP; Android set as the primary Phase 1 validation target with iOS/JVM-Desktop compile-only
+  unless explicitly revisited; module/package strategy recorded as decision criteria only (no
+  Gradle module created; crypto/provider/network dependencies are the likely trigger; `:core`
+  stays dependency-free; `:shared` stays the sample/UI host, not the SDK's long-term home);
+  provider strategy set to mock/stub first with Blockfrost as the first real preprod target
+  and a minimal API (concrete selection deferred to Block 1.3); crypto decision path kept at
+  Block 1.4/1.5 against ADR-0004 with no library selected here; the address
+  encoding/round-trip prerequisite (before Block 1.7) and the CBOR tx map-ordering
+  prerequisite (before Block 1.9) recorded as deferred, each resolved in its own block. See
+  `docs/PHASE_1_PLAN.md` ("Block 1.1 Decisions") and
+  `docs/DECISIONS/0005-phase-1-architecture-and-scope.md` (ADR-0005, Accepted). No Kotlin,
+  Gradle, or dependency changes; Android baseline build verified
+  (`./gradlew :androidApp:assembleDebug :core:jvmTest`).
+- `1.2` Android SDK Playground — **Status: complete.** Outcome: added the
+  `org.sarmidev.kardano.playground` package in `:shared` `commonMain` with a pure
+  UI-free `PlaygroundPresenter` (maps `Address.parse` / `Hex` / `Cbor` results to display
+  models; `presentAddressError` is `internal` for direct unit testing) and a
+  `PlaygroundScreen` Composable (address parser with typed `AddressError` display, Hex
+  decoder, CBOR decoder). `App.kt` replaced to render `PlaygroundScreen` inside
+  `MaterialTheme`; `:core` is unchanged; `:androidApp` is unchanged; no new dependencies
+  or Gradle modules. Tests in `:shared` `commonTest` cover `presentAddressError` with
+  directly-constructed `AddressError` variants plus 2 cited CIP-19 happy-path vectors
+  (type-06 enterprise testnet, type-14 reward testnet), 1 invalid input test, and 1
+  Empty-state test; the protocol test-vector suite stays in `:core`. All build and test
+  commands pass; manual Android checkpoint verified (see `docs/PHASE_1_PLAN.md` Block 1.2 outcome).
+- `1.3` Provider Read-Only Boundary — **complete (1.3a + 1.3b-pre + 1.3b).** 1.3a added the
+  `:provider` module (KMP, depends only on `:core`) with a read-only `ChainQueryProvider`
+  (suspend + `KardanoResult`), provider-neutral ADA-only models (`Utxo`, `Value`,
+  `ProtocolParameters`, `ChainTip`, sealed `ProviderError` with a transport-agnostic
+  `RemoteStatus`), and an `InMemoryChainQueryProvider` mock with fake/test-only seed data,
+  wired into the Playground "Provider" section. 1.3b-pre added `Address.bech32` (the validated
+  source string) to `:core`. 1.3b added `:provider-blockfrost` (`BlockfrostChainQueryProvider`,
+  Ktor + kotlinx-serialization, internal DTOs, ADA-only + 404-as-empty mapping, error mapping,
+  MockEngine fixture tests, opt-in live test) and a live-Blockfrost Playground toggle (ADR-0007;
+  no secrets committed). Submit is split out and deferred to Block 1.11 (ADR-0006 refines
+  ADR-0005 §5). The real Blockfrost preprod provider lives in `:provider-blockfrost` (HTTP client
+  + API-key config + sanitized fixtures + opt-in live test). See
+  `docs/DECISIONS/0006-provider-boundary-and-strategy.md` and
+  `docs/DECISIONS/0007-http-client-and-blockfrost-provider.md`.
+- `1.4` Crypto Evaluation And Module Decision — **Status: complete (docs-only).** Outcome:
+  added ADR-0008 (`Accepted` for module/seam/process only; no final dependency-fitness claim
+  while compatibility is untested). Decided now: `:crypto` deferred to Block 1.5; the seam is a
+  `commonMain` common interface/adapter (`Hashing`, later `KeyDerivation`/`Signing`) returning
+  `KardanoResult`, with `expect`/`actual` as fallback; the first algorithm boundary in 1.5 is
+  Blake2b-224/256 behind `Hashing` with official cited vectors (RFC 7693 / Cardano context).
+  Provisional: candidate selection is provisional, with Hyperledger Identus Apollo +
+  `bip32-ed25519` as the provisional lead (Kotlin 2.4.0 compatibility To verify in 1.5a);
+  bloxbean cardano-client-lib rejected as a shipped dependency (no iOS/KMP), retained as a
+  JVM-only vector oracle. Source-cited matrix; unknowns marked `Unverified`/`To verify in 1.5a`;
+  neutral review fields. No Kotlin/Gradle/dependency/module changes. See
+  `docs/DECISIONS/0008-crypto-dependency-evaluation-and-module-decision.md`.
+- `1.5` Crypto Primitives Needed For Wallet — split into `1.5a` and `1.5b`.
+  - `1.5a` throwaway Kotlin-2.4.0 compatibility spike — **Status: complete (PASS).** The
+    provisional candidate (`org.hyperledger.identus:apollo:1.8.8` + `dev.allain:bip32-ed25519:2.3.0`)
+    resolved and compiled on Android + JVM + iosSimulatorArm64 under Kotlin 2.4.0 / AGP 9.0.1
+    (`:crypto-spike:compileKotlinJvm`, `:crypto-spike:compileKotlinIosSimulatorArm64`,
+    `:crypto-spike:testAndroidHostTest`). Correction: `secp256k1-kmp` arrives transitively as
+    `fr.acinq.secp256k1:secp256k1-kmp:0.16.0`; the `org.hyperledger.identus` companion was not
+    needed. Proves resolve + compile only, not runtime correctness. Scratch module discarded; no
+    dependency committed. See ADR-0008 §6.
+  - `1.5b-pre` crypto vector-source gate — **Status: complete (docs-only); PASS for both sizes.**
+    A blocking gate ran before any module/code, searching for exact official cited Blake2b
+    known-answer vectors. Blake2b-224 **PASS** (CIP-19: `addr_vk1w0l2sr…` + the payment credential
+    from the full CIP-19 address `addr1qx2fxv2umyhttk…`, via `:core` `Address.parse`).
+    Blake2b-256 **PASS** — IntersectMBO Plutus `blake2b_256` conformance goldens
+    (`IntersectMBO/plutus` @`5e18824e2e0e30656c81d182e0ca512b75e7e57c`, Apache-2.0): input `#`
+    (empty) → `0e5751c0…f12fe3a8`, input `2e7ea8…1d200` (25 bytes) → `91c60f99…ee401624`; the
+    builtin hashes the raw UPLC bytestring literal only. The empty-input digest previously seen only
+    in a non-official third-party repo is now confirmed in this official Intersect source. No
+    module/dependency/API/Gradle change. See ADR-0008 §7.
+  - `1.5b` crypto module + hashing boundary — **Status: complete.** Created the `:crypto` KMP
+    module (Android library + JVM + iosArm64 + iosSimulatorArm64, `explicitApi()`, depends only on
+    `:core`) and wired Blake2b-224/256 behind the backend-neutral `Hashing` interface, with
+    `HashDigest` (defensive-copy byte container) and the sealed `CryptoError`. Backend correction:
+    Apollo 1.8.8 ships no Blake2b (verified in `apollo-jvm-1.8.8.jar` and source tags
+    `v1.7.2`–`v1.8.7`), so the hashing-only backend is KotlinCrypto `org.kotlincrypto.hash:blake2`
+    `0.8.0` (pinned in the catalog). Apollo and `bip32-ed25519` were not added this block; both are
+    reserved for the later key-derivation blocks (1.6 / 1.10). Tests use only the pinned cited
+    vectors (CIP-19 for 224; IntersectMBO/plutus goldens for 256), no generated digests.
+    `./gradlew :crypto:jvmTest :crypto:testAndroidHostTest :crypto:compileKotlinIosSimulatorArm64
+    :core:jvmTest` — all BUILD SUCCESSFUL. See ADR-0008 §8.
+- `1.6` Mnemonic / Seed / Key Derivation — restore a test wallet and derive keys. Split into
+  four gated subphases (ADR-0009, `docs/DECISIONS/0009-mnemonic-seed-and-key-derivation.md`);
+  Icarus/CIP-3 restoration path only; restore-only (mnemonic generation and the CSPRNG
+  decision deferred).
+  - `1.6a` API / dependency / vector-source decision — **Status: complete (docs-only).**
+    ADR-0009 records: module placement (`:crypto`; no `:wallet` yet, extraction trigger
+    recorded); the Icarus/CIP-3 scheme (PBKDF2-HMAC-SHA-512 over the entropy, 4096
+    iterations, 96 bytes, CIP-3 bit tweaks; plain BIP-39 seed not exposed; English wordlist
+    only — lowercase ASCII English-wordlist input accepted; non-conforming input rejected,
+    not normalized); the verified dependency table (main Apollo
+    artifact rejected for 1.6 via published-artifact inspection — no checksum validation in
+    its mnemonic API, String-salt PBKDF2; `dev.allain:bip32-ed25519:2.3.0` verified to
+    expose `deriveBytes`/`deriveBytesPub`/`fromNonextended` for 1.6c; cryptography-kotlin
+    0.6.0 PBKDF2 + `org.kotlincrypto.hash:sha2:0.8.0` for 1.6b, with the Android
+    API-24/25 JCA item marked `To verify in 1.6b` and a platform-seam fallback recorded);
+    the vector gate (PASS ×3: Trezor `vectors.json`, CIP-3 `Icarus.md`, cardano-addresses
+    Shelley goldens — URL + commit + license pinned); the public API sketch, the sealed
+    `MnemonicError`/`KeyDerivationError` model, and the key-material rules (opaque handles,
+    no private-key byte accessor, mnemonics input-only and never echoed). No Kotlin,
+    Gradle, dependency, or module changes.
+  - `1.6b` BIP-39/CIP-3 mnemonic-to-master-key — **Status: complete on JVM/Android with
+    executed vectors; iOS compile targets pass; iOS runtime vector execution still future
+    work.** Closed the `To verify in 1.6b` gate: cryptography-kotlin's PBKDF2 fails on
+    Android (its JDK provider requires JCA `PBKDF2WithHmacSHA512`, API 26+, vs `minSdk = 24`;
+    `testAndroidHostTest` cannot detect this since it runs on the host JVM). Adopted ADR-0009
+    §3's platform-seam fallback: BouncyCastle `PKCS5S2ParametersGenerator` (JVM + Android) and
+    Apple CommonCrypto `CCKeyDerivationPBKDF` (iOS); no hand-written PBKDF2. Implemented
+    `Mnemonic.parse` (word count, English wordlist, checksum, entropy) and
+    `IcarusMasterKey.fromMnemonic` (PBKDF2-HMAC-SHA-512 + CIP-3 bit tweaks). Tests pass the
+    cited Trezor `vectors.json` entropy round-trips and both CIP-3 `Icarus.md` vectors on JVM
+    and Android (`:crypto:jvmTest`, `:crypto:testAndroidHostTest`). **iOS cinterop resolved for
+    the compile target:** the shipped `platform.CoreCrypto.CCKeyDerivationPBKDF` binds
+    `password` as `String`; a first attempt used `noStringConversion` directly on it (same
+    delegated Apple primitive, no hand-written crypto) but produced a klib with zero
+    declarations in this build environment. The fix is an inline C interop shim
+    (`kardano_ccpbkdf2_hmac_sha512`) in `pbkdf2raw.def`'s glue block, adapting `password` to a
+    raw byte pointer and delegating verbatim to `CCKeyDerivationPBKDF` — verified bindable with
+    `klib dump-metadata` before the Kotlin actuals were updated to call it.
+    `:crypto:compileKotlinIosSimulatorArm64` and `:crypto:compileKotlinIosArm64` both pass.
+    **iOS runtime execution of the CIP-3/BIP-39 vectors has not been verified** — no
+    iOS-simulator/device test run has exercised this binding; that remains future work. Also
+    found and fixed during review: the checked-in BIP-39 English wordlist had transcription
+    errors versus the canonical `bitcoin/bips` source; regenerated and verified against a fresh
+    download of the pinned commit, with a structural test guarding wordlist shape going
+    forward.
+  - `1.6c` Ed25519-BIP32 + CIP-1852 derivation — **Status: private derivation and
+    public-key projection are both verified on JVM, real Android runtime, and iOS
+    compile/link.** The original `To verify in 1.6c` gate (ADR-0009) narrowed the block to
+    private derivation only, with a confirmed `UnsatisfiedLinkError` on Android host JVM for
+    the pinned `dev.allain:bip32-ed25519:2.3.0` backend, and no public-key-from-private-key
+    primitive in that backend. A first follow-up gate
+    ([ADR-0010](DECISIONS/0010-key-derivation-backend-swap-and-public-key-projection.md))
+    closed both, with one new gap opened in the process: (1) **swapped the derivation
+    backend's coordinate** to `org.hyperledger.identus:bip32-ed25519:1.8.8` (identical
+    wrapper API — `deriveBytes`/`deriveBytesPub`/`fromNonextended`, `UInt` index, same map
+    keys) and **verified private derivation on real Android runtime**
+    (`:crypto:connectedAndroidDeviceTest`, not host JVM) — this AAR ships the native `.so`
+    the prior republish omitted, resolving the Android-derivation blocker outright; (2)
+    **implemented `ExtendedPublicKey`/`KeyDerivation.publicKey(key)` for JVM/iOS**, backed by
+    libsodium's `crypto_scalarmult_ed25519_base_noclamp` over the derived key's left 32-byte
+    scalar, verified byte-for-byte against the cited `addr_xvk` goldens on JVM (iOS
+    compile/link verified) — but the published Android build of that same backend was
+    missing the required symbol, opening a new, separate Android public-key-projection
+    blocker. **A second follow-up gate then closed that blocker too**: `KeyDerivation.
+    publicKey` now delegates on Android to `com.goterl:lazysodium-android:5.2.0` (its AAR
+    bundles a fuller libsodium `.so` that does export the symbol on all four ABIs), verified
+    on real Android runtime — a physical device (API 35) plus API 24/36 emulators —
+    reproducing the cited `addr_xvk` golden with a cross-check against the CIP-19 payment
+    credential pinned in 1.5b. `KeyDerivationError.PublicKeyProjectionUnavailable` remains
+    declared but no current target returns it. Implemented `Cip1852Path`/`Cip1852Role`
+    (SDK-owned, `Long`-validated), `ExtendedPrivateKey`/`ExtendedPublicKey` (opaque, no raw
+    private-key accessor), and both `KeyDerivation` methods. Tests pass the cited
+    `IntersectMBO/cardano-addresses` golden `root_xsk`/`acct_xsk`/`addr_xsk`/`addr_xvk`
+    values on JVM (`:crypto:jvmTest`) and on real Android runtime
+    (`:crypto:connectedAndroidDeviceTest`, both derivation and projection). Full write-up:
+    ADR-0009 "Block 1.6c gate result" and ADR-0010.
+  - `1.6d` test-wallet fixture + Android checkpoint — **delivered.** `:shared` gained a
+    project dependency on `:crypto` (no new external dependency) and a "Test Wallet
+    (derivation)" Playground section: `TestWalletFixture` restores the cited test-only
+    mnemonic, `PlaygroundPresenter.presentTestWallet()` derives `m/1852'/1815'/0'/0/0`,
+    projects the public key, and computes its Blake2b-224 fingerprint — displaying only the
+    path, the fingerprint, whether it matches the cited golden, and typed state; no raw/hex
+    public key; addresses belong to 1.7. `PlaygroundWalletPresenterTest` (`commonTest`) covers
+    error mapping/path formatting/invalid-mnemonic rejection without any native call (safe
+    under `testAndroidHostTest`); `PlaygroundWalletDerivationDesktopTest` (`jvmTest`) is the
+    only end-to-end fingerprint golden check. Android runtime coverage for the native path
+    stays `:crypto:connectedAndroidDeviceTest`; the Android Playground checkpoint itself was
+    confirmed via `adb`-driven UI interaction on the API 36 and API 24 emulators (path,
+    fingerprint, and "matches cited vector: yes" all render, no crash/ANR, no noticeable
+    freeze on API 24).
+- `1.7` Address Generation — generate Shelley testnet addresses and roundtrip through
+  `Address.parse`. Split into 1.7a/1.7b (see `docs/PHASE_1_PLAN.md`).
+  - `1.7a` ADR-0012 + `:core` generation capability — **Status: complete.** Outcome:
+    [ADR-0012](DECISIONS/0012-address-encoding-and-roundtrip.md) resolved the ADR-0005 §6
+    address encoding/round-trip prerequisite and fixed the `:core` API shape. `AddressCredential`
+    gained a public companion with `keyHash(hash)`/`scriptHash(hash)` factories (`HASH_SIZE`
+    and the parser-only `of(...)` stay `internal`); `Address` gained `baseAddress(network,
+    paymentCredential, stakeCredential)` (CIP-19 base, header types 0-3 only — enterprise/
+    reward/pointer builders deferred) and `toBech32()` (a new private `canonicalBech32`
+    field, canonical lowercase Bech32 from the address's own bytes, computed for both parsed
+    and generated addresses). `bech32` is unchanged — still the exact parse-time source
+    string (equal to `toBech32()` only for a generated address, which has no separate
+    source). No new `AddressError` variant; its KDoc now covers construction/encoding, not
+    just parsing. `:crypto` untouched — no new API needed. New `AddressGenerationTest.kt`
+    (22 tests) rebuilds every cited CIP-19 base vector from its own decoded bytes and asserts
+    `toBech32()` matches; `AddressTest.kt` gained 20 `toBech32()` canonicalization tests
+    across every parsed type (base/enterprise/reward/pointer, mainnet + testnet), with all
+    existing non-canonical rejection tests unchanged. Verified: `:core:jvmTest`,
+    `:core:testAndroidHostTest`, `:core:compileKotlinIosSimulatorArm64`; `:core` stays
+    dependency-free.
+  - `1.7b` `:shared` Android checkpoint — **Status: complete.** Outcome: extended the
+    existing Test Wallet section (Block 1.6d) into a combined derivation + structural
+    address-generation checkpoint, per ADR-0011 §2 (`:shared` calls SDK APIs and displays
+    results; no protocol logic). `:crypto` untouched. `TestWalletFixture` replaced its single
+    `path` with `paymentPath` (`m/1852'/1815'/0'/0/0`) and `stakePath`
+    (`m/1852'/1815'/0'/2/0`); the cited golden payment fingerprint is unchanged, and no golden
+    was invented for the stake credential or a full generated address — both are computed at
+    runtime and labelled as checkpoint output, not an external vector.
+    `PlaygroundPresenter.presentTestWalletWithWords` derives both keys from one restored
+    master key, hashes each with `Hashing.default().blake2b224(...)`, builds two
+    `AddressCredential.keyHash(...)` credentials, calls
+    `Address.baseAddress(Network.TESTNET, paymentCredential, stakeCredential)`, and
+    immediately re-parses `address.toBech32()` for a structural round trip; all key handles
+    and the mnemonic are cleared in `finally`. Displayed rows are limited to both path
+    strings, both full credential-hash hex (public CIP-19 credentials, not secret key
+    material), the generated `addr_test1...` address, and an "ok"/"mismatch" round-trip row —
+    never mnemonic/seed/private/root/raw-public-key bytes. `PlaygroundScreen`'s section was
+    renamed "Test Wallet & Address Generation" with reworded, factual copy (test-only
+    fixture, no real funds, no signing, structural generation only).
+    `PlaygroundWalletPresenterTest` (every target) covers the new path names and unchanged
+    error/pre-native-rejection cases; `PlaygroundWalletDerivationDesktopTest` (JVM-only,
+    native) asserts both paths, the cited golden payment-credential hex, an
+    `addr_test1`-prefixed generated address parsing back as `Network.TESTNET` /
+    `AddressType.BASE`, and a positive round trip — the generated address string itself is
+    never pinned as a golden. Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+    `:shared:compileKotlinIosSimulatorArm64`, `:core:jvmTest`; lints clean; no banned words or
+    mnemonic/seed/private/raw-key exposure found.
+- `1.8` Wallet State Read-Only — show generated address, UTxOs, and test ADA balance. Split
+  into 1.8a/1.8b (see `docs/PHASE_1_PLAN.md`).
+  - `1.8a` `:wallet` module + read-only API — **Status: complete.** Outcome:
+    [ADR-0013](DECISIONS/0013-wallet-boundary-and-read-only-state.md) resolved the
+    `:wallet` module/ownership/API-shape decision ADR-0011 §2 deferred here: holding wallet
+    state and composing it with a provider query is the ADR-0009 §1 extraction trigger firing
+    for the first time, so a new module (not a package) was created. New module `:wallet`
+    (`org.sarmidev.kardano.wallet`), targets mirroring `:provider`; depends on `:core`,
+    `:crypto`, and `:provider` only (never `:provider-blockfrost`, no new external
+    `commonMain` dependency). `ReadOnlyWallet.restore(words, network)` restores a mnemonic,
+    derives the account-0 payment/stake keys, hashes and builds a base address via `:core`'s
+    1.7a API, clearing all key handles in `finally`; the returned handle retains only
+    `network`/`address`/`paymentPath`/`stakePath`. `ReadOnlyWallet.balance(provider)` queries
+    a caller-supplied `ChainQueryProvider` and sums lovelace into `WalletBalance`, rejecting
+    `Long` overflow (`WalletError.BalanceOverflow`) rather than truncating. `WalletError` wraps
+    each upstream typed error (`MnemonicError`/`KeyDerivationError`/`CryptoError`/
+    `AddressError`/`ProviderError`) rather than inventing a parallel taxonomy; no
+    `WalletState`/`WalletAddress`/`TestWallet` type was added. Confirmed and documented
+    (ADR-0013 §7) that a restored wallet's generated address is not seeded by
+    `InMemoryChainQueryProvider`'s default data and stays zero-balance under the mock —
+    `defaultSeed()` was not changed to fake a funded wallet. 15 new tests (14 native-free —
+    balance summation/overflow/provider-error-wrapping via an `internal of(...)` test-only
+    factory, direct `WalletError` variant construction, pre-native-call mnemonic rejection —
+    plus 1 JVM-only end-to-end `restore` test against the same cited
+    `IntersectMBO/cardano-addresses` mnemonic already pinned in `:crypto`). Verified:
+    `:wallet:jvmTest`, `:wallet:testAndroidHostTest`, `:wallet:compileKotlinIosSimulatorArm64`,
+    `:wallet:compileKotlinIosArm64`, `:core:jvmTest` (regression); `:core`/`:crypto`/
+    `:provider` sources unchanged; lints clean; no banned words or mnemonic/seed/private/
+    raw-key exposure found.
+  - `1.8b` `:shared` Android checkpoint — **Status: complete.** Outcome: added `:wallet` as a
+    `:shared` `commonMain` dependency (no other Gradle module changed; `:wallet` still depends
+    on `:core`/`:crypto`/`:provider` only). New "Wallet Balance (read-only)" Playground section
+    calls `PlaygroundPresenter.presentWalletBalance(provider)`, which restores
+    `TestWalletFixture`'s cited mnemonic via `ReadOnlyWallet.restore(TestWalletFixture.words,
+    Network.TESTNET)` (always testnet, per the Phase 1 no-mainnet boundary — ADR-0013 §3) and
+    queries whichever `ChainQueryProvider` is currently active (mock or live) via
+    `wallet.balance(provider)`; `:shared` reimplements none of mnemonic parsing, derivation,
+    hashing, address generation, or balance summation. New `WalletBalancePresentation`
+    (`Empty`/`Loading`/`Success`/`Failure`) and `presentWalletError` (delegating to the
+    existing per-type error presenters, plus one message for `WalletError.BalanceOverflow`).
+    Displays only the generated `addr_test1...` address, UTxO count, and balance in lovelace
+    (no existing lovelace→ADA formatting pattern existed in `:shared`, so none was added); a
+    zero balance/UTxO count under the default mock renders as a normal success with
+    explanatory copy, per ADR-0013 §7, not as a failure. 6 new commonTest cases
+    (`PlaygroundWalletBalancePresenterTest`, native-free — zero-balance-is-success, every
+    `WalletError` variant's message delegation) plus 2 new jvmTest cases
+    (`PlaygroundWalletBalanceDesktopTest` — the only place `presentWalletBalance`/
+    `ReadOnlyWallet.restore` run end to end together, asserting the honest zero balance and the
+    `Network.TESTNET` restore call). Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+    `:shared:compileKotlinIosSimulatorArm64`, `:wallet:jvmTest`, `:wallet:testAndroidHostTest`,
+    `:androidApp:assembleDebug`; lints clean; no banned words or mnemonic/seed/private/raw-key
+    exposure found.
+- `1.9` Transaction Builder Minimal — build a simple unsigned ADA transaction draft. Split
+  into 1.9a/1.9b-1/1.9b-2/1.9c (see `docs/PHASE_1_PLAN.md`).
+  - `1.9a` ADR / decision record — **Status: complete (docs-only).** Outcome:
+    [ADR-0014](DECISIONS/0014-minimal-ada-transaction-builder.md) resolves the builder's
+    blocking decisions, including the CBOR tx map-ordering item ADR-0005 §6 deferred here.
+    Block 1.9b creates a new `:tx` Gradle module (`org.sarmidev.kardano.tx`) depending on
+    `:core` and `:provider` only (not `:wallet`/`:shared`/`:provider-blockfrost`/`:crypto`);
+    Block 1.9 builds the **unsigned `transaction_body`** only (inputs, outputs, fee, optional
+    ttl) and emits its canonical CBOR, with no witness set, signing, or submit, and the
+    transaction id computed by the caller via `:crypto`. Cardano CBOR uses RFC 7049 §3.9
+    canonical (length-first) map ordering (CIP-21 / ledger CDDL / `cardano-api`); `:core`'s
+    subset is reused unchanged because the MVP body's single-byte integer keys make length-first
+    and `:core`'s RFC 8949 bytewise order byte-identical (heterogeneous-key maps must revisit
+    this later without weakening `:core`). Inputs sorted by ledger `(transaction_id, index)`
+    order and encoded as an untagged array; outputs use the legacy `[address, coin]` array form;
+    fee = `minFeeCoefficient * txSize + minFeeConstant` over the whole-transaction size estimate
+    (one witness per input; an estimate until Block 1.10); Babbage/Conway min-UTxO
+    `(160 + serializedOutputBytes) * coinsPerUtxoByte` enforced (zero change omitted, dust
+    rejected); sealed `TxBuildError`; structural/CDDL tests only (no invented goldens, no
+    signing tests). No Kotlin/Gradle/dependency changes.
+  - `1.9b-1` `:tx` module + `transaction_body` serialization — **Status: complete.** New
+    `:tx` Gradle module (`org.sarmidev.kardano.tx`, depending on `:core` + `:provider` only).
+    `TransactionBodySerializer.serialize` orders/validates/encodes an already fully specified
+    `TransactionBodyRequest` (explicit inputs/outputs/fee/ttl) into the canonical
+    `transaction_body` via `:core`'s unchanged CBOR subset; inputs sorted by ledger
+    `(transaction_id, index)` order with duplicates rejected
+    (`TxBuildError.DuplicateInput`); outputs use the legacy `[address, coin]` form; output
+    addresses checked against the request's network (`TxBuildError.NetworkMismatch`); empty
+    inputs/outputs rejected (`TxBuildError.NoInputs`/`NoOutputs`, the latter an
+    implementation-discovered addition to ADR-0014 §8). `TxBuildError` exposes the full
+    ADR-0014 §8 error surface plus these additions up front (KDoc marks
+    unreachable-until-1.9b-2 variants). No coin selection or fee/change loop yet — deferred to
+    `1.9b-2` to keep the diff focused. Structural/CDDL tests only; no invented goldens.
+  - `1.9b-2` fee/change coin-selection builder — **Status: complete.** New
+    `TransactionBuildRequest` + `TransactionBuilder.build`, delegating body encoding to
+    `TransactionBodySerializer.serialize` (no duplicated CBOR logic). Largest-first selection
+    over `List<Utxo>` + `ProtocolParameters`, tie-broken by the same ledger order the
+    serializer uses; fee = `minFeeCoefficient * txSize + minFeeConstant` with `txSize` from the
+    real encoded body plus a sized-but-unbuilt witness set (checked arithmetic, generic CBOR
+    head sizing, no `N < 24` shortcut); bounded fixed-point loop that, on non-convergence,
+    rebuilds once more with the conservative (`maxOf`) of the last two fee estimates;
+    Babbage/Conway min-UTxO enforcement (payment/change checked, zero change omitted, dust
+    rejected once against the final result, never folded into the fee). The initial cut reused
+    all existing `TxBuildError` variants; the follow-up review microfix then added
+    `InvalidProtocolParameters(field, value)` (rejects a negative `minFeeCoefficient`/
+    `minFeeConstant`/`maxTxSize`/`coinsPerUtxoByte`) and `FeeEstimateDidNotConverge(encodedFee,
+    recomputedFee)` (the bounded loop's final conservative rebuild still re-estimating a higher
+    fee than it encoded). No `:core`/`:provider`/Gradle changes.
+  - `1.9c` `:shared` Android Playground "Transaction Draft (unsigned)" checkpoint —
+    **Status: complete.** `PlaygroundPresenter.presentTransactionDraft` restores the
+    `TestWalletFixture` mnemonic (`ReadOnlyWallet.restore`, always `Network.TESTNET`), queries
+    the currently active `ChainQueryProvider` for candidate UTxOs and protocol parameters, and
+    calls `TransactionBuilder.build` for a fixed 2 ADA payment to a reused cited CIP-19 testnet
+    vector (`InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY`) with change to the wallet's own
+    address; `:shared` adds no coin-selection, fee, or CBOR logic of its own. Success shows
+    input/output counts, fee/change in lovelace, body size, and a truncated body-CBOR hex
+    preview, always labeled unsigned; failure shows a cause-distinguishing message mapped from
+    `TxBuildError`. No transaction id/body hash is computed (needs `:crypto`, deferred to
+    `1.10`). `:shared` gained an explicit `:tx` dependency; no other module changed.
+- `1.10` Transaction Signing — sign a testnet/preprod transaction locally. Split into
+  `1.10a`/`1.10b-pre`/`1.10b`/`1.10c` (ADR-0015,
+  `docs/DECISIONS/0015-transaction-signing.md`).
+  - `1.10a` Transaction Signing ADR — **Status: complete (docs-only).** Outcome: ADR-0015
+    resolves signing ownership (no new module — `:crypto` owns a backend-neutral `Signing`
+    primitive, `:tx` owns crypto-free witness-set/full-`transaction` CBOR assembly from supplied
+    `(vkey, signature)` pairs, `:wallet` owns orchestration through an explicitly-scoped,
+    non-general-purpose entry point and gains a `:wallet → :tx` dependency, `:shared` displays
+    only); scope (testnet/preprod only, the existing test fixture/restored wallet only, ADA-only
+    single-payment `TransactionBuilder` drafts only — no mainnet/native assets/scripts/metadata/
+    multisig) **and its fixture-only enforcement boundary (§2a)** — because `:wallet` cannot
+    depend on `:shared`, it cannot itself recognize `TestWalletFixture`; Block 1.10 introduces no
+    general-purpose wallet signing API, and the fixture-only scope is enforced instead by the
+    Phase 1 call sites/checkpoint/tests passing the cited words/path and `Network.TESTNET`
+    explicitly; the signing message (Ed25519-BIP32 signs
+    the 32-byte `bodyHash = Blake2b-256(TransactionDraft.bodyCbor())`, i.e. the tx id — not the
+    raw body bytes); the fee stance (Block 1.9's one-witness-per-input estimate can over-estimate
+    for the single-key wallet, so 1.10 signs the existing body unchanged and defers exact
+    witness-aware fee minimization); the artifact (full signed `transaction` CBOR + witness count
+    + tx id, making the tx id displayable for the first time — the item ADR-0014 §2 deferred
+    here); a **blocking backend gate** (see 1.10b-pre); the error model (`:crypto` `SigningError`,
+    typed `:tx` assembly errors, `:wallet` wrapping, `finally` key clearing); the test/vector
+    policy (no invented vectors; a citable extended-key KAT; structural CBOR tests; Android
+    runtime verification); the Playground checkpoint; and the guardrail reconciliation. Narrows
+    the "No transaction signing" guardrail to Block 1.10 scope while keeping every other ban. No
+    Kotlin/Gradle/dependency/source changes.
+  - `1.10b-pre` Signing backend + vector-source gate — **Status: complete. Gate result: backend
+    ADOPTED and VERIFIED; Block 1.10b unblocked** (ADR-0016 §9i,
+    `docs/DECISIONS/0016-transaction-signing-backend-gate.md`).
+    Symbol-level inspection of the resolved artifacts confirmed **none can sign an extended key**:
+    `org.hyperledger.identus:bip32-ed25519:1.8.8`'s native library exports only
+    `derive_bytes`/`derive_bytes_pub`/`from_nonextended` (no `sign` symbol in the shipped Rust
+    cdylib), Apollo's `KMMEdPrivateKey.sign` is BouncyCastle standard **seed-based** RFC-8032
+    Ed25519, and the ionspin/lazysodium libsodium API is seed-based (`ed25519SkToSeed` confirms the
+    `seed‖pk` layout). The **extended-key KAT is pinned**: the reference `ed25519-bip32 0.4.2`
+    (MIT OR Apache-2.0) `xprv_sign` vector (64-byte extended scalar signs `"Hello World"` ⇒ fixed
+    64-byte signature via `XPrv::sign`), with the CIP-0100 32-byte-body-hash vector as a secondary
+    reproduce-to-confirm example; a plain RFC-8032 Ed25519 vector does **not** pass. ADR-0016 §8
+    records that the recommended unblock path — a disposable `scratch-signing-backend` module
+    exposing the crate's `XPrv::sign`/`verify` via a Gobley-0.3.7 uniffi/KMP wrapper, plus a second
+    disposable `scratch-signing-backend:android` sibling module for the Android leg — has now
+    **run, all four legs passing**: **JVM PASS** (real Gobley/JNA bindings, KAT reproduced, symbol
+    proof), **iOS PASS** (compile/link, symbol proof), and **Android PASS** — a real
+    `connectedAndroidDeviceTest` reproduces the KAT *through the packaged Kotlin/JNA bindings* on
+    both a physical device and an emulator. Gobley's own Android Gradle integration remains
+    incompatible with this repo's AGP 9.0.1 pin (upstream-confirmed, `gobley/gobley#153`); the
+    Android leg instead invoked the same `gobley-uniffi-bindgen` CLI directly (library mode) and
+    hand-wired the result into this SDK's `androidLibrary {}` KMP DSL. **That spike has now been
+    ADOPTED and VERIFIED (ADR-0016 §9i)** into the permanent, project-owned module
+    **`:crypto-signing-backend`** (crate `kardano-ed25519-bip32-signing`, `publish = false`,
+    `ed25519-bip32 = "0.4.2"` pinned + `Cargo.lock`), landed as Option R1 (no Rust/Cargo/Gobley
+    Gradle plugin; 8 committed native artifacts + pre-generated UniFFI bindings). Every §7d leg was
+    re-run and **passes against the real module**: `jvmTest` 4/4 (macOS arm64);
+    `connectedAndroidDeviceTest` 4/4 physical (Android 15) + 4/4 emulator (API 24) through the
+    packaged bindings; `compileKotlinIosArm64` + `linkDebugTestIosSimulatorArm64` green; `nm`/`llvm-nm`
+    symbol proof on all 8 artifacts. The disposable scratch modules are deleted; JVM native coverage
+    is macOS-only by design (no CI in-repo; Linux/Windows = future work, ADR-0016 §9 R3). **Block
+    1.10b is unblocked**, though the adoption block added no signing code and no `:crypto`→backend
+    dependency.
+  - `1.10b` `:crypto` `Signing` + `:tx` assembly + `:wallet` orchestration — **Status:
+    complete** (ADR-0015 §9 result note). `:crypto` gained `Signing`/`SigningError` over the
+    adopted `:crypto-signing-backend` plus a module-internal `extendedPrivateKeyBytesForSigning()`
+    accessor (no public private-key byte exposure); `:tx` gained
+    `VerificationKeyWitness`/`TransactionWitnessSet`/`SignedTransaction`/`TransactionAssembler`
+    (still crypto-free; `:core`'s CBOR subset gained narrow `true`/`false`/`null` simple-value
+    support this required, per the ADR-0001 addendum); `:wallet` gained the `:wallet → :tx`
+    dependency and `ReadOnlyWallet.signTransaction(words, network, draft)` returning
+    `WalletSignedTransaction`. All verification commands pass: `jvmTest` for
+    `:crypto`/`:tx`/`:wallet`/`:crypto-signing-backend`; `testAndroidHostTest` for
+    `:crypto`/`:tx`/`:wallet`; `:crypto-signing-backend:connectedAndroidDeviceTest` on a physical
+    device and an emulator; `compileKotlinIosArm64` for all four modules; and
+    `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`.
+  - `1.10c` `:shared` Android "Signed Transaction (not submitted)" checkpoint — **Status:
+    complete, including manual Android runtime checkpoint.**
+    `PlaygroundPresenter` gained a shared `buildTransactionDraft` helper (extracted from the
+    1.9c `presentTransactionDraft`, reused unchanged by both checkpoints so they build the
+    identical unsigned draft) and `presentSignedTransaction`, which signs that draft by calling
+    `:wallet`'s `ReadOnlyWallet.signTransaction` with the cited fixture words/path and
+    `Network.TESTNET` explicitly (ADR-0015 §2a). `PlaygroundScreen` gained a "Signed Transaction
+    (not submitted)" section displaying the tx id, witness count, a truncated signed-tx CBOR
+    preview, and the explicit "signed, not submitted — testnet-only, test fixture, no real funds"
+    label. No submit code (Block 1.11). `:shared` gained no new Gradle module dependency (`:tx`
+    and `:wallet` were already present from 1.9c/1.8b). While wiring this up, a pre-existing gap
+    surfaced and was fixed as the minimum compile-forced change this block's guardrail allows:
+    `PlaygroundPresenter.presentWalletError`/`presentTxBuildError` had not been updated for the
+    `WalletError.Signing`/`WalletError.TransactionAssembly` and
+    `TxBuildError.InvalidVerificationKeyLength`/`InvalidSignatureLength`/`EmptyWitnessSet`
+    variants Block 1.10b added — `:shared` did not compile without those `when` branches (plus a
+    new `presentSigningError` for `SigningError`); no `:crypto`/`:tx`/`:wallet` behavior changed.
+    Tests: `PlaygroundSignedTransactionPresenterTest` (`commonTest`, native-free error-mapping)
+    and `PlaygroundSignedTransactionDesktopTest` (`jvmTest`-only, end-to-end sign-and-display,
+    plus the honest "no UTxOs" default-mock case). All verification commands pass:
+    `:shared:jvmTest`, `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`,
+    `:shared:compileKotlinIosSimulatorArm64`. The project owner then verified the new section
+    manually on Android with live Blockfrost preprod: after correcting the preprod `project_id`,
+    "Sign transaction" displayed a transaction id, witness count `1`, a truncated signed-CBOR
+    preview (`288B total`), and the "signed, not submitted — testnet-only, test fixture, no real
+    funds" label, with no submit action invoked.
+- `1.11` Submit Transaction — submit a signed transaction to preprod. Split into
+  `1.11a`/`1.11b`/`1.11c`/`1.11d`/`1.11d-2` (ADR-0017, plus the ADR-0006/0007/0014 2026-07-13
+  addenda for `1.11d`, and a second ADR-0006/0014 2026-07-13 addendum for `1.11d-2`). `1.11a`
+  (`:provider` boundary — `TxSubmitProvider`, `SubmitError`,
+  `InMemoryTxSubmitProvider`, which never fakes success) — **Status: complete.** `1.11b`
+  (`:provider-blockfrost`'s `BlockfrostTxSubmitProvider`: `POST /tx/submit`,
+  `Content-Type: application/cbor`, quoted-hex-string response mapped to `TxHash`, HTTP status
+  mapped to `SubmitError` including a parsed Blockfrost error-envelope `detail`; MockEngine
+  tests only, no automated live submit test) — **Status: complete.** `1.11c` (`:shared`
+  "Submit Transaction (preprod)" Playground checkpoint: builds and signs the same fixture
+  draft as Block 1.10c, then calls `TxSubmitProvider.submit(...)` directly — no new `:wallet`
+  orchestration method; `activeSubmitProvider` wired alongside `activeProvider`, defaulting to
+  `InMemoryTxSubmitProvider()` and switching to `BlockfrostTxSubmitProvider` under the existing
+  live toggle/`project_id`; shows the accepted id, local id, match status, and a
+  submitted/preprod/fixture label on success, every `SubmitError` variant on failure, no
+  polling) — **Status: implementation complete.** Its manual Android checkpoint was attempted
+  and found a real bug: a preprod address funded with mixed (ADA + native-asset) UTxOs let a
+  draft build and sign, then the node rejected the submitted transaction with
+  `ValueNotConservedUTxO` — the build silently dropped the native assets those inputs carried.
+  `1.11d` (ADA-only rejection — **Status: superseded by `1.11d-2` below**) first fixed this
+  honestly rather than working around it: `:provider`'s `Value` gains a
+  `hasNativeAssets: Boolean = false` presence flag (no quantities/policy ids/asset names, still
+  current); `:provider-blockfrost`'s `mapUtxo` sets it whenever a Blockfrost `amount` entry's
+  `unit != "lovelace"`, instead of silently dropping that entry (still current); but `:tx`'s
+  `TransactionBuilder.build` initially rejected the **entire** candidate list with
+  `TxBuildError.UnsupportedFeature` if any candidate input had the flag set — too broad for a
+  real wallet with a *mix* of ADA-only and native-asset UTxOs, which `1.11d-2` immediately
+  narrows. `1.11d-2` (ADA-only UTxO filtering, not whole-wallet rejection — **Status:
+  implementation complete; manual re-validation PASS**): `TransactionBuilder.build` now
+  drops every candidate with the flag set **before** coin selection, then builds normally from
+  the remaining ADA-only candidates — `TxBuildError.UnsupportedFeature` is returned only if
+  that leaves no candidates at all, and the usual `TxBuildError.InsufficientFunds` (its
+  `available` total reflecting only the ADA-only candidates) fires if those remaining
+  candidates still cannot cover `payment + fee`; a native-asset UTxO is never selected as an
+  input either way. `:shared`'s `presentTxBuildError` rewords the `UnsupportedFeature` message
+  to "This wallet has no ADA-only UTxOs to spend — only UTxOs containing native assets/tokens.
+  Phase 1 only builds ADA-only transactions." New/updated tests across `:tx` and `:shared` cover
+  the mixed-sufficient success case, the mixed-insufficient failure case (proving the
+  native-asset UTxO's lovelace is excluded), and the all-native-asset failure case (see
+  `docs/PHASE_1_PLAN.md` `1.11d`/`1.11d-2` for the full list). Manual Android re-validation
+  passed: the mixed ADA-only + native-asset case built, signed, and submitted from ADA-only
+  UTxOs, and the accepted transaction id matched the locally signed id
+  (`331a79ece991fc9bfd98e9da2a5514f38f7ffeb3a08f1bd7e5a1f75af0e42416`); the owner also reported
+  the all-native-asset rejection and ADA-only-only build/sign/submit checks OK. **Block 1.11 is
+  complete** (see `docs/HANDOFF.md`).
+- `1.12-pre-a` Playground MVI Architecture — refactored the `:shared` Playground from a long
+  tool-like Compose screen into a lightweight MVI split (`playground/mvi`, `playground/domain`,
+  `playground/data`), with `PlaygroundScreen` now a pure renderer dispatching intents to a
+  `PlaygroundViewModel`, and the standalone diagnostics tools folded into the same state/intent
+  model below an explicit Wallet → Funds → Build → Sign → Submit guided flow. Architecture-only:
+  no SDK behavior change (same fixture wallet, mock/live provider selection, ADA-only filtering,
+  errors, submit id comparison), no new architecture library, no Gradle/dependency change, and no
+  visual redesign yet. **Block 1.12-pre-a is complete** (see `docs/PHASE_1_PLAN.md` and
+  `docs/HANDOFF.md`).
+- `1.12-pre-b` Playground visual refresh — **Status: complete.** Outcome: a sample-app
+  visual/UX refresh built on the `1.12-pre-a` MVI foundation, presentation-only (no SDK behavior,
+  no SDK public API, no new dependency, no `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/
+  `:provider-blockfrost` change). A new `playground/ui/` package holds presentation-shell
+  composables — a Kotlin/KMP-inspired Material 3 theme (purple/blue/orange, light/dark),
+  `PlaygroundHeader` (hero + a Compose-drawn geometric mark, no external logo asset + a
+  completed-step `FlowStepper`), `StatusBadge`/status chips (`MOCK`/`LIVE PREPROD`/`TESTNET`/
+  `ADA-only`/`SIGNED`/`SUBMITTED`), `FlowStepCard` (numbered step with title, microcopy, status,
+  one action, key output, and a "Technical details" toggle), and a visually secondary,
+  collapsed-by-default `DiagnosticsSection`. `PlaygroundScreen` still reads `PlaygroundState` and
+  dispatches `PlaygroundIntent`s — no SDK orchestration moved into composables — and reuses the
+  exact `PlaygroundPresenter` display messages; per-step loading and inline errors were added.
+  `App.kt` now wraps the screen in `KardanoPlaygroundTheme`. Behavior unchanged (same fixture
+  wallet, mock/live provider selection, Blockfrost preprod-only submit boundary, ADA-only
+  filtering, no mainnet, no real mnemonic/private-key display, no arbitrary-mnemonic input, no
+  full CBOR display, no polling, no multi-asset support). Existing MVI/presenter tests kept
+  unchanged (no UI-text assertions to update). Verified: `:shared:jvmTest`,
+  `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`; `git diff --check` clean; no
+  banned words. **Follow-up polish (same block):** manual Android screenshots found a white root
+  background clashing with the darker hero/cards and no inset padding around the
+  already-edge-to-edge `:androidApp` (`enableEdgeToEdge()`, Block 1.2) — fixed by giving
+  `PlaygroundScreen`'s root container a theme-derived `surface`→`background` gradient and
+  `Modifier.safeDrawingPadding()` (a Compose-Multiplatform-common `expect`/`actual` API, no
+  Android-specific inset code). See `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12-pre-c` Playground landing section and developer-friendly copy — **Status: complete.**
+  Outcome: the `:shared` Playground now opens like a small developer-facing landing/demo page
+  above the existing guided flow. UX/content only — the `1.12-pre-a` MVI architecture and all SDK
+  behavior are preserved; no SDK public API, no provider/wallet/tx change, no new dependency, no
+  non-`:shared` module touched. The hero (`PlaygroundHeader`) gained the value statement, a
+  platform/scope badge row (`KMP`/`Android`/`iOS`/`JVM`/`Preprod`/`ADA-only MVP`), and a CTA that
+  scrolls to the flow; a new `LandingSection.kt` (`PlaygroundLanding`) adds *What the SDK does
+  today* capability cards, a developer-friendly *transaction flow* preview, collapsible
+  `simplified`-tagged *code examples* (illustrative pseudo-snippets — never a real mnemonic/private
+  key/full signed CBOR), and an honest *roadmap and scope* with a current-limitations list
+  (testnet/preprod-focused demo, ADA-only MVP, no multi-asset, no mainnet flow, no real wallet
+  import). All visuals are Compose-drawn — no external image/logo asset is bundled (deferred until
+  added with an explicit source/license). One presentation-only MVI flag was added
+  (`PlaygroundState.codeExamplesExpanded` + `PlaygroundIntent.ToggleCodeExamples` + a reducer
+  branch) gating only the snippet visibility. Guided-step titles were softened to
+  developer-friendly labels ("Create a test wallet" … "Send it to preprod"), with exact technical
+  detail still behind the per-step toggle. `PlaygroundReducerTest` gained a toggle test; no
+  behavioral coverage removed. Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+  `:shared:compileKotlinIosArm64`; `git diff --check` clean; no banned words. See
+  `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12-pre-c-2` Roadmap screen and friendlier wallet copy — **Status: complete.** Outcome: the
+  `:shared` Playground is now split into navigable Overview / Try SDK / Roadmap sections, with a
+  dedicated tap-to-expand Roadmap screen and softened Wallet-step copy. UX/content only — the
+  1.12-pre-a MVI architecture and all SDK behavior are preserved; no SDK public API, no
+  provider/wallet/tx change, no new dependency, no non-`:shared` module touched. Presentation-only
+  navigation was added to the MVI state (`PlaygroundState.section` +
+  `selectedRoadmapPhase`, new `PlaygroundSection`/`RoadmapPhase` enums, `NavigateTo*` +
+  `SelectRoadmapPhase` intents, reducer branches; `SelectRoadmapPhase` toggles the expanded card).
+  A new `RoadmapScreen` shows Phase 0/1 (shipped) and Phase 2/3 as **aspirational candidate
+  direction, explicitly not a commitment or schedule** — each a card with a Done/Current/Planned/
+  Future badge, tagline, highlights, and a scope note; all Compose-drawn, no external asset. The
+  hero CTA and a new landing `RoadmapTeaser` navigate between sections (the 1.12-pre-c scroll-anchor
+  code was removed). The Wallet step now reads "Create test wallet" in the main UX while its
+  Technical-details block keeps the precise `ReadOnlyWallet.restore(...)` cited-test-only-fixture
+  wording; no arbitrary-mnemonic input or real wallet import was added. `PlaygroundReducerTest`
+  gained navigation + roadmap-selection tests; no behavioral coverage removed. The Roadmap screen is
+  sample-app presentation, not a public API contract. Verified: `:shared:jvmTest`,
+  `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`; `git diff --check` clean; no
+  banned words. See `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12-pre-c-3` Seed mock Playground UTxOs for the guided transaction flow — **Status: complete.**
+  Outcome: the default mock mode now runs the whole Wallet → Funds → Build → Sign flow offline
+  instead of stopping at "no UTxOs". **Playground/sample mock data only** — not chain data, no SDK
+  public API, no `:provider`/`:wallet`/`:tx` change, no live Blockfrost change, and no faked network
+  submission. A new `:shared` sample object `PlaygroundMockSampleData` builds the default mock
+  `ChainQueryProvider` from `InMemoryChainQueryProvider.defaultSeed()` and adds two deterministic
+  fake ADA-only UTxOs (5 + 8 = 13 ADA; `hasNativeAssets = false`) for the demo wallet's own restored
+  address. `PlaygroundProviderFactory` builds its mock query provider from it, lazily. Submit stays
+  honest: the mock `InMemoryTxSubmitProvider` still reports "does not support submission (mock)" —
+  the Submit step now reaches it rather than failing for lack of UTxOs. The demo wallet address is
+  distinct from both provider seed addresses, so the Provider-explorer "has UTxOs"/"empty" examples
+  are unchanged. The provider card copy states mock mode uses "fake local UTxOs, test-only, no
+  network"; live mode is unchanged. A new `PlaygroundMockFlowDesktopTest` covers the seeded flow end
+  to end; existing presenter/desktop tests (bare `:provider` default) are unchanged. Verified:
+  `:shared:jvmTest`, `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`; `git diff
+  --check` clean; no banned words. See `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
+  remaining limitations.
+
+Expected packages/modules (candidate names, not committed; per Block 1.1 / ADR-0005 these
+start as packages and are extracted into Gradle modules only when a block introduces
+dependency or ownership pressure that justifies the split — see ADR-0002/0003):
+
+- `crypto`
 - `wallet`
 - `tx`
 - `provider`
@@ -678,64 +1303,93 @@ Expected capabilities:
 - Address generation.
 - UTxO fetching.
 - Protocol parameter fetching.
-- ADA transaction builder.
-- Native asset transaction builder.
+- ADA-only transaction builder.
 - Fee and change calculation.
 - Local signing.
 - CBOR serialization.
 - Submit transaction.
 
-Acceptance criteria:
+Deferred out of the first MVP (per Block 1.1 / ADR-0005):
 
-- End-to-end preprod transaction works.
-- Android sample works.
-- iOS sample works.
-- JVM/Desktop demo or CLI works.
+- Native asset transaction builder.
+- Providers other than the first preprod target (Koios, Maestro, Ogmios, Kupo).
+- Byron/Base58 address support.
+
+Acceptance criteria (reconciled by Block 1.1 / ADR-0005 to Android-primary):
+
+- End-to-end ADA-only preprod transaction works, verified through the Android app.
+- Android sample works and is the primary Phase 1 validation surface.
+- iOS and JVM/Desktop targets compile; functional demos are deferred to Phase 1 closure
+  (Block 1.12) or Phase 2 unless a future block explicitly revisits this.
 - Tests and docs are updated.
 
-## Phase 2 - Plutus Lite And Provider Expansion
+## Funding Readiness Track
+
+Status: implementation baseline complete; owner-led public release, pilot discovery, and funding
+outreach remain in progress.
+
+Before widening transaction scope, make delivered Phase 1 evidence understandable to prospective
+integrators, contributors, and funding reviewers.
+
+Deliverables:
+
+- Reconciled public project brief, roadmap, quickstart, and scope limits.
+- Apache-2.0 licensing direction and release-time third-party notice review.
+- CI, contribution guidance, changelog, release process, and public demo material.
+- Pilot discovery for a loyalty/ticketing native-asset use case.
+- Milestone-based funding dossier for future Intersect, Catalyst, pilot, or sponsor discussions.
+
+The detailed owner work is in [FUNDING_AND_PILOT_PLAYBOOK.md](FUNDING_AND_PILOT_PLAYBOOK.md).
+
+## Phase 2 - Native-Asset Pilot And Provider Expansion
 
 Goal:
 
-Support simple dApp-like mobile flows without trying to replace full advanced Plutus tooling.
+Support one loyalty/ticketing mobile flow involving an existing Cardano native asset, using shared
+Kotlin code on Android and iOS.
 
-Candidate capabilities:
+Sequence:
 
-- Datum representation.
-- Redeemer representation.
-- Script hash.
-- Inline datum.
-- Reference inputs.
-- Simple script interaction example.
-- Ogmios provider.
-- Kupo provider.
-- Koios or Maestro provider.
+1. Pilot and architecture gate: validate an external use case and choose a provider through a
+   documented capability evaluation.
+2. Cross-platform integration proof: execute documented Android and iOS sample flows.
+3. Multi-asset value foundation: preserve policy ids, asset names, and quantities from queried UTxOs.
+4. Native-asset transaction vertical: select inputs, preserve change, and submit one minimal
+   preprod asset transfer.
+5. Provider and pilot validation: add the selected provider and run an external experiment.
+6. Conditional script interaction: only if the pilot needs a narrowly-scoped datum/redeemer or
+   reference-input flow and a dedicated ADR approves it.
 
-Non-goal:
+Non-goals:
 
 - Full Plutus framework.
+- Mainnet as a prerequisite.
+- Arbitrary wallet import or general-purpose signing without a dedicated decision.
+- Minting, marketplace logic, staking, governance, metadata, multisig, or hardware-wallet support.
+
+See [PHASE_2_PLAN.md](PHASE_2_PLAN.md) for exit criteria, evidence, and scope boundaries.
 
 ## Phase 3 - Ecosystem Adoption
 
 Goal:
 
-Make Kardano SDK visible and credible in the Cardano ecosystem.
+Make the native mobile integration path useful to external teams and sustainable as an open-source
+project.
 
 Deliverables:
 
-- Public docs.
-- Sample videos.
-- Benchmarks.
-- External pilot.
-- Catalyst or Intersect proposal.
-- Contributor guide.
-- Issues labeled for new contributors.
+- Versioned public documentation and API reference.
+- Sample videos, integration guides, and benchmark methodology.
+- At least one public pilot outcome or documented integration report.
+- Contributor guide, issue labels, and maintainer process.
+- A funding proposal built from Phase 2 delivery evidence.
+- Future transaction capabilities only where adoption evidence justifies them.
 
 Success criteria:
 
-- At least one wallet or dApp experiments with the SDK.
-- The demo is easy to run.
-- The project can credibly request funding based on delivered work.
+- At least one external mobile, wallet, or dApp team experiments with the SDK.
+- A developer can run the documented demo and understand known limits.
+- A funding request is grounded in released work, pilot feedback, and measurable milestones.
 
 ## Operating Principle
 

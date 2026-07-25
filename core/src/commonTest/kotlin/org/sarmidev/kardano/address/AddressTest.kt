@@ -448,6 +448,136 @@ class AddressTest {
         assertFalse(rendered.contains("2fxv"))
     }
 
+    // ----- Source string (bech32) -----
+
+    @Test
+    fun bech32PreservesFixedSizeSourceString() {
+        // Fixed-size path (enterprise, type 6): the validated source string is preserved
+        // verbatim, exactly as passed to parse.
+        assertEquals(MAINNET_TYPE_06, ok(Address.parse(MAINNET_TYPE_06)).bech32)
+    }
+
+    @Test
+    fun bech32PreservesBaseSourceString() {
+        // Fixed-size path (base, type 0): another fixed-size family for coverage.
+        assertEquals(TESTNET_TYPE_00, ok(Address.parse(TESTNET_TYPE_00)).bech32)
+    }
+
+    @Test
+    fun bech32PreservesPointerSourceString() {
+        // Pointer path (type 4): the variable-length path also threads the source string.
+        assertEquals(MAINNET_TYPE_04, ok(Address.parse(MAINNET_TYPE_04)).bech32)
+        assertEquals(TESTNET_TYPE_05, ok(Address.parse(TESTNET_TYPE_05)).bech32)
+    }
+
+    @Test
+    fun bech32DoesNotAffectEquality() {
+        // bech32 is excluded from equals/hashCode (see Address KDoc): asserts that parsing
+        // the same string twice yields equal addresses with equal hash codes and equal
+        // source strings. A *differing*-source-string case (uppercase vs. lowercase of the
+        // same vector, both decoding to a structurally equal Address) is covered separately
+        // by bech32AndToBech32DivergeForValidUppercaseInput, once toBech32() existed to make
+        // that case constructible through the public API (see ADR-0012 §3).
+        val a = ok(Address.parse(MAINNET_TYPE_06))
+        val b = ok(Address.parse(MAINNET_TYPE_06))
+        assertEquals(a, b)
+        assertEquals(a.hashCode(), b.hashCode())
+        assertEquals(a.bech32, b.bech32)
+    }
+
+    // ----- toBech32() canonicalization (Block 1.7a) -----
+    // toBech32() re-encodes whatever parse() already validated (rawBytes + hrp), for every
+    // currently supported parsed type, not only base (see ADR-0012 §4). Each cited CIP-19
+    // vector is already canonical, so re-encoding it must reproduce it exactly.
+
+    @Test
+    fun toBech32CanonicalizesMainnetBaseKeyKeyVector() = assertCanonicalRoundtrip(MAINNET_TYPE_00)
+
+    @Test
+    fun toBech32CanonicalizesMainnetBaseScriptKeyVector() = assertCanonicalRoundtrip(MAINNET_TYPE_01)
+
+    @Test
+    fun toBech32CanonicalizesMainnetBaseKeyScriptVector() = assertCanonicalRoundtrip(MAINNET_TYPE_02)
+
+    @Test
+    fun toBech32CanonicalizesMainnetBaseScriptScriptVector() = assertCanonicalRoundtrip(MAINNET_TYPE_03)
+
+    @Test
+    fun toBech32CanonicalizesTestnetBaseKeyKeyVector() = assertCanonicalRoundtrip(TESTNET_TYPE_00)
+
+    @Test
+    fun toBech32CanonicalizesTestnetBaseScriptKeyVector() = assertCanonicalRoundtrip(TESTNET_TYPE_01)
+
+    @Test
+    fun toBech32CanonicalizesTestnetBaseKeyScriptVector() = assertCanonicalRoundtrip(TESTNET_TYPE_02)
+
+    @Test
+    fun toBech32CanonicalizesTestnetBaseScriptScriptVector() = assertCanonicalRoundtrip(TESTNET_TYPE_03)
+
+    @Test
+    fun toBech32CanonicalizesMainnetEnterpriseKeyVector() = assertCanonicalRoundtrip(MAINNET_TYPE_06)
+
+    @Test
+    fun toBech32CanonicalizesMainnetEnterpriseScriptVector() = assertCanonicalRoundtrip(MAINNET_TYPE_07)
+
+    @Test
+    fun toBech32CanonicalizesTestnetEnterpriseKeyVector() = assertCanonicalRoundtrip(TESTNET_TYPE_06)
+
+    @Test
+    fun toBech32CanonicalizesTestnetEnterpriseScriptVector() = assertCanonicalRoundtrip(TESTNET_TYPE_07)
+
+    @Test
+    fun toBech32CanonicalizesMainnetRewardKeyVector() = assertCanonicalRoundtrip(MAINNET_TYPE_14)
+
+    @Test
+    fun toBech32CanonicalizesMainnetRewardScriptVector() = assertCanonicalRoundtrip(MAINNET_TYPE_15)
+
+    @Test
+    fun toBech32CanonicalizesTestnetRewardKeyVector() = assertCanonicalRoundtrip(TESTNET_TYPE_14)
+
+    @Test
+    fun toBech32CanonicalizesTestnetRewardScriptVector() = assertCanonicalRoundtrip(TESTNET_TYPE_15)
+
+    @Test
+    fun toBech32CanonicalizesMainnetPointerKeyVector() = assertCanonicalRoundtrip(MAINNET_TYPE_04)
+
+    @Test
+    fun toBech32CanonicalizesMainnetPointerScriptVector() = assertCanonicalRoundtrip(MAINNET_TYPE_05)
+
+    @Test
+    fun toBech32CanonicalizesTestnetPointerKeyVector() = assertCanonicalRoundtrip(TESTNET_TYPE_04)
+
+    @Test
+    fun toBech32CanonicalizesTestnetPointerScriptVector() = assertCanonicalRoundtrip(TESTNET_TYPE_05)
+
+    @Test
+    fun toBech32DoesNotEqualBech32SourceStringSemanticsChange() {
+        // toBech32() and bech32 both hold the same value for a parsed canonical vector (there
+        // is nothing non-canonical to normalize here), but they are independently computed
+        // fields (see ADR-0012 §3): this asserts both, not just their equality, so a future
+        // regression that removes the canonical computation and aliases toBech32() to bech32
+        // would not silently pass.
+        val address = ok(Address.parse(TESTNET_TYPE_00))
+        assertEquals(TESTNET_TYPE_00, address.bech32)
+        assertEquals(TESTNET_TYPE_00, address.toBech32())
+    }
+
+    @Test
+    fun bech32AndToBech32DivergeForValidUppercaseInput() {
+        // BIP-173 accepts an all-uppercase Bech32 string (only *mixed* case is rejected; see
+        // Bech32.decode), but the canonical form is lowercase. This is the one constructible
+        // case where a *parsed* address's bech32 (the exact source string) and toBech32()
+        // (the canonical re-encoding) genuinely diverge (see ADR-0012 §3).
+        val uppercase = MAINNET_TYPE_06.uppercase()
+        val address = ok(Address.parse(uppercase))
+
+        assertEquals(uppercase, address.bech32)
+        assertEquals(MAINNET_TYPE_06, address.toBech32())
+
+        val reparsed = ok(Address.parse(address.toBech32()))
+        assertEquals(address, reparsed)
+    }
+
     // ----- Invalid / edge cases -----
     // Hand-written rule tests. Each derives its input from a cited CIP-19 vector by
     // decoding, mutating one field, and re-encoding. These are NOT CIP-19 vectors.
@@ -691,6 +821,10 @@ class AddressTest {
     }
 
     // ----- helpers -----
+
+    private fun assertCanonicalRoundtrip(vector: String) {
+        assertEquals(vector, ok(Address.parse(vector)).toBech32())
+    }
 
     private fun assertUnsupportedType(vector: String, typeNibble: Int) {
         val payload = payloadOf(vector)

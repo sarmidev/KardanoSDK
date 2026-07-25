@@ -78,8 +78,10 @@ this reorganization, but fully qualified names and imports moved into the packag
   Supported types, exposed as the sealed `CborValue`: unsigned integers (`CborUnsigned`) and
   negative integers (`CborNegative`) within the signed `Long` range, definite-length byte
   strings (`CborByteString`), definite-length UTF-8 text strings (`CborTextString`),
-  definite-length arrays (`CborArray`), and definite-length maps (`CborMap`, an ordered list of
-  `CborEntry` pairs — not a Kotlin `Map`). `Cbor.decode` returns a `KardanoResult<CborValue,
+  definite-length arrays (`CborArray`), definite-length maps (`CborMap`, an ordered list of
+  `CborEntry` pairs — not a Kotlin `Map`), and (added narrowly in Block 1.10b, ADR-0015 §3 /
+  ADR-0001 addendum) the three fixed major-type-7 simple values `false`/`true` (`CborBool`) and
+  `null` (`CborNull`). `Cbor.decode` returns a `KardanoResult<CborValue,
   CborError>` and `Cbor.encode` returns a `KardanoResult<ByteArray, CborError>` (neither
   throws). The encoder emits canonical (shortest-form) definite-length output. SDK-owned named
   limits (`CBOR_MAX_INPUT_BYTES`, `CBOR_MAX_BYTESTRING_BYTES`, `CBOR_MAX_STRING_BYTES`,
@@ -91,10 +93,10 @@ this reorganization, but fully qualified names and imports moved into the packag
   violate this (`NonCanonicalMapKeyOrder` / `DuplicateMapKey`) and the encoder requires
   already-ordered, duplicate-free entries and rejects rather than reordering. This Phase 0
   deterministic rule is not asserted to be final Cardano transaction-serialization
-  compatibility. Tags (incl. bignum tags 2/3), floats/simple/null/undefined, indefinite
-  lengths, reserved additional info, non-canonical encodings, out-of-range integers/counts,
-  over-deep nesting, over-large collections, malformed UTF-8, over-limit input, and trailing
-  bytes are rejected with a typed `CborError`, never normalized.
+  compatibility. Tags (incl. bignum tags 2/3), `undefined`, every other simple value, floats,
+  indefinite lengths, reserved additional info, non-canonical encodings, out-of-range
+  integers/counts, over-deep nesting, over-large collections, malformed UTF-8, over-limit
+  input, and trailing bytes are rejected with a typed `CborError`, never normalized.
 - `Address` — structural CIP-19 address parsing (Block 0.7). `Address.parse(bech32)`
   returns a `KardanoResult<Address, AddressError>` (never throws) for the Shelley address
   types parsed so far: base (`addr` / `addr_test`, CIP-19 header types 0-3), pointer
@@ -118,11 +120,42 @@ this reorganization, but fully qualified names and imports moved into the packag
   wraparound is relied on). `AddressCredential` and `AddressPointer` have private constructors
   and are built only by the parser through length/range-validated internal factories. All byte
   arrays are defensively copied and use content equality; `toString` renders no credential
-  bytes. **Structural validation only**: it does not prove an address exists on-chain, is
+  bytes. It also exposes `bech32`, the validated source string exactly as passed to
+  `Address.parse` (not an independently encoded value and not a `toBech32` re-encoder, which
+  stays deferred to Block 1.7); `bech32` is excluded from `equals`/`hashCode`/`toString` so the
+  structural equality contract is unchanged. **Structural validation only**: it does not prove an address exists on-chain, is
   owned, is controllable, or is spendable, it does not verify a credential is a real
   key/script hash, and it does not check that a pointer refers to an on-chain certificate.
   Byron (type 8) addresses, Base58, and raw-byte/hex constructors are deferred beyond Block
-  0.7 (`Address.parse` is the only constructor).
+  0.7 (`Address.parse` remains the only *parsing* constructor).
+- **Address generation (Block 1.7a)** — a minimal, structural base-address builder and a
+  canonical Bech32 encoder, gated on
+  [docs/DECISIONS/0012-address-encoding-and-roundtrip.md](../docs/DECISIONS/0012-address-encoding-and-roundtrip.md):
+  - `AddressCredential.keyHash(hash)` / `AddressCredential.scriptHash(hash)` — public
+    factories on `AddressCredential`'s now-public companion. Each returns a
+    `KardanoResult<AddressCredential, AddressError>`, length-checking `hash` (must be
+    exactly 28 bytes, a `blake2b-224` digest) and defensive-copying it before returning
+    `AddressError.InvalidCredentialLength` on a mismatch or the credential on success.
+  - `Address.baseAddress(network, paymentCredential, stakeCredential)` — builds a CIP-19
+    base address (header types 0-3) from two already-computed credentials and a `Network`,
+    returning `KardanoResult<Address, AddressError>`. This is the only generation builder in
+    1.7a; enterprise, reward/stake, and pointer builders remain deferred. The builder accepts
+    either `Network` (a pure function, used by `:core`'s own tests to roundtrip cited
+    mainnet vectors); callers needing the "no mainnet" boundary (for example the sample app)
+    enforce it themselves by only ever passing `Network.TESTNET`.
+  - `Address.toBech32(): String` — returns the canonical lowercase Bech32 encoding derived
+    from the address's own bytes and HRP, computed once at construction for both parsed and
+    generated addresses. Unlike `bech32` (the exact, unmodified source string for a *parsed*
+    address, or the same canonical value for a *generated* one, since generation has no
+    separate source), `toBech32()` canonicalizes **every currently supported parsed type**
+    (base, enterprise, reward, pointer; mainnet and testnet), not only base, because it only
+    depends on the address's own `rawBytes + hrp`.
+  - Structural construction/encoding only, same disclaimer as `Address.parse`: none of these
+    APIs prove an address exists on-chain, is owned, or is spendable, and they do not verify
+    that a credential hash is a real key/script hash.
+  - `:crypto` is not touched by this capability: hashing a derived public key into a
+    28-byte credential hash stays a two-call composition the caller performs directly
+    (`ExtendedPublicKey.publicKeyBytes()` → `Hashing.blake2b224(...)`).
 
 ## Out of scope
 
@@ -131,9 +164,10 @@ this reorganization, but fully qualified names and imports moved into the packag
   [docs/DECISIONS/0004-crypto-strategy.md](../docs/DECISIONS/0004-crypto-strategy.md) for
   the future cryptography strategy.
 - Network/IO, providers, or wallet behavior.
-- The CBOR subset above covers primitives plus definite-length arrays and maps only (no tags,
-  bignums, floats, simple values, or indefinite lengths) and does not interpret Cardano
-  semantics. The `Bech32` codec is generic and does not restrict the HRP to Cardano prefixes;
+- The CBOR subset above covers primitives plus definite-length arrays and maps, plus the three
+  fixed simple values `false`/`true`/`null` (no tags, bignums, floats, `undefined`, or any
+  other simple value, and no indefinite lengths) and does not interpret Cardano semantics. The
+  `Bech32` codec is generic and does not restrict the HRP to Cardano prefixes;
   the `CardanoBech32` wrappers add the HRP allowlist but perform no address parsing or CIP-19
   structural validation (that belongs to `Address`). Primitive-specific hex helpers (e.g.
   `TxHash.fromHex`) are intentionally not added; use the generic `Hex` utility.

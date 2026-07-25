@@ -64,9 +64,34 @@ input is rejected before decoding.
 - Bech32/Bech32m — BIP-173, BIP-350.
 - CBOR — RFC 8949 Appendix A.
 - Addresses — CIP-19.
+- BIP-39 mnemonic/entropy — `trezor/python-mnemonic` `vectors.json` (MIT), the `"english"`
+  array.
+- CIP-3 (Icarus) master-key derivation — `cardano-foundation/CIPs`, `CIP-0003/Icarus.md`
+  (CC-BY-4.0).
+- Ed25519-BIP32 (CIP-1852) private/public derivation — `IntersectMBO/cardano-addresses`
+  Shelley golden tests (Apache-2.0), `test/golden/addresses_5574d91d/golden`.
 
-Cite the source URL in a comment above each fixture block. Never weaken a validator to
-make a test pass.
+Cite the source URL and pinned commit in a comment above each fixture block. Never weaken a
+validator to make a test pass.
+
+## Android/iOS runtime testing for native-backed crypto
+
+Some `:crypto` operations (key derivation, public-key projection, PBKDF2) delegate to a
+native backend per platform, so their known-answer tests are split by what each source set
+can actually prove:
+
+- **`jvmTest`** runs the golden-vector tests against the real backend on the host JVM and is
+  the primary place vectors execute.
+- **`commonTest`/`androidHostTest`** run on the *host* JVM, not on Android — they cannot
+  load Android's native library, so they are structural/rule tests only (mapping logic,
+  synthetic exceptions), never a call into the native backend.
+- **`androidDeviceTest`** (`connectedAndroidDeviceTest` / `connectedDebugAndroidTest` on an
+  emulator or device) is what actually proves a native-backed vector on Android runtime.
+  Do not claim Android support for a native-backed operation without a passing device test.
+- **iOS** is typically compile-and-link verified only (`compileKotlinIosSimulatorArm64`,
+  `linkDebugTestIosSimulatorArm64`); iOS *runtime* execution of vectors is separate future
+  work unless a simulator/device run is explicitly recorded. Do not describe an iOS path as
+  runtime-verified unless it was.
 
 ## Parser safety
 

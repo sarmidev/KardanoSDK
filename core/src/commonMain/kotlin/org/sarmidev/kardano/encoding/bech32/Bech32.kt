@@ -96,7 +96,7 @@ public object Bech32 {
         }
         for (i in hrp.indices) {
             val code = hrp[i].code
-            if (code < MIN_HRP_CHAR_CODE || code > MAX_HRP_CHAR_CODE) {
+            if (code !in MIN_HRP_CHAR_CODE..MAX_HRP_CHAR_CODE) {
                 return KardanoResult.Err(Bech32Error.HrpCharOutOfRange(i, hrp[i]))
             }
         }
@@ -105,7 +105,7 @@ public object Bech32 {
         }
         for (i in data.indices) {
             val value = data[i].toInt()
-            if (value < 0 || value > 31) {
+            if (value !in 0..31) {
                 return KardanoResult.Err(Bech32Error.DataValueOutOfRange(i, value))
             }
         }
@@ -165,7 +165,7 @@ public object Bech32 {
         }
         for (i in hrp.indices) {
             val code = hrp[i].code
-            if (code < MIN_HRP_CHAR_CODE || code > MAX_HRP_CHAR_CODE) {
+            if (code !in MIN_HRP_CHAR_CODE..MAX_HRP_CHAR_CODE) {
                 return KardanoResult.Err(Bech32Error.HrpCharOutOfRange(i, hrp[i]))
             }
         }
