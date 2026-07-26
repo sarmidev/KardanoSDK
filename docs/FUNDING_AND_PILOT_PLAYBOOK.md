@@ -46,12 +46,23 @@ than an ambitious feature list.
      or non-test wallet material.
    - Add captions and publish the video where a grant reviewer can open it without an account.
 
-2. **Prepare a lightweight landing page.**
-   - Start with a static page or GitHub Pages; do not create a complex product site first.
-   - Include: problem, KMP/mobile positioning, current working demo, limitations, roadmap,
-     quickstart, GitHub link, and contact path.
-   - Use only artwork you created or assets whose usage terms you have verified.
-   - Keep the Playground landing as the product demo; the public page is a short entrance to it.
+2. **Prepare a lightweight landing page — delivered.**
+   - A dependency-free static page now lives in [`site/`](../site/) and deploys to GitHub Pages
+     from `main`; see [`site/README.md`](../site/README.md) for local preview, content-source
+     rules, asset provenance, and the one-time repository Pages setting.
+   - It includes: problem/positioning, the delivered-evidence strip, current limits, a three-step
+     Roadmap section (Phase 1 delivered evidence, a developer/community invitation to run the
+     mock Playground and give feedback via GitHub, and the Phase 2 direction explicitly not a
+     commitment), the Quickstart/GitHub links, and the pilot-feedback contact path — no backend
+     form.
+   - It reuses only the project's existing first-party icon mark (website-local derivatives); no
+     third-party or generated artwork was added. It could not include a real Playground
+     screenshot because the environment that built it had no attached display; `site/README.md`
+     documents the manual capture steps for a future update.
+   - The Playground remains the actual product demo; the public page stays a short entrance to
+     it, not a duplicate of the repository documentation.
+   - Remaining owner action: make the repository public (if not already) and set
+     **Settings → Pages → Source → GitHub Actions** so the deployed page becomes reachable.
 
 3. **Create a release packet.**
    - Tag the first public milestone after checking the repository history.

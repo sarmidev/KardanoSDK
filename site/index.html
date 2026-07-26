@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kardano SDK — Kotlin Multiplatform infrastructure for native Cardano mobile apps</title>
+  <meta name="description" content="Kardano SDK is an open-source, Apache-2.0 Kotlin Multiplatform SDK for native Cardano mobile apps. Phase 1 ships an experimental, test-only, preprod, ADA-only, fixture-scoped transaction demo, validated on Android." />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#FAF9FF" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0E0C13" media="(prefers-color-scheme: dark)" />
+
+  <!-- Open Graph / social preview -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Kardano SDK — Kotlin Multiplatform infrastructure for native Cardano mobile apps" />
+  <meta property="og:description" content="Open-source Kotlin Multiplatform SDK for native Cardano mobile apps. Phase 1: an experimental, test-only, preprod, ADA-only, fixture-scoped transaction demo, Android-validated." />
+  <meta property="og:image" content="assets/brand/og-image.png" />
+  <meta property="og:url" content="https://sarmidev.github.io/KardanoSDK/" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/brand/favicon-64.png" />
+  <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="wrap header-row">
+      <a class="brand" href="#top">
+        <picture>
+          <source srcset="assets/brand/kardano-mark-dark.png" media="(prefers-color-scheme: dark)" />
+          <img src="assets/brand/kardano-mark-light.png" width="32" height="32" alt="Kardano SDK icon mark" />
+        </picture>
+        <span class="brand-name">Kardano SDK</span>
+      </a>
+      <nav class="site-nav" aria-label="Page sections">
+        <a href="#approach">Approach</a>
+        <a href="#what-works-today">What works today</a>
+        <a href="#try-the-playground">Playground</a>
+        <a href="#current-limits">Limits</a>
+        <a href="#roadmap">Roadmap</a>
+        <a href="#pilot-contact">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <a id="top"></a>
+
+    <section id="hero" class="hero" aria-labelledby="hero-heading">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Apache-2.0 · Kotlin Multiplatform</p>
+          <h1 id="hero-heading">Open-source Kotlin Multiplatform infrastructure for native Cardano mobile apps.</h1>
+          <p class="lede">
+            Kardano SDK keeps shared Cardano logic in Kotlin for Android, iOS, and JVM/Desktop, so a
+            native mobile app can demonstrate a bounded, test-only Cardano wallet and transaction flow
+            without a WebView bridge or duplicated platform business logic.
+          </p>
+          <p class="status-callout" role="note">
+            <strong>Status:</strong> Phase 1 MVP for a test-only, preprod transaction flow. Experimental,
+            not independently reviewed, and not for mainnet funds or user-supplied private keys.
+          </p>
+          <div class="cta-row">
+            <a class="button button-primary" href="https://github.com/sarmidev/KardanoSDK">View source on GitHub</a>
+            <a class="button button-secondary" href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/QUICKSTART.md">Run the Playground (Quickstart)</a>
+          </div>
+        </div>
+        <div class="hero-panel" aria-labelledby="hero-panel-heading">
+          <h2 id="hero-panel-heading" class="hero-panel-heading">Guided Playground flow</h2>
+          <p class="hero-panel-note">
+            A branded summary of the sample app's guided flow. This is not a screenshot — see
+            <a href="https://github.com/sarmidev/KardanoSDK/blob/main/site/README.md">site/README.md</a>
+            in the repository for how to capture one from a running Playground.
+          </p>
+          <ol class="flow-steps">
+            <li><span class="flow-step-index" aria-hidden="true">1</span> Create test wallet <span class="tag tag-neutral">fixture</span></li>
+            <li><span class="flow-step-index" aria-hidden="true">2</span> Check available test ADA <span class="tag tag-neutral">mock or preprod</span></li>
+            <li><span class="flow-step-index" aria-hidden="true">3</span> Prepare a transaction <span class="tag tag-neutral">ADA-only</span></li>
+            <li><span class="flow-step-index" aria-hidden="true">4</span> Sign it locally <span class="tag tag-neutral">fixture-scoped</span></li>
+            <li><span class="flow-step-index" aria-hidden="true">5</span> Send it to preprod <span class="tag tag-neutral">testnet only</span></li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="evidence" class="evidence" aria-labelledby="evidence-heading">
+      <div class="wrap">
+        <h2 id="evidence-heading">Delivered evidence, not a roadmap promise</h2>
+        <div class="evidence-grid">
+          <div class="evidence-card">
+            <p class="evidence-value">Android · iOS · JVM/Desktop</p>
+            <p class="evidence-label">
+              Kotlin Multiplatform targets. Android is the Phase 1 <strong>runtime-validated</strong>
+              target; iOS and JVM/Desktop currently compile as shared targets, without an executed
+              Phase 1 runtime demonstration.
+            </p>
+          </div>
+          <div class="evidence-card">
+            <p class="evidence-value">Apache-2.0</p>
+            <p class="evidence-label">Open-source license for the SDK source. See the repository <a href="https://github.com/sarmidev/KardanoSDK/blob/main/LICENSE">LICENSE</a>.</p>
+          </div>
+          <div class="evidence-card">
+            <p class="evidence-value">Testnet/preprod, ADA-only</p>
+            <p class="evidence-label">
+              The demonstrated transaction flow is bounded to a public test fixture, Blockfrost
+              preprod, and ADA-only drafts — not a general-purpose or mainnet wallet.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="approach" class="approach" aria-labelledby="approach-heading">
+      <div class="wrap two-col">
+        <div>
+          <h2 id="approach-heading">The problem</h2>
+          <p>
+            Cardano has strong web/TypeScript tooling, Rust low-level libraries, and web-first dApp
+            connectors. There is no clearly dominant mobile-first, Kotlin Multiplatform-first SDK for
+            teams building native Android and iOS apps that need to share the same Cardano business
+            logic.
+          </p>
+        </div>
+        <div>
+          <h2>The approach</h2>
+          <p>
+            Kardano SDK shares Cardano wallet, provider, and transaction logic in Kotlin across Android,
+            iOS, and JVM/Desktop, instead of duplicating platform-specific business logic or wrapping a
+            web dApp in a WebView bridge.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="what-works-today" class="features" aria-labelledby="features-heading">
+      <div class="wrap">
+        <h2 id="features-heading">What works today</h2>
+        <ul class="feature-list">
+          <li>UI-free core primitives, bounded hex/Bech32/CBOR handling, and structural CIP-19 address parsing.</li>
+          <li>Icarus/CIP-3 test-wallet restoration and CIP-1852 address generation.</li>
+          <li>Provider-neutral UTxO, protocol-parameter, and submit boundaries.</li>
+          <li>In-memory demo data plus Blockfrost preprod query and submission providers.</li>
+          <li>ADA-only transaction draft building, scoped local signing, and preprod submission from the test fixture.</li>
+          <li>Android-first Playground demo with shared Android/iOS/JVM/Desktop UI code.</li>
+        </ul>
+        <p class="features-footnote">
+          Full detail: <a href="https://github.com/sarmidev/KardanoSDK/blob/main/README.md">README</a> and
+          <a href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/PROJECT_BRIEF.md">project brief</a>.
+        </p>
+      </div>
+    </section>
+
+    <section id="try-the-playground" class="playground" aria-labelledby="playground-heading">
+      <div class="wrap">
+        <h2 id="playground-heading">Try the Playground</h2>
+        <p>
+          The default mock mode is the quickest way to see the guided flow without a network key. From
+          the repository root:
+        </p>
+        <pre class="code-block"><code>./gradlew :desktopApp:run</code></pre>
+        <p>
+          Mock mode uses deterministic ADA-only sample UTxOs so the Wallet, Funds, Build, and Sign steps
+          complete without a network request; mock submission reports that it does not submit to a
+          network. Live Blockfrost mode is preprod-only and requires an operator-supplied project id.
+        </p>
+        <p>
+          This is a developer demo you run from source. It does not imply a published package or a
+          general integration API — see the
+          <a href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/QUICKSTART.md">Quickstart</a>
+          for Android/iOS run instructions, and the
+          <a href="https://github.com/sarmidev/KardanoSDK">repository source</a> for everything else.
+        </p>
+      </div>
+    </section>
+
+    <section id="current-limits" class="limits" aria-labelledby="limits-heading">
+      <div class="wrap">
+        <h2 id="limits-heading">Current limits</h2>
+        <p class="limits-intro">
+          <strong>Experimental, test-only, preprod scope.</strong> This is not a mainnet product and
+          not independently reviewed.
+        </p>
+        <ul class="limits-list">
+          <li><span class="tag tag-warn">Not implemented</span> Mainnet support.</li>
+          <li><span class="tag tag-warn">Not implemented</span> Arbitrary or user-supplied wallet import.</li>
+          <li><span class="tag tag-warn">Not implemented</span> General-purpose transaction signing.</li>
+          <li><span class="tag tag-warn">Not implemented</span> Native-asset (multi-asset) transactions.</li>
+          <li><span class="tag tag-warn">Not implemented</span> Plutus scripts, staking, metadata, or multisig.</li>
+          <li><span class="tag tag-warn">Not implemented</span> Hardware-wallet support.</li>
+          <li><span class="tag tag-warn">Not validated</span> iOS and JVM/Desktop compile as shared targets; Phase 1 runtime validation is Android-primary.</li>
+        </ul>
+        <p class="features-footnote">
+          Full scope and reporting path: <a href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/SECURITY.md">security policy</a>
+          and <a href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/ROADMAP.md">roadmap</a>.
+        </p>
+      </div>
+    </section>
+
+    <section id="roadmap" class="roadmap" aria-labelledby="roadmap-heading">
+      <div class="wrap">
+        <h2 id="roadmap-heading">From delivered evidence to a community-tested direction</h2>
+        <p class="roadmap-intro">
+          Phase 1 is implemented and can be run today. What comes after it is not fixed — it depends
+          on what developers and the Cardano community find useful when they try it, and on a
+          validated loyalty/ticketing pilot, not on an internal delivery schedule.
+        </p>
+        <div class="roadmap-grid">
+          <div class="roadmap-card">
+            <p class="tag tag-success">Delivered</p>
+            <h3>Phase 1: try it now</h3>
+            <p>
+              An Android-primary, ADA-only, testnet/preprod, fixture-scoped wallet-and-transaction
+              demonstration — restore, query, build, sign, and submit — runs today from source. It is
+              experimental, has not received an independent review, and is not for mainnet funds or
+              user-supplied private keys; iOS and JVM/Desktop compile as shared targets without an
+              executed Phase 1 runtime demonstration.
+            </p>
+            <p class="roadmap-cta">
+              <a class="button button-secondary" href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/QUICKSTART.md">Run the Playground</a>
+            </p>
+          </div>
+          <div class="roadmap-card roadmap-card-invite">
+            <p class="tag tag-neutral">Your turn</p>
+            <h3>Follow, test, and tell us what you find</h3>
+            <p>
+              The most useful next step for a Cardano developer is to run the mock flow, read the
+              technical roadmap, and report what works, what is confusing, or what a real
+              loyalty/ticketing integration would need. Feedback like this is what the Phase 2 pilot
+              gate depends on.
+            </p>
+            <p class="roadmap-cta">
+              <a class="button button-secondary" href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/ROADMAP.md">Read the technical roadmap</a>
+              <a class="button button-secondary" href="https://github.com/sarmidev/KardanoSDK/issues">Open a GitHub issue</a>
+            </p>
+          </div>
+          <div class="roadmap-card">
+            <p class="tag tag-info">Planned direction, not a commitment</p>
+            <h3>Phase 2: loyalty/ticketing native assets</h3>
+            <p>
+              A candidate direction to extend the demonstrated flow toward native-asset transfers for a
+              loyalty/ticketing pilot, gated by external pilot validation and a documented provider
+              decision — no delivery dates.
+            </p>
+            <p class="roadmap-cta">
+              <a class="button button-secondary" href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/PHASE_2_PLAN.md">Read the Phase 2 plan</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="pilot-contact" class="contact" aria-labelledby="contact-heading">
+      <div class="wrap">
+        <h2 id="contact-heading">Building a loyalty or ticketing app on Cardano?</h2>
+        <p>
+          The project is gathering product feedback from loyalty/ticketing teams for the planned Phase 2
+          native-asset pilot direction. This is a request for feedback, not a commitment or a delivery
+          date.
+        </p>
+        <p>
+          <a class="button button-primary" href="mailto:sarmidev@outlook.es">Email sarmidev@outlook.es</a>
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-grid">
+      <nav class="footer-links" aria-label="Project links">
+        <a href="https://github.com/sarmidev/KardanoSDK">GitHub repository</a>
+        <a href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/QUICKSTART.md">Quickstart</a>
+        <a href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/ROADMAP.md">Roadmap</a>
+        <a href="https://github.com/sarmidev/KardanoSDK/blob/main/LICENSE">Apache-2.0 license</a>
+        <a href="https://github.com/sarmidev/KardanoSDK/blob/main/docs/SECURITY.md">Report a security issue</a>
+      </nav>
+      <p class="footer-copyright">
+        © 2026 Javier Sarmiento Mañus (Sarmidev). Contact:
+        <a href="mailto:sarmidev@outlook.es">sarmidev@outlook.es</a>.
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

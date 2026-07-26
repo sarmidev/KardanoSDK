@@ -35,11 +35,21 @@ and can submit to preprod. It is a developer demo, not a general-purpose wallet.
 - The signing backend includes macOS JVM artifacts, Android artifacts, and iOS static libraries;
   Linux and Windows JVM signing artifacts are future work.
 
+## Public landing page
+
+A short, dependency-free static landing page lives in [`site/`](site/) and deploys to GitHub
+Pages from `main` (see [`site/README.md`](site/README.md) for local preview and the one-time
+Pages repository setting). Expected URL once enabled:
+[sarmidev.github.io/KardanoSDK](https://sarmidev.github.io/KardanoSDK/). It links back to this
+README and the documents below rather than duplicating them.
+
 ## Documentation
 
 - [Project brief](docs/PROJECT_BRIEF.md) — product positioning and delivered scope.
 - [Quickstart](docs/QUICKSTART.md) — run the Playground in mock mode.
-- [Roadmap](docs/ROADMAP.md) — completed work and planned direction.
+- [Roadmap](docs/ROADMAP.md) — current focus, planned direction, and scope limits.
+- [Delivery record](docs/DELIVERY_RECORD.md) — completed Phase 0/1 technical outcomes and
+  supporting evidence.
 - [Phase 2 plan](docs/PHASE_2_PLAN.md) — native-asset loyalty/ticketing pilot direction.
 - [Funding and pilot playbook](docs/FUNDING_AND_PILOT_PLAYBOOK.md) — public evidence,
   outreach, and proposal preparation.

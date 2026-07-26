@@ -603,6 +603,157 @@ Date: 2026-07-26
 
 Summary:
 
+- **Public landing page Roadmap section rework — DONE.** Outcome: reworked the `#roadmap` section
+  in `site/index.html` from two side-by-side "Delivered" / "Planned direction" cards into a
+  three-step evidence-to-direction narrative: (1) Phase 1 delivered, runnable today, restating the
+  experimental/testnet-preprod/ADA-only/fixture-scoped/Android-primary-runtime/not-for-mainnet-
+  funds-or-user-supplied-keys boundaries inline; (2) an explicit "Your turn" invitation for
+  developers and the Cardano community to run the mock Playground, read the technical roadmap, and
+  report feedback — visually highlighted as the middle step; (3) the Phase 2 loyalty/ticketing
+  native-asset direction, gated by external pilot validation and a documented provider decision,
+  restated as "no delivery dates." **Content/presentation only** — no SDK public API, no
+  `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost`/`:shared`/Android/iOS/Desktop
+  source touched, no `.github/workflows/verify.yml` change, no new dependency, no JavaScript added.
+  - **New CTAs link only to existing repository documentation or GitHub**, per the task's action-
+    oriented-CTA requirement: "Run the Playground" → `docs/QUICKSTART.md`; "Read the technical
+    roadmap" → `docs/ROADMAP.md`; "Open a GitHub issue" → the repository's `/issues` page (new
+    link target, standard GitHub feature, same public-repository assumption as every other
+    `github.com/sarmidev/KardanoSDK` link already on the page); "Read the Phase 2 plan" →
+    `docs/PHASE_2_PLAN.md`. No new capability, milestone, metric, partner, or delivery date was
+    invented; wording stays within what `docs/ROADMAP.md`, `docs/PHASE_2_PLAN.md`, and
+    `docs/FUNDING_AND_PILOT_PLAYBOOK.md` already state.
+  - **Design reuses existing tokens only.** `site/styles.css` gained `.roadmap-intro`,
+    `.roadmap-grid` (3-column, collapsing to 1 column at the existing 860px breakpoint alongside
+    `.evidence-grid`), `.roadmap-card-invite` (a highlighted middle card using the same
+    `--color-primary-soft` gradient pattern already used by `.hero-panel`), and `.roadmap-cta`
+    (a flex row for 1–2 buttons per card, reusing `.button`/`.button-secondary`). No new color
+    value, external font, icon, or asset was added; `prefers-reduced-motion` and the global
+    `:focus-visible` rule apply unchanged (no new animation, no new interactive widget).
+  - **Verification.** Served `site/` via `python3 -m http.server`; every `href="#…"` anchor
+    resolves to an existing `id` (`grep`-cross-checked), no duplicate `id`, and a Python
+    `html.parser`-based tag-balance check found no unclosed/mismatched tags. Reviewed desktop
+    (1440px) and mobile (390px) layouts in both light and dark appearance via real
+    `Emulation.setEmulatedMedia` over the Chrome DevTools Protocol (a plain `--force-prefers-
+    color-scheme` headless CLI flag was tried first and silently no-opped in this Chrome build,
+    so CDP emulation was used instead for a trustworthy check) — the three-card grid stacks to one
+    column on mobile, the middle card's highlight renders correctly in both themes, and no text or
+    card overflows. A real keyboard Tab-walk (CDP `Input.dispatchKeyEvent`, not synthetic
+    `.focus()`) confirmed `:focus-visible` renders a 3px solid outline on the new "Open a GitHub
+    issue" link, while a plain scripted `.focus()` on the same link correctly does **not** trigger
+    `:focus-visible` (confirming the outline is keyboard-specific, not always-on). `git diff
+    --check` is clean on every changed file; `ReadLints` reported no linter errors. No banned
+    words. `docs/ROADMAP.md`, `docs/FUNDING_AND_PILOT_PLAYBOOK.md`, and `CHANGELOG.md` updated in
+    the same change to describe the revised three-step Roadmap section; `site/README.md`'s
+    content-source rules and guardrails needed no change (this rework stays inside them). No
+    real screenshot was captured or added to the repository — `site/README.md`'s existing
+    no-display-available note and manual capture steps still apply unchanged.
+  - **Roadmap and delivery-record restructure.** `docs/ROADMAP.md` is now a short, reader-first
+    map: delivered Phase 0/1 baseline, current focus, Phase 2’s conditional pilot direction,
+    Phase 3’s evidence-led future direction, current limits, and links to next documents. Its
+    obsolete `Current priority` narrative (which stopped at the early 1.6 work) and stale
+    “Proposed”/“Expected” Phase 1 language are removed. The completed Phase 0/1 history, technical
+    outcomes, verification evidence, and remaining Phase 1 closure context now live in the new
+    `docs/DELIVERY_RECORD.md`, which links back to `PHASE_1_PLAN.md`, ADRs, the testing guide, and
+    the handoff record. This is a documentation-structure change only: no implementation status,
+    current limit, scope, commitment, or schedule changed.
+
+Owner action still required (unchanged from the prior landing-page session): make the repository
+public (if not already) and set **Settings → Pages → Source → GitHub Actions**, then confirm the
+`deploy-site` run succeeds and the published page matches this session's local review.
+
+### Session Summary (Public Landing Page)
+
+Date: 2026-07-26
+
+Summary:
+
+- **Public landing page — DONE.** Outcome: added a self-contained, dependency-free static site
+  under `site/` (`index.html`, `styles.css`, `README.md`, `assets/brand/`) and a dedicated
+  `.github/workflows/deploy-site.yml`, independent from `Verify`, that publishes `site/` to
+  GitHub Pages on pushes to `main` touching `site/**` or the workflow itself, plus manual
+  dispatch, using only the official `actions/configure-pages` /
+  `actions/upload-pages-artifact` / `actions/deploy-pages` actions and `pages: write` /
+  `id-token: write` permissions. **No Kotlin, Gradle, Android/iOS/Desktop source, or `Verify`
+  workflow file was touched.** Expected published URL:
+  `https://sarmidev.github.io/KardanoSDK/`, live only after the repository owner sets
+  **Settings → Pages → Source → GitHub Actions** (a one-time manual setting no workflow file
+  can make) and after the repository is public — both recorded in `site/README.md`.
+  - **Content is English-only and sourced from the cited docs.** Every claim on the page (the
+    "Open-source Kotlin Multiplatform infrastructure for native Cardano mobile apps" positioning,
+    the Phase 1 experimental/test-only/preprod/ADA-only/fixture-scoped status line, the "what
+    works today" list, the Android-primary vs iOS/JVM-Desktop compile-only qualifier, the current
+    limits list, and the Phase 2 loyalty/ticketing framing as planned direction, not a
+    commitment) is reworded from `README.md`, `docs/PROJECT_BRIEF.md`, `docs/QUICKSTART.md`,
+    `docs/PHASE_2_PLAN.md`, `docs/ROADMAP.md`, and `docs/SECURITY.md` — no new capability claim.
+    The page links to the repository (GitHub source, Quickstart, roadmap, license, security
+    policy) rather than duplicating their content, and its pilot-outreach contact CTA uses the
+    already-public `sarmidev@outlook.es` address from `docs/FUNDING_AND_PILOT_PLAYBOOK.md`/
+    `README.md` with no backend form.
+  - **Brand assets are first-party, no new artwork.** `site/assets/brand/kardano-mark-light.png`
+    and `kardano-mark-dark.png` are unmodified copies of the existing first-party icon mark
+    (`shared/src/commonMain/composeResources/drawable/kardano_mark_{light,dark}.png`, Block
+    1.12-pre-d); `favicon-32.png`, `favicon-64.png`, and `apple-touch-icon.png` are `sips`
+    resize-only derivatives of the light mark; `og-image.png` is the light mark resized and
+    padded (via `sips`, no redraw) onto the light theme's background color for social-preview
+    cards. No Cardano/Kotlin logo, stock art, or generated image was added; provenance is
+    recorded in both `site/README.md` and `docs/THIRD_PARTY_NOTICES.md`.
+  - **No real screenshot could be captured — disclosed, not faked.** The plan called for 2–3
+    real Playground Mock-mode screenshots. The environment used to build this page has no
+    attached display (`screencapture -x` returned "could not create image from display"; a
+    headless-Chrome probe confirmed the same), so `./gradlew :desktopApp:run` could not be
+    driven to a capturable window. **No screenshot was invented or generated.** The hero section
+    instead shows a labeled, Compose-independent branded summary of the five guided-flow steps
+    (Wallet → Funds → Build → Sign → Submit) and explicitly states it is not a screenshot;
+    `site/README.md`'s "Screenshots" section documents the exact manual capture-and-sanitization
+    steps (Mock mode only; no project id/wallet/personal data) to replace it once a display is
+    available.
+  - **Design reuses the Playground's own palette.** `site/styles.css` defines CSS custom
+    properties for light (`#FAF9FF` background, `#5B3FD1` primary, `#216BB9` secondary,
+    `#006E88` tertiary) and dark (`#0E0C13` background, `#CDBDFF`/`#A6CEFF`/`#8FE3FF`) matched to
+    `PlaygroundTheme.kt`, switched via `prefers-color-scheme` with no JavaScript theme toggle; the
+    status/limit/roadmap "tags" reuse the same chip color pairs and always carry a text label
+    (Delivered/Planned direction, not a commitment/Not implemented/etc.), so no status is
+    color-only. No external font, icon, analytics, or CDN request; no `site.js` was added (a
+    CSS-only wrapping nav covers the short page, so no mobile-nav script was needed).
+  - **Accessibility verified, not just declared.** `site/index.html` has a skip-navigation link,
+    semantic landmarks (`header`/`nav`/`main`/`section`/`footer`), one `h1` with sequential `h2`s,
+    and meaningful `alt` text on its one image (the brand mark; no other images exist to caption).
+    Verified via a local Chrome DevTools Protocol session (not just visual inspection): a real
+    Tab-key-driven focus walk confirms `:focus-visible` renders a visible outline on nav links,
+    and a real (non-scripted) focus on the skip link confirms it becomes visible at `left: 0`;
+    an earlier same-session check using plain JS `.focus()` had incorrectly suggested the skip
+    link was inert — that was a headless-testing artifact (`:focus` requires the frame to be
+    "focused", which plain `Runtime.evaluate`-driven `.focus()` does not grant), not a real page
+    bug, resolved by using CDP's input-level `DOM.focus`/`Input.dispatchKeyEvent` instead.
+    `styles.css` also disables all animation/transition durations under
+    `prefers-reduced-motion: reduce` (the page has no decorative motion today; this is a guard
+    for future additions).
+  - **Verification.** Served `site/` via `python3 -m http.server` and reviewed desktop
+    (1440px) and mobile (390px) layouts in both light and dark appearance via real
+    (non-simulated) `prefers-color-scheme` emulation over the Chrome DevTools Protocol — nav
+    wraps cleanly on narrow widths, evidence/roadmap cards stack to one column, and no text or
+    card overflows in either theme. Every in-page anchor (`href="#…"`) resolves to an existing
+    `id`; every relative repository link (`README.md`, `LICENSE`, and every cited `docs/*.md`
+    file, plus the new `.github/workflows/deploy-site.yml`) was confirmed to exist on disk —
+    the `github.com/sarmidev/KardanoSDK` links themselves could not be fetched from this
+    environment (the repository is not yet confirmed public), which is why making the repository
+    public is called out below as owner-required. No duplicate `id` attributes; a hand-rolled
+    tag-balance check found no unclosed/mismatched HTML tags. `git diff --check` is clean on
+    every added/changed file. No banned words. `README.md`, `CHANGELOG.md`, `docs/ROADMAP.md`,
+    `docs/FUNDING_AND_PILOT_PLAYBOOK.md`, and `docs/THIRD_PARTY_NOTICES.md` updated in the same
+    change; no `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost`/`:shared`/
+    Android/iOS/Desktop source file and no line of `.github/workflows/verify.yml` was touched.
+
+Owner action still required: make the repository public (if not already) and set
+**Settings → Pages → Source → GitHub Actions**, then confirm the first `deploy-site` run
+succeeds and the published page matches this session's local review.
+
+### Session Summary (Brand Assets And Theme Refresh)
+
+Date: 2026-07-26
+
+Summary:
+
 - **Block 1.12-pre-d: Brand assets and theme refresh — DONE.** Precondition: the funding-readiness
   baseline and Block 1.12-pre-c-3 (below) were already committed. Context: before building the
   public landing page, the owner produced the project's first definitive icon mark (a violet-to-
