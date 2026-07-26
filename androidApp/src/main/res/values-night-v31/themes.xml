@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Night pair of `values-v31/themes.xml` (Block 1.12-pre-d): the same Android 12+ splash-screen
+  attributes, resolved to `kardano_background`'s dark value under system dark mode. This is the
+  file that fixes the reported bug — a white splash background under dark mode, caused by the
+  previous manifest theme (`@android:style/Theme.Material.Light.NoActionBar`) never varying by
+  night mode.
+
+  `windowSplashScreenAnimatedIcon` references the same `@drawable/ic_launcher_foreground_splash`
+  name as `values-v31/themes.xml`; Android resolves it to `drawable-night/
+  ic_launcher_foreground_splash.png` (the dark mark) under system dark mode the same way any
+  other drawable reference would, so no separate name is needed here. See
+  `values-v31/themes.xml` for why a plain, dedicated foreground drawable (not the full adaptive
+  icon, and not the density-bucketed `ic_launcher_foreground` used by the launcher icon) is
+  referenced — that comment explains both the nested light/dark square artifact and the blurry/
+  upscaled icon this file fixes.
+-->
+<resources>
+    <style name="Theme.KardanoSDK" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/kardano_background</item>
+        <item name="android:windowSplashScreenBackground">@color/kardano_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_splash</item>
+    </style>
+</resources>

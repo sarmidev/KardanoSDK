@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Night pair of `values/themes.xml` (Block 1.12-pre-d): the dark Material base plus the dark
+  window background, so cold start under system dark mode shows `kardano_background`'s dark
+  value instead of the light theme's white.
+-->
+<resources>
+    <style name="Theme.KardanoSDK" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/kardano_background</item>
+    </style>
+</resources>

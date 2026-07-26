@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Day theme (Block 1.12-pre-d). Replaces the previous hardcoded, always-light
+  `@android:style/Theme.Material.Light.NoActionBar` manifest theme so the cold-start window
+  background follows the system light/dark setting instead of always being white; see
+  `values-night/themes.xml` for the dark pair and `values-v31`/`values-night-v31` for the
+  Android 12+ system-splash-screen attributes.
+-->
+<resources>
+    <style name="Theme.KardanoSDK" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/kardano_background</item>
+    </style>
+</resources>

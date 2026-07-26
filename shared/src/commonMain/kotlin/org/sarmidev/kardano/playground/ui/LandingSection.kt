@@ -27,16 +27,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-// Accent hues reused from the in-app Compose-drawn mark; used here only to tint small
-// Compose-drawn shapes (capability dots, flow-step numbers). No external image asset is bundled.
-private val AccentPurple = Color(0xFF7F52FF)
-private val AccentBlue = Color(0xFF3B6FF5)
-private val AccentOrange = Color(0xFFF08A24)
-private val AccentTeal = Color(0xFF12A594)
-private val AccentPink = Color(0xFFD6409F)
-
-private val accents = listOf(AccentPurple, AccentBlue, AccentOrange, AccentTeal, AccentPink)
-
 /**
  * The developer-facing landing/overview area shown in the Overview section (Block 1.12-pre-c,
  * updated in 1.12-pre-c-2): what the SDK does today, a friendly preview of the transaction flow,
@@ -90,6 +80,7 @@ private val capabilities = listOf(
 
 @Composable
 private fun CapabilitiesSection() {
+    val accents = LocalKardanoBrand.current.accents
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader(
             title = "What the SDK does today",
@@ -143,6 +134,7 @@ private val previewSteps = listOf(
 
 @Composable
 private fun FlowPreviewSection() {
+    val accents = LocalKardanoBrand.current.accents
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader(
             title = "The transaction flow",

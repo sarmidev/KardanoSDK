@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Light theme's `background` token (#FAF9FF, see PlaygroundTheme.kt), reused as the Android
+  window/splash background so cold start and the system splash screen (Block 1.12-pre-d) match
+  the app's own light surface instead of a plain white default.
+-->
+<resources>
+    <color name="kardano_background">#FAF9FF</color>
+</resources>
