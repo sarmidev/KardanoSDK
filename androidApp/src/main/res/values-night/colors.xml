@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Dark theme's `background` token (#0E0C13, see PlaygroundTheme.kt), reused as the Android
+  window/splash background under system dark mode (Block 1.12-pre-d).
+-->
+<resources>
+    <color name="kardano_background">#0E0C13</color>
+</resources>

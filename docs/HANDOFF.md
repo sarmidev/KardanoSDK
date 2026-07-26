@@ -19,7 +19,9 @@ Current project identity:
   Android-primary, fixture-scoped, ADA-only preprod flow and the shared Playground. The active
   work is Phase 1 closure plus funding readiness: public project materials, contribution/release
   hygiene, pilot discovery, and Phase 2 architecture planning. No Phase 2 protocol capability is
-  implemented yet.
+  implemented yet. Block 1.12-pre-d gave the project its first definitive icon mark and a matching
+  Material 3 theme (Android/iOS/Desktop launchers, the Compose header) ahead of the public landing
+  page.
 - Current strategic direction: Phase 2 is a loyalty/ticketing native-asset pilot with provider
   expansion; it is gated by an ADR, external problem validation, and a preserved-value transaction
   model. See `docs/PHASE_2_PLAN.md` and `docs/FUNDING_AND_PILOT_PLAYBOOK.md`.
@@ -596,6 +598,138 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-07-26
+
+Summary:
+
+- **Block 1.12-pre-d: Brand assets and theme refresh — DONE.** Precondition: the funding-readiness
+  baseline and Block 1.12-pre-c-3 (below) were already committed. Context: before building the
+  public landing page, the owner produced the project's first definitive icon mark (a violet-to-
+  blue "K" beside a cyan-tinted, Cardano-style dot cluster) in a light variant (for light surfaces)
+  and a dark variant (white/lilac, for dark surfaces), at low/medium/high resolution, all with
+  verified transparent backgrounds. This block replaces every placeholder/template icon and the
+  Kotlin/KMP-inspired palette with this first-party mark. **Visual/branding only** — no SDK public
+  API, no `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost` change, no MVI/
+  flow/API change, no new runtime dependency.
+  - **Assets are first-party.** All six source PNGs (light/dark × low/medium/high-res) are
+    Sarmidev-owned artwork, not a third-party logo; `docs/THIRD_PARTY_NOTICES.md` records them as
+    first-party rather than as a tracked external component. Every derived asset below (Android
+    adaptive-icon layers, legacy mipmaps, iOS AppIcon PNGs, desktop distribution/window icons, and
+    the Compose header mark) was generated from the two high-/medium-res source PNGs by resizing/
+    padding/compositing only — no redraw, no new artwork.
+  - **Theme (`PlaygroundTheme.kt`).** Replaced the Kotlin/KMP-inspired purple/blue/orange scheme
+    with a violet/blue/cyan scheme matched to the mark: light primary `#5B3FD1`, secondary
+    `#216BB9`, tertiary `#006E88`, on a cool `#FAF9FF` background/`#FFFFFF` surface (not pure
+    white); dark primary `#CDBDFF`, secondary `#A6CEFF`, tertiary `#8FE3FF`, on a violet-black
+    `#0E0C13` background/`#16131D` surface (not pure black). Added a `KardanoBrandColors` data
+    class (five decorative accent hues plus the Neutral/Info/Success/Live/Loading/Error chip
+    background/foreground pairs) provided via a new `LocalKardanoBrand` composition local, so
+    `StatusBadge.kt` and `LandingSection.kt` no longer declare their own hex constants — each pair
+    now has a distinct, contrast-checked dark-mode value instead of reusing the light-mode chip
+    colors verbatim.
+  - **Header mark (`PlaygroundHeader.kt`).** Removed the Compose-drawn `KmpMark()` (a gradient
+    rounded square with two drawn chevrons) and added `BrandMark()`, an `Image` that picks
+    `Res.drawable.kardano_mark_light` or `-dark` via `isSystemInDarkTheme()` — the same signal
+    `KardanoPlaygroundTheme` uses, so the mark and the surrounding hero always agree. The two PNGs
+    live under `shared/src/commonMain/composeResources/drawable/`; the unused JetBrains template
+    drawable (`compose-multiplatform.xml`) was deleted alongside it.
+  - **Android launcher.** Replaced the default template (`ic_launcher_background`'s green grid,
+    the robot `ic_launcher_foreground` vector) with an adaptive icon built from the mark: a flat
+    `drawable/ic_launcher_background.xml` fill (`#FAF9FF`, matching the light theme's
+    `background`) plus density-specific `drawable-mdpi/…/xxxhdpi/ic_launcher_foreground.png`
+    (light mark, padded to stay inside Android's adaptive-icon safe zone), and a `-night` pair
+    (`drawable-night/ic_launcher_background.xml` at `#0E0C13`, `drawable-night-*dpi/
+    ic_launcher_foreground.png` with the dark mark) that Android resolves under system dark mode.
+    Legacy (pre-API-26) `mipmap-*dpi/ic_launcher.png`/`ic_launcher_round.png` were regenerated as
+    opaque light/dark tiles (mark centered on the matching background color, circle-masked for the
+    round variant), with a `mipmap-night-*dpi` pair for dark mode. `values/strings.xml`'s
+    `app_name` changed from `KardanoSDK` to `Kardano SDK` to match the public project name.
+  - **iOS AppIcon.** Added `app-icon-1024-dark.png` (opaque dark tile) and wired it into the
+    existing `luminosity: dark` appearance slot in `AppIcon.appiconset/Contents.json`; the default
+    slot's `app-icon-1024.png` was regenerated as the opaque light tile from the new mark. The
+    `tinted` appearance slot is left unfilled, per the block's own decision to not publish a tinted
+    variant without a deliberately-designed monochrome asset. Set `AccentColor.colorset` to the
+    theme's light/dark primary (`#5B3FD1` / `#CDBDFF`) instead of the unspecified system default,
+    and added `INFOPLIST_KEY_CFBundleDisplayName=Kardano SDK` to `Configuration/Config.xcconfig` so
+    the visible app name matches Android/Desktop (`PRODUCT_NAME`, used for the binary/bundle id,
+    is unchanged). No Swift UI was added; Compose remains the only UI layer.
+  - **Desktop.** `desktopApp/build.gradle.kts`'s `nativeDistributions` now sets `macOS.iconFile`
+    (`icons/icon.icns`, built with `iconutil` from the light tile at every required size),
+    `windows.iconFile` (`icons/icon.ico`, multi-resolution), and `linux.iconFile` (`icons/icon.png`,
+    512px) for the Dmg/Msi/Deb targets. `main.kt`'s `Window` now sets `title = "Kardano SDK"` (was
+    `"KardanoSDK"`) and a runtime dock/taskbar `icon` loaded via the classic desktop
+    `painterResource("icon.png")` from a new `desktopApp/src/main/resources/icon.png` (a
+    transparent-background light mark) — a separate classpath-resource mechanism from `:shared`'s
+    Compose-multiplatform resources, which `:desktopApp` cannot reference (`Res` is `internal` to
+    the `:shared` Kotlin module).
+  - **Not changed.** The guided Wallet → Funds → Build → Sign → Submit flow, its MVI state/intents/
+    reducer, every provider/wallet/tx call, and `PlaygroundScreen.kt`'s root gradient (it already
+    read `MaterialTheme.colorScheme.surface`/`background`, so it picks up the new palette with no
+    edit). Android's edge-to-edge status/navigation-bar handling (`enableEdgeToEdge()`, Block 1.2)
+    was left as is — it already lets the new theme's background/surface show through under the
+    system bars, so no separate status-bar-color code was added.
+  - **Docs updated.** `shared/README.md` (new "Brand mark and theme" section), `docs/PHASE_1_PLAN.md`
+    and `docs/ROADMAP.md` (`1.12-pre-d` entries), `docs/THIRD_PARTY_NOTICES.md` (first-party asset
+    note), and this file. Each notes this is visual/branding only, not a public API or protocol
+    change.
+  - **Verification.** `./gradlew :shared:jvmTest :shared:testAndroidHostTest`,
+    `:shared:compileKotlinIosArm64`, `:desktopApp:compileKotlin`, and `:androidApp:assembleDebug`
+    (see this file's Verification note below for exact results); `git diff --check` clean; no
+    banned words on touched files. Manual light/dark review covered the Android launcher (day and
+    night adaptive icon + legacy fallback), the iOS AppIcon default/dark slots, the Desktop window/
+    dock icon, and the in-app header/badges/buttons in both themes.
+  - **Post-review fixes (device testing).** Two issues surfaced after installing the debug APK on
+    a physical device, both fixed in the same block:
+    1. *Light-mode adaptive icon clipping.* The density-specific
+       `drawable-*dpi/ic_launcher_foreground.png` (and `-night` pair) content ratio was `0.62`,
+       which put mark pixels outside Android's 66dp-diameter adaptive-icon safe zone on a
+       108dp/432px canvas (confirmed by measuring the foreground's opaque bounding box against the
+       safe-zone circle) — some launchers mask that overflow, clipping the mark. Regenerated every
+       foreground PNG (light and dark, all densities) at ratio `0.43`, which keeps the full mark
+       inside the safe zone with margin on both variants.
+    2. *White splash background under system dark mode.* `AndroidManifest.xml`'s
+       `android:theme` was hardcoded to `@android:style/Theme.Material.Light.NoActionBar` — an
+       always-light platform theme with no night variant — so both the classic cold-start window
+       background and Android 12+'s auto-generated system splash screen (which derives its
+       background from the theme when not told otherwise) stayed white regardless of system dark
+       mode. Replaced it with an app-owned `Theme.KardanoSDK`, defined once per relevant
+       configuration: `values/themes.xml` (light Material base, `android:windowBackground` set to
+       a new `@color/kardano_background` = light theme's `#FAF9FF`), `values-night/themes.xml`
+       (dark Material base, same color name resolving to `#0E0C13` via `values-night/colors.xml`),
+       and `values-v31`/`values-night-v31` pairs that additionally set the API-31+
+       `android:windowSplashScreenBackground` explicitly (same day/night colors) rather than
+       relying on the implicit theme fallback.
+    3. *Nested light/dark background squares behind the splash icon (follow-up to #2, two
+       iterations).* The `values-v31`/`values-night-v31` pair from fix #2 initially also set
+       `android:windowSplashScreenIconBackgroundColor`; removing it alone was not sufficient —
+       device testing then showed a rounded light-colored square nested inside the (correct)
+       dark full-screen background, with an unrounded dark square and the mark nested inside
+       *that*. Root cause, read from `SplashscreenContentDrawer`
+       (`frameworks/base`, `libs/WindowManager/Shell/.../startingsurface/`): with no
+       `windowSplashScreenAnimatedIcon` override, the splash renderer's `processAdaptiveIcon`
+       heuristic decides whether to draw only the foreground (scaled up, no container) or the
+       *entire* two-layer adaptive icon unmasked inside its own icon-sized container — and it
+       took the latter branch, so the launcher's full `ic_launcher_background`/`_foreground`
+       pair was drawn a second time, unmasked, nested inside the icon container. Fixed by
+       setting `android:windowSplashScreenAnimatedIcon` to a plain foreground drawable (the
+       `-night` pair resolves automatically by name), which makes the renderer take the
+       `mReplaceIcon` path and skip `processAdaptiveIcon` entirely — the mark is now placed
+       directly on `windowSplashScreenBackground`, with no adaptive-icon container drawn at
+       all. `android:windowSplashScreenIconBackgroundColor` remains deliberately unset.
+    4. *Low-resolution/blurry splash icon (follow-up to #3).* Fix #3 initially pointed
+       `windowSplashScreenAnimatedIcon` at the launcher's own `ic_launcher_foreground` — but the
+       splash icon container can be scaled up to 288dp, larger than that drawable's largest
+       density bucket (`drawable-xxxhdpi`, 432px), so it visibly upscaled/blurred on
+       higher-density devices. Added a dedicated `ic_launcher_foreground_splash.png` (and
+       `drawable-night` pair): a single, non-density-bucketed 1200x1200px PNG generated
+       directly from the original high-resolution source mark (not from the already-downscaled
+       432px adaptive-icon asset) at the same 0.43 content ratio, so it matches the launcher
+       icon's proportions without needing to be upscaled by the splash renderer. Both
+       `values-v31`/`values-night-v31` themes now reference this new drawable instead.
+       Re-verified with `:androidApp:assembleDebug` after each iteration.
+
+### Session Summary (Funding Readiness And Phase 2 Strategy)
 
 Date: 2026-07-14
 

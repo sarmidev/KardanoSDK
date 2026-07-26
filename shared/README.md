@@ -270,6 +270,43 @@ adds **no SDK public API**, does **not** change `:provider`, `:wallet`, or `:tx`
   (13 ADA, 2 UTxOs) ✓ · Prepare transaction ✓ · Sign locally ✓ · Send to preprod → honest
   "submission not supported". Live preprod mode is unchanged (real calls, faucet-funded address).
 
+## Brand mark and theme (Block 1.12-pre-d)
+
+Block 1.12-pre-d is a **visual/branding change only**: it replaces every placeholder/template icon
+and the Kotlin/KMP-inspired sample palette from Block 1.12-pre-b with the project's own,
+first-party icon mark and a matching Material 3 theme, ahead of the public landing page. It adds no
+SDK behavior, no SDK public API, no new dependency, and no
+`:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost` change; the guided flow, its
+MVI state/intents/reducer, and every use case/provider factory call are unchanged.
+
+- **The mark.** A violet-to-blue "K" beside a cyan-tinted, Cardano-style dot cluster — Sarmidev's
+  own artwork (see `docs/THIRD_PARTY_NOTICES.md`'s "First-party assets" table), not the Kotlin or
+  Cardano logo. It ships as a saturated **light** variant (for light surfaces) and a white/lilac
+  **dark** variant (for dark surfaces), both with verified-transparent backgrounds.
+- **Theme (`PlaygroundTheme.kt`).** The Kotlin/KMP-inspired purple/blue/orange scheme is replaced
+  with a violet/blue/cyan scheme matched to the mark (light primary `#5B3FD1` / secondary
+  `#216BB9` / tertiary `#006E88` on a cool `#FAF9FF` background; dark primary `#CDBDFF` / secondary
+  `#A6CEFF` / tertiary `#8FE3FF` on a violet-black `#0E0C13` background — neither pure white nor
+  pure black, so the mark reads clearly on top). A new `KardanoBrandColors` data class, provided
+  through a `LocalKardanoBrand` composition local, centralizes the five decorative accent hues
+  (`LandingSection.kt`'s capability/step-number dots) and every chip background/foreground pair
+  (`StatusBadge.kt`'s `Badge`/`StepStatus` chips) — each with a distinct dark-mode value, so dark
+  mode no longer reuses light-mode chip colors verbatim.
+- **Header mark (`PlaygroundHeader.kt`).** The Compose-drawn `KmpMark()` (a gradient rounded square
+  with two drawn chevrons) is replaced by `BrandMark()`, an `Image` that renders
+  `Res.drawable.kardano_mark_light` or `-dark` depending on `isSystemInDarkTheme()` — the same
+  signal `KardanoPlaygroundTheme` uses for its color scheme, so the mark and the surrounding hero
+  always agree. The two PNGs live under `composeResources/drawable/`; the unused JetBrains sample
+  drawable (`compose-multiplatform.xml`) was removed alongside them.
+- **Launchers and shells (outside `:shared`).** `:androidApp`'s adaptive icon, legacy mipmaps, and
+  visible app name; `iosApp`'s `AppIcon` dark-appearance slot, `AccentColor`, and display name; and
+  `:desktopApp`'s distribution/window icons and window title were all updated to the same mark and
+  palette — see this repository's top-level `docs/HANDOFF.md` for the per-platform detail, since
+  none of that lives in `:shared`.
+- **Not changed.** `PlaygroundScreen.kt`'s root gradient already read
+  `MaterialTheme.colorScheme.surface`/`background` rather than a hardcoded color, so it picks up
+  the new palette automatically; no edit was needed there.
+
 ### Test Wallet & Address Generation section (Block 1.6d, extended by Block 1.7b)
 
 The "Test Wallet & Address Generation" section restores `playground/TestWalletFixture.kt`'s

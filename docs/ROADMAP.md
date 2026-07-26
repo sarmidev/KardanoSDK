@@ -1284,6 +1284,24 @@ Proposed block sequence:
   to end; existing presenter/desktop tests (bare `:provider` default) are unchanged. Verified:
   `:shared:jvmTest`, `:shared:testAndroidHostTest`, `:shared:compileKotlinIosArm64`; `git diff
   --check` clean; no banned words. See `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
+- `1.12-pre-d` Brand assets and theme refresh — **Status: complete.** Outcome: every placeholder/
+  template icon (the Android robot launcher template, the Compose-drawn header mark) and the
+  Kotlin/KMP-inspired sample palette are replaced with the project's own first-party icon mark (a
+  violet-to-blue "K" beside a cyan-tinted, Cardano-style dot cluster, in verified-transparent light
+  and dark variants) and a matching violet/blue/cyan Material 3 theme. **Visual/branding only** —
+  no SDK public API, no `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost`
+  change, no MVI/flow change, no new runtime dependency. `PlaygroundTheme.kt` gained a
+  `KardanoBrandColors`/`LocalKardanoBrand` composition local so `StatusBadge.kt`/
+  `LandingSection.kt` no longer hardcode chip/accent hex values, each with distinct light/dark
+  pairs. The Android launcher is now a real adaptive icon (solid background + padded foreground
+  PNG, with a `-night` pair) plus regenerated legacy mipmaps; iOS gained a dark-appearance
+  `AppIcon` slot and a theme-matched `AccentColor`; Desktop gained `.icns`/`.ico`/`.png`
+  distribution icons and a runtime window/dock icon; all three shells now show the visible name
+  `Kardano SDK`. The source PNGs are recorded as first-party Sarmidev assets in
+  `docs/THIRD_PARTY_NOTICES.md`. Verified: `:shared:jvmTest`, `:shared:testAndroidHostTest`,
+  `:shared:compileKotlinIosArm64`, `:desktopApp:compileKotlin`, `:androidApp:assembleDebug`; `git
+  diff --check` clean; no banned words; manual light/dark review across all three platforms. See
+  `docs/PHASE_1_PLAN.md` and `docs/HANDOFF.md`.
 - `1.12` Phase 1 Closure / MVP Review — verify the full Android demo flow and document
   remaining limitations.
 

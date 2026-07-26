@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31) system splash-screen attributes (Block 1.12-pre-d). Without these, the
+  automatically-generated splash screen falls back to deriving its background from the theme,
+  which is more OEM-variable; setting `windowSplashScreenBackground` explicitly guarantees the
+  splash background matches the light theme's `background` token.
+
+  `windowSplashScreenAnimatedIcon` is set to a plain foreground drawable (not the launcher's
+  full adaptive icon) so the splash renderer takes the `mReplaceIcon` path in
+  `SplashscreenContentDrawer` (frameworks/base) and skips `processAdaptiveIcon`'s heuristic
+  entirely. That heuristic, when it falls through to its "draw whole icon" branch, renders the
+  full two-layer adaptive icon *unmasked* inside its own icon container — visible on real
+  devices as a nested background-color square behind the mark instead of the plain icon on the
+  splash background. Deliberately NOT setting `android:windowSplashScreenIconBackgroundColor`
+  either, so no extra icon-background container is drawn behind the icon — it is placed
+  directly on the `windowSplashScreenBackground` above.
+
+  It references a dedicated `ic_launcher_foreground_splash` drawable rather than the adaptive
+  icon's own `ic_launcher_foreground` because the splash icon container can be scaled up to
+  288dp — larger than the adaptive-icon foreground's largest density bucket (432px,
+  `drawable-xxxhdpi`), which visibly upscaled/blurred on higher-density devices.
+  `ic_launcher_foreground_splash.png` (and its `-night` pair) is a single, non-density-bucketed
+  1200x1200px PNG generated straight from the original high-resolution source mark, at the same
+  0.43 content ratio as the adaptive-icon foreground, so it looks identical in proportion but
+  does not need to be upscaled by the splash renderer.
+-->
+<resources>
+    <style name="Theme.KardanoSDK" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/kardano_background</item>
+        <item name="android:windowSplashScreenBackground">@color/kardano_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground_splash</item>
+    </style>
+</resources>

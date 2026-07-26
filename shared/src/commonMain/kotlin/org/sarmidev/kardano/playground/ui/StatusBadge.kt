@@ -12,20 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-// Fixed chip color pairs (background + foreground) chosen to stay readable in both the light
-// and dark themes, since each chip paints its own background. Sample-app styling only.
-private val ChipNeutralBg = Color(0xFFE7E0EB)
-private val ChipNeutralFg = Color(0xFF433A54)
-private val ChipInfoBg = Color(0xFFDBE4FF)
-private val ChipInfoFg = Color(0xFF1E3A8A)
-private val ChipSuccessBg = Color(0xFFD6F1E1)
-private val ChipSuccessFg = Color(0xFF0F6D3F)
-private val ChipLiveBg = Color(0xFFFFE0C2)
-private val ChipLiveFg = Color(0xFF8A4B00)
-private val ChipLoadingBg = Color(0xFFE9E0FF)
-private val ChipLoadingFg = Color(0xFF4B2FBF)
-private val ChipErrorBg = Color(0xFFFBDAD7)
-private val ChipErrorFg = Color(0xFF8A1C16)
+// Each chip's background/foreground pair now comes from LocalKardanoBrand (PlaygroundTheme.kt),
+// which supplies distinct light- and dark-theme values — see [Chip] below. No hex constants are
+// declared in this file (Block 1.12-pre-d); this keeps dark mode from reusing light-mode chip
+// colors verbatim.
 
 /** The visual tone of a [Badge]; each maps to a fixed background/foreground pair. */
 internal enum class BadgeTone { NEUTRAL, INFO, SUCCESS, LIVE }
@@ -44,34 +34,36 @@ internal data class StepStatus(val label: String, val tone: StepTone)
 
 @Composable
 internal fun StatusBadge(badge: Badge) {
+    val brand = LocalKardanoBrand.current
     val bg = when (badge.tone) {
-        BadgeTone.NEUTRAL -> ChipNeutralBg
-        BadgeTone.INFO -> ChipInfoBg
-        BadgeTone.SUCCESS -> ChipSuccessBg
-        BadgeTone.LIVE -> ChipLiveBg
+        BadgeTone.NEUTRAL -> brand.chipNeutralBg
+        BadgeTone.INFO -> brand.chipInfoBg
+        BadgeTone.SUCCESS -> brand.chipSuccessBg
+        BadgeTone.LIVE -> brand.chipLiveBg
     }
     val fg = when (badge.tone) {
-        BadgeTone.NEUTRAL -> ChipNeutralFg
-        BadgeTone.INFO -> ChipInfoFg
-        BadgeTone.SUCCESS -> ChipSuccessFg
-        BadgeTone.LIVE -> ChipLiveFg
+        BadgeTone.NEUTRAL -> brand.chipNeutralFg
+        BadgeTone.INFO -> brand.chipInfoFg
+        BadgeTone.SUCCESS -> brand.chipSuccessFg
+        BadgeTone.LIVE -> brand.chipLiveFg
     }
     Chip(text = badge.text, background = bg, foreground = fg)
 }
 
 @Composable
 internal fun StatusChip(status: StepStatus) {
+    val brand = LocalKardanoBrand.current
     val bg = when (status.tone) {
-        StepTone.IDLE -> ChipNeutralBg
-        StepTone.LOADING -> ChipLoadingBg
-        StepTone.SUCCESS -> ChipSuccessBg
-        StepTone.ERROR -> ChipErrorBg
+        StepTone.IDLE -> brand.chipNeutralBg
+        StepTone.LOADING -> brand.chipLoadingBg
+        StepTone.SUCCESS -> brand.chipSuccessBg
+        StepTone.ERROR -> brand.chipErrorBg
     }
     val fg = when (status.tone) {
-        StepTone.IDLE -> ChipNeutralFg
-        StepTone.LOADING -> ChipLoadingFg
-        StepTone.SUCCESS -> ChipSuccessFg
-        StepTone.ERROR -> ChipErrorFg
+        StepTone.IDLE -> brand.chipNeutralFg
+        StepTone.LOADING -> brand.chipLoadingFg
+        StepTone.SUCCESS -> brand.chipSuccessFg
+        StepTone.ERROR -> brand.chipErrorFg
     }
     Chip(text = status.label, background = bg, foreground = fg)
 }

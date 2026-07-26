@@ -1485,7 +1485,63 @@ Objective:
 
 **Status: complete.** `:shared:jvmTest` and `:shared:testAndroidHostTest` pass;
 `:shared:compileKotlinIosArm64` succeeds. `git diff --check` clean; no banned words on touched
-files. **Next: Block 1.12 (Phase 1 Closure / MVP Review).**
+files. **Next: Block 1.12-pre-d (Brand Assets And Theme Refresh).**
+
+### 1.12-pre-d Brand Assets And Theme Refresh
+
+Replace every placeholder/template icon and the Kotlin/KMP-inspired sample palette with the
+project's own, first-party icon mark and a matching Material 3 theme, ahead of building the public
+landing page. **Visual/branding only** — no SDK public API, no `:core`/`:crypto`/`:wallet`/`:tx`/
+`:provider`/`:provider-blockfrost` change, no MVI/flow change, no new runtime dependency.
+
+Context:
+
+- The owner produced the project's first definitive icon mark — a violet-to-blue "K" beside a
+  cyan-tinted, Cardano-style dot cluster — in a light variant (saturated, for light surfaces) and a
+  dark variant (white/lilac, for dark surfaces), each at low/medium/high resolution with verified
+  transparent backgrounds. Every prior icon (the Android robot template, a Compose-drawn
+  placeholder header mark) and the Kotlin/KMP-inspired palette were sample/template artifacts, not
+  the project's own identity.
+
+Objective:
+
+- Confirm both source PNGs have a fully transparent background and centered content (done via a
+  Pillow-based bounding-box check before generating any derived asset).
+- Centralize theme tokens in `PlaygroundTheme.kt`: a violet/blue/cyan Material 3 light/dark
+  `ColorScheme` matched to the mark, plus a new `KardanoBrandColors`/`LocalKardanoBrand`
+  composition local carrying the five decorative accent hues and the chip background/foreground
+  pairs `StatusBadge.kt`/`LandingSection.kt` previously hardcoded — each pair gets a distinct,
+  non-recycled dark-mode value.
+- Replace the Compose-drawn `KmpMark()` in `PlaygroundHeader.kt` with a `BrandMark()` `Image` that
+  picks the light/dark PNG (`shared/src/commonMain/composeResources/drawable/
+  kardano_mark_{light,dark}.png`) via `isSystemInDarkTheme()`, and delete the unused JetBrains
+  template drawable (`compose-multiplatform.xml`).
+- Rebuild the Android launcher as an adaptive icon (solid-color background XML plus a
+  density-specific foreground PNG of the mark, padded to the adaptive-icon safe zone) with a
+  `-night` pair for dark mode, regenerate the legacy pre-API-26 `mipmap-*dpi` PNGs (square +
+  circle-masked) as light/dark opaque tiles, and rename the visible app label to `Kardano SDK`.
+- Add an iOS dark-appearance `AppIcon` PNG and wire it into the existing `Contents.json` slot
+  (leaving `tinted` unpublished), set `AccentColor` to the theme's light/dark primary, and set the
+  visible display name to `Kardano SDK` without touching the bundle identifier.
+- Wire Desktop distribution icons (`.icns`/`.ico`/`.png`) into `nativeDistributions` and a runtime
+  window/dock icon into `Window(...)`, and rename the window title to `Kardano SDK`.
+- Record the source PNGs as first-party Sarmidev assets in `docs/THIRD_PARTY_NOTICES.md` (not a
+  tracked third-party component).
+
+Non-goals:
+
+- No redesign of the guided Wallet → Funds → Build → Sign → Submit flow, its MVI state/intents/
+  reducer, or any provider/wallet/tx call.
+- No new runtime dependency, no Gradle plugin change beyond the existing Compose-desktop
+  `nativeDistributions` DSL already in `desktopApp/build.gradle.kts`.
+- No Kotlin/Cardano third-party logo; the mark is Sarmidev's own artwork.
+
+**Status: complete.** `./gradlew :shared:jvmTest :shared:testAndroidHostTest
+:shared:compileKotlinIosArm64 :desktopApp:compileKotlin :androidApp:assembleDebug` pass; `git diff
+--check` clean; no banned words on touched files. Manual light/dark review covered the Android
+launcher (adaptive + legacy, day/night), the iOS AppIcon default/dark slots, the Desktop window/
+dock icon, and the in-app header/badges/buttons in both themes. **Next: Block 1.12 (Phase 1
+Closure / MVP Review).**
 
 ### 1.12 Phase 1 Closure / MVP Review
 
