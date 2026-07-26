@@ -1,0 +1,50 @@
+name: Deploy site
+
+# Publishes the dependency-free static landing page under site/ to GitHub Pages.
+#
+# Independent from the SDK Verify workflow: it adds no Gradle, Kotlin, or npm step, and never
+# runs on pull requests. It only builds and deploys on pushes to main that touch site/** or this
+# workflow file, plus manual dispatch, using the official GitHub Pages actions.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; let an in-flight run finish rather than cancelling it,
+# so a page is never left partially published.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy site/ to GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

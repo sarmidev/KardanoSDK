@@ -28,7 +28,7 @@ The signing-backend module records its pinned versions and a more detailed inven
 
 | Asset | Source | Note |
 |---|---|---|
-| Kardano SDK icon mark (light/dark variants, low/medium/high resolution PNGs) | Sarmidev (project owner) | First-party artwork, not a third-party component. Derived files — the Android adaptive-icon/legacy launcher PNGs, the iOS `AppIcon` PNGs, the Desktop `.icns`/`.ico`/`.png` icons, and the Compose header mark (`kardano_mark_light.png`/`kardano_mark_dark.png`) — are resized/padded/composited copies of these two source PNGs, added in Block 1.12-pre-d. It is not the Kotlin or Cardano logo. |
+| Kardano SDK icon mark (light/dark variants, low/medium/high resolution PNGs) | Sarmidev (project owner) | First-party artwork, not a third-party component. Derived files — the Android adaptive-icon/legacy launcher PNGs, the iOS `AppIcon` PNGs, the Desktop `.icns`/`.ico`/`.png` icons, the Compose header mark (`kardano_mark_light.png`/`kardano_mark_dark.png`), and the `site/assets/brand/` web derivatives (`kardano-mark-light.png`/`kardano-mark-dark.png` copies, plus `favicon-32.png`/`favicon-64.png`/`apple-touch-icon.png`/`og-image.png` resize/pad-only derivatives, added for the public landing page) — are resized/padded/composited copies of these two source PNGs, added in Block 1.12-pre-d and extended for the landing page. It is not the Kotlin or Cardano logo. |
 
 ## Release-time checklist
 
