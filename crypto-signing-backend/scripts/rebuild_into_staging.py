@@ -179,6 +179,13 @@ def rebuild_android(module_root: Path, staging: Path, env: dict[str, str]) -> No
     props = Path(ndk) / "source.properties"
     if props.is_file() and NDK_REVISION not in props.read_text(encoding="utf-8"):
         raise RebuildError(f"NDK at {ndk} is not revision {NDK_REVISION}")
+    for rust_target in (
+        "aarch64-linux-android",
+        "armv7-linux-androideabi",
+        "i686-linux-android",
+        "x86_64-linux-android",
+    ):
+        _ensure_target(rust_target, module_root=module_root, env=env)
     out = staging / "jniLibs"
     _run(
         [

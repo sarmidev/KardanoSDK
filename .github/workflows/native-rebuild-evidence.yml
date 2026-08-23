@@ -75,28 +75,56 @@ jobs:
           cargo ndk --version || true
           test -f "$ANDROID_NDK_HOME/source.properties" && cat "$ANDROID_NDK_HOME/source.properties"
           xcodebuild -version
-      - name: Rebuild into staging (README recipe)
+      - name: Rebuild macOS JVM into staging
         run: >-
           python3 crypto-signing-backend/scripts/rebuild_into_staging.py
-          --staging "$RUNNER_TEMP/native-rebuild-staging"
-          --groups macos-jvm,android,ios
-      - name: Compare staged bytes to committed natives
+          --staging "$RUNNER_TEMP/native-rebuild-macos-jvm"
+          --groups macos-jvm
+      - name: Compare macOS JVM staged bytes
         if: always()
         run: >-
           python3 crypto-signing-backend/scripts/verify-artifacts.py
           --module-root crypto-signing-backend
-          --staging "$RUNNER_TEMP/native-rebuild-staging/artifacts"
-          --groups macos-jvm,android,ios
-          --report "$RUNNER_TEMP/native-rebuild-staging/compare-report.json"
+          --staging "$RUNNER_TEMP/native-rebuild-macos-jvm/artifacts"
+          --groups macos-jvm
+          --report "$RUNNER_TEMP/native-rebuild-macos-jvm/compare-report.json"
+      - name: Rebuild Android into staging
+        if: always()
+        run: >-
+          python3 crypto-signing-backend/scripts/rebuild_into_staging.py
+          --staging "$RUNNER_TEMP/native-rebuild-android"
+          --groups android
+      - name: Compare Android staged bytes
+        if: always()
+        run: >-
+          python3 crypto-signing-backend/scripts/verify-artifacts.py
+          --module-root crypto-signing-backend
+          --staging "$RUNNER_TEMP/native-rebuild-android/artifacts"
+          --groups android
+          --report "$RUNNER_TEMP/native-rebuild-android/compare-report.json"
           --ndk-home "$ANDROID_NDK_HOME"
+      - name: Rebuild iOS into staging
+        if: always()
+        run: >-
+          python3 crypto-signing-backend/scripts/rebuild_into_staging.py
+          --staging "$RUNNER_TEMP/native-rebuild-ios"
+          --groups ios
+      - name: Compare iOS staged bytes
+        if: always()
+        run: >-
+          python3 crypto-signing-backend/scripts/verify-artifacts.py
+          --module-root crypto-signing-backend
+          --staging "$RUNNER_TEMP/native-rebuild-ios/artifacts"
+          --groups ios
+          --report "$RUNNER_TEMP/native-rebuild-ios/compare-report.json"
       - name: Upload staging report and rebuilt natives
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-rebuild-evidence-macos
           path: |
-            ${{ runner.temp }}/native-rebuild-staging/provenance.json
-            ${{ runner.temp }}/native-rebuild-staging/compare-report.json
-            ${{ runner.temp }}/native-rebuild-staging/artifacts
+            ${{ runner.temp }}/native-rebuild-macos-jvm
+            ${{ runner.temp }}/native-rebuild-android
+            ${{ runner.temp }}/native-rebuild-ios
           if-no-files-found: warn
           retention-days: 14
