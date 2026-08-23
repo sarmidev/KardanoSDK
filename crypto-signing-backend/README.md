@@ -249,13 +249,15 @@ unparseable labels fail), Verneed/Vernaux chains bound to one
 uses `--defined-only --format=posix` exact records, not substring
 search. Printable NUL-terminated absolute path-like strings may use
 only the documented remap prefixes (`/cargo-target`, `/kardano`,
-`/rustc`, `/rustup`, `/cargo`, `/home/rebuild`, `/runner-temp`,
-`/runner-workspace`) and the runtime prefixes (`/lib64`, `/lib`,
-`/usr/lib`, `/usr/lib64`). Match is exact prefix plus `/`, so
-`/cargo-evil` is not `/cargo`. `/tmp/untracked-host` and
-`/usr/local/private-build` are rejected. Run `32669707437` is
-superseded; a fresh Phase A/B at this verifier tip is required before
-any promotion review.
+`/rustc`, `/rust/deps`, `/rustup`, `/cargo`, `/home/rebuild`,
+`/runner-temp`, `/runner-workspace`) and the runtime prefixes
+(`/lib64`, `/lib`, `/usr/lib`, `/usr/lib64`). `/rust/deps` is the
+rustc 1.97 compiler-crate remap observed on ubuntu-22.04 run
+`32670749687` (gimli/addr2line/rustc-demangle/miniz_oxide). Match is
+exact prefix plus `/`, so `/cargo-evil` is not `/cargo`.
+`/tmp/untracked-host` and `/usr/local/private-build` are rejected.
+Runs `32669707437` and `32670749687` are superseded; a fresh Phase A/B
+at this verifier tip is required before any promotion review.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

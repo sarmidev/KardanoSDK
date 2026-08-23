@@ -213,9 +213,11 @@ at `linux-x86-64/`. The ELF verifier accepts only full-string
 Verneed/Vernaux inside one `SHT_GNU_verneed` section, requires canonical
 section 0 and one `.dynamic`/`PT_DYNAMIC` pair, and allowlists
 NUL-terminated absolute path-like strings against the documented remap
-and runtime prefixes only. Permissions stay `contents: read`. Uploads use
+and runtime prefixes only (`/rust/deps` is the rustc 1.97 compiler-crate
+remap seen on run `32670749687`). Permissions stay `contents: read`. Uploads use
 `if-no-files-found: error`. The job does not write CHECKSUMS or committed
-`src/`. ubuntu-24.04 artifacts and Linux run `32669707437` are superseded.
+`src/`. ubuntu-24.04 artifacts and Linux runs `32669707437` and
+`32670749687` are superseded.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

@@ -743,10 +743,16 @@ class LinuxElfVerifyTests(unittest.TestCase):
                     build_elf(embed=f"{prefix}/ok\x00".encode("ascii"))
                 )
                 self.assertEqual(record.forbidden_paths, [])
+        rustc_dep = elf.parse_elf64_le_x86_64_dso(
+            build_elf(embed=b"/rust/deps/gimli-0.32.3/src/read/abbrev.rs\x00")
+        )
+        self.assertEqual(rustc_dep.forbidden_paths, [])
         near_misses = (
             b"/cargo-evil\x00",
             b"/home/rebuild-extra\x00",
             b"/lib64-extra\x00",
+            b"/rust/deps-evil\x00",
+            b"/rust/not-deps\x00",
             b"/usr/local/private-build\x00",
             b"/tmp/untracked-host\x00",
             b"/home/runner\x00",

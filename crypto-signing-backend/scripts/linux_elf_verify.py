@@ -34,9 +34,9 @@ Policy (documented, not a strength claim):
   ``Elf64_Dyn`` entsize, ``sh_link`` to ``.dynstr``, and exact file
   correspondence with the single ``PT_DYNAMIC``
 - printable NUL-terminated absolute path-like strings (start with ``/``,
-  length >= 2) may use only documented remap prefixes and the listed
-  runtime prefixes, matched as ``path == prefix`` or
-  ``path.startswith(prefix + "/")``
+  length >= 2) may use only documented remap prefixes (including rustc
+  ``/rust/deps``) and the listed runtime prefixes, matched as
+  ``path == prefix`` or ``path.startswith(prefix + "/")``
 """
 
 from __future__ import annotations
@@ -175,7 +175,8 @@ DEBUG_SECTION_PREFIXES = (".debug_", ".zdebug_")
 ALLOWED_REMAP_PREFIXES = (
     "/cargo-target",  # staging-owned CARGO_TARGET_DIR
     "/kardano",  # repository / module root
-    "/rustc",  # rustc sysroot
+    "/rustc",  # rustc sysroot (our --remap-path-prefix)
+    "/rust/deps",  # rustc 1.97 compiler-crate remap (panic/backtrace)
     "/rustup",  # RUSTUP_HOME
     "/cargo",  # CARGO_HOME
     "/home/rebuild",  # $HOME

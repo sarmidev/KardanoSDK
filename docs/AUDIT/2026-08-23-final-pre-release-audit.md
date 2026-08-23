@@ -308,7 +308,8 @@ On `fix/native-build-and-platform-evidence`:
   baseline measured at runtime) with a fail-closed ELF64 verifier
   (full-string `GLIBC_*` tuples, Verneed bound to one `SHT_GNU_verneed`,
   canonical section 0, one `.dynamic`/`PT_DYNAMIC`, path allowlist of
-  remap prefixes plus `/lib64` `/lib` `/usr/lib` `/usr/lib64`) and
-  two-build identity; it is not in CHECKSUMS until Phase A/B re-review
-  is GO and a promotion commit lands. Run `32669707437` is superseded.
+  remap prefixes plus `/lib64` `/lib` `/usr/lib` `/usr/lib64` and
+  rustc `/rust/deps`) and two-build identity; it is not in CHECKSUMS
+  until Phase A/B re-review is GO and a promotion commit lands. Runs
+  `32669707437` and `32670749687` are superseded.
   Linux ARM, musl, older glibc, and Windows remain out of scope.
