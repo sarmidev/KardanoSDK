@@ -25,9 +25,12 @@ resize the window, or use your browser's device toolbar for the mobile layout. T
 JavaScript-driven theme switcher; it follows the system setting only.
 
 In-page hash links (`#approach`, `#try-the-playground`, `#roadmap`, and the other section ids,
-plus the skip-link target `#main-content`) use `scroll-padding-top` / `scroll-margin-top` so
-the heading is not hidden under the sticky header. Keyboard and hash navigation still need a
-manual pass after visual changes.
+plus the skip-link target `#main-content`) use one offset: `html { scroll-padding-top }` driven
+by `--anchor-scroll-offset`. The default is `5.5rem`; the existing 860px and 560px breakpoints
+raise it to `8rem` and `10.5rem` so a wrapped header/nav has more reserved space. Section ids
+do not also set `scroll-margin-top`. Those rem values were chosen from the header/nav layout
+in `styles.css`; keyboard and hash navigation still need a manual browser pass after visual
+changes and are not claimed as verified here.
 
 ## Content-source rules
 

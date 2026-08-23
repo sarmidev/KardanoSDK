@@ -72,7 +72,8 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   expanded/collapsed state plus expand/collapse actions on Technical details, Advanced,
   roadmap phases, and other disclosures.
 - Public landing page hash targets (`#approach`, `#try-the-playground`, and the other section
-  ids) now reserve space under the sticky header via `scroll-padding-top` / `scroll-margin-top`.
+  ids) reserve space under the sticky header via one `scroll-padding-top` offset
+  (`--anchor-scroll-offset`), raised at the 860px and 560px breakpoints when header/nav wrap.
 
 ### Changed
 

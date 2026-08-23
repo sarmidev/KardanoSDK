@@ -616,7 +616,11 @@ Summary:
     an actual project-id change and when live mode is disabled. `NonCancellable` gated fakes
     prove identity checks discard stale results after ResetFlow, address edit/fill, repeated
     UTxO/params loads, and provider-configuration changes. The project id is never logged or
-    persisted. Landing hash-offset (sticky header) is a follow-up commit on the same branch.
+    persisted.
+  - **Commit 6 — landing anchor offset.** One scroll-offset mechanism (`--anchor-scroll-offset`
+    + `scroll-padding-top` on `html`); the previous simultaneous `scroll-margin-top` on section
+    ids is removed. The variable is raised at the existing 860px / 560px breakpoints for a
+    wrapped header/nav. Site docs do not claim untested browser/hash behavior.
   - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
     Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
     pass. The factory cache key remains a second in-memory copy of the project id.

@@ -42,6 +42,10 @@
     "Apple Color Emoji", "Segoe UI Emoji";
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Single sticky-header offset for hash / skip-link targets. Raised at the
+     existing 860px / 560px breakpoints when header + nav wrap. */
+  --anchor-scroll-offset: 5.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -79,8 +83,7 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  /* Sticky header is ~4.5–5.5rem tall; keep hash / skip-link targets visible beneath it. */
-  scroll-padding-top: 5.5rem;
+  scroll-padding-top: var(--anchor-scroll-offset);
 }
 
 body {
@@ -161,19 +164,6 @@ button:focus-visible,
   position: sticky;
   top: 0;
   z-index: 10;
-}
-
-#top,
-#hero,
-#evidence,
-#approach,
-#what-works-today,
-#try-the-playground,
-#current-limits,
-#roadmap,
-#pilot-contact,
-#main-content {
-  scroll-margin-top: 5.5rem;
 }
 
 .header-row {
@@ -557,6 +547,10 @@ section {
 }
 
 @media (max-width: 860px) {
+  :root {
+    --anchor-scroll-offset: 8rem;
+  }
+
   .hero-grid,
   .two-col {
     grid-template-columns: 1fr;
@@ -569,6 +563,10 @@ section {
 }
 
 @media (max-width: 560px) {
+  :root {
+    --anchor-scroll-offset: 10.5rem;
+  }
+
   .site-nav {
     gap: 0.6rem 0.9rem;
   }
