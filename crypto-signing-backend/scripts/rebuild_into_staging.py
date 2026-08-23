@@ -34,6 +34,31 @@ class RebuildError(RuntimeError):
     pass
 
 
+def pin_ndk_env(env: dict[str, str], ndk_home: Path) -> None:
+    """Point every NDK env name at the pinned tree.
+
+    macos-26 images export ANDROID_NDK / ANDROID_NDK_HOME / ANDROID_NDK_ROOT
+    to 27.3.13750724. cargo-ndk honors ANDROID_NDK_HOME, but leaving the
+    other names on the image default would mix revisions in logs.
+    """
+    path = str(ndk_home)
+    env["ANDROID_NDK_HOME"] = path
+    env["ANDROID_NDK_ROOT"] = path
+    env["ANDROID_NDK"] = path
+
+
+def require_pinned_ndk(ndk_home: Path) -> Path:
+    props = ndk_home / "source.properties"
+    if not props.is_file():
+        raise RebuildError(f"NDK source.properties missing at {ndk_home}")
+    text = props.read_text(encoding="utf-8")
+    if toolchain.NDK_REVISION not in text:
+        raise RebuildError(
+            f"NDK at {ndk_home} is not revision {toolchain.NDK_REVISION}"
+        )
+    return ndk_home
+
+
 class CommandRecorder:
     def __init__(self, log_dir: Path) -> None:
         self.log_dir = log_dir
@@ -198,6 +223,8 @@ def base_env(
     env["ZERO_AR_DATE"] = toolchain.ZERO_AR_DATE
     ndk = env.get("ANDROID_NDK_HOME") or env.get("ANDROID_NDK_ROOT")
     ndk_home = Path(ndk) if ndk else None
+    if ndk_home is not None:
+        pin_ndk_env(env, ndk_home)
     pairs = toolchain.remap_pairs(
         module_root=module_root,
         cargo_target_dir=cargo_target_dir,
@@ -314,10 +341,8 @@ def rebuild_android(
     ndk = env.get("ANDROID_NDK_HOME") or env.get("ANDROID_NDK_ROOT")
     if not ndk:
         raise RebuildError("ANDROID_NDK_HOME is required for Android rebuilds")
-    ndk_home = Path(ndk)
-    props = ndk_home / "source.properties"
-    if props.is_file() and toolchain.NDK_REVISION not in props.read_text(encoding="utf-8"):
-        raise RebuildError(f"NDK at {ndk} is not revision {toolchain.NDK_REVISION}")
+    ndk_home = require_pinned_ndk(Path(ndk))
+    pin_ndk_env(env, ndk_home)
     android_host = toolchain.assert_android_host(ndk_home)
     (staging / "android-host.json").write_text(
         json.dumps(android_host, indent=2, sort_keys=True) + "\n",

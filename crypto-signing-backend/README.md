@@ -178,7 +178,9 @@ dylib install name other than `@rpath/libkardano_ed25519_bip32_signing.dylib` is
 failed compare.
 
 `.github/workflows/native-rebuild-evidence.yml` pins `macos-26` and Xcode `26.6`
-(`17F113`). A clean runner rebuilds into a fresh staging target and compares hashes,
+(`17F113`). The image default NDK is `27.3.13750724`; the workflow unsets
+`ANDROID_NDK*` and installs revision `27.2.12479018` under a required-empty dest.
+A clean runner rebuilds into a fresh staging target and compares hashes,
 architectures, symbols, install names, and evidence against
 `rebuild-candidates/CANDIDATE_MANIFEST.sha256` when that file exists, otherwise
 against `CHECKSUMS.sha256`. Uploads use `if-no-files-found: error`. The workflow

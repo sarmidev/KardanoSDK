@@ -108,26 +108,6 @@ jobs:
             fi
             arch -x86_64 /usr/bin/true
           fi
-      - name: Install NDK 27.2.12479018
-        run: |
-          NDK_HOME=$(python3 crypto-signing-backend/scripts/install_ndk.py \
-            --dest "$RUNNER_TEMP/kardano-ndk" \
-            --cache-zip "$RUNNER_TEMP/android-ndk-r27c-darwin.zip" \
-            --print-home)
-          echo "NDK_HOME=$NDK_HOME"
-          echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$NDK_HOME" >> "$GITHUB_ENV"
-      - name: Show rustc, cargo-ndk, NDK, and linker
-        run: |
-          rustc --version --verbose
-          cargo --version --verbose
-          cargo ndk --version
-          test -f "$ANDROID_NDK_HOME/source.properties" && cat "$ANDROID_NDK_HOME/source.properties"
-          xcodebuild -version
-          xcode-select -p
-          ld -v || true
-          file "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang"
-          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang" --version
       - name: Choose compare mode
         run: |
           if [ -f crypto-signing-backend/rebuild-candidates/CANDIDATE_MANIFEST.sha256 ]; then
@@ -137,7 +117,64 @@ jobs:
             echo "COMPARE_MODE=committed" >> "$GITHUB_ENV"
             echo "MANIFEST=crypto-signing-backend/CHECKSUMS.sha256" >> "$GITHUB_ENV"
           fi
+      - name: Install NDK 27.2.12479018
+        run: |
+          # macos-26 images export ANDROID_NDK* to 27.3.13750724. Ignore those
+          # names so install_ndk.py cannot treat the image NDK as pinned 27.2.
+          unset ANDROID_NDK_HOME ANDROID_NDK_ROOT ANDROID_NDK
+          NDK_HOME=$(python3 crypto-signing-backend/scripts/install_ndk.py \
+            --dest "$RUNNER_TEMP/kardano-ndk" \
+            --cache-zip "$RUNNER_TEMP/android-ndk-r27c-darwin.zip" \
+            --require-dest \
+            --print-home | tail -n 1)
+          if [ -z "$NDK_HOME" ]; then
+            echo "install_ndk.py printed an empty NDK home"
+            exit 1
+          fi
+          if [ ! -f "$NDK_HOME/source.properties" ]; then
+            echo "pinned NDK missing source.properties at $NDK_HOME"
+            exit 1
+          fi
+          if ! grep -q "27.2.12479018" "$NDK_HOME/source.properties"; then
+            echo "pinned NDK revision is not 27.2.12479018"
+            cat "$NDK_HOME/source.properties"
+            exit 1
+          fi
+          echo "NDK_HOME=$NDK_HOME"
+          echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$NDK_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$NDK_HOME" >> "$GITHUB_ENV"
+      - name: Show rustc, cargo-ndk, NDK, and linker
+        run: |
+          rustc --version --verbose
+          cargo --version --verbose
+          cargo ndk --version
+          if [ -z "${ANDROID_NDK_HOME:-}" ]; then
+            echo "ANDROID_NDK_HOME is unset after NDK install"
+            exit 1
+          fi
+          cat "$ANDROID_NDK_HOME/source.properties"
+          if ! grep -q "27.2.12479018" "$ANDROID_NDK_HOME/source.properties"; then
+            echo "ANDROID_NDK_HOME is not revision 27.2.12479018"
+            exit 1
+          fi
+          xcodebuild -version
+          xcode-select -p
+          ld -v || true
+          CLANG="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang"
+          if [ ! -x "$CLANG" ]; then
+            echo "pinned NDK clang missing: $CLANG"
+            ls -la "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" || true
+            exit 1
+          fi
+          file "$CLANG"
+          if [ "$(uname -m)" = "arm64" ]; then
+            arch -x86_64 "$CLANG" --version
+          else
+            "$CLANG" --version
+          fi
       - name: Rebuild macOS JVM into staging
+        if: always()
         run: >-
           python3 crypto-signing-backend/scripts/rebuild_into_staging.py
           --staging "$RUNNER_TEMP/native-rebuild-macos-jvm"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -280,6 +281,75 @@ class EvidenceAndManifestTests(unittest.TestCase):
         self.assertIn("candidate-mismatch", kinds)
         self.assertIn("extra-staged", kinds)
         self.assertIn("missing-staged", kinds)
+
+
+class PinnedNdkTests(unittest.TestCase):
+    def test_require_dest_ignores_image_ndk_env(self) -> None:
+        import install_ndk as ndk_install
+
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        image = root / "ndk-27.3"
+        image.mkdir()
+        (image / "source.properties").write_text(
+            "Pkg.Revision = 27.3.13750724\n",
+            encoding="utf-8",
+        )
+        dest = root / "kardano-ndk"
+        pinned = dest / "android-ndk-r27c"
+        pinned.mkdir(parents=True)
+        (pinned / "source.properties").write_text(
+            "Pkg.Revision = 27.2.12479018\n",
+            encoding="utf-8",
+        )
+        previous = os.environ.get("ANDROID_NDK_HOME")
+        os.environ["ANDROID_NDK_HOME"] = str(image)
+        self.addCleanup(
+            lambda: (
+                os.environ.__setitem__("ANDROID_NDK_HOME", previous)
+                if previous is not None
+                else os.environ.pop("ANDROID_NDK_HOME", None)
+            )
+        )
+        from io import StringIO
+        from unittest.mock import patch
+
+        with patch("sys.stdout", new=StringIO()) as out:
+            rc = ndk_install.main(
+                ["--dest", str(dest), "--require-dest", "--print-home"]
+            )
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.getvalue().strip(), str(pinned))
+        self.assertEqual(ndk_install.dest_ndk(dest), pinned)
+
+    def test_missing_source_properties_is_rejected(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        with self.assertRaises(rebuild.RebuildError):
+            rebuild.require_pinned_ndk(root / "missing-ndk")
+
+    def test_wrong_ndk_revision_is_rejected(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        ndk = root / "ndk-27.3"
+        ndk.mkdir()
+        (ndk / "source.properties").write_text(
+            "Pkg.Revision = 27.3.13750724\n",
+            encoding="utf-8",
+        )
+        with self.assertRaises(rebuild.RebuildError):
+            rebuild.require_pinned_ndk(ndk)
+
+    def test_pin_ndk_env_overrides_all_names(self) -> None:
+        env = {
+            "ANDROID_NDK": "/image/ndk/27.3.13750724",
+            "ANDROID_NDK_HOME": "/image/ndk/27.3.13750724",
+            "ANDROID_NDK_ROOT": "/image/ndk/27.3.13750724",
+        }
+        rebuild.pin_ndk_env(env, Path("/tmp/android-ndk-r27c"))
+        self.assertEqual(env["ANDROID_NDK"], "/tmp/android-ndk-r27c")
+        self.assertEqual(env["ANDROID_NDK_HOME"], "/tmp/android-ndk-r27c")
+        self.assertEqual(env["ANDROID_NDK_ROOT"], "/tmp/android-ndk-r27c")
 
 
 class ToolchainFlagTests(unittest.TestCase):

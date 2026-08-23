@@ -31,7 +31,9 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `CARGO_TARGET_DIR`, remapped absolute source roots, a link-time
   `@rpath/libkardano_ed25519_bip32_signing.dylib` install name, fail-closed
   `nm`/`lipo`/`file` checks, and a pinned `macos-26` / Xcode 26.6 runner. Gate 1 is
-  still NO-GO until local candidate hashes match a clean runner.
+  still NO-GO until local candidate hashes match a clean runner. macos-26 image
+  `ANDROID_NDK*` defaults to `27.3.13750724`; the rebuild job now ignores those
+  names and fail-closes on any NDK other than `27.2.12479018`.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

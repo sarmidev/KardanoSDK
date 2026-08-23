@@ -7,7 +7,9 @@ SHA-256 of the same bytes in the install report. It does not invent a
 SHA-256 pin before the download.
 
 If ANDROID_NDK_HOME already points at revision 27.2.12479018, the zip is
-not downloaded.
+not downloaded — unless `--require-dest` is set, in which case only the
+`--dest` tree is accepted. macos-26 runners export 27.3.13750724 and must
+use `--require-dest`.
 """
 
 from __future__ import annotations
@@ -59,6 +61,13 @@ def ndk_revision(ndk_home: Path) -> str:
         if line.startswith("Pkg.Revision"):
             return line.split("=", 1)[-1].strip()
     return ""
+
+
+def dest_ndk(dest: Path) -> Path | None:
+    extracted = dest / f"android-ndk-{NDK_RELEASE}"
+    if ndk_revision(extracted) == NDK_REVISION:
+        return extracted
+    return None
 
 
 def existing_ndk() -> Path | None:
@@ -132,9 +141,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the NDK home path on stdout.",
     )
+    parser.add_argument(
+        "--require-dest",
+        action="store_true",
+        help=(
+            "Ignore ANDROID_NDK_HOME/ROOT and default SDK copies. Only accept "
+            f"or install revision {NDK_REVISION} under --dest. Needed on "
+            "macos-26 runners whose image default is 27.3.13750724."
+        ),
+    )
     args = parser.parse_args(argv)
     try:
-        present = existing_ndk()
+        present = dest_ndk(args.dest) if args.require_dest else existing_ndk()
         if present is not None:
             if args.print_home:
                 print(present)

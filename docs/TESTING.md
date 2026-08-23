@@ -200,8 +200,11 @@ python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
 ```
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
-Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. The job
-compares hashes/arch/symbols/install names against the candidate manifest when
+Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare
+mode is chosen before NDK install so a diagnostic failure cannot skip the
+manifest. The job installs NDK `27.2.12479018` into a dest it owns and ignores
+the image `ANDROID_NDK*` value (`27.3.13750724`). It compares
+hashes/arch/symbols/install names against the candidate manifest when
 present, otherwise CHECKSUMS. Uploads use `if-no-files-found: error`. It never
 writes staged copies over `src/`. CARGO_TARGET_DIR is staging-owned and must be
 empty; the module `target/` is refused.
