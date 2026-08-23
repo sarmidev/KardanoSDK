@@ -90,7 +90,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 3 | `fix/playground-operation-lifecycle` | `a34afdc` | Generation/token lifecycle and accessibility semantics |
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
-| 6 | `fix/build-and-ci-reproducibility` | in progress, stacked on `90fe0ee` | Five commits: Actions, toolchain group, crypto review, locks/verification, Android lint CI. |
+| 6 | `fix/build-and-ci-reproducibility` | in progress, stacked on `90fe0ee` | Original five commits plus review-fix commits. Verify is green on run `32655202142`. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -109,7 +109,11 @@ Date: 2026-08-23
   run Verify on `push` to `fix/**`. Legacy square launchers were
   regenerated as a rounded-rect silhouette. Android lint Debug/Release
   is a CI error (`warningsAsErrors`); that lint-CI finding is **closed**.
-  Ubuntu Verify evidence was still pending when this note was written.
+  Verify run `32654915900` (head `0786237`) failed on Ubuntu and
+  macOS-arm64: four Maven Central parent/BOM metadata files missing
+  from `gradle/verification-metadata.xml`. Run `32655202142` (head
+  `5201d63`) is **green** (all six jobs):
+  https://github.com/sarmidev/KardanoSDK/actions/runs/32655202142
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
   `3936047`) — four original commits complete, plus review-fix commits.**
   - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now
