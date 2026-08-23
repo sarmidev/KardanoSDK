@@ -30,8 +30,11 @@ internal val blockfrostJson: Json = Json { ignoreUnknownKeys = true }
  *
  * [HttpTimeout] is installed from `ktor-client-core` (no extra dependency). Default bounds
  * are [BlockfrostHttpTimeoutPolicy.Default]: 10s connect, 30s request, 30s socket. There is
- * no `HttpRequestRetry` plugin and no other automatic retry: a failed attempt is returned
- * as a typed error. Submit is never retried.
+ * no `HttpRequestRetry` plugin: a failed attempt is returned as a typed error. That plugin
+ * policy is separate from engine-level replay. On Android, OkHttp's default
+ * `retryOnConnectionFailure(true)` is explicitly set to `false` so a connection failure
+ * cannot replay `POST /tx/submit`. CIO (JVM) and Darwin (iOS) do not enable an equivalent
+ * automatic request replay.
  *
  * @param timeouts test-only override for the installed [HttpTimeout] values. Production
  *   callers use the default.

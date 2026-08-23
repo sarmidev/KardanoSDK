@@ -122,6 +122,13 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
   through an internal policy seam (no 30s sleep), that `configureBlockfrost` installs
   the plugin, that a delayed `MockEngine` handler with a shortened request timeout maps
   to `Transport` for both read and submit, and that submit is attempted once.
+- `BlockfrostErrorDetailTest` covers empty/malformed bodies, a huge raw body, a complete
+  envelope with a long `message` field, and a UTF-8 4-byte code point split by the byte
+  budget. Public detail stays within 500 characters; a filled byte budget is not parsed
+  as JSON.
+- `BlockfrostOkHttpEngineTest` (androidHostTest) asserts
+  `blockfrostOkHttpClient().retryOnConnectionFailure == false`. That is the engine-level
+  submit-replay switch, not Ktor `HttpRequestRetry`.
 - Wallet and transaction (JVM) tests: `./gradlew :wallet:jvmTest :tx:jvmTest`
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`

@@ -56,8 +56,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 - Explicit Blockfrost HTTP timeouts via Ktor `HttpTimeout` (already in `ktor-client-core`;
   no new dependency): connect 10s, request 30s, socket 30s. Timeout failures map to typed
-  `Transport` errors. There is no automatic retry; submit is never retried. Coroutine
-  cancellation is still rethrown.
+  `Transport` errors. There is no Ktor `HttpRequestRetry` plugin. Android OkHttp is built
+  with `retryOnConnectionFailure(false)` so a connection failure cannot replay submit
+  (engine-level, distinct from the Ktor plugin). CIO and Darwin do not enable an equivalent
+  automatic request replay. Coroutine cancellation is still rethrown.
+- Blockfrost error `detail` is read from a bounded response-body prefix (500 characters
+  publicly; at most 2004 UTF-8 bytes from the channel). A filled byte budget is not parsed
+  as JSON; envelope `message`/`error` fields are capped to the same 500-character budget.
 - `ProviderError.RemoteStatus` now carries an optional `detail` (response-body text only;
   default `null`, source-compatible with existing `RemoteStatus(code)` call sites), matching
   `SubmitError.RemoteStatus`.

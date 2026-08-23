@@ -71,8 +71,17 @@ stay HTTP-free. Per-platform engines: OkHttp (Android), CIO (JVM), Darwin (iOS).
 
 Every client installs Ktor `HttpTimeout` from existing `ktor-client-core` (no extra
 dependency): connect 10 seconds, request 30 seconds, socket 30 seconds. There is no
-automatic retry plugin. Submit is never retried. Timeout failures map to typed
-`Transport` errors; coroutine cancellation is rethrown.
+Ktor `HttpRequestRetry` plugin. That plugin policy is separate from engine-level
+replay: Android OkHttp is built with `retryOnConnectionFailure(false)` so a connection
+failure cannot replay `POST /tx/submit`. CIO (JVM) and Darwin (iOS) do not enable an
+equivalent automatic request replay. Timeout failures map to typed `Transport` errors;
+coroutine cancellation is rethrown.
+
+Error `detail` is read from a bounded prefix of the response body channel
+(`MAX_ERROR_DETAIL_CHARS` characters; the reader pulls at most
+`(MAX_ERROR_DETAIL_CHARS + 1) * 4` UTF-8 bytes and does not materialize the rest).
+A filled byte budget is not parsed as JSON. Envelope `message`/`error` fields are
+capped to the same character budget.
 
 ## API keys / secrets
 

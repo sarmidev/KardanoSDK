@@ -127,19 +127,18 @@ public class BlockfrostTxSubmitProvider internal constructor(
      * codes are translated only here, inside this module: `400` (the node rejected the
      * transaction itself) to [SubmitError.Rejected], `429` to [SubmitError.RateLimited], and
      * any other non-2xx code (for example `403`, `404`, `418`, `425`, `500`) to
-     * [SubmitError.RemoteStatus]. When available, [detailFromBlockfrostBody] extracts a
-     * human-readable detail from Blockfrost's JSON error envelope or, failing that, the
-     * raw response body. It reads only the response body.
+     * [SubmitError.RemoteStatus]. When available, [detailFromBlockfrostResponse] reads a
+     * bounded prefix of the response body channel (never request headers, never the full
+     * body via [bodyAsText]) and maps the JSON envelope or raw prefix to detail.
      */
     private suspend fun statusError(response: HttpResponse): SubmitError {
-        val bodyText = try {
-            response.bodyAsText()
+        val detail = try {
+            detailFromBlockfrostResponse(response)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            ""
+        } catch (_: Exception) {
+            null
         }
-        val detail = detailFromBlockfrostBody(bodyText)
         return when (response.status) {
             HttpStatusCode.BadRequest -> SubmitError.Rejected(
                 code = response.status.value,

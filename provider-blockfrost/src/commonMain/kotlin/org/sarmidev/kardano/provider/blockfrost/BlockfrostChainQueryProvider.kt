@@ -5,7 +5,6 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import org.sarmidev.kardano.KardanoResult
@@ -257,18 +256,18 @@ public class BlockfrostChainQueryProvider internal constructor(
      * Maps a non-success HTTP response to a provider-neutral [ProviderError]. HTTP status
      * codes are translated to [ProviderError] only here, inside this module: `429` to
      * [ProviderError.RateLimited], `404` to [ProviderError.NotFound], and any other non-2xx
-     * code to [ProviderError.RemoteStatus]. [detailFromBlockfrostBody] reads only
-     * [HttpResponse.bodyAsText] — never request headers or request configuration.
+     * code to [ProviderError.RemoteStatus]. [detailFromBlockfrostResponse] reads a bounded
+     * prefix of the response body channel only — never request headers or request
+     * configuration, and never [io.ktor.client.statement.bodyAsText].
      */
     private suspend fun statusError(response: HttpResponse): ProviderError {
-        val bodyText = try {
-            response.bodyAsText()
+        val detail = try {
+            detailFromBlockfrostResponse(response)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            ""
+            null
         }
-        val detail = detailFromBlockfrostBody(bodyText)
         return when (response.status) {
             HttpStatusCode.TooManyRequests -> ProviderError.RateLimited
             HttpStatusCode.NotFound -> ProviderError.NotFound

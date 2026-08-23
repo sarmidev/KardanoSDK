@@ -219,4 +219,15 @@ Tests assert the installed plugin and the documented bounds through an internal
 `BlockfrostHttpTimeoutPolicy` seam, and use a shortened request timeout plus a delayed
 `MockEngine` handler to map timeout to `Transport` without sleeping for 30s.
 
+This addendum's "no automatic retry" refers to the Ktor plugin layer. Engine-level replay
+is a separate switch: OkHttp defaults to `retryOnConnectionFailure(true)`, which can
+replay `POST /tx/submit` after a connection failure. The Android engine now builds OkHttp
+with `retryOnConnectionFailure(false)`. CIO and Darwin do not expose an equivalent
+automatic replay default.
+
+Error `detail` is read from a bounded prefix of the response body channel (500 characters
+publicly; the reader pulls at most 2004 UTF-8 bytes — `(500 + 1) * 4` — and does not
+materialize the rest). A filled byte budget is not parsed as JSON. Envelope `message` /
+`error` fields are capped to the same 500-character budget.
+
 No other decision in this ADR changes.
