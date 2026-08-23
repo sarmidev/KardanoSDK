@@ -13,7 +13,9 @@ The current product thesis is intentionally narrow:
 
 Phase 0 established the foundation. Phase 1 delivered an Android-primary, ADA-only preprod
 demonstration: a cited fixture wallet, provider query, transaction building, scoped local signing,
-and Blockfrost submission. The full delivery record is in `docs/ROADMAP.md`.
+and Blockfrost submission. The full delivery record is in
+[docs/DELIVERY_RECORD.md](DELIVERY_RECORD.md). [docs/ROADMAP.md](ROADMAP.md) remains the
+overview of delivered scope, current focus, and planned direction.
 
 ## 2. Why This Exists
 

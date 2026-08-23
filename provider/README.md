@@ -4,7 +4,7 @@ The read-only Cardano chain query boundary for Kardano SDK, introduced in Phase 
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Testnet/preprod only. No real funds.
+Phase 1 — pre-alpha, experimental. Not independently reviewed. Testnet/preprod only. Not for real funds.
 
 ## Role
 

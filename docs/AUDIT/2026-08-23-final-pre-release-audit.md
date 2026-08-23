@@ -236,3 +236,21 @@ messages and in `CHANGELOG.md`'s Unreleased section; summarized here for the aud
 describes should be read as a certification of any kind.** It is a record of what was checked,
 what was found, and what remains open, as of `fix/pre-release-core-contracts`'s branch point
 from `origin/main@f43ad944`.
+
+---
+
+## 7. Later stacked-remediation status (2026-08-23)
+
+Sections 1–6 remain the Prompt 1 batch record. This section only updates **current**
+status pointers for findings later remediations addressed. It does not rewrite the
+original evidence or reopen resolved-as-of-Prompt-1 items.
+
+| ID | Status as of `fix/release-docs-and-scanners` (docs-reconciliation commit) |
+|---|---|
+| W4-1 | **Further reconciled** — ADR-0015's header now matches the completed 1.10c §9 result note (the Prompt 1-era `f5289d8` note had updated §9; the header still said 1.10c remained open). |
+| W4-2 | **Further reconciled** — ADR-0017's header and Non-goals now point at the shipped 1.11b/1.11c result note; the original 1.11a-only decision text is unchanged. |
+| W4-3 | **Resolved** — `docs/PROJECT_BRIEF.md` now links the full delivery record to `docs/DELIVERY_RECORD.md`. `docs/ROADMAP.md` remains the overview. |
+| W4-4 | **Resolved** — module README status lines now use the accepted factual wording ("Not independently reviewed") already used by the root README / `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`. Provider READMEs keep the testnet/preprod qualifier. The word `audited` is not used. |
+| W5-5 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — `BlockfrostConfig` is no longer a `data class`; equality is referential and `toString` stays redacted. |
+| W8-3 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — explicit Ktor `HttpTimeout` bounds and no Ktor request retry. |
+| W1-2 | **Still open at this commit** — HANDOFF curation is the next commit on this branch. |

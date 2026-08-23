@@ -2,10 +2,10 @@
 
 | Field   | Value                                                                |
 |---------|------------------------------------------------------------------------|
-| Status  | **Accepted** (Block 1.11a). Records only the `:provider` submission interface, error type, and in-memory double; no Blockfrost implementation and no `:shared` checkpoint yet (§7). |
+| Status  | **Accepted**; Block 1.11a boundary shipped as recorded below. Blocks 1.11b/1.11c (`BlockfrostTxSubmitProvider`, `:shared` Playground submit checkpoint) **implemented** — see the §7 result note. |
 | Scope   | Block 1.11a — provider-neutral transaction-submission boundary          |
-| Phase   | Phase 1 (Block 1.11a)                                                   |
-| Updated | 2026-07-13                                                              |
+| Phase   | Phase 1 (Block 1.11a; 1.11b/1.11c later shipped — §7 result note)        |
+| Updated | 2026-08-23 — header and Non-goals reconciled to the shipped 1.11b/1.11c result note; original 1.11a-only decision text is unchanged. |
 
 ---
 
@@ -202,22 +202,29 @@ Block 1.11b's Blockfrost provider).
 
 ## Non-goals
 
-- No Blockfrost (or any other real network) submission implementation (Block 1.11b).
-- No `:shared` Playground submission checkpoint or UI change (Block 1.11c).
-- No change to `:wallet`, `:tx`, `:crypto`, `:core`, or any signing code.
-- No wallet-level submit orchestration method; `:wallet` continues to only restore, query
-  balance, and sign. Whether `:shared` calls `TxSubmitProvider.submit` directly with
-  `walletSigned.signedTransaction.cbor()` (the current plan) or a future orchestration helper is
-  introduced remains a Block 1.11c decision, not one this ADR needs to make.
+The following were out of scope for **Block 1.11a** (this ADR's original decision). Blocks
+1.11b and 1.11c have since shipped; see the §7 result note for that later work. The bullets
+below remain the 1.11a non-goals, not a statement of current shipped state.
+
+- No Blockfrost (or any other real network) submission implementation **in Block 1.11a**
+  (deferred then to Block 1.11b; implemented — §7 result note).
+- No `:shared` Playground submission checkpoint or UI change **in Block 1.11a**
+  (deferred then to Block 1.11c; implemented — §7 result note).
+- No change to `:wallet`, `:tx`, `:crypto`, `:core`, or any signing code **in Block 1.11a**.
+- No wallet-level submit orchestration method **in Block 1.11a**; `:wallet` continues to only
+  restore, query balance, and sign. Whether `:shared` calls `TxSubmitProvider.submit` directly
+  with `walletSigned.signedTransaction.cbor()` or a later orchestration helper was a Block
+  1.11c decision (the shipped checkpoint calls `submit` directly — §7 result note).
 - No mainnet, no real mnemonics/private keys/funds, no native assets/scripts/metadata/multisig.
 
 ---
 
 ## Follow-up work
 
-- Block 1.11b: `BlockfrostTxSubmitProvider` in `:provider-blockfrost`.
+- Block 1.11b: `BlockfrostTxSubmitProvider` in `:provider-blockfrost` — **implemented**
+  (§7 result note).
 - Block 1.11c: `:shared` submit checkpoint and the mandatory manual Android checkpoint for
-  `1.11` in `docs/PHASE_1_PLAN.md`.
+  `1.11` in `docs/PHASE_1_PLAN.md` — **implemented** (§7 result note).
 - ADR-0006 (`docs/DECISIONS/0006-provider-boundary-and-strategy.md`) and ADR-0007
   (`docs/DECISIONS/0007-http-client-and-blockfrost-provider.md`) remain the governing decisions
   this ADR implements and extends.

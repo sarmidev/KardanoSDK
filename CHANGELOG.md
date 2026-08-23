@@ -139,10 +139,17 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   site is live and points readers who want certainty at Settings → Pages (W9-5).
 - `docs/DECISIONS/0015-transaction-signing.md` §9's own result note no longer says Block 1.10c
   "remains open"; it now points at `docs/PHASE_1_PLAN.md`'s 1.10c entry, which every other
-  document already described as complete (W4-1). `docs/DECISIONS/0017-transaction-submission-boundary.md`
+  document already described as complete (W4-1). The ADR header now matches that completed
+  1.10c result note. `docs/DECISIONS/0017-transaction-submission-boundary.md`
   gained a dated result note recording that its deferred Blockfrost-submission/`:shared`-checkpoint
-  work has since shipped, mirroring ADR-0015 §9's own pattern (W4-2). Both ADRs' original
-  at-the-time-of-writing text is otherwise left unchanged.
+  work has since shipped, mirroring ADR-0015 §9's own pattern (W4-2). The ADR-0017 header and
+  Non-goals now point at that shipped 1.11b/1.11c result note. Both ADRs' original
+  at-the-time-of-writing decision text is otherwise left unchanged.
+- `docs/PROJECT_BRIEF.md` now links the full delivery record to `docs/DELIVERY_RECORD.md`
+  (W4-3). `docs/ROADMAP.md` remains the overview.
+- Module README status lines now use the same factual wording as the root README /
+  `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`: "Not independently reviewed" (W4-4). Provider
+  READMEs keep the testnet/preprod qualifier. The word `audited` is not used.
 - CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
   full commit SHA with a version comment instead of a floating major-version tag, so a
   compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).

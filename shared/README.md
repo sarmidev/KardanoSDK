@@ -5,7 +5,7 @@ builds the iOS `Shared` framework that the Xcode app consumes.
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Not for real funds.
+Phase 1 — pre-alpha, experimental. Not independently reviewed. Not for real funds.
 
 ## Role today
 

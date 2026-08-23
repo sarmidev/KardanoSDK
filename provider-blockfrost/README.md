@@ -5,7 +5,7 @@ support was introduced in Phase 1 Block 1.3b; transaction submission was added i
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Testnet/preprod only. No real funds (preprod uses test funds).
+Phase 1 — pre-alpha, experimental. Not independently reviewed. Testnet/preprod only. Not for real funds (preprod uses test funds).
 
 ## Role
 
