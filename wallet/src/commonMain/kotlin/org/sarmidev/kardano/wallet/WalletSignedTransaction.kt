@@ -4,8 +4,8 @@ import org.sarmidev.kardano.primitives.TxHash
 import org.sarmidev.kardano.tx.SignedTransaction
 
 /**
- * The result of [ReadOnlyWallet.signTransaction]: the `:tx` [signedTransaction] artifact paired
- * with the [transactionId] `:wallet` computed while signing it (ADR-0015 §3).
+ * The result of [ReadOnlyWallet.signTestnetFixtureTransaction]: the `:tx` [signedTransaction]
+ * artifact paired with the [transactionId] `:wallet` computed while signing it (ADR-0015 §3).
  *
  * [transactionId] is `Blake2b-256(TransactionDraft.bodyCbor())` — the same body bytes embedded
  * verbatim as field `0` of [signedTransaction], so [transactionId] is exactly the hash of the

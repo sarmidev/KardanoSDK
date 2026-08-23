@@ -601,6 +601,54 @@ At the end of each session, update this section.
 
 ### Last Session Summary
 
+Date: 2026-08-23
+
+Summary:
+
+- **ADR-0018 §4 items 1-2 implemented: signing-scope opt-in signal — DONE.** Precondition:
+  ADR-0018 (signing scope enforcement and publication, W7-1) was already accepted as a
+  decision-only ADR in the prior session. This session implemented only the immediate
+  API-signaling half of its recommendation — the `TransactionDraft` network-binding redesign
+  (Option 3) remains separately scheduled, not implemented.
+  - **Renamed** `ReadOnlyWallet.signTransaction` to `ReadOnlyWallet.signTestnetFixtureTransaction`
+    (`wallet/src/commonMain/kotlin/org/sarmidev/kardano/wallet/ReadOnlyWallet.kt`) — the exact
+    name ADR-0018 §4 suggested; code inspection found no more precise alternative, since the
+    function's actual scope is exactly "testnet" + "the Phase 1 fixture".
+  - **New `ExperimentalKardanoSigningScope`** (`wallet/.../ExperimentalKardanoSigningScope.kt`):
+    a dedicated `@RequiresOptIn(level = ERROR)` annotation applied only to
+    `signTestnetFixtureTransaction`. Its KDoc states plainly that it is an intent signal, not a
+    runtime check — it does not verify the fixture, the network, or bind the draft to a network
+    — and that Kotlin's opt-in enforcement does not carry over as a Swift/iOS compile-time gate.
+    Per this task's explicit scope, it was **not** applied to `Network.MAINNET`/
+    `BlockfrostNetwork.MAINNET`, which remain unchanged, unguarded, general-purpose constants.
+  - **Every in-repository call site updated** with an explicit
+    `@OptIn(ExperimentalKardanoSigningScope::class)`: `PlaygroundPresenter.presentSignedTransaction`
+    and `.presentSubmitTransaction` (both class-scoped via `@OptIn` on the function), and both
+    `:wallet` test files — renamed to `ReadOnlyWalletSignTestnetFixtureTransactionDesktopTest.kt`
+    and `ReadOnlyWalletSignTestnetFixtureTransactionMnemonicTest.kt` for naming consistency, with
+    class-level `@OptIn`.
+  - **No compatibility typealias or deprecated wrapper** under the old `signTransaction` name
+    (pre-alpha repository convention). **No runtime network check, fixture recognition,
+    `TransactionDraft` binding, or `Network.MAINNET`/`BlockfrostNetwork.MAINNET` restriction was
+    added** — exactly and only the signal, not the future enforcement redesign.
+  - **Docs updated in the same session:** `WalletError.kt`/`WalletSignedTransaction.kt` KDoc
+    links, `wallet/README.md`, `shared/README.md`, `CHANGELOG.md` (marked **Breaking**), and
+    ADR-0018 itself (Status field + a new §6 result note). `docs/QUICKSTART.md` needed no change
+    (it never names the SDK function, only UI-level guided-demo copy).
+  - **Verification.** Full repository search for `signTransaction` confirms zero remaining
+    references outside: ADR-0018's own historical §Context/§Decision prose (left as an accurate
+    record of what W7-1 originally described), the audit report and other historical ADRs
+    (0015/0017) and `docs/PHASE_1_PLAN.md` (frozen, point-in-time records, not rewritten), and
+    the unrelated Playground-internal `SignTransactionUseCase`/`signTransaction` naming in
+    `PlaygroundViewModel.kt` (an app-level "guided-demo step" concept, not this SDK entry point).
+    `:wallet:jvmTest`, `:wallet:testAndroidHostTest`, `:shared:jvmTest`,
+    `:shared:testAndroidHostTest` all pass; `:core`/`:crypto`/`:crypto-signing-backend`/
+    `:provider`/`:provider-blockfrost`/`:tx`/`:wallet`/`:shared` compile clean for `iosArm64`;
+    `:androidApp:assembleDebug` and the Desktop target build; `git diff --check` clean; no
+    banned words in touched files. Not committed (per this session's explicit instruction).
+
+### Session Summary (Playground Guided Demo Redesign)
+
 Date: 2026-08-22
 
 Summary:

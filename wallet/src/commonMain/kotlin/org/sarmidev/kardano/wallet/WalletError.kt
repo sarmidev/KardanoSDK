@@ -12,7 +12,7 @@ import org.sarmidev.kardano.tx.TxBuildError
 
 /**
  * A typed error produced by [ReadOnlyWallet.restore], [ReadOnlyWallet.balance], or
- * [ReadOnlyWallet.signTransaction].
+ * [ReadOnlyWallet.signTestnetFixtureTransaction].
  *
  * Every variant except [BalanceOverflow] wraps an already-typed error from the module that
  * produced it, rather than re-deriving a parallel taxonomy (ADR-0013 §6): a caller can always
@@ -72,16 +72,16 @@ public sealed interface WalletError {
     public data class BalanceOverflow(public val partialCount: Int) : WalletError
 
     /**
-     * [ReadOnlyWallet.signTransaction] failed while signing the transaction body hash with the
-     * derived payment key.
+     * [ReadOnlyWallet.signTestnetFixtureTransaction] failed while signing the transaction body
+     * hash with the derived payment key.
      *
      * @property error the underlying `:crypto` signing error.
      */
     public data class Signing(public val error: SigningError) : WalletError
 
     /**
-     * [ReadOnlyWallet.signTransaction] failed while assembling the witness set or full signed
-     * `transaction` CBOR from the computed witness.
+     * [ReadOnlyWallet.signTestnetFixtureTransaction] failed while assembling the witness set or
+     * full signed `transaction` CBOR from the computed witness.
      *
      * @property error the underlying `:tx` build error.
      */

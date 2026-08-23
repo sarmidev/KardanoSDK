@@ -26,7 +26,7 @@ import kotlin.test.assertIs
 import kotlin.test.fail
 
 /**
- * JVM-only end-to-end test for [ReadOnlyWallet.signTransaction].
+ * JVM-only end-to-end test for [ReadOnlyWallet.signTestnetFixtureTransaction].
  *
  * Reaches `:crypto`'s native derivation and signing backends, which cannot load under
  * `:wallet:testAndroidHostTest` (host JVM, Android target) — mirroring the same
@@ -35,10 +35,16 @@ import kotlin.test.fail
  * vector exists to cite (mirroring `TransactionBodySerializerTest`'s unsigned-body policy), so
  * this independently re-derives the payment key and re-hashes the body with the same already
  * cited `IntersectMBO/cardano-addresses` test mnemonic used by
- * [ReadOnlyWalletRestoreDesktopTest], and checks [ReadOnlyWallet.signTransaction]'s output
- * against that independent computation.
+ * [ReadOnlyWalletRestoreDesktopTest], and checks
+ * [ReadOnlyWallet.signTestnetFixtureTransaction]'s output against that independent computation.
+ *
+ * Class-level [OptIn] for [ExperimentalKardanoSigningScope] (ADR-0018): this test exercises the
+ * Phase 1 testnet/test-fixture flow the entry point is scoped to, using the cited fixture
+ * mnemonic and [Network.TESTNET] explicitly at every call, exactly as every in-repository call
+ * site must.
  */
-class ReadOnlyWalletSignTransactionDesktopTest {
+@OptIn(ExperimentalKardanoSigningScope::class)
+class ReadOnlyWalletSignTestnetFixtureTransactionDesktopTest {
 
     private companion object {
         const val TESTNET_TYPE_00 =
@@ -107,7 +113,7 @@ class ReadOnlyWalletSignTransactionDesktopTest {
     }
 
     @Test
-    fun signTransaction_producesOneWitnessWithTheDerivedPaymentVkeyAndCorrectTransactionId() {
+    fun signTestnetFixtureTransaction_producesOneWitnessWithTheDerivedPaymentVkeyAndCorrectTransactionId() {
         val draft = fixtureDraft()
         val expectedBodyHash = when (val result = Hashing.default().blake2b256(draft.bodyCbor())) {
             is KardanoResult.Ok -> result.value.toByteArray()
@@ -115,7 +121,9 @@ class ReadOnlyWalletSignTransactionDesktopTest {
         }
         val expectedVkey = expectedPaymentPublicKeyBytes()
 
-        val signed = when (val result = ReadOnlyWallet.signTransaction(mnemonic, Network.TESTNET, draft)) {
+        val signed = when (
+            val result = ReadOnlyWallet.signTestnetFixtureTransaction(mnemonic, Network.TESTNET, draft)
+        ) {
             is KardanoResult.Ok -> result.value
             is KardanoResult.Err -> fail("expected Ok but got Err(${result.error})")
         }
@@ -129,10 +137,12 @@ class ReadOnlyWalletSignTransactionDesktopTest {
     }
 
     @Test
-    fun signTransaction_embedsTheDraftBodyUnchangedAsFieldZero() {
+    fun signTestnetFixtureTransaction_embedsTheDraftBodyUnchangedAsFieldZero() {
         val draft = fixtureDraft()
 
-        val signed = when (val result = ReadOnlyWallet.signTransaction(mnemonic, Network.TESTNET, draft)) {
+        val signed = when (
+            val result = ReadOnlyWallet.signTestnetFixtureTransaction(mnemonic, Network.TESTNET, draft)
+        ) {
             is KardanoResult.Ok -> result.value
             is KardanoResult.Err -> fail("expected Ok but got Err(${result.error})")
         }
@@ -146,12 +156,12 @@ class ReadOnlyWalletSignTransactionDesktopTest {
     }
 
     @Test
-    fun signTransaction_doesNotMutateDraftBodyOrFee() {
+    fun signTestnetFixtureTransaction_doesNotMutateDraftBodyOrFee() {
         val draft = fixtureDraft()
         val originalBody = draft.bodyCbor()
         val originalFee = draft.fee
 
-        ReadOnlyWallet.signTransaction(mnemonic, Network.TESTNET, draft)
+        ReadOnlyWallet.signTestnetFixtureTransaction(mnemonic, Network.TESTNET, draft)
 
         assertContentEquals(originalBody, draft.bodyCbor())
         assertEquals(originalFee, draft.fee)

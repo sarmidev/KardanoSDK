@@ -34,6 +34,7 @@ import org.sarmidev.kardano.tx.TransactionBuilder
 import org.sarmidev.kardano.tx.TransactionDraft
 import org.sarmidev.kardano.tx.TransactionOutput
 import org.sarmidev.kardano.tx.TxBuildError
+import org.sarmidev.kardano.wallet.ExperimentalKardanoSigningScope
 import org.sarmidev.kardano.wallet.ReadOnlyWallet
 import org.sarmidev.kardano.wallet.WalletBalance
 import org.sarmidev.kardano.wallet.WalletError
@@ -150,17 +151,17 @@ internal sealed interface TransactionDraftPresentation {
 }
 
 /**
- * Result of presenting the signed-transaction checkpoint ([ReadOnlyWallet.signTransaction],
- * Block 1.10c).
+ * Result of presenting the signed-transaction checkpoint
+ * ([ReadOnlyWallet.signTestnetFixtureTransaction], Block 1.10c).
  *
  * Carries only public metadata about the [WalletSignedTransaction] built: the 32-byte
  * transaction id (hex), the witness count, a truncated hex preview of the full signed
  * `transaction` CBOR, and an explicit not-submitted/testnet/fixture label. Never the mnemonic,
  * seed, private/root key bytes, or the full (untruncated) signed CBOR. [Failure] covers both
  * the same draft-building errors [TransactionDraftPresentation.Failure] can report and every
- * [WalletError] [ReadOnlyWallet.signTransaction] itself can return (for example a signing or
- * transaction-assembly failure); its message text distinguishes the cause. This checkpoint
- * never submits anything — submission is Block 1.11.
+ * [WalletError] [ReadOnlyWallet.signTestnetFixtureTransaction] itself can return (for example a
+ * signing or transaction-assembly failure); its message text distinguishes the cause. This
+ * checkpoint never submits anything — submission is Block 1.11.
  */
 internal sealed interface SignedTransactionPresentation {
     data object Empty : SignedTransactionPresentation
@@ -174,9 +175,9 @@ internal sealed interface SignedTransactionPresentation {
  * 1.11c).
  *
  * Carries only public metadata: the accepted transaction id returned by the provider, the
- * locally-signed transaction id computed by [ReadOnlyWallet.signTransaction] (Block 1.10c),
- * whether the two match, and an explicit submitted/preprod/test-fixture label. Never the
- * mnemonic, seed, private/root key bytes, or the full (untruncated) signed CBOR. [Failure]
+ * locally-signed transaction id computed by [ReadOnlyWallet.signTestnetFixtureTransaction]
+ * (Block 1.10c), whether the two match, and an explicit submitted/preprod/test-fixture label.
+ * Never the mnemonic, seed, private/root key bytes, or the full (untruncated) signed CBOR. [Failure]
  * covers every [SubmitError] variant [TxSubmitProvider.submit] can return, plus the same
  * draft-building and signing failures [SignedTransactionPresentation.Failure] can report —
  * building and signing happen first, so this checkpoint only calls `submit` on an
@@ -863,24 +864,28 @@ internal object PlaygroundPresenter {
 
     /**
      * Builds the same unsigned minimal-ADA draft as [presentTransactionDraft] (Block 1.9c) via
-     * [buildTransactionDraft], then signs it through [ReadOnlyWallet.signTransaction] using
-     * [TestWalletFixture]'s cited test-only mnemonic and [Network.TESTNET] explicitly — the
-     * same fixture-only/testnet-only call-site discipline [presentTransactionDraft] and
-     * [presentWalletBalance] already follow (ADR-0015 §2a: `:wallet` itself is not
-     * fixture-aware, so this call site supplies both explicitly).
+     * [buildTransactionDraft], then signs it through
+     * [ReadOnlyWallet.signTestnetFixtureTransaction] using [TestWalletFixture]'s cited
+     * test-only mnemonic and [Network.TESTNET] explicitly — the same fixture-only/testnet-only
+     * call-site discipline [presentTransactionDraft] and [presentWalletBalance] already follow
+     * (ADR-0015 §2a: `:wallet` itself is not fixture-aware, so this call site supplies both
+     * explicitly). The [OptIn] below is this call site's explicit acknowledgment of
+     * [ExperimentalKardanoSigningScope] (ADR-0018) — see that annotation's KDoc for exactly
+     * what it does and does not mean.
      *
      * Delegates entirely to `:tx` ([TransactionBuilder]) for the draft and `:wallet`
-     * ([ReadOnlyWallet.signTransaction], which itself delegates to `:crypto`'s `Signing` and
-     * `:tx`'s `TransactionAssembler`) for signing; this presenter does not hash, sign, or
-     * assemble anything itself, and it never submits the result — submission is out of scope
-     * (Block 1.11). Provider-agnostic: the caller decides whether [provider] is the in-memory
-     * mock (fake/test-only) or a live provider (for example Blockfrost preprod). Under the
-     * default [InMemoryChainQueryProvider], the restored wallet's address has no fake UTxOs
-     * seeded for it, so the shared draft-building step normally fails with
+     * ([ReadOnlyWallet.signTestnetFixtureTransaction], which itself delegates to `:crypto`'s
+     * `Signing` and `:tx`'s `TransactionAssembler`) for signing; this presenter does not hash,
+     * sign, or assemble anything itself, and it never submits the result — submission is out of
+     * scope (Block 1.11). Provider-agnostic: the caller decides whether [provider] is the
+     * in-memory mock (fake/test-only) or a live provider (for example Blockfrost preprod).
+     * Under the default [InMemoryChainQueryProvider], the restored wallet's address has no fake
+     * UTxOs seeded for it, so the shared draft-building step normally fails with
      * [TxBuildError.NoInputs] before signing is ever attempted — reported the same way
      * [presentTransactionDraft] reports it. Fund that address via a live Blockfrost preprod
      * faucet to see a [SignedTransactionPresentation.Success].
      */
+    @OptIn(ExperimentalKardanoSigningScope::class)
     suspend fun presentSignedTransaction(provider: ChainQueryProvider): SignedTransactionPresentation {
         val draft = when (val outcome = buildTransactionDraft(provider)) {
             is DraftBuildOutcome.Failed -> return SignedTransactionPresentation.Failure(outcome.message)
@@ -890,15 +895,15 @@ internal object PlaygroundPresenter {
                     return SignedTransactionPresentation.Failure(presentTxBuildError(result.error))
             }
         }
-        val signResult = ReadOnlyWallet.signTransaction(TestWalletFixture.words, Network.TESTNET, draft)
+        val signResult = ReadOnlyWallet.signTestnetFixtureTransaction(TestWalletFixture.words, Network.TESTNET, draft)
         return mapSignedTransactionResult(signResult)
     }
 
     /**
-     * Maps a raw [ReadOnlyWallet.signTransaction] result to a [SignedTransactionPresentation].
-     * Non-suspend and `internal` so it can be unit-tested by constructing a [WalletError]
-     * directly, without restoring a mnemonic, reaching native cryptography, or querying a
-     * provider.
+     * Maps a raw [ReadOnlyWallet.signTestnetFixtureTransaction] result to a
+     * [SignedTransactionPresentation]. Non-suspend and `internal` so it can be unit-tested by
+     * constructing a [WalletError] directly, without restoring a mnemonic, reaching native
+     * cryptography, or querying a provider.
      */
     internal fun mapSignedTransactionResult(
         result: KardanoResult<WalletSignedTransaction, WalletError>,
@@ -940,11 +945,13 @@ internal object PlaygroundPresenter {
      * [TxSubmitProvider.submit] with its CBOR bytes.
      *
      * Delegates entirely to `:tx` ([TransactionBuilder]) for the draft, `:wallet`
-     * ([ReadOnlyWallet.signTransaction]) for signing, and `:provider`
+     * ([ReadOnlyWallet.signTestnetFixtureTransaction]) for signing, and `:provider`
      * ([TxSubmitProvider.submit]) for submission; this presenter does not build, sign, or
      * submit anything itself — it only sequences the three calls and formats the result. No
      * new `:wallet` orchestration method is added for this (ADR-0017 "Non-goals"): the
-     * id-comparison in [mapSubmitTransactionResult] lives here, in the presenter.
+     * id-comparison in [mapSubmitTransactionResult] lives here, in the presenter. The [OptIn]
+     * below is this call site's explicit acknowledgment of [ExperimentalKardanoSigningScope]
+     * (ADR-0018).
      *
      * [queryProvider] is the provider-agnostic read boundary the earlier checkpoints already
      * use (mock or live Blockfrost preprod). [submitProvider] is the provider-agnostic submit
@@ -960,6 +967,7 @@ internal object PlaygroundPresenter {
      * explicit justification; a single-shot submit-and-display checkpoint has none yet, so
      * none is added here.
      */
+    @OptIn(ExperimentalKardanoSigningScope::class)
     suspend fun presentSubmitTransaction(
         queryProvider: ChainQueryProvider,
         submitProvider: TxSubmitProvider,
@@ -973,7 +981,7 @@ internal object PlaygroundPresenter {
             }
         }
         val signed = when (
-            val result = ReadOnlyWallet.signTransaction(TestWalletFixture.words, Network.TESTNET, draft)
+            val result = ReadOnlyWallet.signTestnetFixtureTransaction(TestWalletFixture.words, Network.TESTNET, draft)
         ) {
             is KardanoResult.Ok -> result.value
             is KardanoResult.Err ->

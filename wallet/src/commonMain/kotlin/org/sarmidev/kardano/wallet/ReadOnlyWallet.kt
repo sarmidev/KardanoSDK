@@ -39,11 +39,12 @@ import org.sarmidev.kardano.tx.VerificationKeyWitness
  * This type can restore a wallet, derive its address, query a provider for a balance
  * ([balance]), and — as of Block 1.10b, ADR-0015 §1 — sign an already-built
  * [org.sarmidev.kardano.tx.TransactionDraft] into a signed, unsubmitted artifact
- * ([signTransaction]). [signTransaction] does not build or alter a transaction body/fee itself,
- * and it is not a general-purpose wallet signing API — see its own KDoc for the exact scope
- * (ADR-0015 §2a). This type never submits a transaction (submission is Block 1.11) and
- * introduces no persistence: an instance lives only as long as the caller keeps the in-memory
- * reference.
+ * ([signTestnetFixtureTransaction]). Its scope-explicit name and [ExperimentalKardanoSigningScope]
+ * opt-in requirement (ADR-0018) are this repository's compiler/IDE-visible signal that it is
+ * not a general-purpose wallet signing API — see its own KDoc for the exact scope (ADR-0015
+ * §2a) and [ExperimentalKardanoSigningScope]'s KDoc for exactly what that signal does and does
+ * not achieve. This type never submits a transaction (submission is Block 1.11) and introduces
+ * no persistence: an instance lives only as long as the caller keeps the in-memory reference.
  *
  * @property network the network [address] was generated for.
  * @property address the wallet's generated testnet/mainnet base address.
@@ -211,10 +212,15 @@ public class ReadOnlyWallet private constructor(
          * This is **not** a general-purpose wallet signing API (ADR-0015 §2a): it authorizes
          * signing only for the Phase 1 testnet test-fixture flow already used by [restore] —
          * `Network.TESTNET`, the cited test-only mnemonic, and an ADA-only single-payment
-         * [TransactionDraft] produced by `TransactionBuilder`/`TransactionBodySerializer`. It
-         * takes whatever [words]/[network]/[draft] it is given and has no way to verify that
-         * [words] is the Phase 1 fixture or that [network] is testnet; that guarantee is a
-         * call-site/checkpoint discipline, not a runtime check this function performs.
+         * [TransactionDraft] produced by `TransactionBuilder`/`TransactionBodySerializer`. Its
+         * name and the required [ExperimentalKardanoSigningScope] opt-in (ADR-0018) say so
+         * explicitly at every call site — **both are intent signals, not runtime enforcement**:
+         * this function still takes whatever [words]/[network]/[draft] it is given and has no
+         * way to verify that [words] is the Phase 1 fixture, that [network] is testnet, or that
+         * [draft] was built for the network [network] claims — that guarantee is a call-site/
+         * checkpoint discipline, not a check this function performs. See
+         * [ExperimentalKardanoSigningScope]'s KDoc for exactly what opting in does and does not
+         * mean, including why it has no effect on Swift/iOS consumers of the compiled framework.
          *
          * Derives the account-0 payment key ([PAYMENT_PATH]) exactly as [restore] does, then:
          * hashes [draft]'s body ([Hashing.blake2b256]) to the 32-byte `bodyHash` / transaction
@@ -236,9 +242,9 @@ public class ReadOnlyWallet private constructor(
          * mirrors [restore]'s `(words, network)` shape exactly, per ADR-0015 §1's design, and so
          * it reads at every call site as the same explicit network declaration [restore] already
          * requires. Enforcing [network] `==` [Network.TESTNET] is a **Phase 1 call-site/test
-         * discipline, not a runtime check this function performs** (ADR-0015 §2a): `:wallet`
-         * cannot itself recognize the Phase 1 test fixture or reject mainnet, so every Phase 1
-         * caller must pass [Network.TESTNET] and the cited fixture explicitly.
+         * discipline, not a runtime check this function performs** (ADR-0015 §2a, ADR-0018):
+         * `:wallet` cannot itself recognize the Phase 1 test fixture or reject mainnet, so every
+         * Phase 1 caller must pass [Network.TESTNET] and the cited fixture explicitly.
          *
          * @param words the candidate BIP-39 mnemonic words for the signing key. Phase 1
          *   call sites must pass the cited test-only fixture.
@@ -251,8 +257,9 @@ public class ReadOnlyWallet private constructor(
          *   ([WalletError.Mnemonic], [WalletError.Derivation], [WalletError.Hashing],
          *   [WalletError.Signing], or [WalletError.TransactionAssembly]). Never throws.
          */
+        @ExperimentalKardanoSigningScope
         @Suppress("UNUSED_PARAMETER")
-        public fun signTransaction(
+        public fun signTestnetFixtureTransaction(
             words: List<String>,
             network: Network,
             draft: TransactionDraft,

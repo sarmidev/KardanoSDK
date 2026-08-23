@@ -21,10 +21,11 @@ import kotlin.test.assertTrue
  *
  * This is the **only** place [PlaygroundPresenter.presentSubmitTransaction] is exercised end to
  * end: like [PlaygroundSignedTransactionDesktopTest] before it, it reaches `:wallet`'s
- * [ReadOnlyWallet.restore]/`ReadOnlyWallet.signTransaction`, which reach `:crypto`'s native
- * derivation/signing backend and cannot load under `:shared:testAndroidHostTest` (host JVM,
- * Android target) — see [PlaygroundSubmitTransactionPresenterTest] for the native-free
- * result-mapping coverage that does run there.
+ * [ReadOnlyWallet.restore]/`ReadOnlyWallet.signTestnetFixtureTransaction`, which reach
+ * `:crypto`'s native derivation/signing backend and cannot load under
+ * `:shared:testAndroidHostTest` (host JVM, Android target) — see
+ * [PlaygroundSubmitTransactionPresenterTest] for the native-free result-mapping coverage that
+ * does run there.
  *
  * Uses [InMemoryTxSubmitProvider] throughout — never a live Blockfrost preprod call — because
  * that provider always returns [org.sarmidev.kardano.provider.SubmitError.SubmissionNotSupported]
