@@ -1,6 +1,7 @@
 package org.sarmidev.kardano.playground.mvi
 
 import org.sarmidev.kardano.playground.LabeledRow
+import org.sarmidev.kardano.playground.MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE
 import org.sarmidev.kardano.playground.SignedTransactionPresentation
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
 import org.sarmidev.kardano.playground.TransactionDraftPresentation
@@ -42,26 +43,124 @@ class PlaygroundReducerTest {
         assertTrue(state.technicalDetailsExpanded.isEmpty())
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS, state.providerAddressInput)
         assertFalse(state.codeExamplesExpanded)
-        assertEquals(PlaygroundSection.OVERVIEW, state.section)
+        assertEquals(PlaygroundSection.WELCOME, state.section)
         assertEquals(RoadmapPhase.PHASE_1, state.selectedRoadmapPhase)
+        assertEquals(PlaygroundStep.WALLET, state.demoStep)
     }
 
-    // --- Section navigation (Block 1.12-pre-c-2) ---
+    // --- Section navigation (Block 1.12-pre-c-2, restructured in Block 1.12-pre-e) ---
 
     @Test
     fun navigationIntents_switchSectionOnly() {
         val state = PlaygroundState.initial()
 
-        val trySdk = PlaygroundReducer.reduce(state, PlaygroundIntent.NavigateToTrySdk)
-        assertEquals(PlaygroundSection.TRY_SDK, trySdk.section)
+        val demo = PlaygroundReducer.reduce(state, PlaygroundIntent.NavigateToDemo)
+        assertEquals(PlaygroundSection.DEMO, demo.section)
         // Navigation touches nothing but the section.
-        assertEquals(state.copy(section = PlaygroundSection.TRY_SDK), trySdk)
+        assertEquals(state.copy(section = PlaygroundSection.DEMO), demo)
 
-        val roadmap = PlaygroundReducer.reduce(trySdk, PlaygroundIntent.NavigateToRoadmap)
+        val roadmap = PlaygroundReducer.reduce(demo, PlaygroundIntent.NavigateToRoadmap)
         assertEquals(PlaygroundSection.ROADMAP, roadmap.section)
 
-        val overview = PlaygroundReducer.reduce(roadmap, PlaygroundIntent.NavigateToOverview)
-        assertEquals(PlaygroundSection.OVERVIEW, overview.section)
+        val about = PlaygroundReducer.reduce(roadmap, PlaygroundIntent.NavigateToAbout)
+        assertEquals(PlaygroundSection.ABOUT, about.section)
+
+        val summary = PlaygroundReducer.reduce(about, PlaygroundIntent.NavigateToSummary)
+        assertEquals(PlaygroundSection.SUMMARY, summary.section)
+
+        val welcome = PlaygroundReducer.reduce(summary, PlaygroundIntent.NavigateToWelcome)
+        assertEquals(PlaygroundSection.WELCOME, welcome.section)
+    }
+
+    // --- Guided-demo cursor: ContinueDemo / BackDemo (Block 1.12-pre-e) ---
+
+    @Test
+    fun continueDemo_isNoOpWhileTheCurrentStepIsUnresolved() {
+        val state = PlaygroundState.initial()
+        assertEquals(PlaygroundStep.WALLET, state.demoStep)
+
+        val next = PlaygroundReducer.reduce(state, PlaygroundIntent.ContinueDemo)
+
+        assertEquals(state, next)
+    }
+
+    @Test
+    fun continueDemo_advancesToTheNextStepOnceTheCurrentStepIsDone() {
+        val walletDone = PlaygroundState.initial().copy(
+            wallet = WalletPresentation.Success(
+                rows = listOf(LabeledRow("Generated address", "addr_test1abc")),
+                fingerprintMatchesVector = true,
+            ),
+        )
+
+        val next = PlaygroundReducer.reduce(walletDone, PlaygroundIntent.ContinueDemo)
+
+        assertEquals(PlaygroundStep.FUNDS, next.demoStep)
+        assertEquals(PlaygroundSection.WELCOME, next.section, "Continuing a step must not change section")
+    }
+
+    @Test
+    fun continueDemo_advancesOnTheHonestMockStopInfoOutcome() {
+        val mockStopped = PlaygroundState.initial().copy(
+            demoStep = PlaygroundStep.SUBMIT,
+            submit = SubmitTransactionPresentation.Failure(MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE),
+        )
+
+        val next = PlaygroundReducer.reduce(mockStopped, PlaygroundIntent.ContinueDemo)
+
+        assertEquals(PlaygroundSection.SUMMARY, next.section)
+    }
+
+    @Test
+    fun continueDemo_fromTheLastStepMovesToSummaryInsteadOfAdvancingDemoStep() {
+        val submitDone = PlaygroundState.initial().copy(
+            demoStep = PlaygroundStep.SUBMIT,
+            submit = SubmitTransactionPresentation.Success(
+                listOf(LabeledRow("Ids match", "yes")),
+            ),
+        )
+
+        val next = PlaygroundReducer.reduce(submitDone, PlaygroundIntent.ContinueDemo)
+
+        assertEquals(PlaygroundStep.SUBMIT, next.demoStep)
+        assertEquals(PlaygroundSection.SUMMARY, next.section)
+    }
+
+    @Test
+    fun continueDemo_doesNotAdvanceOnAnErrorOutcome() {
+        val errored = PlaygroundState.initial().copy(
+            wallet = WalletPresentation.Failure("boom"),
+        )
+
+        val next = PlaygroundReducer.reduce(errored, PlaygroundIntent.ContinueDemo)
+
+        assertEquals(errored, next)
+    }
+
+    @Test
+    fun backDemo_isNoOpOnTheFirstStep() {
+        val state = PlaygroundState.initial()
+
+        val next = PlaygroundReducer.reduce(state, PlaygroundIntent.BackDemo)
+
+        assertEquals(state, next)
+    }
+
+    @Test
+    fun backDemo_stepsBackWithoutClearingResults() {
+        val walletDone = WalletPresentation.Success(
+            rows = listOf(LabeledRow("Generated address", "addr_test1abc")),
+            fingerprintMatchesVector = true,
+        )
+        val onFunds = PlaygroundState.initial().copy(
+            demoStep = PlaygroundStep.FUNDS,
+            wallet = walletDone,
+        )
+
+        val back = PlaygroundReducer.reduce(onFunds, PlaygroundIntent.BackDemo)
+
+        assertEquals(PlaygroundStep.WALLET, back.demoStep)
+        assertEquals(walletDone, back.wallet, "going back must not clear the wallet step's result")
     }
 
     // --- Roadmap phase selection: tap to expand, tap again to collapse ---
@@ -177,6 +276,8 @@ class PlaygroundReducerTest {
             technicalDetailsExpanded = setOf(PlaygroundStep.BUILD),
             addressInput = "addr_test1xyz",
             providerAddressInput = InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY,
+            demoStep = PlaygroundStep.SUBMIT,
+            section = PlaygroundSection.SUMMARY,
         )
 
         val reset = PlaygroundReducer.reduce(dirty, PlaygroundIntent.ResetFlow)
@@ -187,6 +288,10 @@ class PlaygroundReducerTest {
         assertEquals(TransactionDraftPresentation.Empty, reset.draft)
         assertEquals(SignedTransactionPresentation.Empty, reset.signed)
         assertEquals(SubmitTransactionPresentation.Empty, reset.submit)
+
+        // ResetFlow (Block 1.12-pre-e) also returns the guided-demo cursor to the start.
+        assertEquals(PlaygroundStep.WALLET, reset.demoStep)
+        assertEquals(PlaygroundSection.DEMO, reset.section)
 
         // Provider config and diagnostics input/expanded-details are preserved.
         assertTrue(reset.useLiveBlockfrost)

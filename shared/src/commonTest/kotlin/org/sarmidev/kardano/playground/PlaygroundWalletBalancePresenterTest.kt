@@ -50,6 +50,7 @@ class PlaygroundWalletBalancePresenterTest {
         assertEquals(address.toBech32(), rowByLabel["Address"])
         assertEquals("2", rowByLabel["UTxO count"])
         assertEquals("5000000 lovelace", rowByLabel["Balance"])
+        assertEquals("5 ADA", rowByLabel["Test ADA"])
     }
 
     @Test
@@ -64,6 +65,7 @@ class PlaygroundWalletBalancePresenterTest {
         val rowByLabel = success.rows.associate { it.label to it.value }
         assertEquals("0", rowByLabel["UTxO count"])
         assertEquals("0 lovelace", rowByLabel["Balance"])
+        assertEquals("0 ADA", rowByLabel["Test ADA"])
     }
 
     // --- mapWalletBalanceResult: Err ---

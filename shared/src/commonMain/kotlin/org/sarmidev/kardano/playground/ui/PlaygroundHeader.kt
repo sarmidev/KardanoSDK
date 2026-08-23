@@ -6,12 +6,12 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,19 +25,22 @@ import kardanosdk.shared.generated.resources.kardano_mark_light
 import org.jetbrains.compose.resources.painterResource
 
 /**
- * The Playground's landing hero (Block 1.12-pre-c, building on the 1.12-pre-b visual refresh;
- * given the Sarmidev-owned brand mark in 1.12-pre-d): the project's own icon mark via
- * [BrandMark], the "Kardano SDK" title and "Kotlin Multiplatform Cardano SDK" subtitle, a
- * one-line value statement, the platform/scope badge row
- * (`KMP`/`Android`/`iOS`/`JVM`/`Preprod`/`ADA-only MVP`), the concise test-only framing, and a
- * CTA that scrolls to the interactive flow via [onTryFlow]. Presentation only — it reads no SDK
- * state and computes nothing; the active provider mode is shown by the flow's provider card and
- * per-step badges, not here.
+ * The Playground's shared hero card (Block 1.12-pre-c, visually refreshed in 1.12-pre-d;
+ * generalized in Block 1.12-pre-e into a reusable shell for both the Welcome and About screens):
+ * the project's own icon mark via [BrandMark], an optional badge, [title]/[subtitle], and
+ * arbitrary screen-specific [content] painted underneath. Presentation only — it reads no SDK
+ * state and computes nothing.
  */
 @Composable
-internal fun PlaygroundHeader(platformLabel: String, onTryFlow: () -> Unit) {
+internal fun HeroCard(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    badgeText: String? = null,
+    content: @Composable ColumnScope.() -> Unit = {},
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .background(
                 brush = Brush.verticalGradient(
@@ -58,45 +61,23 @@ internal fun PlaygroundHeader(platformLabel: String, onTryFlow: () -> Unit) {
                 BrandMark(modifier = Modifier.size(52.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "Kardano SDK",
+                        text = title,
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text = "Kotlin Multiplatform Cardano SDK",
+                        text = subtitle,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            Text(
-                text = "Build Cardano wallet and transaction flows from shared Kotlin code.",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-
-            BadgeRow(
-                listOf(
-                    Badge("KMP", BadgeTone.INFO),
-                    Badge("Android", BadgeTone.NEUTRAL),
-                    Badge("iOS", BadgeTone.NEUTRAL),
-                    Badge("JVM", BadgeTone.NEUTRAL),
-                    Badge("Preprod", BadgeTone.INFO),
-                    Badge("ADA-only MVP", BadgeTone.NEUTRAL),
-                ),
-            )
-
-            Text(
-                text = "Uses a cited test-only fixture wallet throughout — never real funds, " +
-                    "mnemonics, or private keys. Running on $platformLabel.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Button(onClick = onTryFlow, modifier = Modifier.fillMaxWidth()) {
-                Text("Try the transaction flow below  ↓")
+            if (badgeText != null) {
+                BadgeRow(listOf(Badge(badgeText, BadgeTone.INFO)))
             }
+
+            content()
         }
     }
 }
@@ -118,39 +99,4 @@ internal fun BrandMark(modifier: Modifier = Modifier) {
         painterResource(Res.drawable.kardano_mark_light)
     }
     Image(painter = mark, contentDescription = "Kardano SDK", modifier = modifier)
-}
-
-/**
- * A compact, horizontally readable indicator of the guided flow's five steps. Completed steps
- * (each corresponding to a `Success` presentation) are tinted with the primary color; the rest
- * are muted. Presentation only — it derives nothing and calls no SDK.
- */
-@Composable
-internal fun FlowStepper(completed: List<Boolean>) {
-    val labels = listOf("Wallet", "Funds", "Build", "Sign", "Submit")
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        labels.forEachIndexed { index, label ->
-            val done = completed.getOrElse(index) { false }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (done) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline
-                },
-            )
-            if (index != labels.lastIndex) {
-                Text(
-                    text = "›",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-            }
-        }
-    }
 }

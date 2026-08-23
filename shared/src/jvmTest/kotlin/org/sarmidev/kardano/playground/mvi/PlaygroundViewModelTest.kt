@@ -24,6 +24,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -197,6 +198,43 @@ class PlaygroundViewModelTest {
         vm.dispatch(PlaygroundIntent.SubmitTransaction)
 
         assertEquals(expected, vm.state.value.submit)
+    }
+
+    // --- Guided-demo navigation (Block 1.12-pre-e): routes through the reducer, calls no use case ---
+
+    @Test
+    fun continueDemo_and_backDemo_routeThroughTheReducerWithoutCallingAnyUseCase() = runTest {
+        var useCaseCalls = 0
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                useCaseCalls++
+                WalletBalancePresentation.Success(emptyList())
+            },
+        )
+
+        // ContinueDemo is a no-op (Wallet step unresolved) — no use case, no state change.
+        vm.dispatch(PlaygroundIntent.ContinueDemo)
+        assertEquals(PlaygroundStep.WALLET, vm.state.value.demoStep)
+        assertEquals(0, useCaseCalls)
+
+        // BackDemo on the first step is also a no-op.
+        vm.dispatch(PlaygroundIntent.BackDemo)
+        assertEquals(PlaygroundStep.WALLET, vm.state.value.demoStep)
+        assertEquals(0, useCaseCalls)
+    }
+
+    @Test
+    fun canContinue_isTrueAfterAFakedSuccessfulFundsResult() = runTest {
+        val expected = WalletBalancePresentation.Success(listOf(LabeledRow("Test ADA", "5 ADA")))
+        val vm = viewModel(queryWalletFunds = QueryWalletFundsUseCase { expected })
+        vm.dispatch(PlaygroundIntent.NavigateToDemo)
+
+        // Move the cursor to FUNDS the same way ContinueDemo would once WALLET is resolved.
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.WALLET)))
+
+        val fundsResolvedState = vm.state.value.copy(demoStep = PlaygroundStep.FUNDS)
+        assertTrue(PlaygroundDemoFlow.canContinue(fundsResolvedState))
     }
 
     // --- Provider selection wiring ---

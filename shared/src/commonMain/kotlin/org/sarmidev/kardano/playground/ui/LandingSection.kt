@@ -13,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
@@ -24,59 +23,43 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import org.sarmidev.kardano.playground.mvi.PlaygroundIntent
+import org.sarmidev.kardano.playground.mvi.PlaygroundState
 
 /**
- * The developer-facing landing/overview area shown in the Overview section (Block 1.12-pre-c,
- * updated in 1.12-pre-c-2): what the SDK does today, a friendly preview of the transaction flow,
- * optional illustrative code snippets, and a compact link into the dedicated roadmap screen. Pure
- * presentation — the only interactions are the [onToggleCodeExamples] visibility toggle (driven
- * by [codeExamplesExpanded]) and the [onOpenRoadmap] navigation callback. It reads no SDK state
- * and calls no SDK API.
+ * The About screen (formerly the landing/Overview section; Block 1.12-pre-c,
+ * restructured as a secondary screen off Welcome/Summary in Block 1.12-pre-e): what the SDK
+ * does today in plain language, optional illustrative code snippets, the developer-facing
+ * [DiagnosticsSection] (relocated here under "Developer tools", collapsed by default and
+ * unrelated to the guided demo's fixture wallet), a link into the dedicated roadmap screen, and
+ * a [onBackToDemo] control. Pure presentation — the only interactions are the
+ * [onToggleCodeExamples] visibility toggle (driven by [codeExamplesExpanded]), the
+ * [onOpenRoadmap]/[onBackToDemo] navigation callbacks, and whatever [PlaygroundIntent]s
+ * [DiagnosticsSection] dispatches from [state]. It reads no other SDK state itself.
  */
 @Composable
 internal fun PlaygroundLanding(
+    state: PlaygroundState,
     codeExamplesExpanded: Boolean,
     onToggleCodeExamples: () -> Unit,
     onOpenRoadmap: () -> Unit,
+    onBackToDemo: () -> Unit,
+    dispatch: (PlaygroundIntent) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        TextButton(onClick = onBackToDemo) { Text(DemoCopy.About.BACK_TO_DEMO) }
+        HeroCard(title = DemoCopy.Welcome.TITLE, subtitle = DemoCopy.Welcome.SUBTITLE)
         CapabilitiesSection()
-        FlowPreviewSection()
         CodeExamplesSection(expanded = codeExamplesExpanded, onToggle = onToggleCodeExamples)
         RoadmapTeaser(onOpenRoadmap = onOpenRoadmap)
+        DeveloperToolsSection(state, dispatch)
     }
 }
 
 // ---------------------------------------------------------------------------
-// What the SDK does today
+// What the SDK does today (re-copied in plain language — Block 1.12-pre-e)
 // ---------------------------------------------------------------------------
-
-private data class Capability(val title: String, val description: String)
-
-private val capabilities = listOf(
-    Capability(
-        "Parse and validate addresses",
-        "Structural CIP-19 Shelley address parsing (testnet or mainnet forms) — parsing only.",
-    ),
-    Capability(
-        "Create a test wallet",
-        "Set up the built-in test-only fixture and derive its testnet address.",
-    ),
-    Capability(
-        "Query UTxOs and balance",
-        "Read balances and UTxOs through a provider boundary — an in-memory mock or Blockfrost preprod.",
-    ),
-    Capability(
-        "Build ADA-only drafts",
-        "Assemble a minimal unsigned ADA-only transaction with coin selection, fee, and change.",
-    ),
-    Capability(
-        "Sign locally and submit",
-        "Sign the draft on-device with the fixture wallet, then submit it to preprod.",
-    ),
-)
 
 @Composable
 private fun CapabilitiesSection() {
@@ -84,16 +67,16 @@ private fun CapabilitiesSection() {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader(
             title = "What the SDK does today",
-            subtitle = "The current MVP surface, exercised by the flow below.",
+            subtitle = "The current MVP surface, exercised by the guided demo.",
         )
-        capabilities.forEachIndexed { index, capability ->
+        DemoCopy.About.CAPABILITIES.forEachIndexed { index, capability ->
             CapabilityCard(capability, accents[index % accents.size])
         }
     }
 }
 
 @Composable
-private fun CapabilityCard(capability: Capability, accent: Color) {
+private fun CapabilityCard(capability: DemoCopy.About.Capability, accent: Color) {
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -119,83 +102,14 @@ private fun CapabilityCard(capability: Capability, accent: Color) {
 }
 
 // ---------------------------------------------------------------------------
-// Transaction flow preview
-// ---------------------------------------------------------------------------
-
-private data class PreviewStep(val label: String, val detail: String)
-
-private val previewSteps = listOf(
-    PreviewStep("Create a test wallet", "Set up the fixture wallet and get its testnet address."),
-    PreviewStep("Check available test ADA", "Look up the wallet's balance and UTxOs."),
-    PreviewStep("Prepare a transaction", "Build an ADA-only draft with fee and change."),
-    PreviewStep("Sign it locally", "Sign the draft on-device — nothing is sent yet."),
-    PreviewStep("Send it to preprod", "Submit the signed transaction to the preprod network."),
-)
-
-@Composable
-private fun FlowPreviewSection() {
-    val accents = LocalKardanoBrand.current.accents
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader(
-            title = "The transaction flow",
-            subtitle = "Wallet → Funds → Build → Sign → Submit, in five steps.",
-        )
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                previewSteps.forEachIndexed { index, step ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.Top,
-                    ) {
-                        NumberDot(index + 1, accents[index % accents.size])
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(text = step.label, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                text = step.detail,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                Text(
-                    text = "Exact technical details (hex, fees, witnesses, ids) stay behind a " +
-                        "toggle on each step below.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NumberDot(number: Int, accent: Color) {
-    Surface(color = accent, shape = CircleShape, modifier = Modifier.size(26.dp)) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = number.toString(),
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Code / example cards (collapsible)
 // ---------------------------------------------------------------------------
 
 private data class CodeExample(val title: String, val code: String)
 
 // Deliberately simplified, illustrative snippets — not the exact SDK signatures, and never a
-// real mnemonic, private key, or full signed CBOR. See PlaygroundPresenter and the guided flow
-// below for the actual calls.
+// real mnemonic, private key, or full signed CBOR. See PlaygroundPresenter and the guided demo
+// steps for the actual calls.
 private val codeExamples = listOf(
     CodeExample(
         "Restore a test wallet",
@@ -312,7 +226,7 @@ private fun RoadmapTeaser(onOpenRoadmap: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Button(onClick = onOpenRoadmap, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onOpenRoadmap, modifier = Modifier.fillMaxWidth()) {
                     Text("Open the roadmap  →")
                 }
             }
@@ -321,10 +235,25 @@ private fun RoadmapTeaser(onOpenRoadmap: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------------
+// Developer tools (the relocated Diagnostics area — Block 1.12-pre-e)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun DeveloperToolsSection(state: PlaygroundState, dispatch: (PlaygroundIntent) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader(
+            title = "Developer tools",
+            subtitle = "Standalone structural tools, unrelated to the guided demo's test wallet.",
+        )
+        DiagnosticsSection(state, dispatch)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Shared section header
 // ---------------------------------------------------------------------------
 
-/** A section title with an optional one-line subtitle, used across the landing area and flow. */
+/** A section title with an optional one-line subtitle, used across the About screen and demo. */
 @Composable
 internal fun SectionHeader(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {

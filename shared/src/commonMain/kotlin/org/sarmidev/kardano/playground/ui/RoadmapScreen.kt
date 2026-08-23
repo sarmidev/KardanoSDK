@@ -9,6 +9,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,15 +101,22 @@ private val roadmap = listOf(
 )
 
 /**
- * The dedicated roadmap screen (Block 1.12-pre-c-2): one card per [RoadmapPhase], each showing a
- * title, a status badge (Done / Current / Planned / Future), and a tagline. Tapping a card
- * expands its detail (highlights + a scope note) via [onSelect]; the currently expanded card is
- * [selected]. Pure presentation — every string is static sample-app copy, framed as direction
- * rather than a committed public API or delivery schedule; it reads no SDK state and calls no SDK.
+ * The dedicated roadmap screen (Block 1.12-pre-c-2, given a back control in Block 1.12-pre-e now
+ * that it is reached as a secondary screen rather than a top-level tab): one card per
+ * [RoadmapPhase], each showing a title, a status badge (Done / Current / Planned / Future), and
+ * a tagline. Tapping a card expands its detail (highlights + a scope note) via [onSelect]; the
+ * currently expanded card is [selected]. [onBack] returns to the guided demo. Pure presentation
+ * — every string is static sample-app copy, framed as direction rather than a committed public
+ * API or delivery schedule; it reads no SDK state and calls no SDK.
  */
 @Composable
-internal fun RoadmapScreen(selected: RoadmapPhase?, onSelect: (RoadmapPhase) -> Unit) {
+internal fun RoadmapScreen(
+    selected: RoadmapPhase?,
+    onSelect: (RoadmapPhase) -> Unit,
+    onBack: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TextButton(onClick = onBack) { Text(DemoCopy.About.BACK_TO_DEMO) }
         SectionHeader(
             title = "Roadmap",
             subtitle = "Where the SDK is today and where it could go. This is a sample-app " +

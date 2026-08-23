@@ -46,6 +46,18 @@ import org.sarmidev.kardano.wallet.WalletSignedTransaction
 /** A labeled key-value row for a structured result card. */
 internal data class LabeledRow(val label: String, val value: String)
 
+/**
+ * The exact message [PlaygroundPresenter.presentSubmitError] returns for
+ * [SubmitError.SubmissionNotSupported] — the mock submit provider's honest "no network here"
+ * response. Extracted to a named constant (Block 1.12-pre-e) so
+ * [org.sarmidev.kardano.playground.mvi.PlaygroundDemoFlow] can recognize this specific,
+ * expected mock outcome and present it as a neutral "stopped on purpose" state instead of a
+ * generic error, without duplicating or guessing at the literal text.
+ */
+internal const val MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE: String =
+    "This provider does not support submission (mock) — enable live Blockfrost " +
+        "preprod to submit for real."
+
 /** Result of presenting an [Address.parse] call. */
 internal sealed interface AddressPresentation {
     data object Empty : AddressPresentation
@@ -618,6 +630,7 @@ internal object PlaygroundPresenter {
         LabeledRow("Address", address.toBech32()),
         LabeledRow("UTxO count", balance.utxoCount.toString()),
         LabeledRow("Balance", "${balance.coin.value} lovelace"),
+        LabeledRow("Test ADA", LovelaceDisplay.ada(balance.coin.value)),
     )
 
     /**
@@ -760,6 +773,7 @@ internal object PlaygroundPresenter {
 
     private fun transactionDraftRows(draft: TransactionDraft): List<LabeledRow> {
         val bodyBytes = draft.bodyCbor()
+        val paymentOutput = draft.outputs.getOrNull(0)
         val changeOutput = draft.outputs.getOrNull(1)
         return buildList {
             add(LabeledRow("Selected inputs", draft.selectedInputs.size.toString()))
@@ -769,6 +783,9 @@ internal object PlaygroundPresenter {
             add(LabeledRow("Body size", "${bodyBytes.size} bytes"))
             add(LabeledRow("Body CBOR (preview)", bodyHexPreview(bodyBytes)))
             add(LabeledRow("Status", "Unsigned draft — not signed, not submitted"))
+            paymentOutput?.let { add(LabeledRow("Payment", LovelaceDisplay.ada(it.amount.value))) }
+            add(LabeledRow("Network cost", LovelaceDisplay.ada(draft.fee.value)))
+            changeOutput?.let { add(LabeledRow("Change back", LovelaceDisplay.ada(it.amount.value))) }
         }
     }
 
@@ -1013,9 +1030,7 @@ internal object PlaygroundPresenter {
      * Internal so tests can exercise all variants by constructing them directly.
      */
     internal fun presentSubmitError(error: SubmitError): String = when (error) {
-        is SubmitError.SubmissionNotSupported ->
-            "This provider does not support submission (mock) — enable live Blockfrost " +
-                "preprod to submit for real."
+        is SubmitError.SubmissionNotSupported -> MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE
         is SubmitError.EmptyTransaction -> "Empty transaction: nothing to submit"
         is SubmitError.Rejected -> "Transaction rejected (status ${error.code}): ${error.detail}"
         is SubmitError.Transport -> "Transport error: ${error.message}"

@@ -26,8 +26,13 @@ internal enum class BadgeTone { NEUTRAL, INFO, SUCCESS, LIVE }
  */
 internal data class Badge(val text: String, val tone: BadgeTone)
 
-/** The progress tone of one guided-flow step, driving its [StatusChip] colors. */
-internal enum class StepTone { IDLE, LOADING, SUCCESS, ERROR }
+/**
+ * The progress tone of one guided-flow step, driving its [StatusChip] colors. [INFO] (Block
+ * 1.12-pre-e) is a distinct, neutral "stopped on purpose" tone — used only for the mock Submit
+ * step's honest not-supported outcome — so that expected, non-error resting point is never
+ * painted the same red as a real failure, nor the same green as a completed submission.
+ */
+internal enum class StepTone { IDLE, LOADING, SUCCESS, INFO, ERROR }
 
 /** A per-step status line (for example "Ready", "Restoring…", "Failed"). */
 internal data class StepStatus(val label: String, val tone: StepTone)
@@ -57,12 +62,14 @@ internal fun StatusChip(status: StepStatus) {
         StepTone.IDLE -> brand.chipNeutralBg
         StepTone.LOADING -> brand.chipLoadingBg
         StepTone.SUCCESS -> brand.chipSuccessBg
+        StepTone.INFO -> brand.chipInfoBg
         StepTone.ERROR -> brand.chipErrorBg
     }
     val fg = when (status.tone) {
         StepTone.IDLE -> brand.chipNeutralFg
         StepTone.LOADING -> brand.chipLoadingFg
         StepTone.SUCCESS -> brand.chipSuccessFg
+        StepTone.INFO -> brand.chipInfoFg
         StepTone.ERROR -> brand.chipErrorFg
     }
     Chip(text = status.label, background = bg, foreground = fg)

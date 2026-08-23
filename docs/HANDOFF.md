@@ -21,7 +21,9 @@ Current project identity:
   hygiene, pilot discovery, and Phase 2 architecture planning. No Phase 2 protocol capability is
   implemented yet. Block 1.12-pre-d gave the project its first definitive icon mark and a matching
   Material 3 theme (Android/iOS/Desktop launchers, the Compose header) ahead of the public landing
-  page.
+  page. Block 1.12-pre-e redesigned the Playground into a linear, plain-language guided demo
+  (Welcome → five-step Demo → Summary) for a short public video, replacing the Overview/Try SDK/
+  Roadmap tab row; no SDK API/provider/wallet/tx behavior changed.
 - Current strategic direction: Phase 2 is a loyalty/ticketing native-asset pilot with provider
   expansion; it is gated by an ADR, external problem validation, and a preserved-value transaction
   model. See `docs/PHASE_2_PLAN.md` and `docs/FUNDING_AND_PILOT_PLAYBOOK.md`.
@@ -598,6 +600,87 @@ Do not use:
 At the end of each session, update this section.
 
 ### Last Session Summary
+
+Date: 2026-08-22
+
+Summary:
+
+- **Block 1.12-pre-e: Guided Playground demo redesign — DONE.** Precondition: Block 1.12-pre-d
+  (brand/theme refresh) was already committed; the pre-existing, unrelated working-tree edit in
+  `core/src/commonMain/kotlin/org/sarmidev/kardano/encoding/cbor/CborValue.kt` was left untouched
+  throughout. Context: the Block 1.12-pre-c-2 Overview/Try SDK/Roadmap tab row put a developer-
+  facing prose page in front of the working flow — the opposite of what a short public video
+  needs — and the flow's own language (UTxO, CBOR, witnesses, raw-lovelace fee/change) required
+  narration for a non-Cardano audience. **Presentation only** — no SDK public API, no
+  `:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost` change, no new dependency;
+  every `RestoreWallet`/`QueryFunds`/`BuildDraft`/`SignTransaction`/`SubmitTransaction` call and
+  the 1.12-pre-a MVI split are unchanged.
+  - **New linear journey.** `PlaygroundSection` is now `WELCOME`/`DEMO`/`SUMMARY`/`ABOUT`/
+    `ROADMAP` (was `OVERVIEW`/`TRY_SDK`/`ROADMAP`); `PlaygroundState` gained a `demoStep` cursor.
+    `PlaygroundIntent` gained `NavigateToWelcome`/`NavigateToDemo`/`NavigateToSummary`/
+    `NavigateToAbout`/`ContinueDemo`/`BackDemo` (renamed from `NavigateToOverview`/
+    `NavigateToTrySdk`); `PlaygroundReducer` advances/steps-back `demoStep`, routes the last step's
+    `ContinueDemo` to `SUMMARY`, and `ResetFlow` now also resets `demoStep`/`section`.
+    `PlaygroundScreen.kt` is rewritten as a five-section router: `WelcomeSection` (what the demo
+    does, a five-step preview, one *Start the demo* button) → `DemoStepSection` (one
+    `FlowStepCard` at a time, `Step N of 5`, a recap strip of finished steps, *Back*/*Continue*/
+    *Start over*) → `SummarySection` (plain-language recap, an honest scope-boundary list, *Run
+    the demo again*); `AboutSection` (former Overview content, re-copied) and `RoadmapScreen` are
+    secondary screens off Welcome/Summary with a "Back to the demo" control.
+  - **New `PlaygroundDemoFlow.kt`** (`commonTest`-covered, pure, non-suspend): step outcome
+    classification (`StepOutcome`: `NOT_STARTED`/`WORKING`/`DONE`/`INFO`/`ERROR`), continue-
+    gating (`canContinue`), a documented friendly-reason mapping for a subset of existing
+    `PlaygroundPresenter` failure messages, and address/id truncation for result lines — so no
+    composable computes this logic itself.
+  - **Honest mock-stop, not an error.** The mock Submit step's unchanged
+    `SubmitError.SubmissionNotSupported` failure is classified as a new, neutral `StepOutcome.INFO`
+    ("stopped on purpose") rather than red `ERROR`, keyed off `MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE`
+    — a constant extracted verbatim from `PlaygroundPresenter.presentSubmitError`, which itself did
+    not change. `StatusBadge.kt`'s `StepTone` gained a matching `INFO` tone/chip pair.
+  - **New `DemoCopy.kt`**, a single reviewable, data-driven table holding every Welcome/Demo/
+    Summary string, with a `commonTest` (`DemoCopyTest`) asserting completeness per step and that
+    every primary-facing string is free of jargon/banned words outside two documented, narrower
+    exceptions: the collapsed "Advanced: connect to a test network" disclosure and the Summary's
+    scope-boundary list (both allowed to name real technical terms like "mainnet"/"Blockfrost").
+  - **New `LovelaceDisplay.kt`** (`ada(lovelace)`) plus four purely additive, ADA-formatted
+    `LabeledRow`s in `PlaygroundPresenter.kt` (`Test ADA`, `Payment`, `Network cost`, `Change
+    back`) so the main narrative reads in ADA while every existing raw-lovelace row stays under
+    each step's "Technical details" toggle.
+  - **Two small, documented UX changes.** `DiagnosticsSection` (content unchanged) relocated under
+    the About screen's "Developer tools" heading, since it is unrelated to the guided demo's
+    fixture wallet. The Blockfrost preprod project-id field is now masked
+    (`PasswordVisualTransformation`). The Advanced panel now distinguishes switch intent from an
+    active live provider: with the switch on but a blank project id it explicitly says
+    configuration is incomplete, continues to identify the effective provider as Mock, and keeps
+    the mock Submit stop as neutral `INFO`; it claims live requests only once the id is non-blank,
+    matching `PlaygroundProviderFactory`'s existing behavior.
+  - **Tests.** Extended `PlaygroundReducerTest` (new navigation/`ContinueDemo`/`BackDemo`/reset
+    cases); new `PlaygroundDemoFlowTest`, `DemoCopyTest`, `LovelaceDisplayTest`; extended
+    `PlaygroundSubmitTransactionPresenterTest`/`PlaygroundWalletBalancePresenterTest`/
+    `PlaygroundTransactionDraftPresenterTest` to pin the extracted constant and the new ADA rows;
+    extended `PlaygroundViewModelTest` (navigation intents route through the reducer without
+    calling any use case; `canContinue` true after a faked successful Funds result) and
+    `PlaygroundMockFlowDesktopTest` (the real seeded mock's Submit failure classifies as `INFO`).
+    No new UI-test dependency — navigation/gating/copy stay covered at the reducer/derived-state
+    level plus `@Preview`s, the same shape the rest of `:shared` already uses.
+  - **Docs updated.** `shared/README.md` (new "Playground guided demo (Block 1.12-pre-e)"
+    section; the superseded 1.12-pre-c-2 tab-row section now has a pointer note),
+    `docs/QUICKSTART.md` (Welcome screen + step-by-step guided-demo copy, masked Advanced
+    disclosure), `docs/PHASE_1_PLAN.md` (new `1.12-pre-e` block entry), `CHANGELOG.md`, and this
+    file.
+  - **Verification.** `./gradlew :shared:jvmTest :shared:testAndroidHostTest
+    :shared:compileKotlinIosArm64 :desktopApp:compileKotlin :androidApp:assembleDebug` pass; `git
+    diff --check` clean; no banned words on touched files. Manual light/dark, narrow-screen (360dp),
+    large-font, screen-reader, error-recovery, and reset walkthroughs were identified as needed but
+    require a device/emulator with a display, which this session's environment does not have —
+    flagged as owner-required follow-up rather than skipped silently.
+
+Owner action still required: manually walk the Desktop/Android Playground through light mode,
+dark mode, a narrow (~360dp) window/device, 200% system font scaling, TalkBack/VoiceOver on the
+Welcome → Demo → Summary journey, and the error-recovery + *Start over*/*Run the demo again* paths,
+since this session's environment has no attached display to drive Compose UI manually.
+
+### Session Summary (Public Landing Page Roadmap Section Rework)
 
 Date: 2026-07-26
 

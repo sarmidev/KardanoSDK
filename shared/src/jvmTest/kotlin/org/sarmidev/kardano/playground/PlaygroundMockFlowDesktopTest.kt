@@ -3,6 +3,10 @@ package org.sarmidev.kardano.playground
 import kotlinx.coroutines.test.runTest
 import org.sarmidev.kardano.KardanoResult
 import org.sarmidev.kardano.playground.data.PlaygroundProviderFactory
+import org.sarmidev.kardano.playground.mvi.PlaygroundDemoFlow
+import org.sarmidev.kardano.playground.mvi.PlaygroundState
+import org.sarmidev.kardano.playground.mvi.PlaygroundStep
+import org.sarmidev.kardano.playground.mvi.StepOutcome
 import org.sarmidev.kardano.primitives.Network
 import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
 import org.sarmidev.kardano.wallet.ReadOnlyWallet
@@ -90,5 +94,15 @@ class PlaygroundMockFlowDesktopTest {
             failure.message.contains("does not support submission", ignoreCase = true),
             "expected the mock's honest not-supported message, got: ${failure.message}",
         )
+
+        // Block 1.12-pre-e: ties the demo's honest "stopped on purpose" story to this actual
+        // presenter output, not a hand-copied literal — see PlaygroundDemoFlowTest for the
+        // literal-constant version of this same assertion.
+        val state = PlaygroundState.initial().copy(
+            demoStep = PlaygroundStep.SUBMIT,
+            useLiveBlockfrost = false,
+            submit = failure,
+        )
+        assertEquals(StepOutcome.INFO, PlaygroundDemoFlow.outcome(state, PlaygroundStep.SUBMIT))
     }
 }
