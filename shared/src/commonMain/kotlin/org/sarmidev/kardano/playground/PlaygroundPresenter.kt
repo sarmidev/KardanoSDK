@@ -296,7 +296,14 @@ internal object PlaygroundPresenter {
         when (val result = Hex.decode(input.trim())) {
             is KardanoResult.Ok -> {
                 val bytes = result.value
-                HexPresentation.DecodeSuccess(bytes.size, Hex.encode(bytes))
+                // Hex.decode's own input limit bounds bytes.size to at most
+                // Hex.MAX_ENCODE_INPUT_BYTES (Hex.MAX_INPUT_CHARS / 2), so this re-encode
+                // cannot exceed Hex.encode's own limit; the Err branch is not reachable here,
+                // but is still handled rather than assumed.
+                when (val encoded = Hex.encode(bytes)) {
+                    is KardanoResult.Ok -> HexPresentation.DecodeSuccess(bytes.size, encoded.value)
+                    is KardanoResult.Err -> HexPresentation.Failure(presentHexError(encoded.error))
+                }
             }
             is KardanoResult.Err -> HexPresentation.Failure(presentHexError(result.error))
         }
@@ -305,12 +312,30 @@ internal object PlaygroundPresenter {
      * Encodes [bytes] to canonical lowercase hex.
      */
     fun presentHexEncode(bytes: ByteArray): HexPresentation =
-        HexPresentation.EncodeSuccess(Hex.encode(bytes))
+        when (val result = Hex.encode(bytes)) {
+            is KardanoResult.Ok -> HexPresentation.EncodeSuccess(result.value)
+            is KardanoResult.Err -> HexPresentation.Failure(presentHexError(result.error))
+        }
 
     private fun presentHexError(error: HexError): String = when (error) {
         is HexError.InputTooLong -> "Input too long: ${error.actual} chars (max ${error.max})"
+        is HexError.EncodeInputTooLong -> "Input too long: ${error.actual} bytes (max ${error.max})"
         is HexError.OddLength -> "Odd length: ${error.length} chars"
         is HexError.InvalidCharacter -> "Invalid character '${error.char}' at index ${error.index}"
+    }
+
+    /**
+     * Encodes [bytes] to lowercase hex for display, or a bracketed placeholder if [bytes]
+     * somehow exceeded [Hex.MAX_ENCODE_INPUT_BYTES].
+     *
+     * Every call site of this helper passes a small, internally-bounded array — a Blake2b
+     * digest (28 or 32 bytes) or a short preview-prefix slice — so the placeholder branch is
+     * not expected to be reachable from any current Playground flow; it exists so this
+     * presenter never throws instead of silently assuming [Hex.encode] cannot fail.
+     */
+    private fun hexOrPlaceholder(bytes: ByteArray): String = when (val result = Hex.encode(bytes)) {
+        is KardanoResult.Ok -> result.value
+        is KardanoResult.Err -> "<hex encode error: ${presentHexError(result.error)}>"
     }
 
     // --- CBOR ---
@@ -403,7 +428,7 @@ internal object PlaygroundPresenter {
                 is KardanoResult.Ok -> result.value
                 is KardanoResult.Err -> return WalletPresentation.Failure(presentCryptoError(result.error))
             }
-            val paymentFingerprintHex = Hex.encode(paymentDigest.toByteArray())
+            val paymentFingerprintHex = hexOrPlaceholder(paymentDigest.toByteArray())
             val paymentCredential = when (
                 val result = AddressCredential.keyHash(paymentDigest.toByteArray())
             ) {
@@ -429,7 +454,7 @@ internal object PlaygroundPresenter {
                 is KardanoResult.Ok -> result.value
                 is KardanoResult.Err -> return WalletPresentation.Failure(presentCryptoError(result.error))
             }
-            val stakeFingerprintHex = Hex.encode(stakeDigest.toByteArray())
+            val stakeFingerprintHex = hexOrPlaceholder(stakeDigest.toByteArray())
             val stakeCredential = when (
                 val result = AddressCredential.keyHash(stakeDigest.toByteArray())
             ) {
@@ -794,7 +819,7 @@ internal object PlaygroundPresenter {
 
     private fun bodyHexPreview(bytes: ByteArray): String {
         val prefixLength = minOf(BODY_HEX_PREVIEW_BYTES, bytes.size)
-        val hex = Hex.encode(bytes.copyOf(prefixLength))
+        val hex = hexOrPlaceholder(bytes.copyOf(prefixLength))
         return if (bytes.size > prefixLength) "$hex… (${bytes.size}B total)" else hex
     }
 
@@ -915,7 +940,7 @@ internal object PlaygroundPresenter {
     }
 
     private fun signedTransactionRows(signed: WalletSignedTransaction): List<LabeledRow> = listOf(
-        LabeledRow("Transaction id", Hex.encode(signed.transactionId.toByteArray())),
+        LabeledRow("Transaction id", hexOrPlaceholder(signed.transactionId.toByteArray())),
         LabeledRow("Witnesses", signed.witnessCount.toString()),
         LabeledRow(
             "Signed tx CBOR (preview)",
@@ -926,7 +951,7 @@ internal object PlaygroundPresenter {
 
     private fun signedCborPreview(bytes: ByteArray): String {
         val prefixLength = minOf(SIGNED_CBOR_PREVIEW_BYTES, bytes.size)
-        val hex = Hex.encode(bytes.copyOf(prefixLength))
+        val hex = hexOrPlaceholder(bytes.copyOf(prefixLength))
         return if (bytes.size > prefixLength) "$hex… (${bytes.size}B total)" else hex
     }
 
@@ -1016,8 +1041,13 @@ internal object PlaygroundPresenter {
     ): List<LabeledRow> {
         val matches = localTransactionId == acceptedTransactionId
         return buildList {
-            add(LabeledRow("Accepted transaction id", Hex.encode(acceptedTransactionId.toByteArray())))
-            add(LabeledRow("Locally signed transaction id", Hex.encode(localTransactionId.toByteArray())))
+            add(LabeledRow("Accepted transaction id", hexOrPlaceholder(acceptedTransactionId.toByteArray())))
+            add(
+                LabeledRow(
+                    "Locally signed transaction id",
+                    hexOrPlaceholder(localTransactionId.toByteArray()),
+                ),
+            )
             add(LabeledRow("Ids match", if (matches) "yes" else "no"))
             if (!matches) {
                 add(
@@ -1059,6 +1089,6 @@ internal object PlaygroundPresenter {
 
     private fun shortHex(bytes: ByteArray): String {
         val prefix = bytes.copyOf(minOf(SHORT_HEX_PREFIX_BYTES, bytes.size))
-        return "${Hex.encode(prefix)}… (${bytes.size}B, structural only)"
+        return "${hexOrPlaceholder(prefix)}… (${bytes.size}B, structural only)"
     }
 }

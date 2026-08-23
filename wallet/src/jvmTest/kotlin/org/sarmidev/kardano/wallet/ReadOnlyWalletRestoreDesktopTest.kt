@@ -65,6 +65,10 @@ class ReadOnlyWalletRestoreDesktopTest {
         val paymentCredential = requireNotNull(parsed.paymentCredential) {
             "a base address should have a payment credential"
         }
-        assertEquals(cip19PaymentCredential, Hex.encode(paymentCredential.hashBytes()))
+        val encodedPaymentCredential = when (val result = Hex.encode(paymentCredential.hashBytes())) {
+            is KardanoResult.Ok -> result.value
+            is KardanoResult.Err -> fail("expected Ok but got Err(${result.error})")
+        }
+        assertEquals(cip19PaymentCredential, encodedPaymentCredential)
     }
 }

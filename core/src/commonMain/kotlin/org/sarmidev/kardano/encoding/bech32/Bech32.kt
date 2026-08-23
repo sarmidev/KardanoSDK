@@ -200,8 +200,12 @@ public object Bech32 {
      * Each element of [data] is treated as an unsigned [fromBits]-bit value; values with
      * bits set beyond [fromBits] are rejected. When [pad] is `true`, a final partial group
      * is zero-padded; when `false`, any leftover bits must be fewer than [fromBits] and zero,
-     * otherwise the conversion is rejected. When [toBits] is `8`, the output length is
-     * bounded by [MAX_DATA_BYTES] and the bound is checked before allocation.
+     * otherwise the conversion is rejected. The output length is bounded before allocation in
+     * both directions this function supports: when [toBits] is `8`, by [MAX_DATA_BYTES]; when
+     * [toBits] is `5`, by [MAX_DATA_VALUES] (the same limit [encode] applies to its own `data`
+     * parameter, since this is the conversion that produces it). Both directions enforce this
+     * bound structurally, rather than relying on every current caller happening to pre-bound
+     * its own input.
      *
      * @return [KardanoResult.Ok] with the converted values, or [KardanoResult.Err] with
      *   [Bech32Error.InvalidPadding] or [Bech32Error.DataTooLong]. Never throws.
@@ -219,6 +223,9 @@ public object Bech32 {
         val outSize = if (pad) fullGroups + (if (remainder != 0) 1 else 0) else fullGroups
         if (toBits == 8 && outSize > MAX_DATA_BYTES) {
             return KardanoResult.Err(Bech32Error.DataTooLong(MAX_DATA_BYTES, outSize))
+        }
+        if (toBits == 5 && outSize > MAX_DATA_VALUES) {
+            return KardanoResult.Err(Bech32Error.DataTooLong(MAX_DATA_VALUES, outSize))
         }
 
         val inputMask = (1 shl fromBits) - 1

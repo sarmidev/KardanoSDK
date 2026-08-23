@@ -42,7 +42,7 @@ class BlockfrostTxSubmitProviderTest {
 
         val txHash = ok(provider.submit(sampleCbor))
 
-        assertEquals(BlockfrostFixtures.TX_HASH_A, Hex.encode(txHash.toByteArray()))
+        assertEquals(BlockfrostFixtures.TX_HASH_A, hexOk(txHash.toByteArray()))
 
         val request = requireNotNull(captured) { "expected the provider to make an HTTP request" }
         assertEquals(HttpMethod.Post, request.method)
@@ -63,7 +63,7 @@ class BlockfrostTxSubmitProviderTest {
 
         val txHash = ok(provider.submit(sampleCbor))
 
-        assertEquals(BlockfrostFixtures.TX_HASH_A, Hex.encode(txHash.toByteArray()))
+        assertEquals(BlockfrostFixtures.TX_HASH_A, hexOk(txHash.toByteArray()))
     }
 
     // ----- empty input -----
@@ -231,5 +231,11 @@ class BlockfrostTxSubmitProviderTest {
     private fun err(result: KardanoResult<*, SubmitError>): SubmitError {
         assertTrue(result is KardanoResult.Err, "expected Err but was $result")
         return result.error
+    }
+
+    private fun hexOk(bytes: ByteArray): String {
+        val result = Hex.encode(bytes)
+        assertTrue(result is KardanoResult.Ok, "expected Ok but was $result")
+        return result.value
     }
 }

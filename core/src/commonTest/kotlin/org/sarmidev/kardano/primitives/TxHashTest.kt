@@ -64,8 +64,11 @@ class TxHashTest {
         val text = hash.toString()
         assertTrue(text.contains("size="), "toString should keep a structural marker")
         assertFalse(
-            text.contains(Hex.encode(hash.toByteArray())),
+            text.contains(hexOk(hash.toByteArray())),
             "toString must not render the wrapped bytes",
         )
     }
+
+    private fun hexOk(bytes: ByteArray): String =
+        assertIs<KardanoResult.Ok<String>>(Hex.encode(bytes)).value
 }

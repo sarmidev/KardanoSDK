@@ -64,8 +64,11 @@ class PolicyIdTest {
         val text = policyId.toString()
         assertTrue(text.contains("size="), "toString should keep a structural marker")
         assertFalse(
-            text.contains(Hex.encode(policyId.toByteArray())),
+            text.contains(hexOk(policyId.toByteArray())),
             "toString must not render the wrapped bytes",
         )
     }
+
+    private fun hexOk(bytes: ByteArray): String =
+        assertIs<KardanoResult.Ok<String>>(Hex.encode(bytes)).value
 }

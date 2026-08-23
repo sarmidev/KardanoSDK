@@ -40,6 +40,14 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `blake2b256` now reject an oversized `input` before the defensive copy that previously ran
   unconditionally, closing a gap where the SDK's other parser primitives (`Cbor`, `Bech32`, `Hex`)
   already enforced a named input bound but hashing did not (W6-1).
+- `HexError.EncodeInputTooLong` and `Hex.MAX_ENCODE_INPUT_BYTES` (512 KiB, half of
+  `Hex.MAX_INPUT_CHARS`, so encoded output always stays within what `Hex.decode` accepts as
+  input): `Hex.encode` now rejects an oversized `bytes` array before allocating the doubled-length
+  output buffer.
+- `Bech32.convertBits`'s internal 8-bit-to-5-bit direction is now bounded by `Bech32.MAX_DATA_VALUES`
+  before allocating its output buffer, mirroring the bound its 5-bit-to-8-bit direction already
+  enforced (`Bech32.MAX_DATA_BYTES`), so both directions enforce this bound structurally instead
+  of relying on every current caller happening to pre-bound its own input (W6-3).
 
 ### Changed
 
@@ -99,6 +107,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   compatibility typealias or deprecated wrapper is provided under the old name (pre-alpha). No
   cryptographic, transaction-building, provider, or signing behavior changed; `Network.MAINNET`/
   `BlockfrostNetwork.MAINNET` are unaffected.
+- **Breaking:** `Hex.encode(bytes: ByteArray)` now returns `KardanoResult<String, HexError>`
+  instead of a bare, unbounded, non-failable `String`, so it can reject an oversized `bytes` array
+  (`HexError.EncodeInputTooLong`) the same way every other codec in this SDK
+  (`Bech32.encode`/`decode`, `Cbor.encode`/`decode`, `Hex.decode`) already does, instead of being
+  the one codec in the SDK with no upper bound on its input. Every internal call site (`:core`
+  tests, `:wallet`, `:provider-blockfrost` tests, `:shared`'s Playground presenter) is updated in
+  this same change. No compatibility overload is provided under the old signature (pre-alpha).
 
 ### Known limits
 

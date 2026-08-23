@@ -21,6 +21,21 @@ public sealed interface HexError {
     public data class InputTooLong(public val max: Int, public val actual: Int) : HexError
 
     /**
+     * The input byte array passed to [Hex.encode] exceeded the encoder's named limit.
+     *
+     * The limit is checked before the output [CharArray] is allocated. Each input byte
+     * becomes two output characters, so an unbounded input could otherwise overflow the
+     * doubled output length; the limit is set so that anything [Hex.encode] accepts as input
+     * produces output that stays within [Hex.MAX_INPUT_CHARS], the limit [Hex.decode] applies
+     * to its own input.
+     *
+     * @property max the maximum number of input bytes allowed
+     *   ([Hex.MAX_ENCODE_INPUT_BYTES]).
+     * @property actual the number of input bytes that were provided.
+     */
+    public data class EncodeInputTooLong(public val max: Int, public val actual: Int) : HexError
+
+    /**
      * The input had an odd number of characters, so it cannot map to whole bytes.
      *
      * @property length the number of input characters that were provided.

@@ -290,6 +290,18 @@ class Bech32Test {
         assertEquals(Bech32.MAX_DATA_BYTES, assertIs<Bech32Error.DataTooLong>(err.error).max)
     }
 
+    // W6-3 remediation: the 8->5 direction previously enforced no equivalent bound, unlike the
+    // 5->8 direction tested above. Enough 8-bit bytes that an 8->5 conversion would exceed
+    // MAX_DATA_VALUES.
+    @Test
+    fun convertBitsRejectsOverLimitOutputInOtherDirection() {
+        val bytes = ByteArray(700) // all-zero 8-bit values
+        val err = assertIs<KardanoResult.Err<Bech32Error>>(
+            Bech32.convertBits(bytes, 8, 5, pad = true),
+        )
+        assertEquals(Bech32.MAX_DATA_VALUES, assertIs<Bech32Error.DataTooLong>(err.error).max)
+    }
+
     private fun decode(hrp: String, data: ByteArray, variant: Bech32Variant): Bech32Decoded {
         val encoded = assertIs<KardanoResult.Ok<String>>(Bech32.encode(hrp, data, variant))
         return assertIs<KardanoResult.Ok<Bech32Decoded>>(Bech32.decode(encoded.value)).value

@@ -10,25 +10,25 @@ class HexTest {
 
     @Test
     fun encodeEmptyReturnsEmptyString() {
-        assertEquals("", Hex.encode(ByteArray(0)))
+        assertEquals("", encodeOk(ByteArray(0)))
     }
 
     @Test
     fun encodeSingleBytesBoundaries() {
-        assertEquals("00", Hex.encode(byteArrayOf(0x00)))
-        assertEquals("0f", Hex.encode(byteArrayOf(0x0f)))
-        assertEquals("10", Hex.encode(byteArrayOf(0x10)))
-        assertEquals("ff", Hex.encode(byteArrayOf(0xff.toByte())))
+        assertEquals("00", encodeOk(byteArrayOf(0x00)))
+        assertEquals("0f", encodeOk(byteArrayOf(0x0f)))
+        assertEquals("10", encodeOk(byteArrayOf(0x10)))
+        assertEquals("ff", encodeOk(byteArrayOf(0xff.toByte())))
     }
 
     @Test
     fun encodeMultiByteConcatenatesLowercase() {
-        assertEquals("00102fff", Hex.encode(byteArrayOf(0x00, 0x10, 0x2f, 0xff.toByte())))
+        assertEquals("00102fff", encodeOk(byteArrayOf(0x00, 0x10, 0x2f, 0xff.toByte())))
     }
 
     @Test
     fun encodeOutputIsLowercase() {
-        val encoded = Hex.encode(byteArrayOf(0xab.toByte(), 0xcd.toByte(), 0xef.toByte()))
+        val encoded = encodeOk(byteArrayOf(0xab.toByte(), 0xcd.toByte(), 0xef.toByte()))
         assertEquals("abcdef", encoded)
         assertEquals(encoded.lowercase(), encoded)
     }
@@ -82,6 +82,27 @@ class HexTest {
         assertEquals(HexError.InputTooLong(Hex.MAX_INPUT_CHARS, Hex.MAX_INPUT_CHARS + 1), err.error)
     }
 
+    // W6-3/Hex-bound remediation: the encode bound is checked before the doubled-length
+    // output buffer is allocated. One byte over the limit is rejected.
+    @Test
+    fun encodeInputExceedingMaxRejected() {
+        val tooLong = ByteArray(Hex.MAX_ENCODE_INPUT_BYTES + 1)
+        val err = assertIs<KardanoResult.Err<HexError>>(Hex.encode(tooLong))
+        assertEquals(
+            HexError.EncodeInputTooLong(Hex.MAX_ENCODE_INPUT_BYTES, tooLong.size),
+            err.error,
+        )
+    }
+
+    // At exactly the limit, encode still succeeds, and its output length (2x) stays exactly
+    // at Hex.MAX_INPUT_CHARS — the boundary the encode limit was chosen to respect.
+    @Test
+    fun encodeInputAtMaxSucceeds() {
+        val atLimit = ByteArray(Hex.MAX_ENCODE_INPUT_BYTES)
+        val encoded = encodeOk(atLimit)
+        assertEquals(Hex.MAX_INPUT_CHARS, encoded.length)
+    }
+
     @Test
     fun roundTripDecodeOfEncode() {
         val samples = listOf(
@@ -91,7 +112,7 @@ class HexTest {
             byteArrayOf(0x00, 0x10, 0x2f, 0x80.toByte(), 0xff.toByte()),
         )
         for (sample in samples) {
-            val ok = assertIs<KardanoResult.Ok<ByteArray>>(Hex.decode(Hex.encode(sample)))
+            val ok = assertIs<KardanoResult.Ok<ByteArray>>(Hex.decode(encodeOk(sample)))
             assertTrue(sample.contentEquals(ok.value))
         }
     }
@@ -99,6 +120,9 @@ class HexTest {
     @Test
     fun encodeOfDecodeIsCanonicalLowercase() {
         val ok = assertIs<KardanoResult.Ok<ByteArray>>(Hex.decode("ABCDEF"))
-        assertEquals("abcdef", Hex.encode(ok.value))
+        assertEquals("abcdef", encodeOk(ok.value))
     }
+
+    private fun encodeOk(bytes: ByteArray): String =
+        assertIs<KardanoResult.Ok<String>>(Hex.encode(bytes)).value
 }

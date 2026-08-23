@@ -22,6 +22,17 @@ public object Hex {
      */
     public const val MAX_INPUT_CHARS: Int = 1 shl 20
 
+    /**
+     * The maximum number of bytes [encode] will accept as [encode]'s `bytes` parameter.
+     *
+     * SDK-owned Phase 0 limit (revisable by a future ADR), checked before the doubled-length
+     * output [CharArray] is allocated so an untrusted input length cannot drive an
+     * over-large or overflowing allocation. Set to half of [MAX_INPUT_CHARS] so that
+     * [encode]'s output always stays within the length [decode] accepts as input — anything
+     * this SDK encodes, it can also decode back.
+     */
+    public const val MAX_ENCODE_INPUT_BYTES: Int = MAX_INPUT_CHARS / 2
+
     private const val LOWER_DIGITS: String = "0123456789abcdef"
 
     /**
@@ -31,10 +42,15 @@ public object Hex {
      * significant nibble first. An empty array encodes to an empty string.
      *
      * @param bytes the bytes to encode. Not modified.
-     * @return the canonical lowercase hex representation of [bytes]. Never throws.
+     * @return [KardanoResult.Ok] with the canonical lowercase hex representation of [bytes],
+     *   or [KardanoResult.Err] with [HexError.EncodeInputTooLong] if [bytes] is longer than
+     *   [MAX_ENCODE_INPUT_BYTES]. Never throws.
      */
-    public fun encode(bytes: ByteArray): String {
-        if (bytes.isEmpty()) return ""
+    public fun encode(bytes: ByteArray): KardanoResult<String, HexError> {
+        if (bytes.size > MAX_ENCODE_INPUT_BYTES) {
+            return KardanoResult.Err(HexError.EncodeInputTooLong(MAX_ENCODE_INPUT_BYTES, bytes.size))
+        }
+        if (bytes.isEmpty()) return KardanoResult.Ok("")
         val out = CharArray(bytes.size * 2)
         var i = 0
         for (b in bytes) {
@@ -42,7 +58,7 @@ public object Hex {
             out[i++] = LOWER_DIGITS[v ushr 4]
             out[i++] = LOWER_DIGITS[v and 0x0F]
         }
-        return out.concatToString()
+        return KardanoResult.Ok(out.concatToString())
     }
 
     /**
