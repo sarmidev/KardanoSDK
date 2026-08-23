@@ -20,9 +20,23 @@ Policy (documented, not a strength claim):
   ``STV_PROTECTED``, valid nonzero section/value; ``nm -D --defined-only
   --format=posix`` must corroborate an exact record (never substring)
 - GNU version requirements (``DT_VERNEED`` plus ``readelf --version-info``)
-  must not include a GLIBC version greater than the documented baseline
-- host-absolute path bytes are fatal; only the documented remap prefixes
-  may appear as path-like strings
+  accept only full-string authoritative ``GLIBC_<major>.<minor>`` or
+  legacy ``GLIBC_<major>.<minor>.<patch>`` labels (no leading zeros,
+  signs, suffixes, empty components, or more than three components).
+  ``GLIBC_PRIVATE`` and every unparseable ``GLIBC_*`` label fail.
+  Comparison is the numeric tuple against baseline ``(2, 35, 0)``.
+- ``DT_VERNEED`` / ``DT_VERNEEDNUM`` bind to exactly one
+  ``SHT_GNU_verneed`` (``.gnu.version_r``) range; chains must terminate
+  with ``vn_next == 0`` / ``vna_next == 0`` and reject overlap, cycles,
+  and out-of-section offsets
+- section 0 is the canonical ``SHT_NULL``; extended numbering is
+  rejected; ``.dynamic`` is exactly one ``SHT_DYNAMIC`` with
+  ``Elf64_Dyn`` entsize, ``sh_link`` to ``.dynstr``, and exact file
+  correspondence with the single ``PT_DYNAMIC``
+- printable NUL-terminated absolute path-like strings (start with ``/``,
+  length >= 2) may use only documented remap prefixes and the listed
+  runtime prefixes, matched as ``path == prefix`` or
+  ``path.startswith(prefix + "/")``
 """
 
 from __future__ import annotations
@@ -59,6 +73,10 @@ SHT_DYNAMIC = 6
 SHT_NOTE = 7
 SHT_NOBITS = 8
 SHT_DYNSYM = 11
+SHT_GNU_VERDEF = 0x6FFFFFFD
+SHT_GNU_VERNEED = 0x6FFFFFFE
+SHT_GNU_VERSYM = 0x6FFFFFFF
+SHF_ALLOC = 0x2
 DT_NULL = 0
 DT_NEEDED = 1
 DT_STRTAB = 5
@@ -153,20 +171,7 @@ FORBIDDEN_DEBUG_SECTIONS = frozenset(
 )
 DEBUG_SECTION_PREFIXES = (".debug_", ".zdebug_")
 
-# Host-absolute markers that must not appear in a remapped linux-so.
-LINUX_HOST_PATH_MARKERS = (
-    b"/home/runner/",
-    b"/Users/",
-    b"/var/folders/",
-    b"/private/var/folders/",
-    b"/opt/homebrew/",
-    b"/opt/hostedtoolcache/",
-    b"/Volumes/",
-)
-HOST_PATH_HOME_RE = re.compile(rb"/home/(?!rebuild(?:/|\x00|$))")
-
 # rustc --remap-path-prefix destinations used by native_toolchain.remap_pairs.
-# These are the only path-like prefixes a linux-so may embed.
 ALLOWED_REMAP_PREFIXES = (
     "/cargo-target",  # staging-owned CARGO_TARGET_DIR
     "/kardano",  # repository / module root
@@ -177,9 +182,23 @@ ALLOWED_REMAP_PREFIXES = (
     "/runner-temp",  # GHA RUNNER_TEMP (not always under the repo)
     "/runner-workspace",  # GHA RUNNER_WORKSPACE
 )
+# Runtime/system prefixes that a glibc x86-64 ET_DYN may embed (PT_INTERP
+# and multiarch loader/libgcc realpaths). /usr/local and /tmp are not listed.
+ALLOWED_RUNTIME_PREFIXES = (
+    "/lib64",
+    "/lib",
+    "/usr/lib",
+    "/usr/lib64",
+)
+ALLOWED_ABSOLUTE_PREFIXES = ALLOWED_REMAP_PREFIXES + ALLOWED_RUNTIME_PREFIXES
 
 NM_DEFINED_FUNC_TYPES = frozenset({"T", "W"})
-GLIBC_NAME_RE = re.compile(r"^GLIBC_(\d+)\.(\d+)(?:\.(\d+))?$")
+# Authoritative glibc labels: two components, or legacy three (GLIBC_2.2.5).
+# No leading zeros, signs, empty components, suffixes, or >3 components.
+_GLIBC_COMPONENT = r"(?:0|[1-9]\d*)"
+GLIBC_NAME_RE = re.compile(
+    rf"^GLIBC_({_GLIBC_COMPONENT})\.({_GLIBC_COMPONENT})(?:\.({_GLIBC_COMPONENT}))?$"
+)
 LDD_GLIBC_RE = re.compile(
     r"(?:GLIBC|GNU libc)\s+(\d+)\.(\d+)(?:\.(\d+))?",
     re.IGNORECASE,
@@ -207,7 +226,9 @@ class Section:
     sh_addr: int
     sh_offset: int
     sh_size: int
+    sh_flags: int
     sh_link: int
+    sh_info: int
     sh_entsize: int
     sh_addralign: int
 
@@ -323,12 +344,149 @@ def _vaddr_to_offset(segments: list[LoadSegment], vaddr: int) -> int:
     raise ElfError(f"vaddr {vaddr:#x} is not in a PT_LOAD segment")
 
 
+def _checked_add(left: int, right: int, what: str) -> int:
+    if left < 0 or right < 0:
+        raise ElfError(f"{what} offset underflow")
+    total = left + right
+    if total < left:
+        raise ElfError(f"{what} offset overflow")
+    return total
+
+
+def _ranges_overlap(start_a: int, end_a: int, start_b: int, end_b: int) -> bool:
+    return start_a < end_b and start_b < end_a
+
+
+def _claim_range(occupied: list[tuple[int, int]], start: int, size: int, what: str) -> None:
+    end = _checked_add(start, size, what)
+    for other_start, other_end in occupied:
+        if _ranges_overlap(start, end, other_start, other_end):
+            raise ElfError(f"{what} overlaps another Verneed/Vernaux entry")
+    occupied.append((start, end))
+
+
+def _section_in_compatible_load(section: Section, segments: list[LoadSegment]) -> bool:
+    if section.sh_size == 0:
+        return True
+    end_addr = _checked_add(section.sh_addr, section.sh_size, f"section {section.name} vaddr")
+    end_off = None
+    if section.sh_type != SHT_NOBITS:
+        end_off = _checked_add(section.sh_offset, section.sh_size, f"section {section.name} file")
+    for seg in segments:
+        virt_end = _checked_add(seg.vaddr, seg.memsz, "PT_LOAD memsz")
+        if section.sh_addr < seg.vaddr or end_addr > virt_end:
+            continue
+        if section.sh_type != SHT_NOBITS:
+            file_end = _checked_add(seg.offset, seg.filesz, "PT_LOAD filesz")
+            if section.sh_offset < seg.offset or end_off > file_end:
+                continue
+        return True
+    return False
+
+
+def _named_sections(sections: list[Section], name: str) -> list[Section]:
+    return [item for item in sections if item.name == name]
+
+
+def _typed_sections(sections: list[Section], sh_type: int) -> list[Section]:
+    return [item for item in sections if item.sh_type == sh_type]
+
+
+def _require_unique_named_type(
+    sections: list[Section],
+    name: str,
+    sh_type: int,
+    *,
+    unique_type: bool = True,
+) -> Section:
+    named = _named_sections(sections, name)
+    if len(named) != 1:
+        raise ElfError(f"exactly one {name} section is required")
+    section = named[0]
+    if section.sh_type != sh_type:
+        raise ElfError(f"{name} type/name mismatch")
+    if unique_type:
+        typed = _typed_sections(sections, sh_type)
+        if len(typed) != 1 or typed[0].index != section.index:
+            raise ElfError(f"exactly one {name} typed section is required")
+    return section
+
+
+def _validate_section_program_links(
+    sections: list[Section],
+    segments: list[LoadSegment],
+    dynamic_off: int,
+    dynamic_size: int,
+    e_shnum: int,
+) -> None:
+    if not sections or sections[0].index != 0:
+        raise ElfError("section 0 is missing")
+    dynamic = _require_unique_named_type(sections, ".dynamic", SHT_DYNAMIC)
+    if dynamic.sh_entsize != ELF64_DYN_SIZE:
+        raise ElfError(".dynamic sh_entsize is not Elf64_Dyn")
+    if dynamic.sh_size != dynamic_size or dynamic.sh_offset != dynamic_off:
+        raise ElfError("SHT_DYNAMIC does not correspond to the single PT_DYNAMIC")
+    if dynamic.sh_link == 0 or dynamic.sh_link >= e_shnum:
+        raise ElfError(".dynamic sh_link is out of range")
+    dynstr = _require_unique_named_type(sections, ".dynstr", SHT_STRTAB, unique_type=False)
+    if dynamic.sh_link != dynstr.index:
+        raise ElfError(".dynamic sh_link does not point at .dynstr")
+
+    dynsym = _require_unique_named_type(sections, ".dynsym", SHT_DYNSYM)
+    if dynsym.sh_entsize != ELF64_SYM_SIZE:
+        raise ElfError(".dynsym sh_entsize is not Elf64_Sym")
+    if dynsym.sh_link != dynstr.index:
+        raise ElfError(".dynsym sh_link does not point at .dynstr")
+
+    versyms = _named_sections(sections, ".gnu.version") + _typed_sections(sections, SHT_GNU_VERSYM)
+    if versyms:
+        versym = _require_unique_named_type(sections, ".gnu.version", SHT_GNU_VERSYM)
+        if versym.sh_entsize != 2:
+            raise ElfError(".gnu.version sh_entsize is not Elf64_Half")
+        if versym.sh_link != dynsym.index:
+            raise ElfError(".gnu.version sh_link does not point at .dynsym")
+        expected = (dynsym.sh_size // ELF64_SYM_SIZE) * 2
+        if versym.sh_size != expected:
+            raise ElfError(".gnu.version size does not match .dynsym count")
+
+    verneeds = _named_sections(sections, ".gnu.version_r") + _typed_sections(
+        sections, SHT_GNU_VERNEED
+    )
+    if verneeds:
+        verneed = _require_unique_named_type(sections, ".gnu.version_r", SHT_GNU_VERNEED)
+        if verneed.sh_link != dynstr.index:
+            raise ElfError(".gnu.version_r sh_link does not point at .dynstr")
+
+    verdefs = _named_sections(sections, ".gnu.version_d") + _typed_sections(
+        sections, SHT_GNU_VERDEF
+    )
+    if verdefs:
+        verdef = _require_unique_named_type(sections, ".gnu.version_d", SHT_GNU_VERDEF)
+        if verdef.sh_link != dynstr.index:
+            raise ElfError(".gnu.version_d sh_link does not point at .dynstr")
+
+    for section in sections[1:]:
+        if section.sh_flags & SHF_ALLOC and not _section_in_compatible_load(section, segments):
+            raise ElfError(f"SHF_ALLOC section {section.name} is not contained in a PT_LOAD")
+
+
 def parse_glibc_version(name: str) -> tuple[int, int, int] | None:
+    if not isinstance(name, str):
+        return None
     match = GLIBC_NAME_RE.fullmatch(name)
     if match is None:
         return None
     major, minor, patch = match.group(1), match.group(2), match.group(3) or "0"
     return int(major), int(minor), int(patch)
+
+
+def require_parsed_glibc(name: str) -> tuple[int, int, int]:
+    if name == "GLIBC_PRIVATE":
+        raise ElfError("GLIBC_PRIVATE is not an allowed version requirement")
+    parsed = parse_glibc_version(name)
+    if parsed is None:
+        raise ElfError(f"unparseable GLIBC version label {name!r}")
+    return parsed
 
 
 def format_glibc_version(version: tuple[int, int, int]) -> str:
@@ -351,17 +509,44 @@ def glibc_requirement_allowed(
     *,
     baseline: tuple[int, int, int] = DOCUMENTED_GLIBC_BASELINE,
 ) -> bool:
-    parsed = parse_glibc_version(name)
-    if parsed is None:
-        return name != "GLIBC_PRIVATE"
+    try:
+        parsed = require_parsed_glibc(name)
+    except ElfError:
+        return False
     return parsed <= baseline
 
 
+def _matches_allowed_prefix(path: str, prefix: str) -> bool:
+    return path == prefix or path.startswith(prefix + "/")
+
+
 def is_allowed_remap_prefix(path: str) -> bool:
-    for prefix in ALLOWED_REMAP_PREFIXES:
-        if path == prefix or path.startswith(prefix + "/"):
-            return True
-    return False
+    return any(_matches_allowed_prefix(path, prefix) for prefix in ALLOWED_REMAP_PREFIXES)
+
+
+def is_allowed_absolute_path(path: str) -> bool:
+    return any(_matches_allowed_prefix(path, prefix) for prefix in ALLOWED_ABSOLUTE_PREFIXES)
+
+
+def is_absolute_path_like(text: str) -> bool:
+    return len(text) >= 2 and text.startswith("/")
+
+
+def extract_nul_terminated_strings(data: bytes) -> list[str]:
+    strings: list[str] = []
+    index = 0
+    length = len(data)
+    while index < length:
+        if 32 <= data[index] < 127:
+            end = index
+            while end < length and 32 <= data[end] < 127:
+                end += 1
+            if end < length and data[end] == 0 and end > index:
+                strings.append(data[index:end].decode("ascii"))
+            index = end + 1 if end < length and data[end] == 0 else end
+        else:
+            index += 1
+    return strings
 
 
 def scan_linux_forbidden_paths(
@@ -369,35 +554,15 @@ def scan_linux_forbidden_paths(
     extra_roots: tuple[bytes, ...] = (),
 ) -> list[str]:
     hits: list[str] = []
-
-    def add_fragment(start: int) -> None:
-        end = start
-        while end < len(data) and 32 <= data[end] < 127:
-            end += 1
-        fragment = data[start:end].decode("ascii", errors="ignore")
-        if fragment and fragment not in hits and not is_allowed_remap_prefix(fragment):
-            hits.append(fragment)
-
-    for marker in LINUX_HOST_PATH_MARKERS:
-        start = 0
-        while True:
-            index = data.find(marker, start)
-            if index < 0:
-                break
-            add_fragment(index)
-            start = index + 1
-    for match in HOST_PATH_HOME_RE.finditer(data):
-        add_fragment(match.start())
-    for root in extra_roots:
-        if not root:
+    extra = tuple(root.decode("ascii", errors="ignore") for root in extra_roots if root)
+    for text in extract_nul_terminated_strings(data):
+        if not is_absolute_path_like(text):
             continue
-        start = 0
-        while True:
-            index = data.find(root, start)
-            if index < 0:
-                break
-            add_fragment(index)
-            start = index + 1
+        allowed = is_allowed_absolute_path(text)
+        extra_hit = any(_matches_allowed_prefix(text, root) for root in extra if root)
+        if extra_hit or not allowed:
+            if text not in hits:
+                hits.append(text)
     return hits
 
 
@@ -406,7 +571,7 @@ def build_forbidden_roots(*paths: Path) -> tuple[bytes, ...]:
     seen: set[bytes] = set()
     for path in paths:
         text = str(path)
-        if not text.startswith("/") or is_allowed_remap_prefix(text):
+        if not text.startswith("/") or is_allowed_absolute_path(text):
             continue
         raw = text.encode("utf-8")
         if raw not in seen:
@@ -515,6 +680,8 @@ def parse_elf64_le_x86_64_dso(
         if p_type == PT_LOAD:
             if p_filesz > p_memsz:
                 raise ElfError(f"PT_LOAD {index} p_filesz exceeds p_memsz")
+            if p_align == 0:
+                raise ElfError(f"PT_LOAD {index} p_align is zero")
             if p_align > 1:
                 if p_align & (p_align - 1):
                     raise ElfError(f"PT_LOAD {index} p_align is not a power of two")
@@ -626,14 +793,39 @@ def parse_elf64_le_x86_64_dso(
         sh = e_shoff + index * e_shentsize
         name_off = _u32(data, sh)
         sh_type = _u32(data, sh + 4)
+        sh_flags = _u64(data, sh + 8)
         sh_addr = _u64(data, sh + 16)
         sh_offset = _u64(data, sh + 24)
         sh_size = _u64(data, sh + 32)
         sh_link = _u32(data, sh + 40)
+        sh_info = _u32(data, sh + 44)
         sh_addralign = _u64(data, sh + 48)
         sh_entsize = _u64(data, sh + 56)
         name = _cstring(data, shstr_off + name_off, shstr_off + shstr_size)
         record.section_names.append(name)
+        if index == 0:
+            if any(
+                (
+                    name,
+                    sh_type,
+                    sh_flags,
+                    sh_addr,
+                    sh_offset,
+                    sh_size,
+                    sh_link,
+                    sh_info,
+                    sh_addralign,
+                    sh_entsize,
+                )
+            ):
+                raise ElfError("section 0 is not the canonical SHT_NULL entry")
+        else:
+            if sh_addralign == 0:
+                raise ElfError(f"section {name or index} sh_addralign is zero")
+            if sh_addralign > 1 and sh_addralign & (sh_addralign - 1):
+                raise ElfError(f"section {name or index} sh_addralign is not a power of two")
+            if sh_addralign > 1 and sh_addr % sh_addralign != 0:
+                raise ElfError(f"section {name or index} sh_addr is misaligned")
         if any(name.startswith(prefix) for prefix in DEBUG_SECTION_PREFIXES):
             raise ElfError(f"debug section {name} is present")
         if name in FORBIDDEN_DEBUG_SECTIONS:
@@ -647,14 +839,17 @@ def parse_elf64_le_x86_64_dso(
                 index=index,
                 name=name,
                 sh_type=sh_type,
+                sh_flags=sh_flags,
                 sh_addr=sh_addr,
                 sh_offset=sh_offset,
                 sh_size=sh_size,
                 sh_link=sh_link,
+                sh_info=sh_info,
                 sh_entsize=sh_entsize,
                 sh_addralign=sh_addralign,
             )
         )
+    _validate_section_program_links(sections, segments, dynamic_off, dynamic_size, e_shnum)
 
     for off, size in notes:
         if size > MAX_NOTE_BYTES:
@@ -727,6 +922,8 @@ def parse_elf64_le_x86_64_dso(
         record.gnu_versions = _parse_verneed(
             data,
             segments,
+            sections,
+            e_shnum,
             verneed_vaddr=verneed_vaddr,
             verneed_num=verneed_num,
             dynstr=dynstr,
@@ -739,11 +936,11 @@ def parse_elf64_le_x86_64_dso(
         )
         if not record.glibc_requirements:
             raise ElfError("no GLIBC_* version requirement was found")
-        too_new = [
-            name
-            for name in record.glibc_requirements
-            if not glibc_requirement_allowed(name)
-        ]
+        too_new: list[str] = []
+        for name in record.glibc_requirements:
+            parsed = require_parsed_glibc(name)
+            if parsed > DOCUMENTED_GLIBC_BASELINE:
+                too_new.append(name)
         if too_new:
             raise ElfError(
                 f"GLIBC requirement {too_new} exceeds documented baseline "
@@ -794,6 +991,8 @@ def _require_sign_export(symbols: list[DynSymbol], e_shnum: int, record: ElfReco
 def _parse_verneed(
     data: bytes,
     segments: list[LoadSegment],
+    sections: list[Section],
+    e_shnum: int,
     *,
     verneed_vaddr: int,
     verneed_num: int,
@@ -801,11 +1000,41 @@ def _parse_verneed(
 ) -> list[str]:
     if verneed_num <= 0 or verneed_num > MAX_VERNEED:
         raise ElfError(f"DT_VERNEEDNUM {verneed_num} is missing or exceeds MAX_VERNEED")
-    cursor = _vaddr_to_offset(segments, verneed_vaddr)
+    section = _require_unique_named_type(sections, ".gnu.version_r", SHT_GNU_VERNEED)
+    if section.sh_link == 0 or section.sh_link >= e_shnum:
+        raise ElfError(".gnu.version_r sh_link is out of range")
+    if sections[section.sh_link].name != ".dynstr":
+        raise ElfError(".gnu.version_r sh_link does not point at .dynstr")
+    if section.sh_size < ELF64_VERNEED_SIZE:
+        raise ElfError(".gnu.version_r is smaller than one Elf64_Verneed")
+    section_start = section.sh_offset
+    section_end = _checked_add(section.sh_offset, section.sh_size, ".gnu.version_r")
+    mapped = _vaddr_to_offset(segments, verneed_vaddr)
+    if mapped < section_start or mapped + ELF64_VERNEED_SIZE > section_end:
+        raise ElfError("DT_VERNEED is outside the SHT_GNU_verneed section")
+    if mapped != section_start:
+        raise ElfError("DT_VERNEED does not start at the SHT_GNU_verneed section")
+
+    def _in_section(offset: int, size: int, what: str) -> None:
+        end = _checked_add(offset, size, what)
+        if offset < section_start or end > section_end:
+            raise ElfError(f"{what} is outside the SHT_GNU_verneed section")
+        if offset % 4 != 0:
+            raise ElfError(f"{what} is not 4-byte aligned")
+
     names: list[str] = []
     seen_pairs: set[tuple[str, str]] = set()
-    for _index in range(verneed_num):
-        _checked_range(cursor, ELF64_VERNEED_SIZE, len(data), "Elf64_Verneed")
+    visited_vn: set[int] = set()
+    visited_vna: set[int] = set()
+    occupied: list[tuple[int, int]] = []
+    cursor = mapped
+    walked = 0
+    for index in range(verneed_num):
+        if cursor in visited_vn:
+            raise ElfError("Elf64_Verneed entry was revisited")
+        _in_section(cursor, ELF64_VERNEED_SIZE, "Elf64_Verneed")
+        _claim_range(occupied, cursor, ELF64_VERNEED_SIZE, "Elf64_Verneed")
+        visited_vn.add(cursor)
         vn_version = _u16(data, cursor)
         vn_cnt = _u16(data, cursor + 2)
         vn_file = _u32(data, cursor + 4)
@@ -815,10 +1044,19 @@ def _parse_verneed(
             raise ElfError(f"vn_version {vn_version} is not VER_NEED_CURRENT")
         if vn_cnt == 0 or vn_cnt > MAX_VERNAUX:
             raise ElfError("vn_cnt is missing or exceeds MAX_VERNAUX")
+        if vn_aux == 0:
+            raise ElfError("vn_aux is missing")
         file_name = dynstr(vn_file)
-        aux = cursor + vn_aux
+        aux = _checked_add(cursor, vn_aux, "vn_aux")
+        if aux <= cursor:
+            raise ElfError("vn_aux is not a positive forward offset")
+        walked_aux = 0
         for aux_index in range(vn_cnt):
-            _checked_range(aux, ELF64_VERNAUX_SIZE, len(data), "Elf64_Vernaux")
+            if aux in visited_vna:
+                raise ElfError("Elf64_Vernaux entry was revisited")
+            _in_section(aux, ELF64_VERNAUX_SIZE, "Elf64_Vernaux")
+            _claim_range(occupied, aux, ELF64_VERNAUX_SIZE, "Elf64_Vernaux")
+            visited_vna.add(aux)
             vna_name = _u32(data, aux + 8)
             vna_next = _u32(data, aux + 12)
             name = dynstr(vna_name)
@@ -829,14 +1067,38 @@ def _parse_verneed(
                 raise ElfError(f"duplicate GNU version requirement {file_name}:{name}")
             seen_pairs.add(pair)
             names.append(name)
-            if aux_index + 1 < vn_cnt:
+            walked_aux += 1
+            last_aux = aux_index + 1 == vn_cnt
+            if last_aux:
+                if vna_next != 0:
+                    raise ElfError("final vna_next is not zero")
+            else:
                 if vna_next == 0:
                     raise ElfError("Elf64_Vernaux chain is truncated")
-                aux += vna_next
-        if _index + 1 < verneed_num:
+                if vna_next % 4 != 0:
+                    raise ElfError("vna_next is not 4-byte aligned")
+                nxt = _checked_add(aux, vna_next, "vna_next")
+                if nxt <= aux:
+                    raise ElfError("vna_next is not a positive forward offset")
+                aux = nxt
+        if walked_aux != vn_cnt:
+            raise ElfError("Elf64_Vernaux count does not match vn_cnt")
+        walked += 1
+        last_vn = index + 1 == verneed_num
+        if last_vn:
+            if vn_next != 0:
+                raise ElfError("final vn_next is not zero")
+        else:
             if vn_next == 0:
                 raise ElfError("Elf64_Verneed chain is truncated")
-            cursor += vn_next
+            if vn_next % 4 != 0:
+                raise ElfError("vn_next is not 4-byte aligned")
+            nxt = _checked_add(cursor, vn_next, "vn_next")
+            if nxt <= cursor:
+                raise ElfError("vn_next is not a positive forward offset")
+            cursor = nxt
+    if walked != verneed_num:
+        raise ElfError("DT_VERNEEDNUM does not match the walked Verneed count")
     return names
 
 
@@ -897,12 +1159,18 @@ def verify_linux_x86_64_cdylib(
             raise ElfError(f"readelf --version-info exited {versions.returncode}")
         tool_names = parse_readelf_version_names(record.readelf_version_text)
         tool_glibc = [name for name in tool_names if name.startswith("GLIBC_")]
+        for name in tool_glibc:
+            require_parsed_glibc(name)
         if set(tool_glibc) != set(record.glibc_requirements):
             raise ElfError(
                 "readelf --version-info GLIBC set does not match the parser: "
                 f"{sorted(tool_glibc)} vs {sorted(record.glibc_requirements)}"
             )
-        too_new = [name for name in tool_glibc if not glibc_requirement_allowed(name)]
+        too_new = [
+            name
+            for name in tool_glibc
+            if require_parsed_glibc(name) > DOCUMENTED_GLIBC_BASELINE
+        ]
         if too_new:
             raise ElfError(
                 f"readelf GLIBC requirement {too_new} exceeds documented baseline "

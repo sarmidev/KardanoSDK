@@ -239,14 +239,23 @@ UUID match; arm64 ad-hoc exact-identifier). Linux x86-64 JVM rebuilds
 are native `ubuntu-22.04` only (`linux-jvm-rebuild-evidence.yml`); they
 are not written into CHECKSUMS until two independent candidates match
 and re-review is GO. The ELF verifier is fail-closed on `.dynsym`
-export semantics, GNU version requirements (GLIBC greater than the
-measured 2.35 baseline is rejected), host-absolute path bytes, program
-and section file ranges, duplicate singleton dynamic tags, and
+export semantics, GNU version requirements (full-string
+`GLIBC_<major>.<minor>` or legacy `GLIBC_<major>.<minor>.<patch>` only;
+numeric compare against baseline `(2, 35, 0)`; `GLIBC_PRIVATE` and
+unparseable labels fail), Verneed/Vernaux chains bound to one
+`SHT_GNU_verneed` section, canonical section 0, one `.dynamic` /
+`PT_DYNAMIC` pair, program/section range and alignment arithmetic, and
 `.debug_*` / `.zdebug_*` / `.gnu_debuglink` material. `nm` corroboration
 uses `--defined-only --format=posix` exact records, not substring
-search. Remapped prefixes that may appear are `/cargo-target`,
-`/kardano`, `/rustc`, `/rustup`, `/cargo`, `/home/rebuild`,
-`/runner-temp`, and `/runner-workspace` only.
+search. Printable NUL-terminated absolute path-like strings may use
+only the documented remap prefixes (`/cargo-target`, `/kardano`,
+`/rustc`, `/rustup`, `/cargo`, `/home/rebuild`, `/runner-temp`,
+`/runner-workspace`) and the runtime prefixes (`/lib64`, `/lib`,
+`/usr/lib`, `/usr/lib64`). Match is exact prefix plus `/`, so
+`/cargo-evil` is not `/cargo`. `/tmp/untracked-host` and
+`/usr/local/private-build` are rejected. Run `32669707437` is
+superseded; a fresh Phase A/B at this verifier tip is required before
+any promotion review.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

@@ -63,12 +63,18 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   Linux x86-64 JVM rebuilds on pinned `ubuntu-22.04` only (JNA prefix
   `linux-x86-64/`, ImageOS `ubuntu22`, documented glibc floor 2.35
   measured at runtime). The ELF64 verifier is fail-closed on exact
-  `.dynsym` export semantics, GNU version requirements, host-absolute
-  path bytes, program/section ranges, duplicate singleton dynamic tags,
-  and debug-link sections. Two independent candidate jobs plus JVM KAT
-  must match before any promotion review. The ninth CHECKSUMS row is
-  added only after that re-review is GO. Linux ARM, musl, older glibc,
-  and Windows are out of scope.
+  `.dynsym` export semantics; full-string `GLIBC_*` labels compared as
+  numeric tuples against `(2, 35, 0)`; Verneed/Vernaux chains bound to
+  one `SHT_GNU_verneed` section with terminal-zero and overlap checks;
+  canonical section 0; one `.dynamic`/`PT_DYNAMIC` pair; program/section
+  range and alignment arithmetic; and debug-link sections. Absolute
+  path-like strings are allowlisted to the documented remap prefixes
+  plus `/lib64`, `/lib`, `/usr/lib`, and `/usr/lib64` (exact prefix plus
+  `/`; `/tmp/untracked-host` and `/usr/local/private-build` fail). Two
+  independent candidate jobs plus JVM KAT must match before any
+  promotion review. Run `32669707437` is superseded. The ninth
+  CHECKSUMS row is added only after that re-review is GO. Linux ARM,
+  musl, older glibc, and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

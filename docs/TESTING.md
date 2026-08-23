@@ -208,9 +208,14 @@ pinned `ubuntu-22.04` (ImageOS `ubuntu22`, not `ubuntu-latest`), records
 SHA-256 + ELF reports + GNU version requirements against the documented
 glibc 2.35 baseline, then runs `:crypto-signing-backend:jvmTest`
 `:crypto:jvmTest` `:wallet:jvmTest` `:shared:jvmTest` against the candidate
-at `linux-x86-64/`. Permissions stay `contents: read`. Uploads use
+at `linux-x86-64/`. The ELF verifier accepts only full-string
+`GLIBC_<major>.<minor>` or legacy three-component labels, walks
+Verneed/Vernaux inside one `SHT_GNU_verneed` section, requires canonical
+section 0 and one `.dynamic`/`PT_DYNAMIC` pair, and allowlists
+NUL-terminated absolute path-like strings against the documented remap
+and runtime prefixes only. Permissions stay `contents: read`. Uploads use
 `if-no-files-found: error`. The job does not write CHECKSUMS or committed
-`src/`. ubuntu-24.04 artifacts from earlier Gate 2 runs are superseded.
+`src/`. ubuntu-24.04 artifacts and Linux run `32669707437` are superseded.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

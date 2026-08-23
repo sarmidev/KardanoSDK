@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Not in CHECKSUMS until two independent hashes match and Phase A/B re-review is GO. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Verifier now fail-closes unparseable `GLIBC_*`, Verneed chains, section 0 / `.dynamic`, and non-allowlisted absolute paths. Run `32669707437` superseded. Not in CHECKSUMS until two independent hashes match and Phase A/B re-review is GO. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -108,12 +108,16 @@ Date: 2026-08-23
   `linux-x86-64/` and a fail-closed ELF64 verifier (ET_DYN, EM_X86_64,
   `e_version == EV_CURRENT`, allowlisted `DT_NEEDED`, exact SONAME, no
   RPATH/RUNPATH, no build-id, no `.debug_*` / `.zdebug_*` /
-  `.gnu_debuglink`, exact `.dynsym` sign export, GLIBC requirements at
-  or below the documented 2.35 baseline, no host-absolute path bytes).
-  Rebuilds run only on pinned `ubuntu-22.04` (ImageOS `ubuntu22`) with
-  rustc 1.97.0 / `x86_64-unknown-linux-gnu`. Two independent jobs plus
-  JVM KAT must match; promotion waits for re-review GO. CHECKSUMS still
-  has the eight committed artifacts. Device runtime remains historical
+  `.gnu_debuglink`, exact `.dynsym` sign export, full-string `GLIBC_*`
+  labels compared as tuples against `(2, 35, 0)`, Verneed/Vernaux bound
+  to one `SHT_GNU_verneed` with terminal-zero/overlap/cycle checks,
+  canonical section 0, one `.dynamic`/`PT_DYNAMIC`, absolute path-like
+  strings limited to documented remap prefixes plus `/lib64`, `/lib`,
+  `/usr/lib`, `/usr/lib64`). Rebuilds run only on pinned `ubuntu-22.04`
+  (ImageOS `ubuntu22`) with rustc 1.97.0 / `x86_64-unknown-linux-gnu`.
+  Two independent jobs plus JVM KAT must match; promotion waits for
+  re-review GO. Run `32669707437` is superseded. CHECKSUMS still has
+  the eight committed artifacts. Device runtime remains historical
   (W5-2). Do not start Windows or merge/tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
@@ -234,7 +238,8 @@ Do not use:
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase A/B re-review is the next gate (promotion
 only after two independent `ubuntu-22.04` hashes match **and** that
-re-review is GO). Do not start Windows until then. Residual owner work:
+re-review is GO). Run `32669707437` is superseded; do not promote from
+it. Do not start Windows until then. Residual owner work:
 authenticated GitHub artifact download, secret-scanning / Dependabot,
 the manual accessibility walkthrough, and a post-replacement Android
 device `connectedAndroidDeviceTest`. Do not merge from an automated
