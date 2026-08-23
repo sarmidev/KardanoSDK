@@ -939,9 +939,13 @@ def _readelf_field(line: str, label: str) -> str | None:
     return None
 
 
-def parse_readelf_need_indices(text: str) -> dict[str, int]:
-    """Exact per-line Name:/Version: pairs from ``readelf --version-info``."""
-    parsed: dict[str, int] = {}
+def parse_readelf_need_indices(text: str) -> dict[int, str]:
+    """Exact per-line Name:/Version: pairs from ``readelf --version-info``.
+
+    The same label may appear on more than one needed file with distinct
+    ``vna_other`` values. The map is index -> name, matching the parser.
+    """
+    parsed: dict[int, str] = {}
     for line in text.splitlines():
         name = _readelf_field(line, "Name")
         version = _readelf_field(line, "Version")
@@ -950,10 +954,10 @@ def parse_readelf_need_indices(text: str) -> dict[str, int]:
         if not version.isdigit():
             raise ElfError(f"readelf Version field {version!r} is not an integer")
         index = int(version)
-        existing = parsed.get(name)
-        if existing is not None and existing != index:
-            raise ElfError(f"readelf Name {name!r} has conflicting Version fields")
-        parsed[name] = index
+        existing = parsed.get(index)
+        if existing is not None and existing != name:
+            raise ElfError(f"readelf Version {index} has conflicting Name fields")
+        parsed[index] = name
     return parsed
 
 
@@ -1792,13 +1796,11 @@ def verify_linux_x86_64_cdylib(
                 f"{DOCUMENTED_GLIBC_BASELINE_LABEL}"
             )
         tool_need = parse_readelf_need_indices(record.readelf_version_text)
-        if tool_need:
-            inverted = {name: index for index, name in record.verneed_indices.items()}
-            if tool_need != inverted:
-                raise ElfError(
-                    "readelf --version-info Name/Version indices do not match the parser: "
-                    f"{tool_need} vs {inverted}"
-                )
+        if tool_need and tool_need != record.verneed_indices:
+            raise ElfError(
+                "readelf --version-info Name/Version indices do not match the parser: "
+                f"{tool_need} vs {record.verneed_indices}"
+            )
         dynsyms = _run([readelf_bin, "--dyn-syms", str(path)])
         if dynsyms.returncode == 0:
             for line in (dynsyms.stdout or "").splitlines():

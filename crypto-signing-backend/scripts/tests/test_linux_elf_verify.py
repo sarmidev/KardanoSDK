@@ -1080,6 +1080,14 @@ class LinuxElfVerifyTests(unittest.TestCase):
             elf.parse_elf64_le_x86_64_dso(bytes(blob))
         with self.assertRaisesRegex(elf.ElfError, "sh_entsize is not Elf64_Half"):
             elf.parse_elf64_le_x86_64_dso(build_elf(versym_entsize=4))
+        shared = (
+            "  Name: GLIBC_2.3  Flags: none  Version: 4\n"
+            "  Name: GLIBC_2.3  Flags: none  Version: 9\n"
+        )
+        self.assertEqual(
+            elf.parse_readelf_need_indices(shared),
+            {4: "GLIBC_2.3", 9: "GLIBC_2.3"},
+        )
 
     def test_checked_elf64_arithmetic(self) -> None:
         self.assertEqual(elf._checked_add(0, elf.UINT64_MAX, "t"), elf.UINT64_MAX)
