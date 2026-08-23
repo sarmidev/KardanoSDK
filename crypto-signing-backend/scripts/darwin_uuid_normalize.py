@@ -46,8 +46,11 @@ Scope is fail-closed and narrow:
 
 - thin little-endian 64-bit MH_DYLIB only (arm64 or x86_64);
 - reject fat, big-endian, truncated, unknown magic, or overlapping commands;
-- inspected commands match only their exact encodings (LC_REQ_DYLD is
-  not masked off LC_UUID / LC_ID_DYLIB / LC_LOAD_DYLIB / LC_CODE_SIGNATURE);
+- inspected commands match only their exact encodings from Xcode 26.6
+  loader.h (LC_REQ_DYLD is not masked). Every Apple dylib dependency
+  command is parsed (LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB,
+  LC_LOAD_UPWARD_DYLIB, LC_LAZY_LOAD_DYLIB) and fed to the same allowlist;
+  only one LC_LOAD_DYLIB of /usr/lib/libSystem.B.dylib is accepted;
 - exactly one LC_UUID; at most one LC_CODE_SIGNATURE;
 - refuse unexpected architecture, CPU subtype, LC_ID_DYLIB, dependents,
   or missing sign symbol.
@@ -97,12 +100,27 @@ CPU_SUBTYPE_ARM64E = 0x2
 CPU_SUBTYPE_X86_64_ALL = 0x3
 CPU_SUBTYPE_LIB64 = 0x80000000
 
+# Exact encodings from Xcode 26.6 / 17F113
+# MacOSX.sdk/usr/include/mach-o/loader.h:
+#   LC_REQ_DYLD 0x80000000 (line 279)
+#   LC_LOAD_DYLIB 0xc (line 293) — no LC_REQ_DYLD
+#   LC_ID_DYLIB 0xd (line 294) — no LC_REQ_DYLD
+#   LC_LOAD_WEAK_DYLIB (0x18 | LC_REQ_DYLD) (line 311)
+#   LC_UUID 0x1b (line 316)
+#   LC_CODE_SIGNATURE 0x1d (line 318)
+#   LC_REEXPORT_DYLIB (0x1f | LC_REQ_DYLD) (line 320)
+#   LC_LAZY_LOAD_DYLIB 0x20 (line 321) — no LC_REQ_DYLD
+#   LC_LOAD_UPWARD_DYLIB (0x23 | LC_REQ_DYLD) (line 325)
 LC_REQ_DYLD = 0x80000000
 LC_SEGMENT_64 = 0x19
 LC_UUID = 0x1B
 LC_CODE_SIGNATURE = 0x1D
 LC_ID_DYLIB = 0x0D
 LC_LOAD_DYLIB = 0x0C
+LC_LOAD_WEAK_DYLIB = 0x18 | LC_REQ_DYLD
+LC_REEXPORT_DYLIB = 0x1F | LC_REQ_DYLD
+LC_LAZY_LOAD_DYLIB = 0x20
+LC_LOAD_UPWARD_DYLIB = 0x23 | LC_REQ_DYLD
 LC_SYMTAB = 0x2
 LC_DYSYMTAB = 0xB
 LC_DYLD_INFO_ONLY = 0x80000022
@@ -112,14 +130,23 @@ LC_SOURCE_VERSION = 0x2A
 LC_BUILD_VERSION = 0x32
 LC_VERSION_MIN_MACOSX = 0x24
 
-# Commands whose identity we enforce. LC_REQ_DYLD must not be combined
-# with these; match only the exact encoding.
-INSPECTED_COMMANDS = {
+# Exact encodings only. loader.h defines command numbers in the low
+# 8 bits and LC_REQ_DYLD (0x80000000) as the only high flag. Identity
+# is therefore cmd & 0xFF; any other combination is rejected.
+DEPENDENCY_COMMANDS = {
+    LC_LOAD_DYLIB: "LC_LOAD_DYLIB",
+    LC_LOAD_WEAK_DYLIB: "LC_LOAD_WEAK_DYLIB",
+    LC_REEXPORT_DYLIB: "LC_REEXPORT_DYLIB",
+    LC_LAZY_LOAD_DYLIB: "LC_LAZY_LOAD_DYLIB",
+    LC_LOAD_UPWARD_DYLIB: "LC_LOAD_UPWARD_DYLIB",
+}
+INSPECTED_EXACT = {
     LC_UUID: "LC_UUID",
     LC_CODE_SIGNATURE: "LC_CODE_SIGNATURE",
     LC_ID_DYLIB: "LC_ID_DYLIB",
-    LC_LOAD_DYLIB: "LC_LOAD_DYLIB",
+    **DEPENDENCY_COMMANDS,
 }
+EXACT_BY_BASE = {cmd & 0xFF: cmd for cmd in INSPECTED_EXACT}
 
 HEADER_SIZE = 32
 ARCH_BY_CPU = {
@@ -156,6 +183,13 @@ class LoadCommand:
     cmd: int
     cmdsize: int
     offset: int
+
+
+@dataclass
+class DependentDylib:
+    cmd: int
+    form: str
+    name: str
 
 
 @dataclass
@@ -210,7 +244,7 @@ class ThinDylib:
     signature_datasize: int | None = None
     linkedit: Segment64 | None = None
     install_name: str | None = None
-    dependents: list[str] = field(default_factory=list)
+    dependents: list[DependentDylib] = field(default_factory=list)
 
 
 def _u32(data: bytes, offset: int) -> int:
@@ -257,11 +291,19 @@ def _ranges_overlap(a0: int, a1: int, b0: int, b1: int) -> bool:
 
 
 def _reject_illegal_inspected_encoding(cmd: int) -> None:
-    kind = cmd & ~LC_REQ_DYLD
-    name = INSPECTED_COMMANDS.get(kind)
-    if name is None:
+    """Reject any LC_REQ_DYLD mismatch for inspected/dependency commands.
+
+    Commands that include LC_REQ_DYLD in the Apple header must have that
+    bit set exactly once (the header encoding). Commands that do not
+    include it must not have the bit. Extra bits (including 0x40000000
+    "double flag" variants) are also rejected: identity is cmd & 0xFF.
+    """
+    identity = cmd & 0xFF
+    expected = EXACT_BY_BASE.get(identity)
+    if expected is None:
         return
-    if cmd != kind:
+    if cmd != expected:
+        name = INSPECTED_EXACT[expected]
         raise NormalizeError(
             f"illegal flag combination for {name}: {cmd:#x}"
         )
@@ -348,8 +390,14 @@ def parse_thin_dylib(data: bytes) -> ThinDylib:
             signature_cmds.append(record)
         elif cmd == LC_ID_DYLIB:
             id_names.append(_dylib_name(data, record))
-        elif cmd == LC_LOAD_DYLIB:
-            parsed.dependents.append(_dylib_name(data, record))
+        elif cmd in DEPENDENCY_COMMANDS:
+            parsed.dependents.append(
+                DependentDylib(
+                    cmd=cmd,
+                    form=DEPENDENCY_COMMANDS[cmd],
+                    name=_dylib_name(data, record),
+                )
+            )
         cursor += cmdsize
     if cursor != limit:
         raise NormalizeError("load commands do not fill sizeofcmds")
@@ -749,11 +797,17 @@ def _require_expected_layout(parsed: ThinDylib, expected_arch: str) -> None:
         raise NormalizeError(
             f"LC_ID_DYLIB {parsed.install_name!r} != {STABLE_INSTALL_NAME!r}"
         )
-    unexpected = [name for name in parsed.dependents if name not in ALLOWED_DEPENDENTS]
+    unexpected = [dep.name for dep in parsed.dependents if dep.name not in ALLOWED_DEPENDENTS]
     if unexpected:
         raise NormalizeError(f"unexpected dependent dylibs: {unexpected}")
-    if not parsed.dependents:
-        raise NormalizeError("dylib has no LC_LOAD_DYLIB dependents")
+    unexpected_forms = [dep.form for dep in parsed.dependents if dep.cmd != LC_LOAD_DYLIB]
+    if unexpected_forms:
+        raise NormalizeError(f"unexpected dependency form: {unexpected_forms}")
+    load_dylibs = [dep for dep in parsed.dependents if dep.cmd == LC_LOAD_DYLIB]
+    if len(load_dylibs) != 1:
+        raise NormalizeError(
+            f"expected exactly one LC_LOAD_DYLIB, found {len(load_dylibs)}"
+        )
 
 
 def _require_symbol(path: Path, nm: Callable[[Path], str] | None) -> str:

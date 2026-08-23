@@ -280,8 +280,9 @@ Asset disposition after Debug+Release lint (`No issues found.`):
 | `IconLocation` | Moved splash PNGs to `drawable-nodpi/` and `drawable-night-nodpi/` |
 | `IconLauncherShape` on 10 legacy `ic_launcher.png` squares | Regenerated from `kardano_mark_{light,dark}.png` via `scripts/generate_legacy_launcher_icons.py`: 12.5% transparent margin and a rounded-rect brand-fill silhouette. Adaptive XML, monochrome, splash, and round mipmaps were not changed. Owner visual check remains for pre-API-26 tiles. |
 
-`verify.yml` job `android-lint` runs both variants. Existing
-claim / archive / Gitleaks / action-pin jobs are unchanged.
+`verify.yml` job `android-lint` runs lint Debug/Release, then
+assemble Debug/Release. Existing claim / archive / Gitleaks /
+action-pin jobs are unchanged.
 
 Re-running `resolveAndLockAll --write-locks` on 2026-08-23 produced
 byte-identical SHA-256 hashes for every lockfile. Do not hand-edit

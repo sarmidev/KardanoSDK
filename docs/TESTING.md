@@ -262,16 +262,38 @@ locally by flipping the `junit-4.13.2.jar` SHA-256, then restoring it).
 See `docs/DEPENDENCY_REVIEW.md`.
 
 Android lint (warnings fail the build; freshness detectors are off
-because versions are locked and SHA-256 verified):
+because versions are locked and SHA-256 verified) and packaging:
 
 ```bash
 ./gradlew --no-daemon :androidApp:lintDebug :androidApp:lintRelease
+./gradlew --no-daemon :androidApp:assembleDebug :androidApp:assembleRelease
 ```
 
-`verify.yml` job `android-lint` runs both variants. Reports should read
-`No issues found.` Unsuppressed findings fail CI. Owner should still
-glance at pre-API-26 launcher tiles after regenerating the rounded-rect
-legacy silhouette (`scripts/generate_legacy_launcher_icons.py`).
+`verify.yml` job `android-lint` (Ubuntu) runs lint Debug/Release, then
+assemble Debug/Release. Reports should read `No issues found.`
+Unsuppressed findings fail CI. Assemble is packaging only, not
+`connectedAndroidDeviceTest`. Owner should still glance at pre-API-26
+launcher tiles after regenerating the rounded-rect legacy silhouette
+(`scripts/generate_legacy_launcher_icons.py`).
+
+iOS compile and simulator link (macOS Verify job
+`macos-signing-and-ios`):
+
+```bash
+./gradlew --no-daemon \
+  :core:compileKotlinIosArm64 \
+  :crypto:compileKotlinIosArm64 \
+  :crypto-signing-backend:compileKotlinIosArm64 \
+  :provider:compileKotlinIosArm64 \
+  :provider-blockfrost:compileKotlinIosArm64 \
+  :wallet:compileKotlinIosArm64 \
+  :tx:compileKotlinIosArm64 \
+  :shared:compileKotlinIosArm64 \
+  :crypto-signing-backend:linkDebugTestIosSimulatorArm64
+```
+
+That job also runs the macOS signing-path JVM tests. iOS on-simulator
+assertion execution remains future work (compile+link only).
 
 `scripts/check_handoff_archive.py` restores the six documented archive link
 rewrites at the byte level (no newline normalization) and hashes the result

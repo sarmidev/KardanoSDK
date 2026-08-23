@@ -293,5 +293,15 @@ On `fix/native-build-and-platform-evidence`:
   Run `32662613270` then matched Darwin UUID + arm64 signature as well
   (8/8). Those candidate bytes replaced `src/` and CHECKSUMS in `5582637`.
   The follow-up harness still accepts those Darwin bytes, so they were
-  not rewritten. Gate 2 Linux starts only after Verify and native rebuild
-  are green on the current tip and after Gate 1 re-review is GO.
+  not rewritten. A later re-review required every Apple dylib dependency
+  command (`LC_LOAD_DYLIB` `0xc`, `LC_LOAD_WEAK_DYLIB` `0x18|LC_REQ_DYLD`,
+  `LC_REEXPORT_DYLIB` `0x1f|LC_REQ_DYLD`, `LC_LAZY_LOAD_DYLIB` `0x20`,
+  `LC_LOAD_UPWARD_DYLIB` `0x23|LC_REQ_DYLD`, from Xcode 26.6 `loader.h`)
+  to be parsed and allowlisted; only one `LC_LOAD_DYLIB` of
+  `/usr/lib/libSystem.B.dylib` is accepted. Verify now runs
+  `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` and
+  `:androidApp:assembleDebug`/`assembleRelease` in addition to the
+  existing iOS compiles and Android lint. Device runtime remains an
+  open owner/manual gate bound to W5-2 checksums. Gate 2 Linux starts
+  only after Verify and native rebuild are green on the current tip
+  and after Gate 1 re-review is GO.

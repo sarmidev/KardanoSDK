@@ -107,7 +107,7 @@ jobs:
           :tx:testAndroidHostTest
 
   macos-signing-and-ios:
-    name: macOS signing tests and iOS compile
+    name: macOS signing tests and iOS compile/link
     runs-on: macos-latest
     steps:
       - name: Check out source
@@ -135,7 +135,7 @@ jobs:
           :shared:jvmTest
       - name: Run shared Android host tests
         run: ./gradlew --no-daemon :shared:testAndroidHostTest
-      - name: Compile iOS targets
+      - name: Compile iOS targets and link simulator tests
         run: >-
           ./gradlew --no-daemon
           :core:compileKotlinIosArm64
@@ -146,9 +146,10 @@ jobs:
           :wallet:compileKotlinIosArm64
           :tx:compileKotlinIosArm64
           :shared:compileKotlinIosArm64
+          :crypto-signing-backend:linkDebugTestIosSimulatorArm64
 
   android-lint:
-    name: Android lint Debug and Release
+    name: Android lint and assemble
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -172,3 +173,8 @@ jobs:
           ./gradlew --no-daemon
           :androidApp:lintDebug
           :androidApp:lintRelease
+      - name: Assemble Debug and Release
+        run: >-
+          ./gradlew --no-daemon
+          :androidApp:assembleDebug
+          :androidApp:assembleRelease

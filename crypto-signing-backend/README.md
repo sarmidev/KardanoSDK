@@ -56,9 +56,9 @@ UUID-normalized set in `CHECKSUMS.sha256` (replacement commit `5582637`,
 | Leg | Command | Result | Bound to |
 |---|---|---|---|
 | JVM KAT (through JNA bindings) | `./gradlew :crypto-signing-backend:jvmTest` | 4/4 pass (macOS arm64) on 2026-08-23 | current `CHECKSUMS.sha256` (`darwin-aarch64` `6462fe39…cc84`) |
-| iOS compile + simulator link | `./gradlew :crypto-signing-backend:compileKotlinIosArm64` + `:linkDebugTestIosSimulatorArm64` | both `BUILD SUCCESSFUL` on 2026-08-23 | current iOS rows (`a933ee42…6fb2`, `a894136b…2056`) |
-| Eight `compileKotlinIosArm64` modules | `:core` `:crypto` `:crypto-signing-backend` `:provider` `:provider-blockfrost` `:wallet` `:tx` `:shared` | all `BUILD SUCCESSFUL` on 2026-08-23 | current iOS `.a` rows above |
-| Android packaging | `./gradlew :androidApp:assembleDebug` + `:androidApp:assembleRelease` | both `BUILD SUCCESSFUL` on 2026-08-23 | current Android `.so` rows in `CHECKSUMS.sha256` |
+| iOS compile + simulator link | `./gradlew :crypto-signing-backend:compileKotlinIosArm64` + `:linkDebugTestIosSimulatorArm64` | both `BUILD SUCCESSFUL` on 2026-08-23; Verify `macos-signing-and-ios` runs the eight `compileKotlinIosArm64` tasks **and** `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` | current iOS rows (`a933ee42…6fb2`, `a894136b…2056`) |
+| Eight `compileKotlinIosArm64` modules | `:core` `:crypto` `:crypto-signing-backend` `:provider` `:provider-blockfrost` `:wallet` `:tx` `:shared` | all `BUILD SUCCESSFUL` on 2026-08-23; same eight tasks run on Verify macOS | current iOS `.a` rows above |
+| Android packaging | `./gradlew :androidApp:assembleDebug` + `:androidApp:assembleRelease` | both `BUILD SUCCESSFUL` on 2026-08-23; Verify Ubuntu `android-lint` keeps `lintDebug`/`lintRelease` and now also runs both assemble tasks | current Android `.so` rows in `CHECKSUMS.sha256` |
 | Symbol proof (per target) | `nm -gU` (macOS/iOS), `llvm-nm -D` (Android) | `kardano_ed25519_bip32_signing_fn_func_sign` exported on all 8 artifacts | current `CHECKSUMS.sha256` |
 | Android real-runtime KAT | `./gradlew :crypto-signing-backend:connectedAndroidDeviceTest` | 4/4 on `SM-A356B` (Android 15) + 4/4 on `kardano_api24` (API 24) | **historical only** — W5-2 `40ab80c` CHECKSUMS (host-path-tied Android `.so` rows `fdc2a0e2…`, `6c80eb89…`, `e6194b64…`, `5bbe657d…`). No post-replacement device or emulator run has occurred. Owner/manual gate. |
 

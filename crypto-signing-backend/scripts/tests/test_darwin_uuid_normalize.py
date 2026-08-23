@@ -284,6 +284,120 @@ class ParseAndNormalizeTests(unittest.TestCase):
                 extra_dep, expected_arch="arm64", sign=False, nm=_nm_ok, skip_codesign=True
             )
 
+    def test_each_dependency_command_with_malicious_path_is_rejected(self) -> None:
+        evil = "/tmp/evil.dylib"
+        for cmd, form in normalize.DEPENDENCY_COMMANDS.items():
+            data = build_thin_dylib(
+                extra_cmds=[_dylib_cmd(cmd, evil)] if cmd != normalize.LC_LOAD_DYLIB else None,
+                dependents=(evil,) if cmd == normalize.LC_LOAD_DYLIB else (LIBSYSTEM,),
+            )
+            parsed = normalize.parse_thin_dylib(data)
+            names = [dep.name for dep in parsed.dependents]
+            self.assertIn(evil, names, form)
+            root = Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+            path = root / f"{form}.dylib"
+            path.write_bytes(data)
+            with self.assertRaisesRegex(normalize.NormalizeError, "unexpected dependent|unexpected dependency form"):
+                normalize.normalize_dylib(
+                    path, expected_arch="arm64", sign=False, nm=_nm_ok, skip_codesign=True
+                )
+
+    def test_alternate_dependency_forms_of_libsystem_are_rejected(self) -> None:
+        for cmd, form in normalize.DEPENDENCY_COMMANDS.items():
+            if cmd == normalize.LC_LOAD_DYLIB:
+                continue
+            data = build_thin_dylib(extra_cmds=[_dylib_cmd(cmd, LIBSYSTEM)])
+            parsed = normalize.parse_thin_dylib(data)
+            self.assertTrue(any(dep.cmd == cmd for dep in parsed.dependents), form)
+            root = Path(tempfile.mkdtemp())
+            self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+            path = root / f"{form}.dylib"
+            path.write_bytes(data)
+            with self.assertRaisesRegex(normalize.NormalizeError, "unexpected dependency form"):
+                normalize.normalize_dylib(
+                    path, expected_arch="arm64", sign=False, nm=_nm_ok, skip_codesign=True
+                )
+
+    def test_single_load_dylib_libsystem_is_accepted(self) -> None:
+        data = build_thin_dylib()
+        parsed = normalize.parse_thin_dylib(data)
+        self.assertEqual(len(parsed.dependents), 1)
+        self.assertEqual(parsed.dependents[0].cmd, normalize.LC_LOAD_DYLIB)
+        self.assertEqual(parsed.dependents[0].name, LIBSYSTEM)
+
+    def test_malformed_dependency_req_dyld_variants_are_rejected(self) -> None:
+        malformed = (
+            (normalize.LC_LOAD_DYLIB | normalize.LC_REQ_DYLD, "LC_LOAD_DYLIB"),
+            (normalize.LC_LOAD_DYLIB | 0x40000000, "LC_LOAD_DYLIB"),
+            (0x18, "LC_LOAD_WEAK_DYLIB"),
+            (0x1F, "LC_REEXPORT_DYLIB"),
+            (normalize.LC_LAZY_LOAD_DYLIB | normalize.LC_REQ_DYLD, "LC_LAZY_LOAD_DYLIB"),
+            (0x23, "LC_LOAD_UPWARD_DYLIB"),
+            (normalize.LC_LOAD_WEAK_DYLIB | 0x40000000, "LC_LOAD_WEAK_DYLIB"),
+        )
+        for cmd, name in malformed:
+            data = build_thin_dylib(extra_cmds=[_dylib_cmd(cmd, LIBSYSTEM)])
+            with self.assertRaisesRegex(normalize.NormalizeError, "illegal flag combination"):
+                normalize.parse_thin_dylib(data)
+
+    def test_truncated_dependency_name_and_command_are_rejected(self) -> None:
+        short = struct.pack("<II", normalize.LC_LOAD_WEAK_DYLIB, 8)
+        with self.assertRaisesRegex(normalize.NormalizeError, "dylib command is shorter"):
+            normalize.parse_thin_dylib(build_thin_dylib(extra_cmds=[short]))
+        body = struct.pack("<IIII", 24, 1, 0, 0) + b"nonulxxx"
+        cmdsize = 8 + len(body)
+        unterminated = struct.pack("<II", normalize.LC_REEXPORT_DYLIB, cmdsize) + body
+        with self.assertRaisesRegex(normalize.NormalizeError, "unterminated"):
+            normalize.parse_thin_dylib(build_thin_dylib(extra_cmds=[unterminated]))
+        name_off = 64
+        body = struct.pack("<IIII", name_off, 1, 0, 0) + b"x\x00"
+        cmdsize = 8 + len(_pad8(body))
+        bad_off = struct.pack("<II", normalize.LC_LAZY_LOAD_DYLIB, cmdsize) + _pad8(body)
+        with self.assertRaisesRegex(normalize.NormalizeError, "name offset"):
+            normalize.parse_thin_dylib(build_thin_dylib(extra_cmds=[bad_off]))
+
+    def test_duplicate_load_dylib_is_rejected(self) -> None:
+        data = build_thin_dylib(dependents=(LIBSYSTEM, LIBSYSTEM))
+        parsed = normalize.parse_thin_dylib(data)
+        self.assertEqual(len(parsed.dependents), 2)
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        path = root / "dup.dylib"
+        path.write_bytes(data)
+        with self.assertRaisesRegex(normalize.NormalizeError, "exactly one LC_LOAD_DYLIB"):
+            normalize.normalize_dylib(
+                path, expected_arch="arm64", sign=False, nm=_nm_ok, skip_codesign=True
+            )
+
+    def test_committed_darwin_binaries_still_pass(self) -> None:
+        module = SCRIPT_DIR.parent
+        arm = (
+            module
+            / "src/jvmMain/resources/darwin-aarch64/libkardano_ed25519_bip32_signing.dylib"
+        )
+        x86 = (
+            module
+            / "src/jvmMain/resources/darwin-x86-64/libkardano_ed25519_bip32_signing.dylib"
+        )
+        for path, arch in ((arm, "arm64"), (x86, "x86_64")):
+            original = path.read_bytes()
+            parsed = normalize.parse_thin_dylib(original)
+            self.assertEqual([dep.cmd for dep in parsed.dependents], [normalize.LC_LOAD_DYLIB])
+            self.assertEqual([dep.name for dep in parsed.dependents], [LIBSYSTEM])
+            if arch == "arm64":
+                expected = normalize.verify_signed_canonical_uuid(path, expected_arch=arch)
+                self.assertEqual(parsed.uuid, expected)
+            else:
+                root = Path(tempfile.mkdtemp())
+                self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+                copy = root / path.name
+                copy.write_bytes(original)
+                record = normalize.normalize_dylib(copy, expected_arch=arch, sign=False)
+                self.assertFalse(record["mutated"])
+                self.assertEqual(copy.read_bytes(), original)
+            self.assertEqual(path.read_bytes(), original)
+
     def test_missing_symbol_is_rejected(self) -> None:
         root = Path(tempfile.mkdtemp())
         self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))

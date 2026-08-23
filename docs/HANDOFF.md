@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 1 harness | Tip stacked on `5582637` replacement. Canonical signed-arm64 verification, exact Mach-O encodings, signature-range checks, clean candidate provenance. Current 8 binaries unchanged. Linux not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 1 re-review | Tip `7ac9633` plus follow-up: parse every Apple dylib dependency command fail-closed; Verify runs iOS simulator link and Android assemble. Current 8 binaries unchanged. Linux not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -104,23 +104,19 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence` (continue
-  from `5582637`).** Independent Gate 1 review was NO-GO. The follow-up
-  removes the `_already_normalized` substring shortcut: every signed
-  pass parses exact `codesign` fields, recomputes the UUID from the
-  documented canonical image (in-memory; `hashlib.sha256` only), and
-  rejects an otherwise-valid ad-hoc exact-identifier signature over an
-  arbitrary UUID. Inspected Mach-O commands match exact encodings;
-  `LC_REQ_DYLD` is not masked; CPU subtypes must be ordinary arm64 ALL /
-  x86_64 ALL. Signature blobs must sit in `__LINKEDIT` and end at EOF.
-  Candidate generation requires a clean tracked worktree and records
-  HEAD/tree SHA. Current `CHECKSUMS.sha256` rows (replacement `5582637`)
-  still match this verifier, so the eight binaries were not rewritten.
-  Post-replacement JVM KAT, eight `compileKotlinIosArm64`, iOS simulator
-  link, and Android assemble ran on 2026-08-23 against those hashes.
-  Device `connectedAndroidDeviceTest` remains bound to W5-2 `40ab80c`
-  checksums; no post-replacement device runtime. Next: Verify + native
-  rebuild green on this tip, then Gate 2 Linux only after re-review GO.
-  Do not merge or tag.
+  from `7ac9633`).** Gate 1 re-review found a parser regression (alternate
+  dylib dependency commands were ignored) and a CI gap (claimed iOS
+  simulator link / Android assemble were local-only). The follow-up
+  parses `LC_LOAD_DYLIB` / `LC_LOAD_WEAK_DYLIB` / `LC_REEXPORT_DYLIB` /
+  `LC_LOAD_UPWARD_DYLIB` / `LC_LAZY_LOAD_DYLIB` at the exact Xcode 26.6
+  `loader.h` encodings, feeds every name through the libSystem allowlist,
+  and rejects unexpected forms and malformed `LC_REQ_DYLD` variants.
+  Verify macOS now runs `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`
+  with the eight `compileKotlinIosArm64` tasks. Verify Ubuntu `android-lint`
+  keeps lint Debug/Release and adds `assembleDebug` / `assembleRelease`.
+  Device `connectedAndroidDeviceTest` remains historical (W5-2 `40ab80c`
+  checksums); no post-replacement device runtime. Do not start Linux or
+  merge/tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope
@@ -238,12 +234,12 @@ Do not use:
 ## Next Recommended Task
 
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Independent Gate 1
-re-review of the canonical-verification harness is the next gate. Do not
-start Gate 2 Linux until that re-review is GO. Residual owner work from
-earlier prompts: authenticated GitHub secret-scanning / Dependabot, the
-manual accessibility walkthrough, and a post-replacement Android device
-`connectedAndroidDeviceTest` (still a manual gate). Do not merge from an
-automated session.
+re-review of the dependency-command parser and Verify link/assemble
+tasks is the next gate. Do not start Gate 2 Linux until that re-review
+is GO. Residual owner work: authenticated GitHub secret-scanning /
+Dependabot, the manual accessibility walkthrough, and a post-replacement
+Android device `connectedAndroidDeviceTest` (still a manual gate). Do
+not merge from an automated session.
 
 ## Prompt For Cursor Business/Product Work
 

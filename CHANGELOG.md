@@ -55,8 +55,12 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   masked. Candidate generation requires a clean tracked worktree and
   records HEAD/tree SHA. Current Darwin bytes still match that
   verifier, so CHECKSUMS was not rewritten by the follow-up harness
-  commit. Gate 2 Linux starts only after Verify and native rebuild are
-  green on the current tip.
+  commit. Every Apple dylib dependency load command from Xcode 26.6
+  `loader.h` is now parsed fail-closed (not only `LC_LOAD_DYLIB`);
+  Verify runs `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`
+  and `:androidApp:assembleDebug`/`assembleRelease` in addition to the
+  eight iOS compiles and Android lint. Gate 2 Linux starts only after
+  Verify and native rebuild are green on the current tip.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
