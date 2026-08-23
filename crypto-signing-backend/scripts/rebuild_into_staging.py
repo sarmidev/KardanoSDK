@@ -139,6 +139,18 @@ def copy_into_staging(src: Path, staging: Path, relative: str) -> Path:
     return dest
 
 
+def _ensure_target(rust_target: str, *, module_root: Path, env: dict[str, str]) -> None:
+    completed = subprocess.run(
+        ["rustup", "target", "add", rust_target],
+        cwd=module_root,
+        env=env,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RebuildError(f"rustup target add {rust_target} failed ({completed.returncode})")
+
+
 def rebuild_macos_jvm(module_root: Path, staging: Path, env: dict[str, str]) -> None:
     target_dir = Path(env["CARGO_TARGET_DIR"])
     _run(["cargo", "build", "--locked", "--release", "--lib"], cwd=module_root, env=env)
@@ -147,11 +159,7 @@ def rebuild_macos_jvm(module_root: Path, staging: Path, env: dict[str, str]) -> 
         staging,
         natives.ARTIFACT_BY_ID["macos-jvm-arm64"].relative_path,
     )
-    _run(
-        ["rustup", "target", "add", "x86_64-apple-darwin"],
-        cwd=module_root,
-        env=env,
-    )
+    _ensure_target("x86_64-apple-darwin", module_root=module_root, env=env)
     _run(
         ["cargo", "build", "--locked", "--release", "--lib", "--target", "x86_64-apple-darwin"],
         cwd=module_root,
@@ -207,7 +215,7 @@ def rebuild_ios(module_root: Path, staging: Path, env: dict[str, str]) -> None:
         ("ios-arm64", "aarch64-apple-ios"),
         ("ios-simulator-arm64", "aarch64-apple-ios-sim"),
     ):
-        _run(["rustup", "target", "add", rust_target], cwd=module_root, env=env)
+        _ensure_target(rust_target, module_root=module_root, env=env)
         _run(
             ["cargo", "build", "--locked", "--release", "--lib", "--target", rust_target],
             cwd=module_root,
@@ -288,6 +296,11 @@ def main(argv: list[str] | None = None) -> int:
         (staging / "provenance.json").write_text(
             json.dumps(provenance, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+        )
+        print(
+            f"ANDROID_NDK_HOME={env.get('ANDROID_NDK_HOME', '')} "
+            f"CARGO_TARGET_DIR={env.get('CARGO_TARGET_DIR', '')}",
+            flush=True,
         )
         for group in groups:
             BUILDERS[group](module_root, staging, env)

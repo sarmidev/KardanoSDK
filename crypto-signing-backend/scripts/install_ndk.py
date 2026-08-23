@@ -139,13 +139,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.print_home:
                 print(present)
             else:
-                print(f"using existing NDK {NDK_REVISION} at {present}")
+                print(f"using existing NDK {NDK_REVISION} at {present}", file=sys.stderr)
             return 0
         name = zip_name_for()
         expected_sha1, expected_size = NDK_ZIP_SHA1[name]
         zip_path = args.cache_zip or (args.dest / name)
         if not zip_path.is_file():
-            print(f"downloading {name} from {DOWNLOAD_BASE} ({expected_size} bytes)")
+            print(
+                f"downloading {name} from {DOWNLOAD_BASE} ({expected_size} bytes)",
+                file=sys.stderr,
+            )
             download_to(f"{DOWNLOAD_BASE}/{name}", zip_path)
         actual_size = zip_path.stat().st_size
         if actual_size != expected_size:
@@ -154,8 +157,14 @@ def main(argv: list[str] | None = None) -> int:
         if actual_sha1 != expected_sha1:
             raise InstallError(f"{name} SHA-1 {actual_sha1} != publisher {expected_sha1}")
         actual_sha256 = sha256_file(zip_path)
-        print(f"{name} SHA-1 matches Google repository2-3.xml ({REPO_XML})")
-        print(f"{name} SHA-256 (computed after SHA-1 match): {actual_sha256}")
+        print(
+            f"{name} SHA-1 matches Google repository2-3.xml ({REPO_XML})",
+            file=sys.stderr,
+        )
+        print(
+            f"{name} SHA-256 (computed after SHA-1 match): {actual_sha256}",
+            file=sys.stderr,
+        )
         extracted = extract_zip(zip_path, args.dest)
         if ndk_revision(extracted) != NDK_REVISION:
             raise InstallError(
@@ -164,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.print_home:
             print(extracted)
         else:
-            print(f"installed NDK {NDK_REVISION} -> {extracted}")
+            print(f"installed NDK {NDK_REVISION} -> {extracted}", file=sys.stderr)
     except InstallError as error:
         print(f"NDK install failed: {error}", file=sys.stderr)
         return 1

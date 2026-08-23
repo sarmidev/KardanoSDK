@@ -1,13 +1,6 @@
 # rustup pin for offline native regeneration. Channel is the exact
-# toolchain recorded in README.md (verified 2026-08-23).
+# toolchain recorded in README.md (verified 2026-08-23). Cross targets
+# are added by the rebuild scripts (`rustup target add`), not here, so a
+# `cargo metadata --locked` host check does not have to download them.
 [toolchain]
 channel = "1.97.0"
-targets = [
-    "x86_64-apple-darwin",
-    "aarch64-apple-ios",
-    "aarch64-apple-ios-sim",
-    "aarch64-linux-android",
-    "armv7-linux-androideabi",
-    "i686-linux-android",
-    "x86_64-linux-android",
-]

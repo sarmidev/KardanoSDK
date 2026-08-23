@@ -64,15 +64,24 @@ jobs:
           NDK_HOME=$(python3 crypto-signing-backend/scripts/install_ndk.py \
             --dest "$RUNNER_TEMP/kardano-ndk" \
             --cache-zip "$RUNNER_TEMP/android-ndk-r27c-darwin.zip" \
-            --print-home | tail -n 1)
+            --print-home)
+          echo "NDK_HOME=$NDK_HOME"
           echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$NDK_HOME" >> "$GITHUB_ENV"
+      - name: Show rustc, cargo-ndk, and NDK
+        run: |
+          rustc --version --verbose
+          cargo --version --verbose
+          cargo ndk --version || true
+          test -f "$ANDROID_NDK_HOME/source.properties" && cat "$ANDROID_NDK_HOME/source.properties"
+          xcodebuild -version
       - name: Rebuild into staging (README recipe)
         run: >-
           python3 crypto-signing-backend/scripts/rebuild_into_staging.py
           --staging "$RUNNER_TEMP/native-rebuild-staging"
           --groups macos-jvm,android,ios
       - name: Compare staged bytes to committed natives
+        if: always()
         run: >-
           python3 crypto-signing-backend/scripts/verify-artifacts.py
           --module-root crypto-signing-backend
