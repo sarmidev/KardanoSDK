@@ -50,9 +50,10 @@ class LovelaceDisplayTest {
 
     /**
      * W9-7 (2026-08-22 pre-release audit): a raw negative `Long` can no longer reach [LovelaceDisplay.ada]
-     * at all — [Lovelace.of] rejects it first, at construction time, before any display formatting
-     * is attempted. This pins that rejection as the actual, tested contract rather than an
-     * un-asserted assumption every current caller happened to satisfy.
+     * at all — [Lovelace.of] rejects it first, at construction time (a runtime
+     * [org.sarmidev.kardano.KardanoResult], not a compile-time check), before any display
+     * formatting is attempted. This pins that rejection as the actual, tested contract rather
+     * than an un-asserted assumption every current caller happened to satisfy.
      */
     @Test
     fun negativeLovelace_isRejectedAtConstructionBeforeItCanReachAda() {

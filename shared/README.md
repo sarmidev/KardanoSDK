@@ -486,9 +486,10 @@ input and output counts, the fee and (if present) change amounts in lovelace, th
 size in bytes, and a truncated hex preview of the body bytes — always labeled as an unsigned
 draft. On failure (for example no UTxOs, insufficient funds, or an amount below minimum ADA) the
 screen shows a message distinguishing the cause, mapped from `:tx`'s typed `TxBuildError`. Under
-the default `InMemoryChainQueryProvider`, the restored wallet's address has no fake UTxOs seeded
-for it — same honest-empty behavior as the Wallet Balance section (ADR-0013 §7) — so this section
-normally reports "no UTxOs" as the expected mock result, not a failure; a live Blockfrost preprod
+the raw `InMemoryChainQueryProvider` default, the restored wallet's address has no fake UTxOs
+seeded for it — same honest-empty behavior as presenter tests for Wallet Balance (ADR-0013 §7).
+The Playground factory mock (`PlaygroundMockSampleData`) seeds fake ADA-only UTxOs for that
+address so the guided demo can complete Funds/Build/Sign offline. A live Blockfrost preprod
 provider can build a real draft only after that address is funded with test ADA from a preprod
 faucet. **No signing, no witness construction, no transaction id hashing, and no submission**
 anywhere in this checkpoint — see
@@ -532,10 +533,11 @@ screen shows a message distinguishing the cause, covering both the same draft-bu
 the Transaction Draft section can report and every `WalletError`
 `ReadOnlyWallet.signTestnetFixtureTransaction` itself can return (a signing failure or a
 witness/transaction-assembly failure). Under the
-default `InMemoryChainQueryProvider`, the restored wallet's address has no fake UTxOs seeded for
-it — same honest-empty behavior as the sections above — so this section normally reports "no
-UTxOs" as the expected mock result, not a failure; a live Blockfrost preprod provider can sign a
-real draft only after that address is funded with test ADA from a preprod faucet. **No
+raw `InMemoryChainQueryProvider` default, the restored wallet's address has no fake UTxOs seeded
+for it — same honest-empty behavior as the presenter tests above. The Playground factory mock
+seeds that address, so the guided Sign step can complete offline. A live Blockfrost preprod
+provider can sign a real draft only after that address is funded with test ADA from a preprod
+faucet. **No
 submission anywhere in this checkpoint** — submitting a transaction is Block 1.11, see
 [docs/DECISIONS/0015-transaction-signing.md](../docs/DECISIONS/0015-transaction-signing.md).
 

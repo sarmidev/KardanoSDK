@@ -36,7 +36,9 @@ The mock contains deterministic ADA-only sample UTxOs, so the first four steps c
 network request. The last step honestly reports **"Nothing was sent — and that's the honest
 answer"**: this demo runs offline, so there is no network to send to, and the SDK says so rather
 than imitating a network acceptance. The closing **Summary** screen recaps what actually happened
-and offers **Run the demo again**.
+and offers **Run the demo again**. **Start over** (and changing the live-network switch or
+project id) increments an operation generation so a slow in-flight request cannot overwrite the
+newer screen.
 
 The wallet behind this demo is a cited public test fixture. The UI does not display its mnemonic,
 seed, or raw private-key material. Signing accepts only that fixture (recognized by its published

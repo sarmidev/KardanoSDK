@@ -24,6 +24,11 @@ To review both appearances, toggle your OS/browser color scheme (`prefers-color-
 resize the window, or use your browser's device toolbar for the mobile layout. The page has no
 JavaScript-driven theme switcher; it follows the system setting only.
 
+In-page hash links (`#approach`, `#try-the-playground`, `#roadmap`, and the other section ids,
+plus the skip-link target `#main-content`) use `scroll-padding-top` / `scroll-margin-top` so
+the heading is not hidden under the sticky header. Keyboard and hash navigation still need a
+manual pass after visual changes.
+
 ## Content-source rules
 
 Every public claim on this page must trace back to one of these repository documents, not to new

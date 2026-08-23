@@ -605,6 +605,40 @@ Date: 2026-08-23
 
 Summary:
 
+- **Playground operation lifecycle on `fix/playground-operation-lifecycle` (four commits) — DONE.**
+  Started from clean `origin/main` at `a632b7d` after confirming Prompt 1 (pre-release core
+  contracts, through `43a30e0`) and Prompt 2 (signing-scope enforcement, through `a632b7d`)
+  were already merged. No SDK protocol behavior changed.
+  - **Commit 1 — operation generations and cancellation.** `PlaygroundState.flowGeneration`
+    increments on ResetFlow and on actual live-toggle / project-id changes. The ViewModel
+    captures generation at Funds/Build/Sign/Submit/diagnostic start, ignores stale results,
+    and cancels in-flight Jobs. Provider-backed step results clear when provider configuration
+    changes. The reducer stays a pure function of `(state, intent)`.
+  - **Commit 2 — provider cache and provenance.** Explicit `PlaygroundProviderMode.Mock` /
+    `LivePreprod`. Provider-backed presentations carry mode + generation. Live Blockfrost
+    clients are dropped when the project id changes or live mode is disabled. Docs no longer
+    claim only `PlaygroundState` holds the id; the factory cache key is also in-memory, never
+    persisted or logged.
+  - **Commit 3 — accessibility semantics.** Headings, polite/assertive live regions,
+    disclosure `stateDescription` plus expand/collapse actions, and combined title+outcome
+    descriptions. Compose 1.11 has no boolean `expanded` property; expand/collapse actions
+    are the supported equivalent.
+  - **Commit 4 — presentation and site polish.** `InsufficientFunds` excluded-native-asset
+    fields are shown; stale mock / `LovelaceDisplay` KDoc corrected; landing hash targets
+    offset under the sticky header; CHANGELOG, HANDOFF, QUICKSTART, TESTING, shared/README,
+    site/README updated.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. A cancelled request can still complete in a non-cancellable use case; generation
+    matching drops that result. The factory cache key is a second in-memory copy of the
+    project id.
+
+### Session Summary (Signing-scope enforcement)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Signing-scope enforcement on `fix/signing-scope-enforcement` (five commits) — DONE.**
   Closes the compiled-artifact signing gap (ADR-0018 Option 3 / W7-1), not merely the
   rename/opt-in signal. Started from clean `origin/main` at `43a30e0` (Prompt 1 already

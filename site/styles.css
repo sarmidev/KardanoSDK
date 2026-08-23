@@ -79,6 +79,8 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Sticky header is ~4.5–5.5rem tall; keep hash / skip-link targets visible beneath it. */
+  scroll-padding-top: 5.5rem;
 }
 
 body {
@@ -159,6 +161,19 @@ button:focus-visible,
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+#top,
+#hero,
+#evidence,
+#approach,
+#what-works-today,
+#try-the-playground,
+#current-limits,
+#roadmap,
+#pilot-contact,
+#main-content {
+  scroll-margin-top: 5.5rem;
 }
 
 .header-row {

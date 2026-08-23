@@ -14,10 +14,11 @@ import org.sarmidev.kardano.primitives.Lovelace
  * fractional digits are trimmed (`"2.000000"` -> `"2"`, `"2.500000"` -> `"2.5"`) so whole-ADA
  * amounts read cleanly.
  *
- * [ada] takes a [Lovelace] rather than a raw [Long] so a negative amount is rejected at
- * [Lovelace.of] construction time, before it ever reaches this formatter — compile-time
- * enforcement of the non-negative invariant every current call site already relied on, rather
- * than a gap only every current caller happens to avoid (W9-7, 2026-08-22 pre-release audit).
+ * [ada] takes a [Lovelace] rather than a raw [Long]. A negative amount cannot be constructed
+ * as a [Lovelace]: [Lovelace.of] returns [org.sarmidev.kardano.primitives.LovelaceError.Negative]
+ * at construction time, so it never reaches this formatter (W9-7, 2026-08-22 pre-release
+ * audit). That check is a runtime [org.sarmidev.kardano.KardanoResult], not a compile-time
+ * guarantee; the [Lovelace] parameter only keeps a raw [Long] from being passed in.
  */
 internal object LovelaceDisplay {
 

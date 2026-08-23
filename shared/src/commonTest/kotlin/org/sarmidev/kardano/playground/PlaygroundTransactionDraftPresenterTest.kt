@@ -18,6 +18,7 @@ import org.sarmidev.kardano.tx.TransactionOutput
 import org.sarmidev.kardano.tx.TxBuildError
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -183,6 +184,23 @@ class PlaygroundTransactionDraftPresenterTest {
         )
         assertTrue(msg.contains("5000000"), "got: $msg")
         assertTrue(msg.contains("1000000"), "got: $msg")
+        assertFalse(msg.contains("native-asset"), "zero-exclusion case must not mention native assets: $msg")
+    }
+
+    @Test
+    fun presentTxBuildError_insufficientFunds_includesNativeAssetAdvisoryWhenPresent() {
+        val msg = PlaygroundPresenter.presentTxBuildError(
+            TxBuildError.InsufficientFunds(
+                required = 5_000_000L,
+                available = 1_000_000L,
+                excludedNativeAssetUtxoCount = 2,
+                excludedNativeAssetLovelace = 70_000_000L,
+            ),
+        )
+        assertTrue(msg.contains("5000000"), "got: $msg")
+        assertTrue(msg.contains("1000000"), "got: $msg")
+        assertTrue(msg.contains("2 native-asset UTxO"), "got: $msg")
+        assertTrue(msg.contains("70000000"), "got: $msg")
     }
 
     @Test

@@ -139,6 +139,9 @@ internal object PlaygroundDemoFlow {
         message.startsWith(ALL_NATIVE_ASSET_PREFIX) ->
             "This wallet's test money is held in tokens this demo can't spend. The demo sends " +
                 "ADA only."
+        message.startsWith("Insufficient funds") && message.contains("native-asset") ->
+            "This wallet's spendable test ADA isn't enough, and some value is held in tokens " +
+                "this demo can't spend."
         message.startsWith("Insufficient funds") ->
             "This wallet doesn't hold enough test money for this payment."
         message.startsWith("Transport error") ->
