@@ -176,9 +176,15 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
 - JVM signing runtime coverage currently requires the committed macOS native artifacts. Linux and
   Windows JVM signing artifacts are not included.
 
-Documentation checks (no banned marketing/security words; keyword presence):
+Documentation and claim-language checks:
 
 ```bash
 rg -n "TESTING|fixtures|test vector|commonTest|jvmTest|iosSimulatorArm64Test|testAndroidHostTest" README.md docs/ core/README.md shared/README.md
-rg -n -i "secure|safe|hardened|audited|production-ready|guaranteed|cryptographically safe|bank-grade|battle-tested" README.md docs/ core/README.md shared/README.md
+python3 scripts/check_restricted_claims.py
+python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive
 ```
+
+`scripts/check_restricted_claims.py` classifies each restricted-claim phrase
+match on its own (never a whole-line exclusion), reports `path:line:column`,
+and prefers the longest phrase. It is the CI `restricted-claim-scan` job. It
+does not scan credentials.

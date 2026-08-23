@@ -254,3 +254,4 @@ original evidence or reopen resolved-as-of-Prompt-1 items.
 | W5-5 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — `BlockfrostConfig` is no longer a `data class`; equality is referential and `toString` stays redacted. |
 | W8-3 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — explicit Ktor `HttpTimeout` bounds and no Ktor request retry. |
 | W1-2 | **Resolved** — historical HANDOFF content is preserved verbatim under `docs/archive/handoff/`; the living `docs/HANDOFF.md` is the current resume. Coverage is checked by `scripts/check_handoff_archive.py`. |
+| NF-5 | **Further remediated** — the inline whole-line grep is replaced by `scripts/check_restricted_claims.py` (match-by-match, `path:line:column`, longest phrase first). Same-line permitted+prohibited fixtures are unit-tested. |

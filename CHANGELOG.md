@@ -149,7 +149,7 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   (W4-3). `docs/ROADMAP.md` remains the overview.
 - Module README status lines now use the same factual wording as the root README /
   `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`: "Not independently reviewed" (W4-4). Provider
-  READMEs keep the testnet/preprod qualifier. The word `audited` is not used.
+  READMEs keep the testnet/preprod qualifier.
 - `docs/HANDOFF.md` is now the living resume (current context, recent sessions, active
   risks, branch-stack status). The previous full handoff is preserved verbatim at
   `docs/archive/handoff/2026-08-23-pre-curation.md` and checked by
@@ -157,11 +157,12 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
   full commit SHA with a version comment instead of a floating major-version tag, so a
   compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).
-- `verify.yml` gained a `restricted-claim-scan` job: a plain grep/bash step (no new Action or
-  dependency) that fails the build if a tracked doc/markdown/source file contains a banned word
-  outside a short, individually-justified exclusion list (frozen historical records, the policy
-  definitions themselves, and four narrow non-claim occurrences). This is a claim-language scan
-  only, not secret/credential scanning (W9-3).
+- `verify.yml` gained a `restricted-claim-scan` job that runs
+  `scripts/check_restricted_claims.py`. The script classifies each phrase match on its
+  own (never a whole-line exclusion), reports `path:line:column`, and prefers the
+  longest phrase. Exclusions are exact paths or frozen-record prefixes, each with a
+  rationale in the script. This is a claim-language scan only, not credential scanning
+  (W9-3 / NF-5).
 - The Playground demo is now a linear, guided story (Welcome → five-step Demo → Summary) with
   plain-language copy, one primary action per step, and technical detail (hashes, fees, CBOR,
   UTxOs, witnesses) collapsed behind an optional "Technical details" toggle, replacing the earlier

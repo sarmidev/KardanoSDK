@@ -108,7 +108,11 @@ Date: 2026-08-23
   - **Commit 2 — this HANDOFF curation.** Historical implementation and session content
     preserved verbatim in `docs/archive/handoff/2026-08-23-pre-curation.md`. Coverage
     is checked by `scripts/check_handoff_archive.py`.
-  - **Next on this branch:** restricted-claim scanner, then full-history Gitleaks.
+  - **Commit 3 — restricted-claim scanner.** `scripts/check_restricted_claims.py`
+    replaces the inline `verify.yml` grep. Classification is per match; output is
+    `path:line:column`; longest phrase wins. Unit tests cover same-line mixed
+    hits, exclusion boundaries, and near-miss words.
+  - **Next on this branch:** full-history Gitleaks.
 
 ### Session Summary (Provider boundaries and timeouts)
 

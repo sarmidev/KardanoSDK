@@ -33,7 +33,9 @@ promise and they do not keep exhaustive `when` expressions compiling without edi
 
 1. Choose a semantic version and create a release branch if the change needs stabilisation.
 2. Run the JVM, Android-host, and iOS compile checks documented in `TESTING.md`.
-3. Run `git diff --check` and the project’s restricted-claim scan.
+3. Run `git diff --check` and `python3 scripts/check_restricted_claims.py`.
+   The script classifies each phrase match on its own and prints
+   `path:line:column`. It is not a credential scanner.
 4. Review public API changes and update KDoc/module READMEs.
 5. Create an annotated Git tag from the verified commit.
 6. Publish release notes containing:
