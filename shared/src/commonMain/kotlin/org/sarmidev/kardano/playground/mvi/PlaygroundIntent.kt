@@ -102,9 +102,10 @@ internal sealed interface PlaygroundIntent {
      * [PlaygroundState.section] to [PlaygroundSection.DEMO] — serving both the mid-demo "Start
      * over" control and the Summary screen's "Run the demo again" control. Provider selection
      * ([PlaygroundState.useLiveBlockfrost], [PlaygroundState.projectId]),
-     * [PlaygroundState.technicalDetailsExpanded], and diagnostics inputs are preserved — see
-     * [PlaygroundReducer.reduce]'s handling of this intent. Increments
-     * [PlaygroundState.flowGeneration] so in-flight provider-backed results are discarded.
+     * [PlaygroundState.technicalDetailsExpanded], diagnostics inputs, and *completed*
+     * diagnostic results are preserved. In-flight diagnostic Loading values become Empty.
+     * Increments [PlaygroundState.flowGeneration] and the diagnostic request tokens so
+     * in-flight provider-backed results are discarded.
      */
     data object ResetFlow : PlaygroundIntent
 
@@ -137,10 +138,18 @@ internal sealed interface PlaygroundIntent {
     /** Decodes the current CBOR Decoder input. */
     data object DecodeCbor : PlaygroundIntent
 
-    /** Updates the generic Provider explorer's address field. */
+    /**
+     * Updates the generic Provider explorer's address field. An actual change increments
+     * [PlaygroundState.providerUtxosRequestToken] and clears the UTxO result so a previous
+     * address's rows cannot remain under the new value.
+     */
     data class UpdateProviderAddressInput(val value: String) : PlaygroundIntent
 
-    /** Fills the Provider explorer's address field with one of the two cited seed vectors. */
+    /**
+     * Fills the Provider explorer's address field with one of the two cited seed vectors.
+     * An actual change increments [PlaygroundState.providerUtxosRequestToken] and clears the
+     * UTxO result, same as [UpdateProviderAddressInput].
+     */
     data class FillSeedAddress(val kind: SeedAddressKind) : PlaygroundIntent
 
     /** Loads UTxOs for the Provider explorer's current address from the active provider. */

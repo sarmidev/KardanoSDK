@@ -24,11 +24,12 @@ import org.sarmidev.kardano.provider.blockfrost.BlockfrostTxSubmitProvider
  * as before. [mode] reports that effective choice as [PlaygroundProviderMode].
  *
  * Live providers are cached by the last non-blank project id so a repeated live request can
- * reuse the same Blockfrost client. That in-memory cache is dropped when the project id
- * changes **or** live mode is disabled (toggle off, or a blank id). The cache key is a second
- * in-memory copy of the id — [org.sarmidev.kardano.playground.mvi.PlaygroundState.projectId] is
- * not the only place the session holds it. The id is never persisted or logged: this class has
- * no logger, no disk write, and no string interpolation of the id into messages.
+ * reuse the same Blockfrost client. [invalidateLiveCache] drops that cache immediately and is
+ * invoked by [org.sarmidev.kardano.playground.mvi.PlaygroundViewModel] on an actual project-id
+ * change and when live mode is disabled — not only on the next [queryProvider]/[submitProvider]
+ * lookup. Lookups that are not live still call [invalidateLiveCache] as a defensive fallback.
+ * The cache key is a second in-memory copy of the id. The id is never persisted or logged: this
+ * class has no logger, no disk write, and no string interpolation of the id into messages.
  *
  * This is sample/diagnostic wiring in `:shared`, not part of the SDK public API.
  */
@@ -85,7 +86,11 @@ internal class PlaygroundProviderFactory {
         cachedLiveSubmitProvider = BlockfrostTxSubmitProvider.create(config)
     }
 
-    private fun invalidateLiveCache() {
+    /**
+     * Drops the cached live Blockfrost clients and the in-memory project-id cache key.
+     * Does not log or persist the id. Safe to call when nothing is cached.
+     */
+    fun invalidateLiveCache() {
         cachedProjectId = null
         cachedLiveQueryProvider = null
         cachedLiveSubmitProvider = null

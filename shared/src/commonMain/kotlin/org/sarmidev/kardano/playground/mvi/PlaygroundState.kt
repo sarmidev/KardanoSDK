@@ -84,8 +84,9 @@ internal enum class RoadmapPhase {
  * (see [org.sarmidev.kardano.playground.data.PlaygroundProviderFactory]). [projectId] is the
  * session field the visitor typed. The provider factory also retains the last live id as an
  * in-memory cache key so a repeated live request can reuse the same Blockfrost client; that
- * cache is dropped when the id changes or live mode is disabled. Neither copy is persisted or
- * logged.
+ * cache is dropped immediately when the id changes or live mode is disabled
+ * ([org.sarmidev.kardano.playground.data.PlaygroundProviderFactory.invalidateLiveCache]).
+ * Neither copy is persisted or logged.
  *
  * ### Operation generations
  *
@@ -102,6 +103,11 @@ internal enum class RoadmapPhase {
  * [providerAddressInput]/[providerUtxos]/[providerParams] back the standalone diagnostic tools
  * shown below the guided flow — unrelated to the fixture wallet, kept for structural
  * exploration of `:core`/`:provider` APIs.
+ *
+ * [providerUtxosRequestToken] increments on each UTxO load and on an actual explorer-address
+ * change (typed or seed-fill) so a result for address A cannot apply after the field shows B,
+ * and a repeated load cannot overwrite a newer one. [providerParamsRequestToken] increments on
+ * each protocol-parameters load for the same reason. Both are independent of [flowGeneration].
  *
  * ### Technical details
  *
@@ -151,6 +157,8 @@ internal data class PlaygroundState(
     val providerAddressInput: String,
     val providerUtxos: ProviderUtxosPresentation,
     val providerParams: ProviderParamsPresentation,
+    val providerUtxosRequestToken: Long = 0L,
+    val providerParamsRequestToken: Long = 0L,
     val codeExamplesExpanded: Boolean = false,
     val section: PlaygroundSection = PlaygroundSection.WELCOME,
     val selectedRoadmapPhase: RoadmapPhase? = RoadmapPhase.PHASE_1,
@@ -192,6 +200,8 @@ internal data class PlaygroundState(
             providerAddressInput = InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS,
             providerUtxos = ProviderUtxosPresentation.Empty,
             providerParams = ProviderParamsPresentation.Empty,
+            providerUtxosRequestToken = 0L,
+            providerParamsRequestToken = 0L,
             codeExamplesExpanded = false,
             section = PlaygroundSection.WELCOME,
             selectedRoadmapPhase = RoadmapPhase.PHASE_1,

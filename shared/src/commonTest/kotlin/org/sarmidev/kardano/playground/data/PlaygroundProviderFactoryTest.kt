@@ -61,4 +61,15 @@ class PlaygroundProviderFactoryTest {
         assertTrue(live !== liveAgain, "disabling live mode must drop the cached live provider")
         assertEquals(PlaygroundProviderMode.Mock, factory.mode(false, "session-id"))
     }
+
+    @Test
+    fun invalidateLiveCache_dropsCacheWithoutAnInterveningLookup() {
+        val factory = PlaygroundProviderFactory()
+        val first = factory.queryProvider(useLive = true, projectId = "session-id")
+
+        factory.invalidateLiveCache()
+        val second = factory.queryProvider(useLive = true, projectId = "session-id")
+
+        assertTrue(first !== second, "explicit invalidation must drop the cache immediately")
+    }
 }

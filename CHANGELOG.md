@@ -56,10 +56,15 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 - Playground operation lifecycle: a monotonic `flowGeneration` discards stale Funds/Build/Sign/
   Submit/diagnostic results after ResetFlow or an actual provider-configuration change; in-flight
-  jobs are cancelled. Provider-backed results now carry `PlaygroundProviderMode` (`Mock` /
-  `LivePreprod`) and that generation. The live Blockfrost client cache is dropped when the
-  project id changes or live mode is disabled. The project id remains session-only (state plus
-  an in-memory cache key) and is never persisted or logged.
+  jobs are cancelled. Provider explorer UTxO and protocol-parameter loads also carry a request
+  token (and the explorer address for UTxOs) so a result for address A cannot apply after the
+  field shows B, and a repeated load cannot overwrite a newer one. ResetFlow converts in-flight
+  diagnostic Loading values to Empty and keeps completed diagnostic results. Provider-backed
+  results now carry `PlaygroundProviderMode` (`Mock` / `LivePreprod`) and that generation. The
+  live Blockfrost client cache is dropped immediately on an actual project-id change and when
+  live mode is disabled (`PlaygroundProviderFactory.invalidateLiveCache`), not only on the next
+  lookup. The project id remains session-only (state plus an in-memory cache key) and is never
+  persisted or logged.
 - `PlaygroundPresenter.presentTxBuildError` now includes `InsufficientFunds`'s excluded
   native-asset UTxO count and lovelace when those fields are non-zero.
 - Playground Compose semantics: headings on section/step titles; polite live regions for

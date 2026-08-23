@@ -605,6 +605,28 @@ Date: 2026-08-23
 
 Summary:
 
+- **Independent-review NO-GO fixes on `fix/playground-operation-lifecycle` (two additive
+  commits; the original four commits are preserved) — DONE.** No SDK protocol behavior changed.
+  - **Commit 5 — diagnostics identity, reset normalization, immediate cache drop, race tests.**
+    Provider explorer UTxO/params loads carry request tokens (UTxOs also capture the explorer
+    address). Actual address edit/fill increments the UTxO token, clears the UTxO result, and
+    cancels the in-flight UTxO job. Apply only when generation, token, and address still match.
+    ResetFlow converts diagnostic Loading → Empty and keeps completed diagnostic results.
+    `PlaygroundProviderFactory.invalidateLiveCache()` is public and invoked synchronously on
+    an actual project-id change and when live mode is disabled. `NonCancellable` gated fakes
+    prove identity checks discard stale results after ResetFlow, address edit/fill, repeated
+    UTxO/params loads, and provider-configuration changes. The project id is never logged or
+    persisted. Landing hash-offset (sticky header) is a follow-up commit on the same branch.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. The factory cache key remains a second in-memory copy of the project id.
+
+### Session Summary (Playground operation lifecycle)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Playground operation lifecycle on `fix/playground-operation-lifecycle` (four commits) — DONE.**
   Started from clean `origin/main` at `a632b7d` after confirming Prompt 1 (pre-release core
   contracts, through `43a30e0`) and Prompt 2 (signing-scope enforcement, through `a632b7d`)

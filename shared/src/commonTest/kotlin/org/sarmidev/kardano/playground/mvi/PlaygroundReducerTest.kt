@@ -37,6 +37,8 @@ class PlaygroundReducerTest {
         assertFalse(state.useLiveBlockfrost)
         assertEquals("", state.projectId)
         assertEquals(0L, state.flowGeneration)
+        assertEquals(0L, state.providerUtxosRequestToken)
+        assertEquals(0L, state.providerParamsRequestToken)
         assertEquals(WalletPresentation.Empty, state.wallet)
         assertFalse(state.walletLoading)
         assertEquals(WalletBalancePresentation.Empty, state.funds)
@@ -224,6 +226,8 @@ class PlaygroundReducerTest {
 
         assertEquals("abc123", next.projectId)
         assertEquals(3L, next.flowGeneration)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(1L, next.providerParamsRequestToken)
         assertEquals(WalletBalancePresentation.Empty, next.funds)
         assertEquals(TransactionDraftPresentation.Empty, next.draft)
         assertEquals(SignedTransactionPresentation.Empty, next.signed)
@@ -256,12 +260,16 @@ class PlaygroundReducerTest {
         assertTrue(next.useLiveBlockfrost)
         assertEquals("abc123", next.projectId)
         assertEquals(1L, next.flowGeneration)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(1L, next.providerParamsRequestToken)
         assertEquals(WalletBalancePresentation.Empty, next.funds)
         assertEquals(TransactionDraftPresentation.Empty, next.draft)
 
         val backOff = PlaygroundReducer.reduce(next, PlaygroundIntent.ToggleLiveBlockfrost(false))
         assertFalse(backOff.useLiveBlockfrost)
         assertEquals(2L, backOff.flowGeneration)
+        assertEquals(2L, backOff.providerUtxosRequestToken)
+        assertEquals(2L, backOff.providerParamsRequestToken)
     }
 
     // --- Technical details toggling ---
@@ -349,6 +357,26 @@ class PlaygroundReducerTest {
         assertEquals("addr_test1xyz", reset.addressInput)
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, reset.providerAddressInput)
         assertEquals(1L, reset.flowGeneration, "ResetFlow must bump generation so in-flight results are stale")
+        assertEquals(1L, reset.providerUtxosRequestToken)
+        assertEquals(1L, reset.providerParamsRequestToken)
+    }
+
+    @Test
+    fun resetFlow_convertsDiagnosticLoadingToEmptyButKeepsCompletedResults() {
+        val utxosDone = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "2")))
+        val dirty = PlaygroundState.initial().copy(
+            providerUtxos = utxosDone,
+            providerParams = ProviderParamsPresentation.Loading,
+            providerUtxosRequestToken = 4L,
+            providerParamsRequestToken = 2L,
+        )
+
+        val reset = PlaygroundReducer.reduce(dirty, PlaygroundIntent.ResetFlow)
+
+        assertEquals(utxosDone, reset.providerUtxos, "completed UTxO result must survive ResetFlow")
+        assertEquals(ProviderParamsPresentation.Empty, reset.providerParams)
+        assertEquals(5L, reset.providerUtxosRequestToken)
+        assertEquals(3L, reset.providerParamsRequestToken)
     }
 
     @Test
@@ -389,6 +417,8 @@ class PlaygroundReducerTest {
             PlaygroundIntent.FillSeedAddress(SeedAddressKind.WITH_UTXOS),
         )
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS, next.providerAddressInput)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
     }
 
     @Test
@@ -399,6 +429,105 @@ class PlaygroundReducerTest {
             PlaygroundIntent.FillSeedAddress(SeedAddressKind.EMPTY),
         )
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, next.providerAddressInput)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
+    }
+
+    @Test
+    fun updateProviderAddressInput_sameValue_isNoOp() {
+        val state = PlaygroundState.initial().copy(providerUtxosRequestToken = 3L)
+
+        val next = PlaygroundReducer.reduce(
+            state,
+            PlaygroundIntent.UpdateProviderAddressInput(state.providerAddressInput),
+        )
+
+        assertEquals(state, next)
+    }
+
+    @Test
+    fun updateProviderAddressInput_actualChange_incrementsUtxoTokenAndClearsResult() {
+        val dirty = PlaygroundState.initial().copy(
+            providerUtxos = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "1"))),
+            providerParams = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "44"))),
+            providerUtxosRequestToken = 2L,
+        )
+
+        val next = PlaygroundReducer.reduce(
+            dirty,
+            PlaygroundIntent.UpdateProviderAddressInput("addr_test1changed"),
+        )
+
+        assertEquals("addr_test1changed", next.providerAddressInput)
+        assertEquals(3L, next.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
+        assertEquals(dirty.providerParams, next.providerParams, "params are address-independent")
+    }
+
+    @Test
+    fun applyProviderUtxosResult_staleTokenOrAddress_isIgnored() {
+        val result = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale")))
+        val current = PlaygroundState.initial().copy(
+            providerUtxosRequestToken = 2L,
+            providerAddressInput = "addr-b",
+        )
+
+        assertEquals(
+            current,
+            PlaygroundReducer.applyProviderUtxosResult(
+                current,
+                result,
+                requestToken = 1L,
+                address = "addr-b",
+            ),
+        )
+        assertEquals(
+            current,
+            PlaygroundReducer.applyProviderUtxosResult(
+                current,
+                result,
+                requestToken = 2L,
+                address = "addr-a",
+            ),
+        )
+    }
+
+    @Test
+    fun applyProviderParamsResult_staleToken_isIgnored() {
+        val result = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "1")))
+        val current = PlaygroundState.initial().copy(providerParamsRequestToken = 3L)
+
+        val next = PlaygroundReducer.applyProviderParamsResult(current, result, requestToken = 2L)
+
+        assertEquals(current, next)
+    }
+
+    @Test
+    fun applyProviderUtxosResult_currentIdentity_isApplied() {
+        val result = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "current")))
+        val current = PlaygroundState.initial().copy(
+            providerUtxosRequestToken = 2L,
+            providerAddressInput = "addr-b",
+        )
+
+        val next = PlaygroundReducer.applyProviderUtxosResult(
+            current,
+            result,
+            requestToken = 2L,
+            address = "addr-b",
+        )
+
+        assertEquals(result, next.providerUtxos)
+    }
+
+    @Test
+    fun applyProviderParamsResult_currentToken_isApplied() {
+        val result = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "44")))
+        val current = PlaygroundState.initial().copy(providerParamsRequestToken = 3L)
+
+        val next = PlaygroundReducer.applyProviderParamsResult(current, result, requestToken = 3L)
+
+        assertEquals(result, next.providerParams)
     }
 
     // --- Loading transitions ---
@@ -413,6 +542,24 @@ class PlaygroundReducerTest {
     fun startWalletLoading_setsWalletLoadingFlag() {
         val next = PlaygroundReducer.startWalletLoading(PlaygroundState.initial())
         assertTrue(next.walletLoading)
+    }
+
+    @Test
+    fun startProviderUtxosLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startProviderUtxosLoading(
+            PlaygroundState.initial().copy(providerUtxosRequestToken = 4L),
+        )
+        assertEquals(ProviderUtxosPresentation.Loading, next.providerUtxos)
+        assertEquals(5L, next.providerUtxosRequestToken)
+    }
+
+    @Test
+    fun startProviderParamsLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startProviderParamsLoading(
+            PlaygroundState.initial().copy(providerParamsRequestToken = 1L),
+        )
+        assertEquals(ProviderParamsPresentation.Loading, next.providerParams)
+        assertEquals(2L, next.providerParamsRequestToken)
     }
 
     // --- applyX: fold a *Presentation result back into state ---

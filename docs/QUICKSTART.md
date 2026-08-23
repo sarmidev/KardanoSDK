@@ -71,7 +71,8 @@ The Playground can query and submit only to Blockfrost preprod. Before enabling 
 2. Create a Blockfrost preprod project id in your own Blockfrost account.
 3. Enter the project id in the masked field. It stays in session memory (`PlaygroundState` plus
    an in-memory factory cache key used only to reuse or drop the live Blockfrost client). It is
-   never shown, saved, or logged. Changing the id or turning live mode off drops that cache.
+   never shown, saved, or logged. Changing the id or turning live mode off drops that cache
+   immediately, not only on the next provider lookup.
 4. Use only test ADA and test addresses.
 
 The switch alone does not activate network requests. Until the project id is non-blank, the

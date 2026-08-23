@@ -1,6 +1,8 @@
 package org.sarmidev.kardano.playground.domain
 
 import org.sarmidev.kardano.playground.PlaygroundPresenter
+import org.sarmidev.kardano.playground.ProviderParamsPresentation
+import org.sarmidev.kardano.playground.ProviderUtxosPresentation
 import org.sarmidev.kardano.playground.SignedTransactionPresentation
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
 import org.sarmidev.kardano.playground.TransactionDraftPresentation
@@ -87,6 +89,41 @@ internal fun interface SubmitTransactionUseCase {
     companion object {
         val Default = SubmitTransactionUseCase { queryProvider, submitProvider ->
             PlaygroundPresenter.presentSubmitTransaction(queryProvider, submitProvider)
+        }
+    }
+}
+
+/**
+ * Loads UTxOs for the Provider explorer address from [provider].
+ *
+ * Thin wrapper over [PlaygroundPresenter.presentProviderUtxos] so [PlaygroundViewModel] can be
+ * tested with a fake that completes after cancellation ([kotlinx.coroutines.NonCancellable]).
+ */
+internal fun interface LoadProviderUtxosUseCase {
+    suspend operator fun invoke(
+        provider: ChainQueryProvider,
+        addressInput: String,
+    ): ProviderUtxosPresentation
+
+    companion object {
+        val Default = LoadProviderUtxosUseCase { provider, addressInput ->
+            PlaygroundPresenter.presentProviderUtxos(provider, addressInput)
+        }
+    }
+}
+
+/**
+ * Loads protocol parameters for the Provider explorer from [provider].
+ *
+ * Thin wrapper over [PlaygroundPresenter.presentProviderParams] so repeated non-cooperative
+ * loads can be faked in [PlaygroundViewModel] tests.
+ */
+internal fun interface LoadProviderParamsUseCase {
+    suspend operator fun invoke(provider: ChainQueryProvider): ProviderParamsPresentation
+
+    companion object {
+        val Default = LoadProviderParamsUseCase { provider ->
+            PlaygroundPresenter.presentProviderParams(provider)
         }
     }
 }

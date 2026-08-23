@@ -90,11 +90,12 @@ internal object PlaygroundReducer {
         // Resets the five guided-flow step results (and the Wallet step's loading flag), and
         // (Block 1.12-pre-e) returns demoStep/section to the start of the demo — serving both a
         // mid-demo "Start over" control and the Summary screen's "Run the demo again" control.
-        // Provider selection, technicalDetailsExpanded, and diagnostics inputs/results are
-        // intentionally preserved so resetting the flow does not also clear an in-progress
-        // diagnostics exploration or provider configuration. [PlaygroundState.flowGeneration]
-        // increments so any in-flight Funds/Build/Sign/Submit/diagnostic result is discarded
-        // when it arrives; the reducer itself stays pure and does not cancel Jobs.
+        // Provider selection, technicalDetailsExpanded, and diagnostics inputs plus *completed*
+        // diagnostic results are preserved. In-flight diagnostic Loading values are converted
+        // to Empty so a cancelled load cannot leave the explorer stuck on "Working…".
+        // [PlaygroundState.flowGeneration] and the diagnostic request tokens increment so any
+        // in-flight Funds/Build/Sign/Submit/diagnostic result is discarded when it arrives;
+        // the reducer itself stays pure and does not cancel Jobs.
         is PlaygroundIntent.ResetFlow -> state.copy(
             wallet = WalletPresentation.Empty,
             walletLoading = false,
@@ -105,16 +106,21 @@ internal object PlaygroundReducer {
             demoStep = PlaygroundStep.WALLET,
             section = PlaygroundSection.DEMO,
             flowGeneration = state.flowGeneration + 1,
+            providerUtxos = idleDiagnosticUtxos(state.providerUtxos),
+            providerParams = idleDiagnosticParams(state.providerParams),
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+            providerParamsRequestToken = state.providerParamsRequestToken + 1,
         )
 
         is PlaygroundIntent.UpdateAddressInput -> state.copy(addressInput = intent.value)
         is PlaygroundIntent.UpdateHexInput -> state.copy(hexInput = intent.value)
         is PlaygroundIntent.UpdateCborInput -> state.copy(cborInput = intent.value)
         is PlaygroundIntent.UpdateProviderAddressInput ->
-            state.copy(providerAddressInput = intent.value)
+            applyProviderAddressChange(state, intent.value)
 
-        is PlaygroundIntent.FillSeedAddress -> state.copy(
-            providerAddressInput = when (intent.kind) {
+        is PlaygroundIntent.FillSeedAddress -> applyProviderAddressChange(
+            state,
+            when (intent.kind) {
                 SeedAddressKind.WITH_UTXOS -> InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS
                 SeedAddressKind.EMPTY -> InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY
             },
@@ -152,10 +158,16 @@ internal object PlaygroundReducer {
         state.copy(submit = SubmitTransactionPresentation.Loading)
 
     fun startProviderUtxosLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(providerUtxos = ProviderUtxosPresentation.Loading)
+        state.copy(
+            providerUtxos = ProviderUtxosPresentation.Loading,
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+        )
 
     fun startProviderParamsLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(providerParams = ProviderParamsPresentation.Loading)
+        state.copy(
+            providerParams = ProviderParamsPresentation.Loading,
+            providerParamsRequestToken = state.providerParamsRequestToken + 1,
+        )
 
     // --- Result transitions (fold a *Presentation result back into state) ---
 
@@ -206,15 +218,31 @@ internal object PlaygroundReducer {
         state: PlaygroundState,
         result: ProviderUtxosPresentation,
         generation: Long = state.flowGeneration,
-    ): PlaygroundState =
-        if (generation != state.flowGeneration) state else state.copy(providerUtxos = result)
+        requestToken: Long = state.providerUtxosRequestToken,
+        address: String = state.providerAddressInput,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.providerUtxosRequestToken ||
+        address != state.providerAddressInput
+    ) {
+        state
+    } else {
+        state.copy(providerUtxos = result)
+    }
 
     fun applyProviderParamsResult(
         state: PlaygroundState,
         result: ProviderParamsPresentation,
         generation: Long = state.flowGeneration,
-    ): PlaygroundState =
-        if (generation != state.flowGeneration) state else state.copy(providerParams = result)
+        requestToken: Long = state.providerParamsRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.providerParamsRequestToken
+    ) {
+        state
+    } else {
+        state.copy(providerParams = result)
+    }
 
     /**
      * Increments [PlaygroundState.flowGeneration] and clears every provider-backed step/diagnostic
@@ -230,5 +258,42 @@ internal object PlaygroundReducer {
             submit = SubmitTransactionPresentation.Empty,
             providerUtxos = ProviderUtxosPresentation.Empty,
             providerParams = ProviderParamsPresentation.Empty,
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+            providerParamsRequestToken = state.providerParamsRequestToken + 1,
         )
+
+    /**
+     * An actual explorer-address change increments the UTxO request token and clears the UTxO
+     * result so a previous address's rows cannot remain under the new field value. Protocol
+     * parameters are address-independent and are left in place. Same-value updates are a no-op.
+     */
+    private fun applyProviderAddressChange(
+        state: PlaygroundState,
+        newAddress: String,
+    ): PlaygroundState {
+        if (state.providerAddressInput == newAddress) return state
+        return state.copy(
+            providerAddressInput = newAddress,
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+            providerUtxos = ProviderUtxosPresentation.Empty,
+        )
+    }
+
+    private fun idleDiagnosticUtxos(
+        current: ProviderUtxosPresentation,
+    ): ProviderUtxosPresentation =
+        if (current is ProviderUtxosPresentation.Loading) {
+            ProviderUtxosPresentation.Empty
+        } else {
+            current
+        }
+
+    private fun idleDiagnosticParams(
+        current: ProviderParamsPresentation,
+    ): ProviderParamsPresentation =
+        if (current is ProviderParamsPresentation.Loading) {
+            ProviderParamsPresentation.Empty
+        } else {
+            current
+        }
 }

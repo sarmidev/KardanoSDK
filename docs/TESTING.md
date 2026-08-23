@@ -116,9 +116,16 @@ Playground operation-lifecycle coverage lives in `:shared`:
 
 - `PlaygroundViewModelTest` (jvmTest) — a slow fake query discarded after ResetFlow, after a
   live-provider toggle, and after a project-id change (only the latest generation applies).
+  `NonCancellable` gated fakes also complete after Job cancellation so generation / request-token
+  / address-identity checks — not cooperative cancellation — discard stale UTxO and params
+  results after ResetFlow, address edit/fill, repeated loads, and provider-configuration changes.
+  Toggle-off and project-id change invalidate the live factory cache before the next lookup.
+- `PlaygroundReducerTest` (commonTest) — diagnostic request tokens increment on each load and on
+  an actual explorer-address change; ResetFlow converts diagnostic Loading to Empty and keeps
+  completed diagnostic results; stale token/address applies are no-ops.
 - `PlaygroundProviderFactoryTest` (commonTest) — Mock vs LivePreprod mode, live-cache reuse,
-  and cache drop when the id changes or live mode is disabled (dummy ids never appear in
-  assertion messages).
+  cache drop when the id changes or live mode is disabled, and explicit `invalidateLiveCache()`
+  without an intervening mock lookup (dummy ids never appear in assertion messages).
 - `PlaygroundTransactionDraftPresenterTest` — `InsufficientFunds` includes
   `excludedNativeAssetUtxoCount` / `excludedNativeAssetLovelace` when those fields are non-zero.
 - `PlaygroundMockFlowDesktopTest` (jvmTest) — the seeded guided mock flow is unchanged

@@ -70,7 +70,8 @@ No key is committed. `BlockfrostConfig.projectId` is supplied at runtime, for bo
 read-only and the submit provider:
 
 - Android: the Playground `project_id` field (session memory in `PlaygroundState` plus an
-  in-memory factory cache key; never persisted or logged).
+  in-memory factory cache key, dropped immediately when the id changes or live mode is
+  disabled; never persisted or logged).
 - Local integration test: the `BLOCKFROST_PROJECT_ID` environment variable (opt-in, read-only
   path only — see above for why `submit` has no equivalent automated live test).
 - Default unit tests: a Ktor `MockEngine` + committed sanitized fixtures — no network, no key.

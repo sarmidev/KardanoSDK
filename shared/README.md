@@ -78,8 +78,10 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   helpers `PlaygroundViewModel` uses around each use-case/presenter call. Being pure and
   coroutine-free, it is exercised directly and synchronously by `PlaygroundReducerTest`
   (`commonTest`, native-free — runs on every target including `:shared:testAndroidHostTest`).
-  `ResetFlow` clears only the five guided-flow step results (and the Wallet step's loading flag);
-  provider selection and diagnostics inputs/results are intentionally preserved.
+  `ResetFlow` clears the five guided-flow step results (and the Wallet step's loading flag);
+  provider selection, diagnostics inputs, and *completed* diagnostic results are preserved.
+  In-flight diagnostic Loading values become Empty. UTxO/params request tokens increment on
+  ResetFlow, each load, and (UTxOs) an actual explorer-address change.
 - `playground/mvi/PlaygroundViewModel.kt` — an `androidx.lifecycle.ViewModel` (already a
   `commonMain` dependency via `libs.androidx.lifecycle.viewmodelCompose`/`-runtimeCompose`; no new
   architecture library was added) exposing `state: StateFlow<PlaygroundState>` and
@@ -88,20 +90,23 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   where a provider call is involved — and fold the result back into state through the matching
   reducer helper. This class holds no derivation, hashing, address-generation, balance,
   coin-selection, fee/change, signing, or submission logic of its own.
-- `playground/domain/PlaygroundUseCases.kt` — five small `fun interface`s
+- `playground/domain/PlaygroundUseCases.kt` — seven small `fun interface`s
   (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`, `BuildTransactionDraftUseCase`,
-  `SignTransactionUseCase`, `SubmitTransactionUseCase`), each a thin, directly-injectable wrapper
-  over the matching existing `PlaygroundPresenter` function (`.Default` delegates to it). They
-  exist so `PlaygroundViewModel` can be unit-tested with fakes (see `PlaygroundViewModelTest`,
-  `jvmTest`) without reimplementing or duplicating any `:wallet`/`:tx`/`:provider` call.
+  `SignTransactionUseCase`, `SubmitTransactionUseCase`, `LoadProviderUtxosUseCase`,
+  `LoadProviderParamsUseCase`), each a thin, directly-injectable wrapper over the matching
+  existing `PlaygroundPresenter` function (`.Default` delegates to it). They exist so
+  `PlaygroundViewModel` can be unit-tested with fakes — including `NonCancellable` completions
+  after Job cancellation — without reimplementing or duplicating any `:wallet`/`:tx`/`:provider`
+  call (see `PlaygroundViewModelTest`, `jvmTest`).
 - `playground/data/PlaygroundProviderFactory.kt` — moves the provider-selection logic (mock by
   default; live Blockfrost preprod once the toggle is on and `project_id` is non-blank) out of
   the Compose layer, so `PlaygroundViewModel` can build a `ChainQueryProvider`/`TxSubmitProvider`
   pair from `PlaygroundState` without a `remember`. Live clients are cached by the last non-blank
-  id and dropped when that id changes or live mode is disabled. The session field lives in
-  `PlaygroundState`; the factory also keeps an in-memory cache key. Neither copy is persisted or
-  logged. Provider-backed results carry `PlaygroundProviderMode` (`Mock` / `LivePreprod`) plus
-  the captured `flowGeneration`.
+  id. `invalidateLiveCache()` drops that cache immediately and is invoked by
+  `PlaygroundViewModel` on an actual project-id change and when live mode is disabled — not only
+  on the next lookup. The session field lives in `PlaygroundState`; the factory also keeps an
+  in-memory cache key. Neither copy is persisted or logged. Provider-backed results carry
+  `PlaygroundProviderMode` (`Mock` / `LivePreprod`) plus the captured `flowGeneration`.
 - `PlaygroundPresenter.kt` is **retained unchanged as the display-mapping layer** — every use
   case and every diagnostics intent still calls into it, and every existing `PlaygroundPresenter`
   test below (`PlaygroundPresenterTest`, `PlaygroundProviderPresenterTest`,
@@ -658,15 +663,20 @@ call, which these tests must not perform.
 The MVI layer added in Block 1.12-pre-a follows the same split. `PlaygroundReducerTest`
 (`commonTest`) drives `PlaygroundReducer` directly — pure, non-suspend, no coroutine, no native
 call — covering the default mock initial state, provider-selection and technical-details
-transitions, `ResetFlow`'s keep-vs-clear behavior, and every `applyXResult` helper (including
-the ADA-only/native-asset draft-failure message from Block 1.11d/1.11d-2 flowing through
-unchanged). `PlaygroundViewModelTest` (`jvmTest`-only) drives `PlaygroundViewModel.dispatch`
-with every guided-flow use case faked (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`,
-`BuildTransactionDraftUseCase`, `SignTransactionUseCase`, `SubmitTransactionUseCase`), covering
-each step's success/failure folding (including the submit step's accepted/local-id match and
-mismatch cases), the funds step's loading flag while its fake use case is still in flight, and
-that `PlaygroundProviderFactory` selects the same mock-or-live provider instance the ViewModel
-passes to a use case. It is `jvmTest`-only because `androidx.lifecycle.ViewModel.viewModelScope`
+transitions, `ResetFlow`'s keep-vs-clear behavior (completed diagnostics kept; Loading
+converted to Empty), diagnostic request-token / address-identity applies, and every
+`applyXResult` helper (including the ADA-only/native-asset draft-failure message from Block
+1.11d/1.11d-2 flowing through unchanged). `PlaygroundViewModelTest` (`jvmTest`-only) drives
+`PlaygroundViewModel.dispatch` with every guided-flow and diagnostic-load use case faked
+(`RestoreWalletUseCase`, `QueryWalletFundsUseCase`, `BuildTransactionDraftUseCase`,
+`SignTransactionUseCase`, `SubmitTransactionUseCase`, `LoadProviderUtxosUseCase`,
+`LoadProviderParamsUseCase`), covering each step's success/failure folding (including the
+submit step's accepted/local-id match and mismatch cases), the funds step's loading flag while
+its fake use case is still in flight, `NonCancellable` stale-result discard for ResetFlow /
+address edit/fill / repeated UTxO and params loads / provider-configuration changes, immediate
+live-cache invalidation, and that `PlaygroundProviderFactory` selects the same mock-or-live
+provider instance the ViewModel passes to a use case. It is `jvmTest`-only because
+`androidx.lifecycle.ViewModel.viewModelScope`
 needs a `Dispatchers.Main` implementation to dispatch on, which `kotlinx-coroutines-test`
 (already a `jvmTest` dependency) supplies via `Dispatchers.setMain`; no native `:crypto`/`:wallet`
 call is reached by any fake used here. See [docs/TESTING.md](../docs/TESTING.md) for the testing

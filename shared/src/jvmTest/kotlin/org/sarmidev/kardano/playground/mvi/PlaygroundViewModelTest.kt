@@ -3,19 +3,25 @@ package org.sarmidev.kardano.playground.mvi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.sarmidev.kardano.playground.LabeledRow
 import org.sarmidev.kardano.playground.PlaygroundProviderMode
+import org.sarmidev.kardano.playground.ProviderParamsPresentation
+import org.sarmidev.kardano.playground.ProviderUtxosPresentation
 import org.sarmidev.kardano.playground.SignedTransactionPresentation
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
 import org.sarmidev.kardano.playground.TransactionDraftPresentation
 import org.sarmidev.kardano.playground.WalletBalancePresentation
 import org.sarmidev.kardano.playground.data.PlaygroundProviderFactory
 import org.sarmidev.kardano.playground.domain.BuildTransactionDraftUseCase
+import org.sarmidev.kardano.playground.domain.LoadProviderParamsUseCase
+import org.sarmidev.kardano.playground.domain.LoadProviderUtxosUseCase
 import org.sarmidev.kardano.playground.domain.QueryWalletFundsUseCase
 import org.sarmidev.kardano.playground.domain.RestoreWalletUseCase
 import org.sarmidev.kardano.playground.domain.SignTransactionUseCase
@@ -65,6 +71,8 @@ class PlaygroundViewModelTest {
         buildTransactionDraft: BuildTransactionDraftUseCase = BuildTransactionDraftUseCase.Default,
         signTransaction: SignTransactionUseCase = SignTransactionUseCase.Default,
         submitTransaction: SubmitTransactionUseCase = SubmitTransactionUseCase.Default,
+        loadProviderUtxos: LoadProviderUtxosUseCase = LoadProviderUtxosUseCase.Default,
+        loadProviderParams: LoadProviderParamsUseCase = LoadProviderParamsUseCase.Default,
         providerFactory: PlaygroundProviderFactory = PlaygroundProviderFactory(),
     ): PlaygroundViewModel = PlaygroundViewModel(
         restoreWallet = RestoreWalletUseCase.Default,
@@ -72,6 +80,8 @@ class PlaygroundViewModelTest {
         buildTransactionDraft = buildTransactionDraft,
         signTransaction = signTransaction,
         submitTransaction = submitTransaction,
+        loadProviderUtxos = loadProviderUtxos,
+        loadProviderParams = loadProviderParams,
         providerFactory = providerFactory,
     )
 
@@ -374,5 +384,260 @@ class PlaygroundViewModelTest {
         assertEquals(PlaygroundProviderMode.Mock, funds.providerMode)
         assertEquals(0L, funds.flowGeneration)
         assertEquals(0L, vm.state.value.flowGeneration)
+    }
+
+    // --- Non-cooperative cancellation: identity checks discard stale results ---
+
+    @Test
+    fun queryFunds_nonCancellableResultAfterResetFlow_isDiscardedByGeneration() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+    }
+
+    @Test
+    fun queryFunds_nonCancellableResultAfterProviderToggle_isDiscardedByGeneration() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertTrue(vm.state.value.useLiveBlockfrost)
+    }
+
+    @Test
+    fun loadProviderUtxos_nonCancellableResultAfterAddressEdit_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderUtxosPresentation>()
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+        val originalAddress = vm.state.value.providerAddressInput
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+        assertEquals(1L, vm.state.value.providerUtxosRequestToken)
+
+        vm.dispatch(PlaygroundIntent.UpdateProviderAddressInput("addr_test1other"))
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+        assertEquals("addr_test1other", vm.state.value.providerAddressInput)
+
+        pending.complete(
+            ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale-for-previous-address"))),
+        )
+        advanceUntilIdle()
+
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertTrue(originalAddress != vm.state.value.providerAddressInput)
+    }
+
+    @Test
+    fun loadProviderUtxos_nonCancellableResultAfterFillSeedAddress_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderUtxosPresentation>()
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        vm.dispatch(PlaygroundIntent.FillSeedAddress(SeedAddressKind.EMPTY))
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+
+        pending.complete(ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+    }
+
+    @Test
+    fun loadProviderUtxos_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<ProviderUtxosPresentation>()
+        val second = CompletableDeferred<ProviderUtxosPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(1L, vm.state.value.providerUtxosRequestToken)
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        first.complete(ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale"))))
+        advanceUntilIdle()
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        val latest = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+    }
+
+    @Test
+    fun loadProviderParams_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<ProviderParamsPresentation>()
+        val second = CompletableDeferred<ProviderParamsPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            loadProviderParams = LoadProviderParamsUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(1L, vm.state.value.providerParamsRequestToken)
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(2L, vm.state.value.providerParamsRequestToken)
+
+        first.complete(ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "stale"))))
+        advanceUntilIdle()
+        assertEquals(ProviderParamsPresentation.Loading, vm.state.value.providerParams)
+
+        val latest = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.providerParams)
+    }
+
+    @Test
+    fun loadProviderUtxos_nonCancellableResultAfterResetFlow_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderUtxosPresentation>()
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+
+        pending.complete(ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+    }
+
+    @Test
+    fun loadProviderParams_nonCancellableResultAfterProjectIdChange_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderParamsPresentation>()
+        val vm = viewModel(
+            loadProviderParams = LoadProviderParamsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(ProviderParamsPresentation.Loading, vm.state.value.providerParams)
+
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("newer-id"))
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+        assertEquals(2L, vm.state.value.providerParamsRequestToken)
+
+        pending.complete(ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+    }
+
+    @Test
+    fun resetFlow_preservesCompletedDiagnosticsAndClearsLoading() = runTest {
+        val pending = CompletableDeferred<ProviderParamsPresentation>()
+        val utxos = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "kept")))
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ -> utxos },
+            loadProviderParams = LoadProviderParamsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(utxos, vm.state.value.providerUtxos)
+
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(ProviderParamsPresentation.Loading, vm.state.value.providerParams)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(utxos, vm.state.value.providerUtxos)
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+
+        pending.complete(ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "stale"))))
+        advanceUntilIdle()
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+        assertEquals(utxos, vm.state.value.providerUtxos)
+    }
+
+    @Test
+    fun toggleLiveOff_invalidatesFactoryCacheImmediately() = runTest {
+        val factory = PlaygroundProviderFactory()
+        val vm = viewModel(providerFactory = factory)
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("session-id"))
+        val first = factory.queryProvider(useLive = true, projectId = "session-id")
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(false))
+        val second = factory.queryProvider(useLive = true, projectId = "session-id")
+
+        assertTrue(first !== second, "disabling live mode must drop the cache before the next lookup")
+    }
+
+    @Test
+    fun updateProjectId_invalidatesFactoryCacheImmediately() = runTest {
+        val factory = PlaygroundProviderFactory()
+        val vm = viewModel(providerFactory = factory)
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("session-id-a"))
+        val first = factory.queryProvider(useLive = true, projectId = "session-id-a")
+
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("session-id-b"))
+        val rebuilt = factory.queryProvider(useLive = true, projectId = "session-id-a")
+
+        assertTrue(first !== rebuilt, "an actual project-id change must drop the cache immediately")
     }
 }
