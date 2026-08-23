@@ -110,6 +110,14 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
 - `BlockfrostConfigTest` asserts that `toString`, `assertEquals` failure text, and
   `List`/`Set`/`Map` rendering never include the project id, and that two configs with
   the same fields are not equal (identity equality; the type is no longer a `data class`).
+- `BlockfrostChainQueryProviderTest` covers `403`/`500` response-body detail (and
+  malformed/blank bodies), cancellation rethrow, and the UTxO cap: an internal
+  `UtxoPaginationPolicy` test seam (not public) exercises `ProviderError.ResultTruncated`
+  when the last permitted page is full, and `Ok` when that page is short, without
+  allocating 10_000 entries.
+- `PlaygroundProviderPresenterTest` / `PlaygroundDemoFlowTest` cover every
+  `ProviderError` variant, including `RemoteStatus` with and without `detail` and
+  `ResultTruncated`.
 - Wallet and transaction (JVM) tests: `./gradlew :wallet:jvmTest :tx:jvmTest`
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`

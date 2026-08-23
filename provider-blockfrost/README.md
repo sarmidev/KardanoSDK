@@ -34,7 +34,12 @@ coroutine cancellation), which keeps the API compatible with Swift/ObjC interop.
   represent instead of building around it.
 - `getUtxos` treats a Blockfrost `404` (address never used) as an empty list, not an error.
   Other endpoints keep `404` as `ProviderError.NotFound`.
-- UTxO pagination is capped internally.
+- UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). If the last
+  permitted page is still full, `getUtxos` returns `ProviderError.ResultTruncated` rather
+  than a partial success list.
+- Non-success read statuses other than `404`/`429` map to `ProviderError.RemoteStatus(code,
+  detail?)`. `detail` is parsed from the response body only (never request headers or the
+  `project_id`).
 - `submit` rejects empty input with `SubmitError.EmptyTransaction` before any HTTP call, and
   defensively copies the caller's bytes before handing them to the HTTP client.
 

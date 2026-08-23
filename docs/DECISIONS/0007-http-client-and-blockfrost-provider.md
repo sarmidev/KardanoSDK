@@ -181,3 +181,22 @@ pre-alpha source change:
 - `copy` / `componentN` are not generated.
 
 No other decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): read-path `RemoteStatus` detail and UTxO cap failure
+
+§4's `getUtxos` pagination ("up to a bounded `MAX_PAGES`") previously returned the accumulated
+list as success after the last permitted page, including when that page was still full (10_000
+UTxOs with the production 100×100 bound). That is a silent partial result. The implementation
+now returns `ProviderError.ResultTruncated(fetchedCount, cap)` when the final permitted page is
+full. Tests inject an internal `UtxoPaginationPolicy` so the cap path can be exercised without
+allocating a 10_000-entry page; that seam is not public.
+
+§5's error mapping now parses an optional `detail` for `ProviderError.RemoteStatus`, matching
+`SubmitError.RemoteStatus`. Detail is taken from the response body only (Blockfrost's
+`{status_code, error, message}` envelope, or a truncated raw body). Request headers and request
+configuration, including `project_id`, are never read into `detail`. Coroutine cancellation is
+still rethrown.
+
+No other decision in this ADR changes.

@@ -12,6 +12,7 @@ import org.sarmidev.kardano.provider.Utxo
 import org.sarmidev.kardano.provider.Value
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -81,14 +82,41 @@ class PlaygroundProviderPresenterTest {
         val messages = listOf(
             ProviderError.Transport("boom"),
             ProviderError.RemoteStatus(500),
+            ProviderError.RemoteStatus(403, "forbidden"),
             ProviderError.NotFound,
             ProviderError.Deserialization("bad json"),
             ProviderError.RateLimited,
             ProviderError.NetworkMismatch(Network.TESTNET, Network.MAINNET),
+            ProviderError.ResultTruncated(fetchedCount = 4, cap = 4),
             ProviderError.Unknown,
         ).map { PlaygroundPresenter.presentProviderError(it) }
 
-        assertEquals(7, messages.size)
+        assertEquals(9, messages.size)
         assertTrue(messages.all { it.isNotBlank() })
+    }
+
+    @Test
+    fun presentProviderErrorRemoteStatusWithDetailContainsCodeAndDetail() {
+        val msg = PlaygroundPresenter.presentProviderError(
+            ProviderError.RemoteStatus(403, "forbidden"),
+        )
+        assertTrue(msg.contains("403"), "got: $msg")
+        assertTrue(msg.contains("forbidden"), "got: $msg")
+    }
+
+    @Test
+    fun presentProviderErrorRemoteStatusWithoutDetailContainsCodeOnly() {
+        val msg = PlaygroundPresenter.presentProviderError(ProviderError.RemoteStatus(500, null))
+        assertTrue(msg.contains("500"), "got: $msg")
+        assertFalse(msg.contains("("), "got: $msg")
+    }
+
+    @Test
+    fun presentProviderErrorResultTruncatedMentionsCapAndFetchedCount() {
+        val msg = PlaygroundPresenter.presentProviderError(
+            ProviderError.ResultTruncated(fetchedCount = 4, cap = 4),
+        )
+        assertTrue(msg.contains("4"), "got: $msg")
+        assertTrue(msg.contains("not returned"), "got: $msg")
     }
 }

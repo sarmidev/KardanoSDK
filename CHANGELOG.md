@@ -54,6 +54,14 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   branch is reachable with valid input today; they now return a typed error instead of throwing,
   closing the gap between that guarantee and this module's own never-throw policy.
 
+- `ProviderError.RemoteStatus` now carries an optional `detail` (response-body text only;
+  default `null`, source-compatible with existing `RemoteStatus(code)` call sites), matching
+  `SubmitError.RemoteStatus`.
+- `ProviderError.ResultTruncated(fetchedCount, cap)`: the typed failure when a paged UTxO
+  query hits the provider's accumulation cap while the last permitted page is still full.
+  `BlockfrostChainQueryProvider.getUtxos` returns this instead of a partial success list
+  (production cap: 10_000 UTxOs). Playground presenter mappings cover every `ProviderError`
+  variant, including this one.
 - Playground operation lifecycle: a monotonic `flowGeneration` discards stale Funds/Build/Sign/
   Submit/diagnostic results after ResetFlow or an actual provider-configuration change; in-flight
   jobs are cancelled. Provider explorer UTxO and protocol-parameter loads also carry a request

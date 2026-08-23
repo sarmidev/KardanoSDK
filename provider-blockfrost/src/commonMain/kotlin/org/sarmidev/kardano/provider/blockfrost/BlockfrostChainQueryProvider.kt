@@ -4,6 +4,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import org.sarmidev.kardano.KardanoResult
@@ -42,7 +44,9 @@ import kotlin.coroutines.cancellation.CancellationException
  *   `TransactionBuilder`) can honestly reject a UTxO it cannot fully represent.
  * - `getUtxos` treats a Blockfrost `404` (an address that never appeared on-chain) as an
  *   empty UTxO list, not an error. The other endpoints keep `404` as [ProviderError.NotFound].
- * - UTxO pagination is capped at [MAX_PAGES] pages of [PAGE_COUNT] entries.
+ * - UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). If the last
+ *   permitted page is still full, [getUtxos] returns [ProviderError.ResultTruncated]
+ *   rather than a partial success list.
  *
  * Instances are created with [create]. Tests use the `internal` constructor to inject an
  * [HttpClient] backed by a mock engine, so mapping can be exercised without a real network.
@@ -54,6 +58,7 @@ import kotlin.coroutines.cancellation.CancellationException
 public class BlockfrostChainQueryProvider internal constructor(
     private val config: BlockfrostConfig,
     private val httpClient: HttpClient,
+    private val pagination: UtxoPaginationPolicy = UtxoPaginationPolicy.Default,
 ) : ChainQueryProvider {
 
     override val network: Network = config.network.toCoreNetwork()
@@ -67,11 +72,11 @@ public class BlockfrostChainQueryProvider internal constructor(
 
         val accumulated = mutableListOf<Utxo>()
         var page = 1
-        while (page <= MAX_PAGES) {
+        while (page <= pagination.maxPages) {
             val response = try {
                 httpClient.get("${config.network.baseUrl}/addresses/${address.bech32}/utxos") {
                     parameter("page", page)
-                    parameter("count", PAGE_COUNT)
+                    parameter("count", pagination.pageCount)
                     parameter("order", "asc")
                 }
             } catch (e: CancellationException) {
@@ -86,7 +91,7 @@ public class BlockfrostChainQueryProvider internal constructor(
                 return KardanoResult.Ok(accumulated)
             }
             if (!response.status.isSuccess()) {
-                return KardanoResult.Err(statusError(response.status))
+                return KardanoResult.Err(statusError(response))
             }
 
             val dtos = try {
@@ -106,8 +111,16 @@ public class BlockfrostChainQueryProvider internal constructor(
                 }
             }
 
-            if (dtos.size < PAGE_COUNT) break
+            if (dtos.size < pagination.pageCount) break
             page++
+        }
+        if (page > pagination.maxPages) {
+            return KardanoResult.Err(
+                ProviderError.ResultTruncated(
+                    fetchedCount = accumulated.size,
+                    cap = pagination.cap,
+                ),
+            )
         }
         return KardanoResult.Ok(accumulated)
     }
@@ -165,7 +178,7 @@ public class BlockfrostChainQueryProvider internal constructor(
             return KardanoResult.Err(ProviderError.Transport(e.message ?: "request failed"))
         }
         if (!response.status.isSuccess()) {
-            return KardanoResult.Err(statusError(response.status))
+            return KardanoResult.Err(statusError(response))
         }
         return try {
             KardanoResult.Ok(response.body<T>())
@@ -238,27 +251,32 @@ public class BlockfrostChainQueryProvider internal constructor(
     }
 
     /**
-     * Maps a non-success HTTP status to a provider-neutral [ProviderError]. HTTP status codes
-     * are translated to [ProviderError] only here, inside this module: `429` to
+     * Maps a non-success HTTP response to a provider-neutral [ProviderError]. HTTP status
+     * codes are translated to [ProviderError] only here, inside this module: `429` to
      * [ProviderError.RateLimited], `404` to [ProviderError.NotFound], and any other non-2xx
-     * code to [ProviderError.RemoteStatus].
+     * code to [ProviderError.RemoteStatus]. [detailFromBlockfrostBody] reads only
+     * [HttpResponse.bodyAsText] — never request headers or request configuration.
      */
-    private fun statusError(status: HttpStatusCode): ProviderError = when (status) {
-        HttpStatusCode.TooManyRequests -> ProviderError.RateLimited
-        HttpStatusCode.NotFound -> ProviderError.NotFound
-        else -> ProviderError.RemoteStatus(status.value)
+    private suspend fun statusError(response: HttpResponse): ProviderError {
+        val bodyText = try {
+            response.bodyAsText()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            ""
+        }
+        val detail = detailFromBlockfrostBody(bodyText)
+        return when (response.status) {
+            HttpStatusCode.TooManyRequests -> ProviderError.RateLimited
+            HttpStatusCode.NotFound -> ProviderError.NotFound
+            else -> ProviderError.RemoteStatus(code = response.status.value, detail = detail)
+        }
     }
 
     public companion object {
 
         /** The Blockfrost amount `unit` value for the ADA (lovelace) component. */
         private const val LOVELACE_UNIT: String = "lovelace"
-
-        /** Entries requested per UTxO page (Blockfrost's maximum page size). */
-        private const val PAGE_COUNT: Int = 100
-
-        /** Upper bound on UTxO pages fetched, so a query never loops unbounded. */
-        private const val MAX_PAGES: Int = 100
 
         /**
          * Creates a [BlockfrostChainQueryProvider] with the default platform HTTP client

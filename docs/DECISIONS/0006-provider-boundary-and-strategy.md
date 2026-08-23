@@ -188,3 +188,21 @@ This addendum records the resulting, narrowly-scoped change:
   failing with `TxBuildError.UnsupportedFeature` if that leaves no candidates at all.
 
 No other decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): `RemoteStatus` detail and `ResultTruncated`
+
+§4's `ProviderError` list shipped `RemoteStatus(code)` with no optional detail, while the later
+`SubmitError.RemoteStatus` (ADR-0017) carried `detail: String?`. That asymmetry is closed:
+`ProviderError.RemoteStatus` is now `RemoteStatus(code, detail?)`. [detail] is parsed response
+text when a concrete backend provides one; it must not include request headers or request
+configuration.
+
+§5 said pagination is a provider-internal concern and that a concrete implementation aggregates
+paged responses up to a bounded maximum. Returning that maximum as success while the last page
+is still full silently omits remaining items. `ProviderError.ResultTruncated(fetchedCount, cap)`
+is the typed failure for that case. `getUtxos` still returns a bounded `List<Utxo>` on success;
+page cursors remain out of the public API.
+
+No other decision in this ADR changes.

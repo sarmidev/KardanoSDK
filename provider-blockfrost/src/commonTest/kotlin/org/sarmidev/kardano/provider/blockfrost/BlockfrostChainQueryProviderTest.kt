@@ -13,9 +13,12 @@ import kotlinx.coroutines.test.runTest
 import org.sarmidev.kardano.KardanoResult
 import org.sarmidev.kardano.address.Address
 import org.sarmidev.kardano.provider.ProviderError
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -168,11 +171,97 @@ class BlockfrostChainQueryProviderTest {
     }
 
     @Test
-    fun mapsForbiddenToRemoteStatus() = runTest {
-        val provider = provider { json("{}", HttpStatusCode.Forbidden) }
+    fun mapsForbiddenToRemoteStatusWithParsedDetail() = runTest {
+        val provider = provider { json(BlockfrostFixtures.FORBIDDEN_BODY, HttpStatusCode.Forbidden) }
         val error = err(provider.getProtocolParameters())
         assertTrue(error is ProviderError.RemoteStatus)
         assertEquals(403, error.code)
+        assertTrue(error.detail?.contains("sanitized", ignoreCase = true) == true)
+        assertFalse(
+            error.detail?.contains("test-project-id") == true,
+            "detail must not contain the project id: ${error.detail}",
+        )
+    }
+
+    @Test
+    fun maps500ToRemoteStatusWithParsedDetail() = runTest {
+        val provider = provider {
+            json(BlockfrostFixtures.SERVER_ERROR_BODY, HttpStatusCode.InternalServerError)
+        }
+        val error = err(provider.getTip())
+        assertTrue(error is ProviderError.RemoteStatus)
+        assertEquals(500, error.code)
+        assertTrue(error.detail?.contains("sanitized", ignoreCase = true) == true)
+        assertFalse(
+            error.toString().contains("test-project-id"),
+            "error rendering must not contain the project id: $error",
+        )
+    }
+
+    @Test
+    fun mapsMalformedErrorBodyToRemoteStatusWithRawDetail() = runTest {
+        val provider = provider {
+            json(BlockfrostFixtures.MALFORMED_ERROR_BODY, HttpStatusCode.Forbidden)
+        }
+        val error = err(provider.getTip())
+        assertTrue(error is ProviderError.RemoteStatus)
+        assertEquals(403, error.code)
+        assertEquals(BlockfrostFixtures.MALFORMED_ERROR_BODY, error.detail)
+    }
+
+    @Test
+    fun mapsBlankErrorBodyToRemoteStatusWithNullDetail() = runTest {
+        val provider = provider { json("   ", HttpStatusCode.InternalServerError) }
+        val error = err(provider.getTip())
+        assertTrue(error is ProviderError.RemoteStatus)
+        assertEquals(500, error.code)
+        assertNull(error.detail)
+    }
+
+    @Test
+    fun getUtxosReturnsResultTruncatedWhenFinalPageIsFull() = runTest {
+        val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
+        val provider = provider(pagination = pagination) { request ->
+            when (request.url.parameters["page"]) {
+                "1" -> json(BlockfrostFixtures.utxoPage(2))
+                "2" -> json(BlockfrostFixtures.utxoPage(2))
+                else -> json("[]")
+            }
+        }
+        val error = err(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertTrue(error is ProviderError.ResultTruncated, "expected ResultTruncated, got: $error")
+        assertEquals(4, error.fetchedCount)
+        assertEquals(4, error.cap)
+    }
+
+    @Test
+    fun getUtxosReturnsOkWhenFinalPermittedPageIsShort() = runTest {
+        val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
+        val provider = provider(pagination = pagination) { request ->
+            when (request.url.parameters["page"]) {
+                "1" -> json(BlockfrostFixtures.utxoPage(2))
+                "2" -> json(BlockfrostFixtures.utxoPage(1))
+                else -> json("[]")
+            }
+        }
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertEquals(3, utxos.size)
+    }
+
+    @Test
+    fun getTipRethrowsCancellationInsteadOfSwallowingIt() = runTest {
+        val provider = provider { throw CancellationException("cancelled") }
+        assertFailsWith<CancellationException> {
+            provider.getTip()
+        }
+    }
+
+    @Test
+    fun getUtxosRethrowsCancellationInsteadOfSwallowingIt() = runTest {
+        val provider = provider { throw CancellationException("cancelled") }
+        assertFailsWith<CancellationException> {
+            provider.getUtxos(address(TESTNET_ADDRESS))
+        }
     }
 
     // ----- helpers -----
@@ -191,6 +280,7 @@ class BlockfrostChainQueryProviderTest {
 
     private fun provider(
         network: BlockfrostNetwork = BlockfrostNetwork.PREPROD,
+        pagination: UtxoPaginationPolicy = UtxoPaginationPolicy.Default,
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
     ): BlockfrostChainQueryProvider {
         val config = BlockfrostConfig(projectId = "test-project-id", network = network)
@@ -198,7 +288,7 @@ class BlockfrostChainQueryProviderTest {
             configureBlockfrost(config)
             engine { addHandler(handler) }
         }
-        return BlockfrostChainQueryProvider(config, client)
+        return BlockfrostChainQueryProvider(config, client, pagination)
     }
 
     private fun providerReturning(

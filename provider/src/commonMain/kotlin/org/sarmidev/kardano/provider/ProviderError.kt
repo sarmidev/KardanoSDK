@@ -25,11 +25,32 @@ public sealed interface ProviderError {
      *
      * This is deliberately transport-agnostic and is **not** named `HttpStatus`: the read
      * boundary does not assume HTTP. A concrete implementation (for example the Blockfrost
-     * provider) maps its HTTP status codes into this [code].
+     * provider) maps its HTTP status codes into this [code]. [detail] is optional parsed
+     * response text when the backend provides one; it must never include request headers or
+     * request configuration.
      *
      * @property code the backend-reported status code.
+     * @property detail a short, human-readable description of the failure, when available.
      */
-    public data class RemoteStatus(public val code: Int) : ProviderError
+    public data class RemoteStatus(
+        public val code: Int,
+        public val detail: String? = null,
+    ) : ProviderError
+
+    /**
+     * A paged query hit this provider's documented accumulation cap while the last permitted
+     * page was still full, so remaining items were not fetched.
+     *
+     * Callers must treat this as a failure, not as a complete result. Returning the
+     * accumulated items as success would silently omit the rest.
+     *
+     * @property fetchedCount how many items were accumulated before the cap was reached.
+     * @property cap the maximum number of items this provider will accumulate.
+     */
+    public data class ResultTruncated(
+        public val fetchedCount: Int,
+        public val cap: Int,
+    ) : ProviderError
 
     /** The requested resource was not found by the backend. */
     public data object NotFound : ProviderError
