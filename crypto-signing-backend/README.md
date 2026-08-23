@@ -179,6 +179,14 @@ workflow does not replace committed natives. Ubuntu runs the catalog tests and
 `cargo metadata --locked` only — it does not rebuild Apple or Android host artifacts
 for comparison against the macOS-built committed files.
 
+Recorded 2026-08-23: on the original macOS arm64 host, a clean
+`target/`-directory rebuild matched all eight CHECKSUMS rows. The same
+recipe on GitHub `macos-latest` (run `32658155802`) rebuilt the macOS JVM
+and iOS artifacts and then failed byte-compare (Mach-O `LC_ID_DYLIB` is
+the absolute cargo output path; iOS archives also differed). The Android
+`cargo ndk` step on that runner failed before a compare. Those committed
+bytes are therefore host-path-tied, not clean-runner-identical.
+
 **Regeneration rule:** this manifest must be regenerated in the *same commit* as any change to one
 or more of the 8 binaries above (step 6 in the regeneration recipe), never as a separate follow-up
 commit — a stale manifest that doesn't match the binaries it ships alongside is worse than no

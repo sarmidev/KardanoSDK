@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | in progress, stacked on `2b85ed7` | Staged native rebuild harness and clean-runner comparison. Linux/Windows JVM artifacts only after Gate 1 byte-match. |
+| 7 | `fix/native-build-and-platform-evidence` | `6325262` | Gate 1 **NO-GO**. Local 8/8 byte-match on the original host; clean `macos-latest` rebuilds do not match committed natives. Linux/Windows JVM artifacts not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -103,6 +103,18 @@ Stacked remediations, each additive (no amend / no force-push):
 
 Date: 2026-08-23
 
+- **Native rebuild evidence on `fix/native-build-and-platform-evidence` (stacked on
+  Prompt 6 `2b85ed7`).** Gate 1 landed a staging harness
+  (`crypto-signing-backend/scripts/`) and `native-rebuild-evidence.yml`.
+  On this host, `rebuild_into_staging.py --groups macos-jvm,android,ios
+  --compare` matched all eight committed natives and CHECKSUMS (same
+  `target/` install-name path as the original dylibs). A separate
+  `CARGO_TARGET_DIR` rewrites Mach-O `LC_ID_DYLIB` and the content-hashed
+  `LC_UUID`. Clean-runner run `32658155802` (head `6325262`): Ubuntu
+  catalog + `cargo metadata --locked` passed; macOS JVM and iOS rebuilt
+  then failed byte-compare; Android `cargo ndk` rebuild failed. No
+  CHECKSUMS rewrite. Gates 2–4 (Linux/Windows committed libs, legal
+  packet) were not started. `gh` is not logged in; no PR. Do not merge.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope
