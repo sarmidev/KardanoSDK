@@ -422,11 +422,17 @@ def archive_members(path: Path, hooks: InspectHooks) -> tuple[int | None, str, l
         if extract.returncode != 0:
             return extract.returncode, text, []
         for name in member_names:
+            if name.startswith("__.SYMDEF"):
+                hashed.append({"name": name, "sha256": "symdef"})
+                continue
             member = Path(tmp) / name
-            if member.is_file():
-                hashed.append({"name": name, "sha256": sha256_file(member)})
-            else:
-                hashed.append({"name": name, "sha256": ""})
+            try:
+                if member.is_file():
+                    hashed.append({"name": name, "sha256": sha256_file(member)})
+                else:
+                    hashed.append({"name": name, "sha256": ""})
+            except OSError as error:
+                hashed.append({"name": name, "sha256": f"unreadable:{error}"})
     return listing.returncode, text, hashed
 
 
