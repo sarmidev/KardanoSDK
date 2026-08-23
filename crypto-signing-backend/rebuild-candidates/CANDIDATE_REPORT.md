@@ -4,15 +4,13 @@ These hashes are **not** CHECKSUMS.sha256. Committed src/ binaries are unchanged
 
 Stable Darwin install name: `@rpath/libkardano_ed25519_bip32_signing.dylib`
 
-Darwin keeps `LC_UUID` (macos-26 dyld requires it) and passes `-Wl,-reproducible`.
-Android and iOS matched clean macos-26 runs `32660838357` and `32661414105`.
-Darwin did **not** rematch on `32661414105` (local macOS 26.2 vs runner 26.5.2).
-Do not copy these Darwin hashes into CHECKSUMS until a clean runner matches them.
+Darwin UUID is post-link normalized; arm64 is ad-hoc signed after that.
+Link remapping, UUID normalize, signature bytes, and CHECKSUMS are separate.
 
 | Artifact | SHA-256 |
 |---|---|
-| `macos-jvm-arm64` | `72d91b312741a11ce6a05d244a8727564ab304837ebe09fdc46116b381505ba0` |
-| `macos-jvm-x86_64` | `d1d27c9aa60b099253fb618cfa03a09cc320ceb1085724cc295ee1edd260a2fc` |
+| `macos-jvm-arm64` | `6462fe39abd8628da35c688d58b5c376b6a32919391078fd0ce5981fb032cc84` |
+| `macos-jvm-x86_64` | `f696f355c0202a0b1664e9850eb1482ad704c48d8503797b848aba57eab605b7` |
 | `android-arm64-v8a` | `0110314867664f9856c306e8a5dbd9ea7c78b8811e5614283455775324cb9b51` |
 | `android-armeabi-v7a` | `37751f5668a4be6ffea0fb3cbfa4e39087ededcdc0f577190ac61d63bb2985ac` |
 | `android-x86` | `8a4615594c75ecc628579f19f4a82398fee8bafb3dfc91ddea0408430d05614c` |
