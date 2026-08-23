@@ -385,17 +385,22 @@ class ParseAndNormalizeTests(unittest.TestCase):
             parsed = normalize.parse_thin_dylib(original)
             self.assertEqual([dep.cmd for dep in parsed.dependents], [normalize.LC_LOAD_DYLIB])
             self.assertEqual([dep.name for dep in parsed.dependents], [LIBSYSTEM])
-            if arch == "arm64":
-                expected = normalize.verify_signed_canonical_uuid(path, expected_arch=arch)
-                self.assertEqual(parsed.uuid, expected)
-            else:
-                root = Path(tempfile.mkdtemp())
-                self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
-                copy = root / path.name
-                copy.write_bytes(original)
-                record = normalize.normalize_dylib(copy, expected_arch=arch, sign=False)
-                self.assertFalse(record["mutated"])
-                self.assertEqual(copy.read_bytes(), original)
+            # codesign / host nm live on Darwin. Ubuntu catalog jobs still
+            # parse every dependency command and apply the allowlist.
+            if sys.platform == "darwin":
+                if arch == "arm64":
+                    expected = normalize.verify_signed_canonical_uuid(
+                        path, expected_arch=arch
+                    )
+                    self.assertEqual(parsed.uuid, expected)
+                else:
+                    root = Path(tempfile.mkdtemp())
+                    self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+                    copy = root / path.name
+                    copy.write_bytes(original)
+                    record = normalize.normalize_dylib(copy, expected_arch=arch, sign=False)
+                    self.assertFalse(record["mutated"])
+                    self.assertEqual(copy.read_bytes(), original)
             self.assertEqual(path.read_bytes(), original)
 
     def test_missing_symbol_is_rejected(self) -> None:
