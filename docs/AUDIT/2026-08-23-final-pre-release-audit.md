@@ -262,3 +262,25 @@ original evidence or reopen resolved-as-of-Prompt-1 items.
 | W5-4 | **Formally accepted** on the same branch (ADR-0020) — remaining 0.x pins are reviewed with current versions, KAT evidence, monitoring triggers, and replacement criteria. Castle 1.85.2 and JNA 5.19.1 were upgraded. Upstream maturity is unchanged. |
 | W3-3 / lock + verification | **Further remediated** on `fix/build-and-ci-reproducibility` — STRICT lockfiles, SHA-256 metadata, Cargo `--locked`. Verify `32654915900` failed on four cold-cache Maven Central metadata files; publisher-hashed rows were added. Verify `32655202142` (https://github.com/sarmidev/KardanoSDK/actions/runs/32655202142) is green on all six jobs. |
 | W3-3 / lint CI | **Closed** — Debug and Release lint run in `verify.yml` with `warningsAsErrors`. Freshness detectors and `OldTargetApi` (ADR-0021) are the only disables. Monochrome adaptive layer and nodpi splash remain. Legacy square launchers use a generated rounded-rect silhouette, not a 1px inset. |
+
+---
+
+## 8. Prompt 7 native rematch (2026-08-23, stacked)
+
+W5-2's committed CHECKSUMS still describe the original eight host-path-tied
+binaries. That is a tamper check, not proof of cross-host rebuild identity or
+of source provenance. On `fix/native-build-and-platform-evidence`:
+
+- Link remapping and a stable `@rpath` install name make Darwin *unsigned*
+  code/data match across local `26.2` and `macos-26` `26.5.2`.
+- `ld`'s `LC_UUID` does not. Apple TN3178 states there is no Apple command
+  that sets `LC_UUID` after link. `-no_uuid` matches hashes and is refused
+  by macos-26 `dyld`.
+- The post-link normalizer writes an RFC 9562 version-8 UUID from
+  `hashlib.sha256` of unsigned canonical bytes, then ad-hoc signs arm64
+  with a stable identifier and no timestamp. Signature bytes are a
+  separate fact from the UUID and from CHECKSUMS.
+- Android and iOS candidates already matched a clean runner (6/8).
+  `src/` and CHECKSUMS stay unchanged until all eight candidate hashes,
+  including the arm64 signature, match that runner. Gate 1 remains
+  **NO-GO** until then. Gate 2 Linux is not started.

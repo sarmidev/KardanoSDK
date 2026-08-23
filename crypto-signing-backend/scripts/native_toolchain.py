@@ -240,6 +240,13 @@ def apply_rustflags(
         "source_date_epoch": SOURCE_DATE_EPOCH,
         "zero_ar_date": ZERO_AR_DATE,
         "cargo_incremental": "0",
+        "darwin_uuid_normalize": {
+            "digest": "hashlib.sha256",
+            "uuid": "RFC 9562 version 8 from first 16 digest bytes",
+            "identifier": "org.sarmidev.kardano.ed25519-bip32-signing",
+            "arm64_codesign": "adhoc --timestamp=none",
+            "x86_64_codesign": "unsigned after LC_UUID patch",
+        },
     }
 
 

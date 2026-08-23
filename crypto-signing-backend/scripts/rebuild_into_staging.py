@@ -24,6 +24,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+import darwin_uuid_normalize as darwin_uuid  # noqa: E402
 import native_artifacts as natives  # noqa: E402
 import native_toolchain as toolchain  # noqa: E402
 
@@ -328,6 +329,15 @@ def rebuild_macos_jvm(
             outputs=[output],
         )
         dest = copy_fresh_output(output, staging, spec.relative_path, started_monotonic=started)
+        try:
+            normalize_record = darwin_uuid.normalize_dylib(
+                dest, expected_arch=spec.expected_arch
+            )
+        except darwin_uuid.NormalizeError as error:
+            raise RebuildError(f"{spec.artifact_id} UUID normalize failed: {error}") from error
+        darwin_uuid.write_normalize_evidence(
+            normalize_record, staging / "evidence", spec.artifact_id
+        )
         record = natives.inspect_artifact(spec, dest)
         natives.write_inspect_evidence(record, staging / "evidence")
         _require_fatal_inspection(spec, record)
@@ -462,7 +472,10 @@ def write_candidate_outputs(
     provenance: dict[str, object],
 ) -> None:
     dest.mkdir(parents=True, exist_ok=True)
+    existing = dest / natives.CANDIDATE_MANIFEST_NAME
     rows: dict[str, str] = {}
+    if existing.is_file():
+        rows.update(natives.load_manifest(existing))
     for spec in natives.EXISTING_ARTIFACTS:
         if spec.group not in groups:
             continue
@@ -480,6 +493,8 @@ def write_candidate_outputs(
         "provenance": provenance,
         "note": (
             "Candidate bytes only. CHECKSUMS.sha256 and src/ natives are unchanged. "
+            "Darwin LC_UUID is post-link normalized (hashlib.sha256 / RFC 9562 v8); "
+            "arm64 is then ad-hoc signed with a stable identifier and no timestamp. "
             "Replace committed binaries only after a clean runner matches these hashes."
         ),
     }
@@ -493,6 +508,9 @@ def write_candidate_outputs(
         "These hashes are **not** CHECKSUMS.sha256. Committed src/ binaries are unchanged.",
         "",
         f"Stable Darwin install name: `{toolchain.STABLE_INSTALL_NAME}`",
+        "",
+        "Darwin UUID is post-link normalized; arm64 is ad-hoc signed after that.",
+        "Link remapping, UUID normalize, signature bytes, and CHECKSUMS are separate.",
         "",
         "| Artifact | SHA-256 |",
         "|---|---|",

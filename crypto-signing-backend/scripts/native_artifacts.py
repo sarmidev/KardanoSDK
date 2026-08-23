@@ -38,7 +38,15 @@ HOST_PATH_MARKERS = (
 HOST_PATH_HOME_RE = re.compile(rb"/home/(?!rebuild(?:/|\x00|$))")
 
 REQUIRED_EVIDENCE_SUFFIXES = {
-    "dylib": (".inspect.json", ".file.txt", ".nm.txt", ".lipo.txt", ".otool-l.txt", ".path-scan.txt"),
+    "dylib": (
+        ".inspect.json",
+        ".file.txt",
+        ".nm.txt",
+        ".lipo.txt",
+        ".otool-l.txt",
+        ".path-scan.txt",
+        ".normalize.json",
+    ),
     "so": (".inspect.json", ".file.txt", ".nm.txt", ".path-scan.txt"),
     "archive": (
         ".inspect.json",

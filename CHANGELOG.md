@@ -38,11 +38,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `clang-18: command not found`). Darwin JVM keeps `LC_UUID` and passes
   `-Wl,-reproducible` (macos-26 dyld rejects `-no_uuid`). Clean run
   `32660838357` matched Android and iOS. Run `32661414105` at `7ed38e4`
-  rematched those six again; Darwin still differs only in `LC_UUID` and
-  the arm64 ad-hoc signature over it (local macOS `26.2` vs runner
-  `26.5.2`, same Xcode `26.6` / `ld-1267`). Candidate compare now
-  records staged UUID/install-name and byte-cluster offsets. `src/` and
-  CHECKSUMS are unchanged. Gate 2 Linux is not started.
+  rematched those six again; Darwin `LC_UUID` stayed host-OS-bound
+  (local macOS `26.2` vs runner `26.5.2`). A fail-closed post-link
+  normalizer now writes an RFC 9562 v8 UUID from `hashlib.sha256` of
+  unsigned canonical bytes and re-signs arm64 ad hoc with a stable
+  identifier and no timestamp. Apple TN3178 has no tool that sets
+  `LC_UUID`. `src/` and CHECKSUMS stay unchanged until a clean runner
+  matches all eight candidate hashes. Gate 2 Linux is not started.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

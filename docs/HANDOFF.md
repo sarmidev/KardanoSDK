@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 1 NO-GO | Darwin `LC_UUID` still host-OS-bound after `-Wl,-reproducible`. Android+iOS 6/8 match on `32661414105`. CHECKSUMS/`src/` unchanged. Linux/Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Darwin UUID normalize | Post-link RFC 9562 v8 UUID + arm64 ad-hoc sign. Android+iOS still the matched 6/8. CHECKSUMS/`src/` unchanged until clean-runner 8/8. Linux not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -103,28 +103,20 @@ Stacked remediations, each additive (no amend / no force-push):
 
 Date: 2026-08-23
 
-- **Native rebuild evidence on `fix/native-build-and-platform-evidence` (stacked on
-  Prompt 6 `2b85ed7`, continue from `6e4a51d`).** Independent review confirmed
-  Gate 1 **NO-GO**. Owner chose full cross-host remediation; no host-bound
-  exception. Phase A fail-closes the harness: staging-owned empty
-  `CARGO_TARGET_DIR` (module `target/` refused), remapped source roots,
-  link-time `@rpath/libkardano_ed25519_bip32_signing.dylib`, required
-  `nm`/`lipo`/`file`/`otool`, pinned `macos-26` + Xcode 26.6 (`17F113`),
-  retained command logs and evidence uploads (`if-no-files-found: error`).
-  The large first commit `6cb6810` is historical review debt and is not
-  rewritten. Phase B writes a separate candidate manifest. Android cargo-ndk
-  failures were flattened zip symlinks / missing execute bits, not a
-  rustc 1.97 / cargo-ndk 4.1.2 / NDK 27.2 incompatibility. Clean run
-  `32661414105` at `7ed38e4` matched Android+iOS (6/8) and failed Darwin:
-  local vs runner dylibs are the same size with the same `@rpath` name;
-  x86_64 differs only at `LC_UUID` 16 bytes; arm64 adds 31 ad-hoc
-  signature bytes over that UUID. Two local staging paths were
-  byte-identical. Local OS `26.2`/`25C56` vs runner `26.5.2`/`25F84`;
-  both use Xcode `26.6`/`17F113` and `ld-1267`. `-no_uuid` matched hashes
-  but dyld refused the dylibs. Phase C did not run. Next task: a later
-  invocation that rematches Darwin `LC_UUID` across those OS builds, then
-  Phase C, then Gate 2 Linux. Do not start Linux/Windows/legal. Do not
-  merge or tag.
+- **Native rebuild evidence on `fix/native-build-and-platform-evidence` (continue
+  from `0c4661d`).** Gate 1 is still **NO-GO** until a clean `macos-26`
+  runner matches all eight candidate hashes. Apple TN3178 has no command
+  that sets `LC_UUID`; `-no_uuid` is refused by dyld. The rebuild now
+  post-link normalizes Darwin JVM dylibs: `codesign --remove-signature`,
+  zero UUID, `hashlib.sha256` of that unsigned sequence, RFC 9562 v8
+  UUID, arm64 ad-hoc sign with
+  `org.sarmidev.kardano.ed25519-bip32-signing` and `--timestamp=none`.
+  x86_64 is left unsigned. Android+iOS hashes are unchanged from the
+  already-matched 6/8. `src/` and CHECKSUMS are not replaced in this
+  step. Link remapping, UUID normalize, signature bytes, checksum
+  identity, and source provenance are separate. Next: clean-runner 8/8
+  including arm64 signature bytes; only then Phase C. Do not start
+  Linux/Windows/legal. Do not merge or tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope

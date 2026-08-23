@@ -175,8 +175,17 @@ select one group. Both Darwin JVM targets are built with explicit
 host. Inspection is fail-closed: missing `nm`/`llvm-nm`/`lipo`/`file`/`otool`/`ar`,
 a nonzero tool exit, a missing `fn_func_sign` export, a wrong architecture, or a
 dylib install name other than `@rpath/libkardano_ed25519_bip32_signing.dylib` is a
-failed compare. Darwin JVM links also pass `-Wl,-reproducible` so `LC_UUID` is
-content-derived; macos-26 `dyld` rejects dylibs that omit `LC_UUID`.
+failed compare. Darwin JVM links pass `-Wl,-reproducible` and keep `LC_UUID`
+(macos-26 `dyld` rejects `-no_uuid`). Apple TN3178 has no tool that sets
+`LC_UUID` after link, so the rebuild then runs a fail-closed post-link
+normalizer: strip any ad-hoc signature with `codesign --remove-signature`,
+zero the UUID, digest the unsigned bytes with Python `hashlib.sha256`,
+write an RFC 9562 version-8 UUID, and re-sign arm64 ad hoc with identifier
+`org.sarmidev.kardano.ed25519-bip32-signing` and `--timestamp=none`.
+x86_64 stays unsigned. These are separate facts: link remapping, UUID
+normalization, ad-hoc signature bytes, CHECKSUMS identity, and source
+provenance. A matching checksum does not prove the bytes came from the
+visible Rust sources.
 
 `.github/workflows/native-rebuild-evidence.yml` pins `macos-26` and Xcode `26.6`
 (`17F113`). The image default NDK is `27.3.13750724`; the workflow unsets
@@ -193,16 +202,13 @@ cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
 
 The first harness commit on this branch (`6cb6810`) is historical review debt: it
 defaulted to the module `target/` and treated missing inspection tools as optional.
-Those bytes are not rewritten. Clean `macos-26` run `32660838357` matched
-Android and iOS candidates but used unloadable `-no_uuid` Darwin dylibs.
-Run `32661414105` at `7ed38e4` (`-Wl,-reproducible`, `LC_UUID` kept) matched
-Android and iOS again (6/8). Darwin JVM still differs: same size, same
-`@rpath` install name, same code/data; only `LC_UUID` (x86_64: 16 bytes)
-and the arm64 ad-hoc signature over that UUID (31 bytes). Two local
-staging paths produced identical Darwin bytes; the remaining gap is
-host OS (`26.2`/`25C56` vs runner `26.5.2`/`25F84`) with the same Xcode
-`26.6`/`17F113` and `ld-1267`. Gate 1 stays **NO-GO**. `src/` and
-`CHECKSUMS.sha256` are unchanged. Gate 2 Linux is not started.
+Those bytes are not rewritten. Android and iOS candidates already matched
+clean `macos-26` runs `32660838357` and `32661414105`. Darwin `LC_UUID`
+remained host-OS-bound under `-Wl,-reproducible` (local `26.2` vs runner
+`26.5.2`). The post-link normalizer is the rematch under test; `src/` and
+`CHECKSUMS.sha256` stay unchanged until a clean runner matches all eight
+candidate hashes, including the arm64 signature bytes. Gate 2 Linux is
+not started.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current CHECKSUMS rows. The same
