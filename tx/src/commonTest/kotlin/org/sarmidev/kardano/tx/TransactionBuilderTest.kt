@@ -106,6 +106,35 @@ class TransactionBuilderTest {
         return assertIs<CborValue.CborMap>(decoded.value)
     }
 
+    /**
+     * Sums the lovelace of exactly the candidates [draft] actually selected (per
+     * [TransactionDraft.selectedInputs]), by looking each selected [UtxoRef] back up in
+     * [candidates] — never by trusting a builder-internal running total, so this is an
+     * independent check of the value-conservation identity (W8-1).
+     */
+    private fun sumSelectedInputLovelace(candidates: List<Utxo>, draft: TransactionDraft): Long {
+        val byRef = candidates.associateBy { it.ref }
+        return draft.selectedInputs.sumOf { ref -> byRef.getValue(ref).value.coin.value }
+    }
+
+    private fun sumOutputLovelace(draft: TransactionDraft): Long = draft.outputs.sumOf { it.amount.value }
+
+    /**
+     * Asserts the transaction value-conservation identity directly, in one assertion, rather
+     * than checking fee and change separately (W8-1, 2026-08-22 pre-release audit): a future
+     * change that shifted lovelace between fee and change while keeping each side individually
+     * plausible would still fail this.
+     */
+    private fun assertValueConserved(candidates: List<Utxo>, draft: TransactionDraft) {
+        val inputsTotal = sumSelectedInputLovelace(candidates, draft)
+        val outputsPlusFee = sumOutputLovelace(draft) + draft.fee.value
+        assertEquals(
+            inputsTotal,
+            outputsPlusFee,
+            "sum(selected inputs)=$inputsTotal must equal sum(outputs)+fee=$outputsPlusFee",
+        )
+    }
+
     @Test
     fun emptyCandidateInputsReturnsNoInputs() {
         val err = assertIs<KardanoResult.Err<TxBuildError>>(
@@ -503,5 +532,135 @@ class TransactionBuilderTest {
 
         assertEquals(original.toList(), draft.bodyCbor().toList())
         assertTrue(!mutable.contentEquals(draft.bodyCbor()))
+    }
+
+    // --- Value-conservation identity (W8-1, 2026-08-22 pre-release audit): direct
+    // sum(selected inputs) == sum(outputs) + fee assertions, one per branch, rather than
+    // inferring the property from separately testing fee alone or change alone. ---
+
+    @Test
+    fun valueConservationHolds_exactZeroChange() {
+        val payment = paymentOutput()
+        val fee = 200_000L
+        val candidates = listOf(fakeUtxo(1, 0L, payment.amount.value + fee))
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBuilder.build(
+                request(candidateInputs = candidates, payment = payment, protocolParameters = flatFeeParams(fee)),
+            ),
+        ).value
+
+        assertEquals(listOf(payment), draft.outputs, "sanity: this branch omits a change output")
+        assertValueConserved(candidates, draft)
+    }
+
+    @Test
+    fun valueConservationHolds_changeEmitted() {
+        val payment = paymentOutput()
+        val candidates = listOf(fakeUtxo(1, 0L, payment.amount.value + 20_000_000L))
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBuilder.build(request(candidateInputs = candidates, payment = payment)),
+        ).value
+
+        assertEquals(2, draft.outputs.size, "sanity: this branch emits a change output")
+        assertValueConserved(candidates, draft)
+    }
+
+    @Test
+    fun valueConservationHolds_multipleSelectedInputs() {
+        val payment = paymentOutput()
+        // Neither alone covers payment + fee, so both must be selected.
+        val candidates = listOf(
+            fakeUtxo(9, 0L, 3_500_000L),
+            fakeUtxo(1, 0L, 3_500_000L),
+        )
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBuilder.build(request(candidateInputs = candidates, payment = payment)),
+        ).value
+
+        assertEquals(2, draft.selectedInputs.size, "sanity: this branch selects both candidates")
+        assertValueConserved(candidates, draft)
+    }
+
+    @Test
+    fun valueConservationHolds_afterNativeAssetUtxoIsFilteredOut() {
+        val payment = paymentOutput()
+        val adaOnly = fakeUtxo(2, 0L, payment.amount.value + 20_000_000L)
+        val nativeAssetUtxo = fakeNativeAssetUtxo(1, 0L, 50_000_000L)
+        val allCandidates = listOf(nativeAssetUtxo, adaOnly)
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBuilder.build(request(candidateInputs = allCandidates, payment = payment)),
+        ).value
+
+        assertEquals(listOf(adaOnly.ref), draft.selectedInputs, "sanity: only the ADA-only UTxO is selected")
+        // The excluded native-asset UTxO's lovelace must not appear in the conservation sum on
+        // either side — passing allCandidates here (not just the ADA-only ones) proves that:
+        // the lookup would silently misattribute it as an input if the builder had selected it.
+        assertValueConserved(allCandidates, draft)
+    }
+
+    @Test
+    fun insufficientFunds_neverProducesANonConservingDraft() {
+        val payment = paymentOutput()
+        val result = TransactionBuilder.build(
+            request(candidateInputs = listOf(fakeUtxo(1, 0L, payment.amount.value + 1L)), payment = payment),
+        )
+        // No draft is produced at all on this path — the conservation identity has nothing to
+        // hold or fail against, which is itself the correct outcome: a builder that returned
+        // some non-conserving draft "close enough" to the requested payment would be far worse
+        // than a clean error.
+        assertIs<KardanoResult.Err<TxBuildError>>(result)
+    }
+
+    @Test
+    fun feeCalculationOverflow_neverProducesANonConservingDraft() {
+        val payment = paymentOutput()
+        val params = realisticParams().copy(minFeeCoefficient = 1L, minFeeConstant = Long.MAX_VALUE)
+        val result = TransactionBuilder.build(
+            request(
+                candidateInputs = listOf(fakeUtxo(1, 0L, Long.MAX_VALUE)),
+                payment = payment,
+                protocolParameters = params,
+            ),
+        )
+        // An overflowing fee calculation must be rejected outright, never silently wrapped into
+        // a small/negative encoded fee that would make the identity hold only by coincidence.
+        assertIs<KardanoResult.Err<TxBuildError>>(result)
+    }
+
+    // --- InsufficientFunds' native-asset advisory fields (W8-2, 2026-08-22 pre-release audit) ---
+
+    @Test
+    fun insufficientFundsReportsNoExcludedNativeAssetsWhenNoneWereCandidates() {
+        val payment = paymentOutput()
+        val err = assertIs<KardanoResult.Err<TxBuildError>>(
+            TransactionBuilder.build(
+                request(candidateInputs = listOf(fakeUtxo(1, 0L, payment.amount.value + 1L)), payment = payment),
+            ),
+        )
+        val insufficient = assertIs<TxBuildError.InsufficientFunds>(err.error)
+        assertEquals(0, insufficient.excludedNativeAssetUtxoCount)
+        assertEquals(0L, insufficient.excludedNativeAssetLovelace)
+    }
+
+    @Test
+    fun insufficientFundsReportsExcludedNativeAssetCountAndTotal() {
+        // The ADA-only candidate alone cannot cover payment + fee; the two native-asset
+        // candidates hold real value the wallet has, but this ADA-only builder cannot spend it.
+        val payment = paymentOutput()
+        val tinyAdaOnly = fakeUtxo(3, 0L, 1_000_000L)
+        val nativeAssetOne = fakeNativeAssetUtxo(1, 0L, 50_000_000L)
+        val nativeAssetTwo = fakeNativeAssetUtxo(2, 0L, 20_000_000L)
+        val err = assertIs<KardanoResult.Err<TxBuildError>>(
+            TransactionBuilder.build(
+                request(
+                    candidateInputs = listOf(tinyAdaOnly, nativeAssetOne, nativeAssetTwo),
+                    payment = payment,
+                ),
+            ),
+        )
+        val insufficient = assertIs<TxBuildError.InsufficientFunds>(err.error)
+        assertEquals(1_000_000L, insufficient.available, "native-asset UTxOs must not be counted as available")
+        assertEquals(2, insufficient.excludedNativeAssetUtxoCount)
+        assertEquals(70_000_000L, insufficient.excludedNativeAssetLovelace)
     }
 }
