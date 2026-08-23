@@ -731,13 +731,14 @@ def parse_elf64_le_x86_64_dso(
             verneed_num=verneed_num,
             dynstr=dynstr,
         )
-        record.glibc_requirements = [
-            name for name in record.gnu_versions if name.startswith("GLIBC_")
-        ]
+        # The same GLIBC_* label may appear on libc.so.6 and ld-linux-*.
+        # Duplicate policy is (file, name) in the Verneed walk, not the
+        # flattened name list used for the baseline cap.
+        record.glibc_requirements = sorted(
+            {name for name in record.gnu_versions if name.startswith("GLIBC_")}
+        )
         if not record.glibc_requirements:
             raise ElfError("no GLIBC_* version requirement was found")
-        if len(record.glibc_requirements) != len(set(record.glibc_requirements)):
-            raise ElfError("duplicate GLIBC version requirement")
         too_new = [
             name
             for name in record.glibc_requirements

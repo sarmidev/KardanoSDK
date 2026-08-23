@@ -53,6 +53,7 @@ def build_elf(
     duplicate_strtab: bool = False,
     duplicate_glibc: bool = False,
     verneed_version: int = elf.VER_NEED_CURRENT,
+    loader_verneed: bool = False,
     filesz_gt_memsz: bool = False,
     align_mismatch: bool = False,
     section_overflow: bool = False,
@@ -78,6 +79,7 @@ def build_elf(
     rpath_off = add_str(rpath) if rpath else None
     runpath_off = add_str(runpath) if runpath else None
     version_offs = [add_str(name) for name in glibc_versions]
+    loader_name_off = add_str("ld-linux-x86-64.so.2") if loader_verneed else None
     dynstr = b"".join(dynstr_entries)
     if unterminated_dynstr:
         dynstr = dynstr[:-1]
@@ -101,7 +103,7 @@ def build_elf(
         dyn_tags.append((elf.DT_VERNEED, 0))
         if duplicate_verneed_tag:
             dyn_tags.append((elf.DT_VERNEED, 0))
-        dyn_tags.append((elf.DT_VERNEEDNUM, 1))
+        dyn_tags.append((elf.DT_VERNEEDNUM, 2 if loader_verneed else 1))
     dyn_tags.append((elf.DT_NULL, 0))
     dynamic = b"".join(struct.pack("<qQ", tag, value) for tag, value in dyn_tags)
 
@@ -131,6 +133,9 @@ def build_elf(
         for index, name_off in enumerate(aux_names):
             nxt = elf.ELF64_VERNAUX_SIZE if index + 1 < len(aux_names) else 0
             aux_blob += struct.pack("<IHHII", 0, 0, index + 2, name_off, nxt)
+        first_next = (
+            elf.ELF64_VERNEED_SIZE + len(aux_blob) if loader_verneed else 0
+        )
         verneed = (
             struct.pack(
                 "<HHIII",
@@ -138,10 +143,20 @@ def build_elf(
                 len(aux_names),
                 libc_off,
                 elf.ELF64_VERNEED_SIZE,
-                0,
+                first_next,
             )
             + aux_blob
         )
+        if loader_verneed:
+            shared = version_offs[0]
+            verneed += struct.pack(
+                "<HHIII",
+                verneed_version,
+                1,
+                loader_name_off,
+                elf.ELF64_VERNEED_SIZE,
+                0,
+            ) + struct.pack("<IHHII", 0, 0, 9, shared, 0)
 
     shstr_names = [b"\x00", b".dynstr\x00", b".dynamic\x00", b".dynsym\x00", b".shstrtab\x00"]
     if debug_section:
@@ -386,6 +401,13 @@ class LinuxElfVerifyTests(unittest.TestCase):
     def test_glibc_version_policy(self) -> None:
         lower = elf.parse_elf64_le_x86_64_dso(build_elf(glibc_versions=("GLIBC_2.2.5",)))
         self.assertEqual(lower.glibc_requirements, ["GLIBC_2.2.5"])
+        shared = elf.parse_elf64_le_x86_64_dso(
+            build_elf(
+                needed=(LIBC, "ld-linux-x86-64.so.2"),
+                loader_verneed=True,
+            )
+        )
+        self.assertEqual(shared.glibc_requirements, ["GLIBC_2.2.5", "GLIBC_2.35"])
         with self.assertRaisesRegex(elf.ElfError, "exceeds documented baseline"):
             elf.parse_elf64_le_x86_64_dso(build_elf(glibc_versions=("GLIBC_2.2.5", "GLIBC_2.36")))
         with self.assertRaisesRegex(elf.ElfError, "duplicate (GNU version|GLIBC)"):
