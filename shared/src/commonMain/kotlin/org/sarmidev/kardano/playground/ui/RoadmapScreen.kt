@@ -13,6 +13,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.sarmidev.kardano.playground.mvi.RoadmapPhase
 
@@ -134,7 +136,20 @@ internal fun RoadmapScreen(
 
 @Composable
 private fun PhaseCard(entry: PhaseEntry, expanded: Boolean, onClick: () -> Unit) {
-    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    OutlinedCard(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .disclosureSemantics(
+                expanded = expanded,
+                label = if (expanded) {
+                    "${entry.title} expanded"
+                } else {
+                    "${entry.title} collapsed"
+                },
+                onToggle = onClick,
+            ),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -147,7 +162,9 @@ private fun PhaseCard(entry: PhaseEntry, expanded: Boolean, onClick: () -> Unit)
                 Text(
                     text = entry.title,
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { heading() },
                 )
                 StatusBadge(Badge(entry.status.label, entry.status.tone))
             }

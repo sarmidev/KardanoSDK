@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -65,7 +66,12 @@ internal fun FlowStepCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics(mergeDescendants = true) {
+                        heading()
+                        contentDescription = "$title, ${status.label}"
+                    },
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -95,7 +101,10 @@ internal fun FlowStepCard(
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
-                    Text(text = "  $actionLabel")
+                    Text(
+                        text = "  $actionLabel",
+                        modifier = Modifier.politeLiveRegion(),
+                    )
                 } else {
                     Text(actionLabel)
                 }
@@ -118,7 +127,17 @@ internal fun FlowStepCard(
             if (showDetailsToggle) {
                 TextButton(
                     onClick = onToggleDetails,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .disclosureSemantics(
+                            expanded = detailsExpanded,
+                            label = if (detailsExpanded) {
+                                "Technical details expanded"
+                            } else {
+                                "Technical details collapsed"
+                            },
+                            onToggle = onToggleDetails,
+                        ),
                 ) {
                     Text(if (detailsExpanded) "Hide technical details" else "Technical details")
                 }
@@ -163,6 +182,7 @@ internal fun ResultHeadline(text: String, isError: Boolean = false) {
         text = text,
         style = MaterialTheme.typography.titleSmall,
         color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        modifier = if (isError) Modifier.assertiveLiveRegion() else Modifier.politeLiveRegion(),
     )
 }
 
@@ -236,7 +256,7 @@ internal fun ErrorInline(message: String) {
     ) {
         Text(
             text = message,
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(12.dp).assertiveLiveRegion(),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onErrorContainer,
         )
@@ -256,6 +276,7 @@ internal fun LoadingInline() {
             text = "Working…",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.politeLiveRegion(),
         )
     }
 }

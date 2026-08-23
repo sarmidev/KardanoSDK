@@ -22,6 +22,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import org.sarmidev.kardano.playground.mvi.PlaygroundIntent
@@ -145,7 +147,16 @@ private fun CodeExamplesSection(expanded: Boolean, onToggle: () -> Unit) {
             title = "Code examples",
             subtitle = "Simplified snippets for illustration — not exact API signatures.",
         )
-        TextButton(onClick = onToggle, modifier = Modifier.fillMaxWidth()) {
+        TextButton(
+            onClick = onToggle,
+            modifier = Modifier
+                .fillMaxWidth()
+                .disclosureSemantics(
+                    expanded = expanded,
+                    label = if (expanded) "Code examples expanded" else "Code examples collapsed",
+                    onToggle = onToggle,
+                ),
+        ) {
             Text(if (expanded) "Hide code examples" else "Show code examples")
         }
         if (expanded) {
@@ -257,7 +268,11 @@ private fun DeveloperToolsSection(state: PlaygroundState, dispatch: (PlaygroundI
 @Composable
 internal fun SectionHeader(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(text = title, style = MaterialTheme.typography.titleLarge)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.semantics { heading() },
+        )
         if (subtitle != null) {
             Text(
                 text = subtitle,
