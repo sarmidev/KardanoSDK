@@ -50,6 +50,22 @@ class ParseChecksumsTests(unittest.TestCase):
             natives.parse_checksums("not-a-digest  src/a.so\n")
 
 
+class LinuxCatalogTests(unittest.TestCase):
+    def test_linux_is_candidate_catalog_not_committed_eight(self) -> None:
+        linux = natives.LINUX_JVM_ARTIFACTS[0]
+        self.assertEqual(linux.group, "linux-jvm")
+        self.assertEqual(
+            linux.relative_path,
+            "src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so",
+        )
+        self.assertNotIn(linux, natives.EXISTING_ARTIFACTS)
+        self.assertEqual(
+            [spec.artifact_id for spec in natives.artifacts_for_groups(("linux-jvm",))],
+            ["linux-jvm-x86_64"],
+        )
+        self.assertEqual(len(natives.EXISTING_ARTIFACTS), 8)
+
+
 class ManifestCoverageTests(unittest.TestCase):
     def test_missing_catalog_row_is_a_finding(self) -> None:
         checksums = {

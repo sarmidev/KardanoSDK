@@ -11,8 +11,9 @@ import kotlin.test.assertTrue
 /**
  * Block 1.10b backend adoption — JVM KAT (ADR-0016 §9f) against the real, permanent
  * `:crypto-signing-backend` module (not the disposable spike). Exercises the committed
- * `src/jvmMain/resources/darwin-<arch>/libkardano_ed25519_bip32_signing.dylib` through the
- * pre-generated JNA-backed UniFFI bindings.
+ * committed JNA resource (`darwin-<arch>/…dylib` on macOS, or
+ * `linux-x86-64/libkardano_ed25519_bip32_signing.so` on Linux x86-64) through the
+ * pre-generated JNA-backed UniFFI bindings. Linux ARM is out of scope.
  *
  * Vector source: `ed25519-bip32` crate 0.4.2, `src/tests.rs`, `xprv_sign` / `verify_signature`
  * (`D1_H0`), cited by CIP-3 and pinned in ADR-0016 §3. Copied verbatim, not invented.

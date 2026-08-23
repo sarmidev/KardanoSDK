@@ -14,11 +14,9 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // keep everything in ONE module: Gobley 0.3.7 cannot coexist with an `androidLibrary {}` target
 // under this repo's AGP 9.0.1 pin (ADR-0016 §8, `gobley/gobley#153`).
 //
-// JVM native coverage is macOS-only by design (ADR-0016 §9, R1 host-artifact decision): the
-// committed cdylibs cover `darwin-aarch64` (runtime-verified via `jvmTest` on the macOS arm64 dev
-// host) and `darwin-x86-64` (cross-built, not runtime-verified here). Linux/Windows JVM hosts are
-// not covered — there is no CI, and this SDK is developed/verified on macOS. Broader JVM host
-// coverage is future work (ADR-0016 §9 R3, publishing).
+// JVM natives: committed `darwin-aarch64` / `darwin-x86-64` cdylibs. Linux x86-64 uses the
+// JNA prefix `linux-x86-64/` and is rebuilt only on native Ubuntu (`x86_64-unknown-linux-gnu`);
+// it is not in CHECKSUMS until promotion. Linux ARM and Windows JVM hosts are out of scope.
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)

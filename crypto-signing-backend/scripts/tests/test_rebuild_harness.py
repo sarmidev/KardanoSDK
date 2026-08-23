@@ -516,6 +516,22 @@ class ToolchainFlagTests(unittest.TestCase):
         self.assertIn("-Wl,-reproducible", script)
         self.assertIn('exec cc "$@"', script)
 
+    def test_linux_flags_include_soname_and_no_build_id(self) -> None:
+        pairs = [("/workspace", "/kardano")]
+        flags = toolchain.rustflags_linux_jvm(pairs)
+        self.assertTrue(any(toolchain.STABLE_LINUX_SONAME in item for item in flags))
+        self.assertTrue(any("--build-id=none" in item for item in flags))
+        self.assertTrue(any(item == "-Cdebuginfo=0" for item in flags))
+        self.assertFalse(any("rpath" in item.lower() for item in flags))
+
+    def test_linux_rebuild_refuses_non_linux_hosts(self) -> None:
+        if __import__("platform").system() == "Linux" and __import__(
+            "platform"
+        ).machine().lower() in {"x86_64", "amd64"}:
+            self.skipTest("this host is native Linux x86-64")
+        with self.assertRaisesRegex(toolchain.ToolchainError, "native Linux"):
+            toolchain.require_native_linux_x86_64()
+
     def test_xcode_pin_parser(self) -> None:
         version, build = toolchain.parse_xcodebuild("Xcode 26.6\nBuild version 17F113\n")
         self.assertEqual(version, "26.6")

@@ -34,18 +34,19 @@ A Gobley-free single module is required because Gobley `0.3.7` cannot coexist wi
 The Rust crate (`Cargo.toml`, `Cargo.lock`) is retained in-tree only for offline regeneration; it
 is `publish = false` and is **not** compiled by Gradle.
 
-### JVM native coverage is macOS-only (deliberate scope, ADR-0016 §9)
+### JVM native coverage (JNA resource prefixes)
 
-JNA loads the committed cdylib per host from `src/jvmMain/resources/<jna-prefix>/`. There is **no
-CI** in this repo and the SDK is developed/verified on macOS, so only the macOS cdylibs are
-committed:
+JNA 5.19.1 loads the cdylib from `src/jvmMain/resources/<jna-prefix>/`. The generated
+`Native.register("kardano_ed25519_bip32_signing")` call uses that prefix; this module
+does not invent a second loader path.
 
-- `darwin-aarch64` — **runtime-verified** here (`jvmTest` runs on the macOS arm64 dev host).
-- `darwin-x86-64` — cross-built on macOS, **not** runtime-verified on this arm64 host.
-- **Linux / Windows JVM hosts are not covered** — no committed cdylib for those prefixes, so JNA
-  loading would fail there. Broadening host coverage (or publishing a multi-host artifact) is
-  future work (ADR-0016 §9, Option R3). This module does not claim general cross-host JVM
-  verification.
+- `darwin-aarch64` — committed; **runtime-verified** here (`jvmTest` on the macOS arm64 host).
+- `darwin-x86-64` — committed; cross-built on macOS, **not** runtime-verified on this arm64 host.
+- `linux-x86-64` — JNA prefix for Linux x86-64 (`libkardano_ed25519_bip32_signing.so`).
+  Built only on a native Ubuntu x86-64 host (`x86_64-unknown-linux-gnu`). Not committed
+  until two independent runner hashes match and a promotion commit adds the CHECKSUMS
+  row. Linux ARM (`linux-aarch64`) is out of scope.
+- **Windows JVM hosts are not covered.**
 
 ## Verified (ADR-0016 §7d / §9f) — legs against this real module
 
@@ -231,8 +232,9 @@ UUID-normalized candidates; commit `5582637` replaced `src/` and
 replacement set, not the W5-2 host-path rows. A matching checksum is
 identity of those committed bytes, not proof of source provenance.
 The current verifier accepts both committed Darwin dylibs (canonical
-UUID match; arm64 ad-hoc exact-identifier). Gate 2 Linux starts only
-after Verify and native rebuild are green on the current tip.
+UUID match; arm64 ad-hoc exact-identifier). Linux x86-64 JVM rebuilds
+are native Ubuntu only (`linux-jvm-rebuild-evidence.yml`); they are
+not written into CHECKSUMS until two independent candidates match.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

@@ -17,6 +17,10 @@ from pathlib import Path
 
 LIB_STEM = "libkardano_ed25519_bip32_signing"
 STABLE_INSTALL_NAME = f"@rpath/{LIB_STEM}.dylib"
+STABLE_LINUX_SONAME = f"{LIB_STEM}.so"
+LINUX_JVM_TARGET = "x86_64-unknown-linux-gnu"
+EXPECTED_LINUX_IMAGE_OS = "ubuntu24"
+EXPECTED_LINUX_RUNS_ON = "ubuntu-24.04"
 
 RUST_CHANNEL = "1.97.0"
 RUSTC_COMMIT = "2d8144b7880597b6e6d3dfd63a9a9efae3f533d3"
@@ -52,6 +56,22 @@ ANDROID_ABI_BY_TARGET = {
 
 class ToolchainError(RuntimeError):
     pass
+
+
+def require_native_linux_x86_64() -> None:
+    """Refuse macOS cross-builds and Linux ARM hosts."""
+    system = platform.system()
+    machine = platform.machine().lower()
+    if system != "Linux":
+        raise ToolchainError(
+            "linux-jvm rebuilds require a native Linux x86-64 host; "
+            f"{system} cross-builds are refused"
+        )
+    if machine not in {"x86_64", "amd64"}:
+        raise ToolchainError(
+            "linux-jvm rebuilds require x86_64-unknown-linux-gnu; "
+            f"host machine {machine} is refused (Linux ARM is out of scope)"
+        )
 
 
 def _capture(command: list[str], *, env: dict[str, str] | None = None) -> str:
@@ -203,6 +223,17 @@ def rustflags_android(pairs: list[tuple[str, str]]) -> list[str]:
     ]
 
 
+def rustflags_linux_jvm(pairs: list[tuple[str, str]]) -> list[str]:
+    """Native x86_64-unknown-linux-gnu flags. No macOS cross-link, no rpath."""
+    return [
+        *rustflags_common(pairs),
+        "-Cdebuginfo=0",
+        "-Cstrip=symbols",
+        f"-Clink-arg=-Wl,-soname,{STABLE_LINUX_SONAME}",
+        "-Clink-arg=-Wl,--build-id=none",
+    ]
+
+
 def encode_rustflags(flags: list[str]) -> str:
     return "\x1f".join(flags)
 
@@ -221,11 +252,13 @@ def apply_rustflags(
     common = rustflags_common(pairs)
     darwin = rustflags_darwin_jvm(pairs, linker=darwin_linker)
     android = rustflags_android(pairs)
+    linux = rustflags_linux_jvm(pairs)
     env["RUSTFLAGS"] = " ".join(common)
     env["CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS"] = " ".join(darwin)
     env["CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS"] = " ".join(darwin)
     env["CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS"] = " ".join(common)
     env["CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS"] = " ".join(common)
+    env["CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS"] = " ".join(linux)
     for rust_target in ANDROID_TARGETS:
         key = f"CARGO_TARGET_{rust_target.upper().replace('-', '_')}_RUSTFLAGS"
         env[key] = " ".join(android)
@@ -234,6 +267,9 @@ def apply_rustflags(
         "common_rustflags": common,
         "darwin_jvm_rustflags": darwin,
         "android_rustflags": android,
+        "linux_jvm_rustflags": linux,
+        "linux_soname": STABLE_LINUX_SONAME,
+        "linux_build_id": "none",
         "ios_rustflags": common,
         "stable_install_name": STABLE_INSTALL_NAME,
         "darwin_linker": str(darwin_linker) if darwin_linker else None,
@@ -321,8 +357,21 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
         raise ToolchainError("macos-jvm/ios rebuilds require Darwin + Xcode 26.6")
 
     image_os = os.environ.get("ImageOS", "")
+    needs_linux = "linux-jvm" in groups
+    if needs_apple and needs_linux:
+        raise ToolchainError(
+            "macos-jvm/ios and linux-jvm cannot share one runner"
+        )
+    if needs_linux:
+        require_native_linux_x86_64()
     if os.environ.get("GITHUB_ACTIONS") == "true":
-        if image_os != EXPECTED_GITHUB_IMAGE_OS:
+        if needs_linux:
+            if image_os != EXPECTED_LINUX_IMAGE_OS:
+                raise ToolchainError(
+                    f"GitHub ImageOS {image_os!r} != pinned {EXPECTED_LINUX_IMAGE_OS} "
+                    f"(workflow must use runs-on: {EXPECTED_LINUX_RUNS_ON})"
+                )
+        elif image_os != EXPECTED_GITHUB_IMAGE_OS:
             raise ToolchainError(
                 f"GitHub ImageOS {image_os!r} != pinned {EXPECTED_GITHUB_IMAGE_OS} "
                 f"(workflow must use runs-on: {EXPECTED_GITHUB_RUNS_ON})"

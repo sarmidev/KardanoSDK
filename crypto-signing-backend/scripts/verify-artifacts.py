@@ -77,9 +77,7 @@ def build_report(
     )
     diffs: list[dict[str, object]] = []
     staged_by_id = {item.spec.artifact_id: item for item in staged}
-    for spec in natives.EXISTING_ARTIFACTS:
-        if groups is not None and spec.group not in groups:
-            continue
+    for spec in natives.artifacts_for_groups(groups):
         expected = checksums.get(spec.relative_path)
         staged_record = staged_by_id.get(spec.artifact_id)
         if staged_record is None or not staged_record.exists:
@@ -153,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--groups",
         default="",
-        help="Comma-separated groups: macos-jvm,android,ios (default: all).",
+        help="Comma-separated groups: macos-jvm,android,ios,linux-jvm (default: committed eight).",
     )
     parser.add_argument(
         "--report",

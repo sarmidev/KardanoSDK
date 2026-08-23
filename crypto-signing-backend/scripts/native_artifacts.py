@@ -1,8 +1,10 @@
 """Catalog and fail-closed comparison helpers for signing-backend natives.
 
 This module does not rebuild binaries. It names the eight committed artifacts
-that exist today, parses SHA-256 manifests, inspects staged copies, and
-compares them against a manifest. Rebuilds must write only into staging.
+that exist today, plus the Linux x86-64 JVM candidate catalog used by
+``linux-jvm`` rebuilds. Linux is not in CHECKSUMS until promotion.
+Parses SHA-256 manifests, inspects staged copies, and compares them
+against a manifest. Rebuilds must write only into staging.
 """
 
 from __future__ import annotations
@@ -17,6 +19,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from linux_elf_verify import (
+    JNA_RESOURCE_PREFIX as LINUX_JNA_PREFIX,
+    STABLE_SONAME as LINUX_STABLE_SONAME,
+    verify_linux_x86_64_cdylib,
+    ElfError,
+)
 from native_toolchain import STABLE_INSTALL_NAME
 
 MODULE_ROOT = Path(__file__).resolve().parent.parent
@@ -48,6 +56,14 @@ REQUIRED_EVIDENCE_SUFFIXES = {
         ".normalize.json",
     ),
     "so": (".inspect.json", ".file.txt", ".nm.txt", ".path-scan.txt"),
+    "linux-so": (
+        ".inspect.json",
+        ".file.txt",
+        ".nm.txt",
+        ".path-scan.txt",
+        ".elf.json",
+        ".readelf-d.txt",
+    ),
     "archive": (
         ".inspect.json",
         ".file.txt",
@@ -73,7 +89,8 @@ class ArtifactSpec:
     host_only: bool = False
 
 
-# The eight committed natives. Linux/Windows JVM hosts are not in this catalog.
+# The eight committed natives. Linux x86-64 JVM is LINUX_JVM_ARTIFACTS
+# (candidate catalog) until a promotion commit adds it here.
 EXISTING_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec(
         artifact_id="macos-jvm-arm64",
@@ -157,13 +174,40 @@ EXISTING_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ),
 )
 
+LINUX_JVM_ARTIFACTS: tuple[ArtifactSpec, ...] = (
+    ArtifactSpec(
+        artifact_id="linux-jvm-x86_64",
+        relative_path=f"src/jvmMain/resources/{LINUX_JNA_PREFIX}/{LIB_STEM}.so",
+        group="linux-jvm",
+        filename=LINUX_STABLE_SONAME,
+        kind="linux-so",
+        expected_arch="x86-64",
+        expected_file_tokens=("ELF", "x86-64"),
+        rust_target="x86_64-unknown-linux-gnu",
+    ),
+)
+
+KNOWN_ARTIFACTS: tuple[ArtifactSpec, ...] = EXISTING_ARTIFACTS + LINUX_JVM_ARTIFACTS
+
 ARTIFACT_BY_ID: dict[str, ArtifactSpec] = {
-    spec.artifact_id: spec for spec in EXISTING_ARTIFACTS
+    spec.artifact_id: spec for spec in KNOWN_ARTIFACTS
 }
 ARTIFACT_BY_RELATIVE: dict[str, ArtifactSpec] = {
-    spec.relative_path: spec for spec in EXISTING_ARTIFACTS
+    spec.relative_path: spec for spec in KNOWN_ARTIFACTS
 }
-GROUPS: tuple[str, ...] = ("macos-jvm", "android", "ios")
+GROUPS: tuple[str, ...] = ("macos-jvm", "android", "ios", "linux-jvm")
+
+
+def artifacts_for_groups(groups: tuple[str, ...] | None) -> list[ArtifactSpec]:
+    if groups is None:
+        return list(EXISTING_ARTIFACTS)
+    wanted: list[ArtifactSpec] = []
+    for group in groups:
+        if group == "linux-jvm":
+            wanted.extend(LINUX_JVM_ARTIFACTS)
+        else:
+            wanted.extend(spec for spec in EXISTING_ARTIFACTS if spec.group == group)
+    return wanted
 
 
 @dataclass
@@ -209,6 +253,11 @@ class ArtifactRecord:
     member_hashes: list[dict[str, str]] = field(default_factory=list)
     embedded_paths: list[str] = field(default_factory=list)
     inspection_errors: list[str] = field(default_factory=list)
+    soname: str | None = None
+    needed: list[str] = field(default_factory=list)
+    rpath: list[str] = field(default_factory=list)
+    runpath: list[str] = field(default_factory=list)
+    elf_ok: bool | None = None
 
 
 _UNSET = object()
@@ -335,6 +384,11 @@ def _nm_command(
     path: Path,
     hooks: InspectHooks,
 ) -> list[str] | None:
+    if spec.kind == "linux-so":
+        nm = hooks.which("nm") or hooks.llvm_nm_path()
+        if nm:
+            return [nm, "-D", str(path)]
+        return None
     if spec.kind == "so":
         llvm_nm = _ndk_llvm_nm(hooks.ndk_home) or hooks.which("llvm-nm")
         if llvm_nm:
@@ -543,6 +597,26 @@ def inspect_artifact(
                 record.inspection_errors.append("ar is required for iOS archives")
             elif rc != 0:
                 record.inspection_errors.append(f"ar exited {rc}")
+    elif spec.kind == "linux-so":
+        record.arch_ok = token_ok
+        if not record.arch_ok:
+            record.inspection_errors.append(
+                f"file(1) did not confirm {spec.expected_file_tokens}: {file_text!r}"
+            )
+        try:
+            elf_record = verify_linux_x86_64_cdylib(path, require_tools=require_inspection)
+            record.soname = elf_record.soname
+            record.needed = list(elf_record.needed)
+            record.rpath = list(elf_record.rpath)
+            record.runpath = list(elf_record.runpath)
+            record.elf_ok = True
+            record.otool_output = elf_record.readelf_text
+            if elf_record.nm_text and not record.nm_output:
+                record.nm_output = elf_record.nm_text
+                record.nm_returncode = elf_record.nm_returncode
+        except ElfError as error:
+            record.elf_ok = False
+            record.inspection_errors.append(str(error))
     else:
         record.arch_ok = token_ok
         if not record.arch_ok:
@@ -621,6 +695,11 @@ def write_inspect_evidence(record: ArtifactRecord, evidence_dir: Path) -> list[P
         "member_hashes": record.member_hashes,
         "embedded_paths": record.embedded_paths,
         "inspection_errors": record.inspection_errors,
+        "soname": record.soname,
+        "needed": record.needed,
+        "rpath": record.rpath,
+        "runpath": record.runpath,
+        "elf_ok": record.elf_ok,
     }
     import json
 
@@ -632,6 +711,24 @@ def write_inspect_evidence(record: ArtifactRecord, evidence_dir: Path) -> list[P
         dump(".lipo.txt", (record.lipo_output or "") + "\n")
     if record.spec.kind == "dylib":
         dump(".otool-l.txt", (record.otool_output or "") + "\n")
+    if record.spec.kind == "linux-so":
+        dump(
+            ".elf.json",
+            json.dumps(
+                {
+                    "soname": record.soname,
+                    "needed": record.needed,
+                    "rpath": record.rpath,
+                    "runpath": record.runpath,
+                    "elf_ok": record.elf_ok,
+                    "symbol_ok": record.symbol_ok,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+        dump(".readelf-d.txt", (record.otool_output or "") + "\n")
     if record.spec.kind == "archive":
         dump(".ar-tv.txt", (record.ar_tv or "") + "\n")
         dump(
@@ -652,9 +749,7 @@ def check_evidence_dir(
     logs_dir: Path | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
-    wanted = [
-        spec for spec in EXISTING_ARTIFACTS if groups is None or spec.group in groups
-    ]
+    wanted = artifacts_for_groups(groups)
     if not evidence_dir.is_dir():
         findings.append(
             Finding("missing-evidence", None, str(evidence_dir), "evidence directory is missing")
@@ -692,9 +787,14 @@ def check_evidence_dir(
     return findings
 
 
-def check_manifest_coverage(checksums: dict[str, str]) -> list[Finding]:
+def check_manifest_coverage(
+    checksums: dict[str, str],
+    *,
+    catalog: tuple[ArtifactSpec, ...] | None = None,
+) -> list[Finding]:
     findings: list[Finding] = []
-    expected = {spec.relative_path for spec in EXISTING_ARTIFACTS}
+    expected_specs = catalog if catalog is not None else EXISTING_ARTIFACTS
+    expected = {spec.relative_path for spec in expected_specs}
     listed = set(checksums)
     for relative in sorted(expected - listed):
         spec = ARTIFACT_BY_RELATIVE[relative]
@@ -732,14 +832,10 @@ def compare_trees(
     evidence_dir: Path | None = None,
     logs_dir: Path | None = None,
 ) -> tuple[list[Finding], list[ArtifactRecord], list[ArtifactRecord]]:
-    wanted = [
-        spec
-        for spec in EXISTING_ARTIFACTS
-        if groups is None or spec.group in groups
-    ]
+    wanted = artifacts_for_groups(groups)
     if checksums is None:
         checksums = load_checksums(committed_root)
-    findings = check_manifest_coverage(checksums)
+    findings = check_manifest_coverage(checksums, catalog=tuple(wanted))
     if groups is not None:
         findings = [
             item
@@ -861,15 +957,8 @@ def compare_trees(
                 findings.append(
                     Finding(kind, spec.artifact_id, spec.relative_path, message)
                 )
-    extra = sorted(
-        relative
-        for relative in staged_seen
-        if relative not in ARTIFACT_BY_RELATIVE
-        or (
-            groups is not None
-            and ARTIFACT_BY_RELATIVE[relative].group not in groups
-        )
-    )
+    wanted_paths = {spec.relative_path for spec in wanted}
+    extra = sorted(relative for relative in staged_seen if relative not in wanted_paths)
     for relative in extra:
         findings.append(
             Finding(

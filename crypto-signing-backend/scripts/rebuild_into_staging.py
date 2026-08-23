@@ -25,6 +25,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import darwin_uuid_normalize as darwin_uuid  # noqa: E402
+import linux_elf_verify as linux_elf  # noqa: E402
 import native_artifacts as natives  # noqa: E402
 import native_toolchain as toolchain  # noqa: E402
 
@@ -492,6 +493,65 @@ def rebuild_android(
         _require_fatal_inspection(spec, record)
 
 
+def rustc_host(*, env: dict[str, str], cwd: Path) -> str:
+    text = _capture(["rustc", "-vV"], cwd=cwd, env=env)
+    for line in text.splitlines():
+        if line.startswith("host:"):
+            return line.split(None, 1)[1].strip()
+    return ""
+
+
+def rebuild_linux_jvm(
+    module_root: Path,
+    staging: Path,
+    env: dict[str, str],
+    recorder: CommandRecorder,
+) -> None:
+    toolchain.require_native_linux_x86_64()
+    host = rustc_host(env=env, cwd=module_root)
+    if host != toolchain.LINUX_JVM_TARGET:
+        raise RebuildError(
+            f"linux-jvm requires rustc host {toolchain.LINUX_JVM_TARGET}; "
+            f"got {host!r} (macOS cross-builds are refused)"
+        )
+    spec = natives.LINUX_JVM_ARTIFACTS[0]
+    rust_target = spec.rust_target
+    if rust_target != toolchain.LINUX_JVM_TARGET:
+        raise RebuildError(f"unexpected linux rust target {rust_target}")
+    _ensure_target(rust_target, module_root=module_root, env=env, recorder=recorder)
+    target_dir = Path(env["CARGO_TARGET_DIR"])
+    output = target_dir / rust_target / "release" / spec.filename
+    started = time.monotonic()
+    recorder.run(
+        [
+            "cargo",
+            "rustc",
+            "--locked",
+            "--release",
+            "--lib",
+            "--target",
+            rust_target,
+            "--",
+            "-Cdebuginfo=0",
+            "-Cstrip=symbols",
+            f"-Clink-arg=-Wl,-soname,{toolchain.STABLE_LINUX_SONAME}",
+            "-Clink-arg=-Wl,--build-id=none",
+        ],
+        cwd=module_root,
+        env=env,
+        name=f"cargo-rustc-{rust_target}",
+        outputs=[output],
+    )
+    dest = copy_fresh_output(output, staging, spec.relative_path, started_monotonic=started)
+    record = natives.inspect_artifact(spec, dest)
+    natives.write_inspect_evidence(record, staging / "evidence")
+    _require_fatal_inspection(spec, record)
+    try:
+        linux_elf.verify_linux_x86_64_cdylib(dest, require_tools=True)
+    except linux_elf.ElfError as error:
+        raise RebuildError(f"{spec.artifact_id} ELF verify failed: {error}") from error
+
+
 def rebuild_ios(
     module_root: Path,
     staging: Path,
@@ -541,6 +601,7 @@ BUILDERS = {
     "macos-jvm": rebuild_macos_jvm,
     "android": rebuild_android,
     "ios": rebuild_ios,
+    "linux-jvm": rebuild_linux_jvm,
 }
 
 
@@ -556,9 +617,7 @@ def write_candidate_outputs(
     rows: dict[str, str] = {}
     if existing.is_file():
         rows.update(natives.load_manifest(existing))
-    for spec in natives.EXISTING_ARTIFACTS:
-        if spec.group not in groups:
-            continue
+    for spec in natives.artifacts_for_groups(groups):
         artifact = staging / "artifacts" / spec.relative_path
         if not artifact.is_file():
             raise RebuildError(f"candidate missing: {artifact}")
@@ -597,7 +656,7 @@ def write_candidate_outputs(
         "| Artifact | SHA-256 |",
         "|---|---|",
     ]
-    for spec in natives.EXISTING_ARTIFACTS:
+    for spec in natives.artifacts_for_groups(groups):
         if spec.relative_path in rows:
             lines.append(f"| `{spec.artifact_id}` | `{rows[spec.relative_path]}` |")
     lines.append("")
