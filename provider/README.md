@@ -48,9 +48,12 @@ API compatible with Swift/ObjC interop.
   live in `:provider-blockfrost`, alongside the existing read-only Blockfrost provider from
   Block 1.3b. `ProviderError`/`SubmitError` stay backend-neutral (for example `RemoteStatus`,
   not `HttpStatus`). `ProviderError.RemoteStatus` carries an optional `detail` (response text
-  only). `ProviderError.ResultTruncated` is the typed failure when a paged `getUtxos` hits
-  the implementation cap while more items remain; callers must not treat a truncated list as
-  complete.
+  only; pre-alpha data-class shape change — source calls with the default `detail` still
+  compile; binary and exhaustive-`when` compatibility are not claimed).
+  `ProviderError.ResultTruncated` is a new pre-alpha subtype: the typed failure when a paged
+  `getUtxos` reaches the implementation cap and a one-item probe shows more items remain.
+  An empty probe is a complete result at exactly the cap. A page larger than the requested
+  count is `Deserialization`, not truncation.
 
 ## Testing
 

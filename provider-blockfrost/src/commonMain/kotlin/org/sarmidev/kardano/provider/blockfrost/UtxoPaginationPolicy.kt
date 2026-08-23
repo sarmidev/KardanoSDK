@@ -3,8 +3,9 @@ package org.sarmidev.kardano.provider.blockfrost
 /**
  * Internal UTxO pagination bounds for [BlockfrostChainQueryProvider].
  *
- * Production uses [Default] (100 entries per page, 100 pages — 10_000 UTxOs). Tests inject a
- * smaller policy so the cap-reached path can be exercised without allocating a 10_000-entry
+ * Production uses [Default] (100 entries per page, 100 pages — 10_000 UTxOs). After
+ * [maxPages] full pages the provider probes the next page for one item. Tests inject a
+ * smaller policy so the cap/probe path can be exercised without allocating a 10_000-entry
  * page. This type is not part of the public API.
  *
  * @property pageCount entries requested per page (Blockfrost's maximum page size is 100).

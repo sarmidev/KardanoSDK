@@ -200,9 +200,15 @@ text when a concrete backend provides one; it must not include request headers o
 configuration.
 
 §5 said pagination is a provider-internal concern and that a concrete implementation aggregates
-paged responses up to a bounded maximum. Returning that maximum as success while the last page
-is still full silently omits remaining items. `ProviderError.ResultTruncated(fetchedCount, cap)`
-is the typed failure for that case. `getUtxos` still returns a bounded `List<Utxo>` on success;
-page cursors remain out of the public API.
+paged responses up to a bounded maximum. A full last page is not enough to claim that more
+items exist. `ProviderError.ResultTruncated(fetchedCount, cap)` is the typed failure only after
+a one-item probe of the next page is non-empty. An empty probe is a complete `Ok` at exactly
+the cap. A page larger than the requested count is an invalid remote payload
+(`Deserialization`), not ordinary truncation. `getUtxos` still returns a bounded `List<Utxo>`
+on success; page cursors remain out of the public API.
+
+Adding `detail` to `RemoteStatus` and adding the `ResultTruncated` subtype are pre-alpha
+source breaks. Default `detail = null` keeps existing `RemoteStatus(code)` source call sites
+compiling; binary compatibility and exhaustive-`when` compatibility are not claimed.
 
 No other decision in this ADR changes.

@@ -38,11 +38,15 @@ public sealed interface ProviderError {
     ) : ProviderError
 
     /**
-     * A paged query hit this provider's documented accumulation cap while the last permitted
-     * page was still full, so remaining items were not fetched.
+     * A paged query reached this provider's accumulation cap and a one-item probe of the
+     * next page showed that at least one further item exists.
      *
-     * Callers must treat this as a failure, not as a complete result. Returning the
-     * accumulated items as success would silently omit the rest.
+     * A full last permitted page is not enough to claim truncation: an empty probe means
+     * the result is complete at exactly [cap]. Callers must treat this variant as a
+     * failure, not as a complete result.
+     *
+     * This is not used when a single page contains more entries than were requested —
+     * that is an invalid remote payload, not ordinary truncation.
      *
      * @property fetchedCount how many items were accumulated before the cap was reached.
      * @property cap the maximum number of items this provider will accumulate.

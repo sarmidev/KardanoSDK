@@ -46,9 +46,12 @@ import kotlin.coroutines.cancellation.CancellationException
  *   `TransactionBuilder`) can honestly reject a UTxO it cannot fully represent.
  * - `getUtxos` treats a Blockfrost `404` (an address that never appeared on-chain) as an
  *   empty UTxO list, not an error. The other endpoints keep `404` as [ProviderError.NotFound].
- * - UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). If the last
- *   permitted page is still full, [getUtxos] returns [ProviderError.ResultTruncated]
- *   rather than a partial success list.
+ * - UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). A page that
+ *   contains more entries than the requested count is [ProviderError.Deserialization]
+ *   (invalid remote payload; it is not sliced). After 100 full pages, a one-item probe
+ *   of the next page decides completeness: empty → [KardanoResult.Ok] with exactly the
+ *   cap; non-empty → [ProviderError.ResultTruncated]; probe failure → the real typed
+ *   error (not a completeness claim).
  *
  * Instances are created with [create]. Tests use the `internal` constructor to inject an
  * [HttpClient] backed by a mock engine, so mapping can be exercised without a real network.
@@ -106,6 +109,15 @@ public class BlockfrostChainQueryProvider internal constructor(
                 )
             }
 
+            if (dtos.size > pagination.pageCount) {
+                return KardanoResult.Err(
+                    ProviderError.Deserialization(
+                        "utxo page contained ${dtos.size} entries; " +
+                            "requested count is ${pagination.pageCount}",
+                    ),
+                )
+            }
+
             for (dto in dtos) {
                 when (val mapped = mapUtxo(dto)) {
                     is KardanoResult.Ok -> accumulated.add(mapped.value)
@@ -113,18 +125,68 @@ public class BlockfrostChainQueryProvider internal constructor(
                 }
             }
 
-            if (dtos.size < pagination.pageCount) break
+            if (dtos.size < pagination.pageCount) {
+                return KardanoResult.Ok(accumulated)
+            }
             page++
         }
-        if (page > pagination.maxPages) {
+        return probeBeyondCap(address, accumulated)
+    }
+
+    /**
+     * After [UtxoPaginationPolicy.maxPages] full pages, requests exactly one item on the
+     * next page. An empty probe means the cap is the complete result; a non-empty probe
+     * is [ProviderError.ResultTruncated]. Transport, status, and decode failures keep
+     * their real typed errors — they are not treated as completeness.
+     */
+    private suspend fun probeBeyondCap(
+        address: Address,
+        accumulated: List<Utxo>,
+    ): KardanoResult<List<Utxo>, ProviderError> {
+        val probePage = pagination.maxPages + 1
+        val response = try {
+            httpClient.get("${config.network.baseUrl}/addresses/${address.bech32}/utxos") {
+                parameter("page", probePage)
+                parameter("count", UTXO_CAP_PROBE_COUNT)
+                parameter("order", "asc")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return KardanoResult.Err(ProviderError.Transport(transportFailureMessage(e)))
+        }
+
+        if (!response.status.isSuccess()) {
+            return KardanoResult.Err(statusError(response))
+        }
+
+        val dtos = try {
+            response.body<List<BlockfrostUtxoDto>>()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
             return KardanoResult.Err(
-                ProviderError.ResultTruncated(
-                    fetchedCount = accumulated.size,
-                    cap = pagination.cap,
+                ProviderError.Deserialization(e.message ?: "utxo probe decode failed"),
+            )
+        }
+
+        if (dtos.size > UTXO_CAP_PROBE_COUNT) {
+            return KardanoResult.Err(
+                ProviderError.Deserialization(
+                    "utxo probe page contained ${dtos.size} entries; requested count is " +
+                        "$UTXO_CAP_PROBE_COUNT",
                 ),
             )
         }
-        return KardanoResult.Ok(accumulated)
+        if (dtos.isEmpty()) {
+            return KardanoResult.Ok(accumulated)
+        }
+        return KardanoResult.Err(
+            ProviderError.ResultTruncated(
+                fetchedCount = accumulated.size,
+                cap = pagination.cap,
+            ),
+        )
     }
 
     override suspend fun getProtocolParameters():
@@ -279,6 +341,9 @@ public class BlockfrostChainQueryProvider internal constructor(
 
         /** The Blockfrost amount `unit` value for the ADA (lovelace) component. */
         private const val LOVELACE_UNIT: String = "lovelace"
+
+        /** Items requested on the exact-cap completeness probe (never a full extra page). */
+        private const val UTXO_CAP_PROBE_COUNT: Int = 1
 
         /**
          * Creates a [BlockfrostChainQueryProvider] with the default platform HTTP client

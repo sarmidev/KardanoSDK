@@ -63,14 +63,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - Blockfrost error `detail` is read from a bounded response-body prefix (500 characters
   publicly; at most 2004 UTF-8 bytes from the channel). A filled byte budget is not parsed
   as JSON; envelope `message`/`error` fields are capped to the same 500-character budget.
-- `ProviderError.RemoteStatus` now carries an optional `detail` (response-body text only;
-  default `null`, source-compatible with existing `RemoteStatus(code)` call sites), matching
-  `SubmitError.RemoteStatus`.
 - `ProviderError.ResultTruncated(fetchedCount, cap)`: the typed failure when a paged UTxO
-  query hits the provider's accumulation cap while the last permitted page is still full.
-  `BlockfrostChainQueryProvider.getUtxos` returns this instead of a partial success list
-  (production cap: 10_000 UTxOs). Playground presenter mappings cover every `ProviderError`
-  variant, including this one.
+  query reaches the provider cap and a one-item probe of the next page is non-empty
+  (production cap: 10_000 UTxOs). An empty probe is a complete `Ok` at exactly the cap.
+  A page larger than the requested count is `Deserialization`, not this variant.
 - Playground operation lifecycle: a monotonic `flowGeneration` discards stale Funds/Build/Sign/
   Submit/diagnostic results after ResetFlow or an actual provider-configuration change; in-flight
   jobs are cancelled. Provider explorer UTxO and protocol-parameter loads also carry a request
@@ -100,6 +96,15 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- **Breaking (pre-alpha):** `ProviderError.RemoteStatus` is now
+  `RemoteStatus(code: Int, detail: String? = null)`. Existing source call sites that pass
+  only `code` remain source-compatible because `detail` defaults to `null`. This is still
+  a data-class shape change: generated `equals` / `hashCode` / `toString` / `copy` /
+  `componentN` include `detail`. No binary compatibility and no exhaustive-`when`
+  compatibility are claimed (pre-alpha).
+- **Breaking (pre-alpha):** `ProviderError` gained the subtype
+  `ResultTruncated(fetchedCount, cap)`. Existing exhaustive `when` expressions over
+  `ProviderError` must add a branch. No binary compatibility is claimed (pre-alpha).
 - **Breaking (pre-alpha):** `BlockfrostConfig` is no longer a `data class`. Equality is
   referential (identity), `toString` still redacts `projectId`, and `copy` / `componentN`
   are not generated. `equals` / `hashCode` no longer incorporate the project id, so

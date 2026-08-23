@@ -676,7 +676,8 @@ internal object PlaygroundPresenter {
             "Network mismatch: provider=${error.expected.name}, address=${error.actual.name}"
         is ProviderError.ResultTruncated ->
             "UTxO query stopped at the provider cap of ${error.cap} items " +
-                "(fetched ${error.fetchedCount}). Remaining outputs were not returned."
+                "(fetched ${error.fetchedCount}). At least one further output exists " +
+                "and was not returned."
         is ProviderError.Unknown -> "Unknown provider error"
     }
 

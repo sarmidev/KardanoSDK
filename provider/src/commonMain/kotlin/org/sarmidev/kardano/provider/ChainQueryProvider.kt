@@ -39,9 +39,10 @@ public interface ChainQueryProvider {
      * An address that exists but holds no unspent outputs returns [KardanoResult.Ok] with an
      * empty list (an empty result is not an error). The returned list is bounded; how a
      * concrete implementation handles backend pagination is an internal detail and is not
-     * reflected in this API. If a concrete implementation hits its accumulation cap while
-     * more items remain, it returns [ProviderError.ResultTruncated] rather than a partial
-     * success list.
+     * reflected in this API. If a concrete implementation reaches its accumulation cap
+     * and a bounded probe shows that more items remain, it returns
+     * [ProviderError.ResultTruncated] rather than a partial success list. An exact-cap
+     * result with an empty probe is still [KardanoResult.Ok].
      *
      * @param address the address to query. Its network must match [network].
      * @return [KardanoResult.Ok] with the (possibly empty) list of [Utxo], or

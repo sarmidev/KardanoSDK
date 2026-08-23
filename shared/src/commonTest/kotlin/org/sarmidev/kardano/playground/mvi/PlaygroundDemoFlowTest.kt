@@ -281,7 +281,7 @@ class PlaygroundDemoFlowTest {
         )
         assertEquals(
             "This address has more unspent outputs than the provider will load. " +
-                "Remaining outputs were not returned.",
+                "At least one further output exists and was not returned.",
             PlaygroundDemoFlow.friendlyReason(PlaygroundStep.FUNDS, message),
         )
     }

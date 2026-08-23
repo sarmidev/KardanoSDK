@@ -154,7 +154,7 @@ internal object PlaygroundDemoFlow {
             "This request was addressed to the wrong network."
         message.startsWith("UTxO query stopped") ->
             "This address has more unspent outputs than the provider will load. " +
-                "Remaining outputs were not returned."
+                "At least one further output exists and was not returned."
         else -> if (step == PlaygroundStep.SUBMIT && message == MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE) {
             "This demo runs offline, so there is no network to send to."
         } else {

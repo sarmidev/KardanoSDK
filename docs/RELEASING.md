@@ -13,6 +13,21 @@ tag plus release notes that identify the source revision, verified targets, and 
    behavior.
 5. Run the CI-equivalent test matrix and record platform limitations.
 6. Add the release entry to `CHANGELOG.md`.
+7. When `CHANGELOG.md` records a **Breaking (pre-alpha)** public type change, copy the
+   upgrade note into the release notes. Do not claim binary compatibility or exhaustive
+   `when` compatibility for those changes even if a default argument keeps some source
+   call sites compiling.
+
+## Pre-alpha upgrade notes (Unreleased)
+
+These are source-level breaks in an unpublished API. They are not a binary-compatibility
+promise and they do not keep exhaustive `when` expressions compiling without edits.
+
+- `ProviderError.RemoteStatus` is now `RemoteStatus(code, detail: String? = null)`.
+  Call sites that pass only `code` still compile. Generated data-class members include
+  `detail`.
+- `ProviderError` gained `ResultTruncated(fetchedCount, cap)`. Every exhaustive `when`
+  over `ProviderError` needs a new branch.
 
 ## Release checklist
 

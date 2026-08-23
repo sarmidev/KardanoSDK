@@ -622,10 +622,19 @@ Summary:
     No `HttpRequestRetry`; submit is never retried. Timeout failures map to typed
     `Transport`; cancellation is rethrown. Delayed `MockEngine` tests use a shortened
     request-timeout seam.
+  - **Independent-review NO-GO fixes (additive; original three commits preserved).**
+    Android OkHttp is built with `retryOnConnectionFailure(false)` so a connection failure
+    cannot replay submit (engine-level; distinct from Ktor `HttpRequestRetry`). Error
+    `detail` is read from a bounded body-channel prefix (500 characters / 2004 UTF-8
+    bytes). `getUtxos` rejects an oversized page as `Deserialization` and uses a one-item
+    probe of the next page for exact-cap completeness. `RemoteStatus`/`ResultTruncated`
+    are documented as pre-alpha source breaks (no binary or exhaustive-`when` claim).
   - **Residual limitations.** Live Blockfrost connect/socket timeouts still depend on the
-    platform engine honoring `HttpTimeout`. Opt-in `BLOCKFROST_PROJECT_ID` live tests and
-    the manual Android submit checkpoint remain the only live-network coverage. The
-    factory cache key is still a second in-memory copy of the project id.
+    platform engine honoring `HttpTimeout`. OkHttp replay disablement is asserted on the
+    configured client, not by inducing a live connection failure. Opt-in
+    `BLOCKFROST_PROJECT_ID` live tests and the manual Android submit checkpoint remain
+    the only live-network coverage. The factory cache key is still a second in-memory
+    copy of the project id.
 
 ### Session Summary (Final-review Medium lifecycle race)
 

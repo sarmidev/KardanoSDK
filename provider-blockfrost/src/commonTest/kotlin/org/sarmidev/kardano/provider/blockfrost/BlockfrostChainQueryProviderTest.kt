@@ -219,19 +219,81 @@ class BlockfrostChainQueryProviderTest {
     }
 
     @Test
-    fun getUtxosReturnsResultTruncatedWhenFinalPageIsFull() = runTest {
+    fun getUtxosRejectsOversizedPageBeforeAccumulation() = runTest {
+        var mappedFollowUp = false
+        val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
+        val provider = provider(pagination = pagination) { request ->
+            when (request.url.parameters["page"]) {
+                "1" -> json(BlockfrostFixtures.utxoPage(3))
+                else -> {
+                    mappedFollowUp = true
+                    json(BlockfrostFixtures.utxoPage(2))
+                }
+            }
+        }
+        val error = err(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertTrue(error is ProviderError.Deserialization, "expected Deserialization, got: $error")
+        assertTrue(error.detail.contains("3"), "got: ${error.detail}")
+        assertTrue(error.detail.contains("2"), "got: ${error.detail}")
+        assertFalse(mappedFollowUp, "oversized first page must not continue pagination")
+    }
+
+    @Test
+    fun getUtxosExactCapWithEmptyProbeReturnsOk() = runTest {
+        var probeCount: String? = null
+        var probePage: String? = null
         val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
         val provider = provider(pagination = pagination) { request ->
             when (request.url.parameters["page"]) {
                 "1" -> json(BlockfrostFixtures.utxoPage(2))
                 "2" -> json(BlockfrostFixtures.utxoPage(2))
-                else -> json("[]")
+                else -> {
+                    probePage = request.url.parameters["page"]
+                    probeCount = request.url.parameters["count"]
+                    json("[]")
+                }
+            }
+        }
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertEquals(4, utxos.size)
+        assertEquals("3", probePage)
+        assertEquals("1", probeCount, "probe must request one item, not a full extra page")
+    }
+
+    @Test
+    fun getUtxosExactCapWithNonEmptyProbeReturnsResultTruncated() = runTest {
+        var probeCount: String? = null
+        val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
+        val provider = provider(pagination = pagination) { request ->
+            when (request.url.parameters["page"]) {
+                "1" -> json(BlockfrostFixtures.utxoPage(2))
+                "2" -> json(BlockfrostFixtures.utxoPage(2))
+                else -> {
+                    probeCount = request.url.parameters["count"]
+                    json(BlockfrostFixtures.utxoPage(1))
+                }
             }
         }
         val error = err(provider.getUtxos(address(TESTNET_ADDRESS)))
         assertTrue(error is ProviderError.ResultTruncated, "expected ResultTruncated, got: $error")
         assertEquals(4, error.fetchedCount)
         assertEquals(4, error.cap)
+        assertEquals("1", probeCount)
+    }
+
+    @Test
+    fun getUtxosExactCapProbeHttpFailureKeepsTypedError() = runTest {
+        val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
+        val provider = provider(pagination = pagination) { request ->
+            when (request.url.parameters["page"]) {
+                "1" -> json(BlockfrostFixtures.utxoPage(2))
+                "2" -> json(BlockfrostFixtures.utxoPage(2))
+                else -> json(BlockfrostFixtures.SERVER_ERROR_BODY, HttpStatusCode.InternalServerError)
+            }
+        }
+        val error = err(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertTrue(error is ProviderError.RemoteStatus, "expected RemoteStatus, got: $error")
+        assertEquals(500, error.code)
     }
 
     @Test

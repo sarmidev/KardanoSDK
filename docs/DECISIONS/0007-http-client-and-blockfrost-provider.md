@@ -188,10 +188,13 @@ No other decision in this ADR changes.
 
 §4's `getUtxos` pagination ("up to a bounded `MAX_PAGES`") previously returned the accumulated
 list as success after the last permitted page, including when that page was still full (10_000
-UTxOs with the production 100×100 bound). That is a silent partial result. The implementation
-now returns `ProviderError.ResultTruncated(fetchedCount, cap)` when the final permitted page is
-full. Tests inject an internal `UtxoPaginationPolicy` so the cap path can be exercised without
-allocating a 10_000-entry page; that seam is not public.
+UTxOs with the production 100×100 bound). That is a silent partial result. A full last page
+still does not prove more items exist. The implementation now probes the next page for exactly
+one item: empty → `Ok` at the cap; non-empty → `ProviderError.ResultTruncated`; probe HTTP or
+decode failure → the real typed error. A page larger than the requested `count` is
+`Deserialization` (not sliced, not `ResultTruncated`). Tests inject an internal
+`UtxoPaginationPolicy` so the cap path can be exercised without allocating a 10_000-entry
+page; that seam is not public.
 
 §5's error mapping now parses an optional `detail` for `ProviderError.RemoteStatus`, matching
 `SubmitError.RemoteStatus`. Detail is taken from the response body only (Blockfrost's

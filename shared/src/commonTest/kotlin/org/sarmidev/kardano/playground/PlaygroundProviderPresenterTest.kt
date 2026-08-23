@@ -117,6 +117,7 @@ class PlaygroundProviderPresenterTest {
             ProviderError.ResultTruncated(fetchedCount = 4, cap = 4),
         )
         assertTrue(msg.contains("4"), "got: $msg")
+        assertTrue(msg.contains("further output"), "got: $msg")
         assertTrue(msg.contains("not returned"), "got: $msg")
     }
 }
