@@ -81,7 +81,9 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   `ResetFlow` clears the five guided-flow step results (and the Wallet step's loading flag);
   provider selection, diagnostics inputs, and *completed* diagnostic results are preserved.
   In-flight diagnostic Loading values become Empty. UTxO/params request tokens increment on
-  ResetFlow, each load, and (UTxOs) an actual explorer-address change.
+  ResetFlow, each load, and (UTxOs) an actual explorer-address change. Starting Funds, Build,
+  or Sign also clears completed and in-flight downstream guided-step results in the same
+  transition and increments those request tokens.
 - `playground/mvi/PlaygroundViewModel.kt` — an `androidx.lifecycle.ViewModel` (already a
   `commonMain` dependency via `libs.androidx.lifecycle.viewmodelCompose`/`-runtimeCompose`; no new
   architecture library was added) exposing `state: StateFlow<PlaygroundState>` and

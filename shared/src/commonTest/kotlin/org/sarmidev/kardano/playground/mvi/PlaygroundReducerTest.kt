@@ -572,6 +572,28 @@ class PlaygroundReducerTest {
     }
 
     @Test
+    fun startFundsLoading_clearsCompletedDownstreamAndIncrementsTheirTokens() {
+        val dirty = PlaygroundState.initial().copy(
+            draft = TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1"))),
+            signed = SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1"))),
+            submit = SubmitTransactionPresentation.Loading,
+            draftRequestToken = 3L,
+            signedRequestToken = 2L,
+            submitRequestToken = 1L,
+        )
+
+        val next = PlaygroundReducer.startFundsLoading(dirty)
+
+        assertEquals(WalletBalancePresentation.Loading, next.funds)
+        assertEquals(TransactionDraftPresentation.Empty, next.draft)
+        assertEquals(SignedTransactionPresentation.Empty, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(4L, next.draftRequestToken)
+        assertEquals(3L, next.signedRequestToken)
+        assertEquals(2L, next.submitRequestToken)
+    }
+
+    @Test
     fun startDraftLoading_incrementsRequestToken() {
         val next = PlaygroundReducer.startDraftLoading(
             PlaygroundState.initial().copy(draftRequestToken = 1L),
@@ -581,12 +603,44 @@ class PlaygroundReducerTest {
     }
 
     @Test
+    fun startDraftLoading_clearsCompletedSignAndSubmitAndIncrementsTheirTokens() {
+        val dirty = PlaygroundState.initial().copy(
+            signed = SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1"))),
+            submit = SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted"))),
+            signedRequestToken = 5L,
+            submitRequestToken = 4L,
+        )
+
+        val next = PlaygroundReducer.startDraftLoading(dirty)
+
+        assertEquals(TransactionDraftPresentation.Loading, next.draft)
+        assertEquals(SignedTransactionPresentation.Empty, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(6L, next.signedRequestToken)
+        assertEquals(5L, next.submitRequestToken)
+    }
+
+    @Test
     fun startSignedLoading_incrementsRequestToken() {
         val next = PlaygroundReducer.startSignedLoading(
             PlaygroundState.initial().copy(signedRequestToken = 4L),
         )
         assertEquals(SignedTransactionPresentation.Loading, next.signed)
         assertEquals(5L, next.signedRequestToken)
+    }
+
+    @Test
+    fun startSignedLoading_clearsCompletedSubmitAndIncrementsItsToken() {
+        val dirty = PlaygroundState.initial().copy(
+            submit = SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted"))),
+            submitRequestToken = 7L,
+        )
+
+        val next = PlaygroundReducer.startSignedLoading(dirty)
+
+        assertEquals(SignedTransactionPresentation.Loading, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(8L, next.submitRequestToken)
     }
 
     @Test

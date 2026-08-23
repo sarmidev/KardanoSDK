@@ -48,6 +48,8 @@ import org.sarmidev.kardano.provider.TxSubmitProvider
  *
  * Provider-backed operations capture [PlaygroundState.flowGeneration] and the matching
  * per-operation request token at start and fold the result back only when both still match.
+ * Starting Funds/Build/Sign also cancels downstream guided Jobs and, in the same reducer
+ * transition, clears those presentations and increments their tokens.
  * Diagnostic UTxO/params loads also capture a request token (and the explorer address for
  * UTxOs). A result that still completes after [Job] cancellation is folded under
  * [NonCancellable] so the identity check — not cooperative cancellation — is what discards
@@ -169,6 +171,12 @@ internal class PlaygroundViewModel(
 
     private fun onQueryFunds() {
         fundsJob?.cancel()
+        draftJob?.cancel()
+        draftJob = null
+        signedJob?.cancel()
+        signedJob = null
+        submitJob?.cancel()
+        submitJob = null
         val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startFundsLoading)
         val generation = mutableState.value.flowGeneration
@@ -186,6 +194,10 @@ internal class PlaygroundViewModel(
 
     private fun onBuildDraft() {
         draftJob?.cancel()
+        signedJob?.cancel()
+        signedJob = null
+        submitJob?.cancel()
+        submitJob = null
         val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startDraftLoading)
         val generation = mutableState.value.flowGeneration
@@ -203,6 +215,8 @@ internal class PlaygroundViewModel(
 
     private fun onSignTransaction() {
         signedJob?.cancel()
+        submitJob?.cancel()
+        submitJob = null
         val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startSignedLoading)
         val generation = mutableState.value.flowGeneration

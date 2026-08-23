@@ -60,7 +60,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   token (and the explorer address for UTxOs) so a result for address A cannot apply after the
   field shows B, and a repeated load cannot overwrite a newer one. Funds, Build, Sign, and
   Submit each carry their own request token so a repeated same-step request cannot be
-  overwritten by a slower first call that still shares `flowGeneration`. Wallet restore is
+  overwritten by a slower first call that still shares `flowGeneration`. Starting Funds
+  clears Build/Sign/Submit (completed results included) and increments those tokens;
+  starting Build clears Sign/Submit; starting Sign clears Submit — so Continue cannot
+  advance on a stale later step after an upstream rerun. Wallet restore is
   synchronous and has no request token. ResetFlow converts in-flight
   diagnostic Loading values to Empty and keeps completed diagnostic results. Provider-backed
   results now carry `PlaygroundProviderMode` (`Mock` / `LivePreprod`) and that generation. The

@@ -605,6 +605,24 @@ Date: 2026-08-23
 
 Summary:
 
+- **Final-review Medium lifecycle race on `fix/playground-operation-lifecycle` (one additive
+  commit; prior commits preserved) — DONE.** No SDK protocol behavior changed.
+  - **Commit 8 — upstream rerun invalidates downstream guided steps.** Starting Funds
+    clears Build/Sign/Submit (completed and Loading) and increments those tokens in one
+    reducer transition; starting Build clears Sign/Submit; starting Sign clears Submit.
+    The ViewModel cancels the matching downstream Jobs. `NonCancellable` tests prove a
+    late downstream completion is discarded and Continue cannot advance on the emptied
+    later step. Sequential Funds→Build→Sign continue-gating is unchanged.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. The factory cache key remains a second in-memory copy of the project id.
+
+### Session Summary (Second independent-review NO-GO fixes)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Second independent-review NO-GO fixes on `fix/playground-operation-lifecycle` (one
   additive commit; prior commits preserved) — DONE.** No SDK protocol behavior changed.
   - **Commit 7 — guided-operation request identity and documentation corrections.**

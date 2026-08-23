@@ -97,11 +97,14 @@ internal enum class RoadmapPhase {
  * visitor's newer configuration.
  *
  * [fundsRequestToken], [draftRequestToken], [signedRequestToken], and [submitRequestToken]
- * increment on each start of that guided operation and whenever ResetFlow or an actual
- * provider-configuration change invalidates in-flight work. A repeated same-step request
- * therefore cannot be overwritten by a slower first call that still shares [flowGeneration].
- * Wallet restore is synchronous (no Job), so it has no request token. The reducer stays a
- * pure function of `(state, intent)` — it never cancels work; the ViewModel holds/cancels
+ * increment on each start of that guided operation, whenever an *upstream* guided step starts
+ * (Funds clears Build/Sign/Submit; Build clears Sign/Submit; Sign clears Submit), and whenever
+ * ResetFlow or an actual provider-configuration change invalidates in-flight work. Starting an
+ * upstream step also sets those downstream presentations to Empty (completed results included)
+ * so Continue cannot advance on a stale later step. A repeated same-step request therefore
+ * cannot be overwritten by a slower first call that still shares [flowGeneration]. Wallet
+ * restore is synchronous (no Job), so it has no request token. The reducer stays a pure
+ * function of `(state, intent)` — it never cancels work; the ViewModel holds/cancels
  * [kotlinx.coroutines.Job]s.
  *
  * ### Diagnostics (Address Parser, Hex Decoder, CBOR Decoder, generic Provider explorer)

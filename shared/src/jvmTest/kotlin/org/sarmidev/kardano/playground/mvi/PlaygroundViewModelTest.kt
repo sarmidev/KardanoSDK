@@ -758,4 +758,192 @@ class PlaygroundViewModelTest {
         advanceUntilIdle()
         assertEquals(latest, vm.state.value.submit)
     }
+
+    // --- Upstream rerun invalidates downstream guided steps ---
+
+    @Test
+    fun buildInFlight_rerunFunds_discardsStaleDraft() = runTest {
+        val pendingDraft = CompletableDeferred<TransactionDraftPresentation>()
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1")))
+            },
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                withContext(NonCancellable) { pendingDraft.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(TransactionDraftPresentation.Loading, vm.state.value.draft)
+        val draftTokenAtStart = vm.state.value.draftRequestToken
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(TransactionDraftPresentation.Empty, vm.state.value.draft)
+        assertEquals(draftTokenAtStart + 1, vm.state.value.draftRequestToken)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.BUILD)))
+
+        pendingDraft.complete(TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(TransactionDraftPresentation.Empty, vm.state.value.draft)
+        assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+    }
+
+    @Test
+    fun signInFlight_rerunBuild_discardsStaleSignedAndSubmit() = runTest {
+        val pendingSigned = CompletableDeferred<SignedTransactionPresentation>()
+        val vm = viewModel(
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                withContext(NonCancellable) { pendingSigned.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(SignedTransactionPresentation.Loading, vm.state.value.signed)
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+
+        pendingSigned.complete(SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
+    }
+
+    @Test
+    fun submitInFlight_rerunSign_discardsStaleSubmit() = runTest {
+        val pendingSubmit = CompletableDeferred<SubmitTransactionPresentation>()
+        val vm = viewModel(
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                withContext(NonCancellable) { pendingSubmit.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertEquals(SubmitTransactionPresentation.Loading, vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+
+        pendingSubmit.complete(SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+    }
+
+    @Test
+    fun rerunningFunds_clearsPreviouslyCompletedDraftSignAndSubmit() = runTest {
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1")))
+            },
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+        assertIs<SubmitTransactionPresentation.Success>(vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(TransactionDraftPresentation.Empty, vm.state.value.draft)
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.BUILD)))
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SIGN)))
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SUBMIT)))
+    }
+
+    @Test
+    fun rerunningBuild_clearsPreviouslyCompletedSignAndSubmit() = runTest {
+        val vm = viewModel(
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+        assertIs<SubmitTransactionPresentation.Success>(vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SIGN)))
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SUBMIT)))
+    }
+
+    @Test
+    fun rerunningSign_clearsPreviouslyCompletedSubmit() = runTest {
+        val vm = viewModel(
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertIs<SubmitTransactionPresentation.Success>(vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SUBMIT)))
+    }
+
+    @Test
+    fun sequentialGuidedSteps_stillAllowContinueOnEachResolvedStep() = runTest {
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1")))
+            },
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertTrue(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.FUNDS)))
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertTrue(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.BUILD)))
+        assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertTrue(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SIGN)))
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
+    }
 }

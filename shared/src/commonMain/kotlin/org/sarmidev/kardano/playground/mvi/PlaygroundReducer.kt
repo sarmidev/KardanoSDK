@@ -149,22 +149,45 @@ internal object PlaygroundReducer {
 
     fun startWalletLoading(state: PlaygroundState): PlaygroundState = state.copy(walletLoading = true)
 
+    /**
+     * Marks Funds loading and invalidates every downstream guided step (Build/Sign/Submit) in
+     * the same transition — completed results and in-flight Loading values both become Empty,
+     * and those request tokens increment so a late completion cannot reappear.
+     */
     fun startFundsLoading(state: PlaygroundState): PlaygroundState =
         state.copy(
             funds = WalletBalancePresentation.Loading,
             fundsRequestToken = state.fundsRequestToken + 1,
+            draft = TransactionDraftPresentation.Empty,
+            signed = SignedTransactionPresentation.Empty,
+            submit = SubmitTransactionPresentation.Empty,
+            draftRequestToken = state.draftRequestToken + 1,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
         )
 
+    /**
+     * Marks Build loading and invalidates Sign/Submit in the same transition.
+     */
     fun startDraftLoading(state: PlaygroundState): PlaygroundState =
         state.copy(
             draft = TransactionDraftPresentation.Loading,
             draftRequestToken = state.draftRequestToken + 1,
+            signed = SignedTransactionPresentation.Empty,
+            submit = SubmitTransactionPresentation.Empty,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
         )
 
+    /**
+     * Marks Sign loading and invalidates Submit in the same transition.
+     */
     fun startSignedLoading(state: PlaygroundState): PlaygroundState =
         state.copy(
             signed = SignedTransactionPresentation.Loading,
             signedRequestToken = state.signedRequestToken + 1,
+            submit = SubmitTransactionPresentation.Empty,
+            submitRequestToken = state.submitRequestToken + 1,
         )
 
     fun startSubmitLoading(state: PlaygroundState): PlaygroundState =
