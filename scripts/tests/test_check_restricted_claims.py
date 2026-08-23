@@ -35,22 +35,22 @@ class SameLineClassificationTests(unittest.TestCase):
         )
         self.assertEqual([h.phrase for h in _prohibited(line)], ["safe"])
 
-    def test_display_safe_then_plain_safe_on_one_line(self) -> None:
+    def test_hyphen_compound_then_plain_safe_on_one_line(self) -> None:
         line = "display-safe metadata, later safe"
         hits = _hits(line)
-        self.assertEqual(hits[0].phrase, "safe")
-        self.assertTrue(hits[0].permitted)
-        self.assertEqual(hits[0].reason, "permitted-compound")
-        self.assertEqual(hits[1].phrase, "safe")
-        self.assertFalse(hits[1].permitted)
+        self.assertEqual(
+            [(h.phrase, h.permitted, h.reason) for h in hits],
+            [
+                ("safe", False, "restricted-claim"),
+                ("safe", False, "restricted-claim"),
+            ],
+        )
 
 
 class QualifierAndBoundaryTests(unittest.TestCase):
-    def test_reviewed_display_safe_compound_is_permitted(self) -> None:
-        hits = _hits("already carry only public, display-safe metadata")
-        self.assertEqual(len(hits), 1)
-        self.assertTrue(hits[0].permitted)
-        self.assertEqual(hits[0].reason, "permitted-compound")
+    def test_display_safe_compound_is_prohibited(self) -> None:
+        hits = _prohibited("already carry only public, display-safe metadata")
+        self.assertEqual([h.phrase for h in hits], ["safe"])
 
     def test_funds_safe_is_prohibited(self) -> None:
         hits = _prohibited("Not a funds-safe issue.")
@@ -166,6 +166,15 @@ class ExclusionBoundaryTests(unittest.TestCase):
         self.assertFalse(scanner.is_excluded("docs/DECISIONS/"))
         self.assertFalse(scanner.is_excluded("docs/AUDIT/"))
 
+    def test_evolving_adrs_are_not_whole_file_excluded(self) -> None:
+        for relative in (
+            "docs/DECISIONS/0001-cbor-and-parser-policy.md",
+            "docs/DECISIONS/0012-address-encoding-and-roundtrip.md",
+            "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md",
+            "docs/PHASE_1_PLAN.md",
+        ):
+            self.assertFalse(scanner.is_excluded(relative), relative)
+
 
 class FilenameAndExtensionTests(unittest.TestCase):
     def test_nul_separated_listing_keeps_newline_filename(self) -> None:
@@ -184,6 +193,85 @@ class FilenameAndExtensionTests(unittest.TestCase):
         self.assertTrue(scanner.is_scan_path(".github/workflows/verify.yml"))
         self.assertTrue(scanner.is_scan_path("package.json"))
         self.assertTrue(scanner.is_scan_path("gradle.properties"))
+
+    def test_mixed_case_extensions_are_scanned_with_original_paths(self) -> None:
+        for relative in ("NOTES.MD", "Config.Xml", "App.SWIFT", "mixed.YmL"):
+            self.assertTrue(scanner.is_scan_path(relative), relative)
+            hits = _prohibited("This is safe.", path=relative)
+            self.assertEqual(hits[0].path, relative)
+            self.assertEqual(hits[0].phrase, "safe")
+
+
+class OccurrenceAllowlistTests(unittest.TestCase):
+    def test_exact_historical_adr_occurrence_passes(self) -> None:
+        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        findings = scanner.scan_text(relative, text)
+        prohibited = scanner.prohibited_findings(findings)
+        self.assertEqual(prohibited, [], "\n".join(f.format() for f in prohibited))
+        allowed = [f for f in findings if f.reason == "allowed-occurrence"]
+        self.assertEqual([f.phrase for f in allowed], ["safe"])
+        self.assertEqual(allowed[0].line, 162)
+
+    def test_edited_historical_line_fails(self) -> None:
+        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
+        original = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        edited = original.replace(
+            'as "safe" or "restricted"',
+            'as "safe" and still safe',
+            1,
+        )
+        self.assertNotEqual(edited, original)
+        prohibited = scanner.prohibited_findings(scanner.scan_text(relative, edited))
+        self.assertTrue(any(f.phrase == "safe" and not f.permitted for f in prohibited))
+
+    def test_appended_positive_claim_in_same_adr_fails(self) -> None:
+        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
+        original = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        appended = original + "\nThis signing path is safe.\n"
+        prohibited = scanner.prohibited_findings(scanner.scan_text(relative, appended))
+        self.assertEqual([f.phrase for f in prohibited], ["safe"])
+        self.assertEqual(prohibited[0].line, original.count("\n") + 2)
+
+    def test_second_occurrence_on_allowed_line_fails(self) -> None:
+        line = "historical wording: safe once"
+        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
+        allowed = frozenset(
+            {
+                (
+                    relative,
+                    scanner.line_content_hash(line),
+                    "safe",
+                    1,
+                )
+            }
+        )
+        single = scanner.prohibited_findings(
+            scanner.scan_text(relative, line + "\n", allowed_keys=allowed)
+        )
+        self.assertEqual(single, [])
+        doubled = line.replace("safe once", "safe once and still safe")
+        # Hash changed, so even occurrence 1 fails — also test same-hash two matches.
+        same_hash_line = "safe token then another safe token"
+        allowed_one = frozenset(
+            {
+                (
+                    relative,
+                    scanner.line_content_hash(same_hash_line),
+                    "safe",
+                    1,
+                )
+            }
+        )
+        hits = scanner.scan_text(relative, same_hash_line + "\n", allowed_keys=allowed_one)
+        self.assertEqual(
+            [(h.phrase, h.permitted, h.reason) for h in hits],
+            [
+                ("safe", True, "allowed-occurrence"),
+                ("safe", False, "restricted-claim"),
+            ],
+        )
+        self.assertTrue(scanner.prohibited_findings(scanner.scan_text(relative, doubled + "\n")))
 
 
 class CurrentTreeTests(unittest.TestCase):

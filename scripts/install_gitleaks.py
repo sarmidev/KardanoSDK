@@ -118,7 +118,21 @@ def _read_zip_member(archive_path: Path) -> bytes:
         return archive.read("gitleaks")
 
 
-def _write_atomic_binary(dest: Path, payload: bytes) -> None:
+def write_all_bytes(fd: int, payload: bytes, write=os.write) -> None:
+    """Write every payload byte. Reject zero/negative progress; retry EINTR."""
+    view = memoryview(payload)
+    offset = 0
+    while offset < len(payload):
+        try:
+            written = write(fd, view[offset:])
+        except InterruptedError:
+            continue
+        if written <= 0:
+            raise InstallError("write made no progress")
+        offset += written
+
+
+def _write_atomic_binary(dest: Path, payload: bytes, write=os.write) -> None:
     if dest.is_symlink():
         raise InstallError("refusing to write through a destination symlink")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -126,14 +140,13 @@ def _write_atomic_binary(dest: Path, payload: bytes) -> None:
     fd = None
     try:
         fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o755)
-        os.write(fd, payload)
+        write_all_bytes(fd, payload, write=write)
         os.fchmod(fd, 0o755)
         os.close(fd)
         fd = None
         if dest.is_symlink():
             raise InstallError("refusing to write through a destination symlink")
         os.replace(str(tmp), str(dest))
-        os.chmod(dest, 0o755)
     except Exception:
         if fd is not None:
             os.close(fd)

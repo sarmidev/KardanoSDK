@@ -90,7 +90,7 @@ third-party GitHub Action wrapper.
 | Checksums file | `https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt` |
 | Checksums file SHA-256 | `061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae` |
 | Licence | MIT (upstream `gitleaks/gitleaks`) |
-| Installer | `scripts/install_gitleaks.py` — verifies the checksums file, then the selected archive, then extracts. The binary is never committed. |
+| Installer | `scripts/install_gitleaks.py` — verifies the checksums file, then the selected archive, reads the member into memory, writes every byte to an exclusive temp sibling, `fchmod`s `0755` on that descriptor, and atomically replaces a non-symlink destination. The binary is never committed. |
 | Why not an Action wrapper | This repo pins Actions by commit SHA already; a wrapper would add a second, unverified tool chain. Installing the CLI lets CI and a local checkout run the same pinned binary. |
 | Scan scope | Full git history (`fetch-depth: 0`, `git fetch --prune --tags origin`, `gitleaks detect --log-opts=--all`). Output is redacted. |
 | Allowlist | Match-level only in `.gitleaks.toml`: the cited CIP-19 payment-credential hex **and** an exact repo-root path (`^…$`). Paths are the cited test files plus `scripts/gitleaks_allowlist.py` (the helper historically embedded the same vector). No directory, rule, or commit exclusions. |

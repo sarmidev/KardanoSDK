@@ -217,6 +217,71 @@ class InstallHelperTests(unittest.TestCase):
                 self._install_fixture(dest, member_mode=0o777)
             self.assertFalse(dest.exists())
 
+    def test_write_all_bytes_retries_partial_writes(self) -> None:
+        chunks: list[bytes] = []
+
+        def write_one(_fd: int, data) -> int:
+            chunks.append(bytes(data[:1]))
+            return 1
+
+        payload = b"abcdef"
+        install_gitleaks.write_all_bytes(3, payload, write=write_one)
+        self.assertEqual(b"".join(chunks), payload)
+        self.assertEqual(len(chunks), len(payload))
+
+    def test_write_all_bytes_rejects_zero_progress(self) -> None:
+        with self.assertRaises(install_gitleaks.InstallError):
+            install_gitleaks.write_all_bytes(3, b"abc", write=lambda _fd, _data: 0)
+
+    def test_write_all_bytes_rejects_negative_progress(self) -> None:
+        with self.assertRaises(install_gitleaks.InstallError):
+            install_gitleaks.write_all_bytes(3, b"abc", write=lambda _fd, _data: -1)
+
+    def test_write_all_bytes_retries_interrupted(self) -> None:
+        calls = {"n": 0}
+
+        def write(_fd: int, data) -> int:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise InterruptedError
+            return len(data)
+
+        install_gitleaks.write_all_bytes(3, b"abc", write=write)
+        self.assertEqual(calls["n"], 2)
+
+    def test_write_failure_closes_and_unlinks_temp(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "gitleaks"
+
+            def boom(_fd: int, _data) -> int:
+                raise OSError("disk full")
+
+            with self.assertRaises(OSError):
+                install_gitleaks._write_atomic_binary(dest, b"payload-bytes", write=boom)
+            self.assertFalse(dest.exists())
+            leftover = list(Path(tmp).glob(".gitleaks.*.tmp"))
+            self.assertEqual(leftover, [])
+
+    def test_partial_write_install_keeps_full_payload_and_mode(self) -> None:
+        original = install_gitleaks.write_all_bytes
+
+        def one_byte_write(fd: int, payload: bytes, write=os.write) -> None:
+            def stepwise(_fd: int, data) -> int:
+                return write(_fd, data[:1])
+
+            original(fd, payload, write=stepwise)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "gitleaks"
+            payload = b"#!/bin/sh\necho fixture\n"
+            try:
+                install_gitleaks.write_all_bytes = one_byte_write  # type: ignore[method-assign]
+                installed = self._install_fixture(dest, payload=payload)
+            finally:
+                install_gitleaks.write_all_bytes = original  # type: ignore[method-assign]
+            self.assertEqual(installed.read_bytes(), payload)
+            self.assertEqual(stat.S_IMODE(installed.stat().st_mode), 0o755)
+
     def test_missing_archive_member_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / "gitleaks"

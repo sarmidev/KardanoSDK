@@ -161,9 +161,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   and archive unit tests, the HANDOFF archive byte check, then
   `scripts/check_restricted_claims.py`. The script classifies each phrase match on its
   own (never a whole-line exclusion), reports `path:line:column`, and prefers the
-  longest phrase. Exclusions are exact files only, each with a rationale in the
-  script. This is a claim-language scan only, not credential scanning
-  (W9-3 / NF-5).
+  longest phrase. Whole-file exclusions are limited to immutable archived
+  snapshots and circular policy/test data. Historical wording in evolving ADRs
+  and append-only logs is allowlisted per occurrence. This is a claim-language
+  scan only, not credential scanning (W9-3 / NF-5).
 - `verify.yml` gained a `credential-scan` job that runs the Gitleaks helper /
   installer / allowlist tests, installs the Gitleaks CLI (`v8.30.1`,
   checksum-verified from the official GitHub release checksums file), and scans
