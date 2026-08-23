@@ -81,8 +81,11 @@ internal enum class RoadmapPhase {
  * [useLiveBlockfrost] and [projectId] mirror the existing "Use live Blockfrost (preprod)"
  * toggle and `project_id` field: the default is the in-memory mock; enabling the toggle with a
  * non-blank [projectId] switches both the query and submit provider to live Blockfrost preprod
- * (see [org.sarmidev.kardano.playground.data.PlaygroundProviderFactory]). [projectId] is held
- * only in this in-memory state — never persisted, saved, or logged.
+ * (see [org.sarmidev.kardano.playground.data.PlaygroundProviderFactory]). [projectId] is the
+ * session field the visitor typed. The provider factory also retains the last live id as an
+ * in-memory cache key so a repeated live request can reuse the same Blockfrost client; that
+ * cache is dropped when the id changes or live mode is disabled. Neither copy is persisted or
+ * logged.
  *
  * ### Operation generations
  *

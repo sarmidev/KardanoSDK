@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.sarmidev.kardano.address.Address
 import org.sarmidev.kardano.playground.PlaygroundPresenter
+import org.sarmidev.kardano.playground.PlaygroundProviderMode
 import org.sarmidev.kardano.playground.data.PlaygroundProviderFactory
+import org.sarmidev.kardano.playground.withProvenance
 import org.sarmidev.kardano.playground.domain.BuildTransactionDraftUseCase
 import org.sarmidev.kardano.playground.domain.QueryWalletFundsUseCase
 import org.sarmidev.kardano.playground.domain.RestoreWalletUseCase
@@ -124,6 +126,11 @@ internal class PlaygroundViewModel(
         projectId = mutableState.value.projectId,
     )
 
+    private fun activeProviderMode(): PlaygroundProviderMode = providerFactory.mode(
+        useLive = mutableState.value.useLiveBlockfrost,
+        projectId = mutableState.value.projectId,
+    )
+
     // --- Guided flow: Wallet -> Funds -> Build -> Sign -> Submit ---
 
     // Restoring the fixture wallet is synchronous (no provider call, no suspend boundary), the
@@ -137,10 +144,11 @@ internal class PlaygroundViewModel(
     private fun onQueryFunds() {
         fundsJob?.cancel()
         val generation = mutableState.value.flowGeneration
+        val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startFundsLoading)
         val provider = activeQueryProvider()
         fundsJob = viewModelScope.launch {
-            val result = queryWalletFunds(provider)
+            val result = queryWalletFunds(provider).withProvenance(mode, generation)
             mutableState.update { PlaygroundReducer.applyFundsResult(it, result, generation) }
         }
     }
@@ -148,10 +156,11 @@ internal class PlaygroundViewModel(
     private fun onBuildDraft() {
         draftJob?.cancel()
         val generation = mutableState.value.flowGeneration
+        val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startDraftLoading)
         val provider = activeQueryProvider()
         draftJob = viewModelScope.launch {
-            val result = buildTransactionDraft(provider)
+            val result = buildTransactionDraft(provider).withProvenance(mode, generation)
             mutableState.update { PlaygroundReducer.applyDraftResult(it, result, generation) }
         }
     }
@@ -159,10 +168,11 @@ internal class PlaygroundViewModel(
     private fun onSignTransaction() {
         signedJob?.cancel()
         val generation = mutableState.value.flowGeneration
+        val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startSignedLoading)
         val provider = activeQueryProvider()
         signedJob = viewModelScope.launch {
-            val result = signTransaction(provider)
+            val result = signTransaction(provider).withProvenance(mode, generation)
             mutableState.update { PlaygroundReducer.applySignedResult(it, result, generation) }
         }
     }
@@ -170,11 +180,12 @@ internal class PlaygroundViewModel(
     private fun onSubmitTransaction() {
         submitJob?.cancel()
         val generation = mutableState.value.flowGeneration
+        val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startSubmitLoading)
         val queryProvider = activeQueryProvider()
         val submitProvider = activeSubmitProvider()
         submitJob = viewModelScope.launch {
-            val result = submitTransaction(queryProvider, submitProvider)
+            val result = submitTransaction(queryProvider, submitProvider).withProvenance(mode, generation)
             mutableState.update { PlaygroundReducer.applySubmitResult(it, result, generation) }
         }
     }
@@ -201,11 +212,13 @@ internal class PlaygroundViewModel(
     private fun onLoadProviderUtxos() {
         providerUtxosJob?.cancel()
         val generation = mutableState.value.flowGeneration
+        val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startProviderUtxosLoading)
         val provider = activeQueryProvider()
         val addressInput = mutableState.value.providerAddressInput
         providerUtxosJob = viewModelScope.launch {
             val result = PlaygroundPresenter.presentProviderUtxos(provider, addressInput)
+                .withProvenance(mode, generation)
             mutableState.update { PlaygroundReducer.applyProviderUtxosResult(it, result, generation) }
         }
     }
@@ -213,10 +226,12 @@ internal class PlaygroundViewModel(
     private fun onLoadProviderParams() {
         providerParamsJob?.cancel()
         val generation = mutableState.value.flowGeneration
+        val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startProviderParamsLoading)
         val provider = activeQueryProvider()
         providerParamsJob = viewModelScope.launch {
             val result = PlaygroundPresenter.presentProviderParams(provider)
+                .withProvenance(mode, generation)
             mutableState.update { PlaygroundReducer.applyProviderParamsResult(it, result, generation) }
         }
     }

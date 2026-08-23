@@ -69,7 +69,8 @@ stay HTTP-free. Per-platform engines: OkHttp (Android), CIO (JVM), Darwin (iOS).
 No key is committed. `BlockfrostConfig.projectId` is supplied at runtime, for both the
 read-only and the submit provider:
 
-- Android: the Playground `project_id` field (non-persistent Compose state; not stored/logged).
+- Android: the Playground `project_id` field (session memory in `PlaygroundState` plus an
+  in-memory factory cache key; never persisted or logged).
 - Local integration test: the `BLOCKFROST_PROJECT_ID` environment variable (opt-in, read-only
   path only — see above for why `submit` has no equivalent automated live test).
 - Default unit tests: a Ktor `MockEngine` + committed sanitized fixtures — no network, no key.

@@ -102,17 +102,37 @@ internal sealed interface WalletPresentation {
 internal sealed interface ProviderUtxosPresentation {
     data object Empty : ProviderUtxosPresentation
     data object Loading : ProviderUtxosPresentation
-    data class Success(val rows: List<LabeledRow>) : ProviderUtxosPresentation
-    data class NoUtxos(val message: String) : ProviderUtxosPresentation
-    data class Failure(val message: String) : ProviderUtxosPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderUtxosPresentation
+    data class NoUtxos(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderUtxosPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderUtxosPresentation
 }
 
 /** Result of presenting a [ChainQueryProvider.getProtocolParameters] call. */
 internal sealed interface ProviderParamsPresentation {
     data object Empty : ProviderParamsPresentation
     data object Loading : ProviderParamsPresentation
-    data class Success(val rows: List<LabeledRow>) : ProviderParamsPresentation
-    data class Failure(val message: String) : ProviderParamsPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderParamsPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderParamsPresentation
 }
 
 /**
@@ -127,8 +147,16 @@ internal sealed interface ProviderParamsPresentation {
 internal sealed interface WalletBalancePresentation {
     data object Empty : WalletBalancePresentation
     data object Loading : WalletBalancePresentation
-    data class Success(val rows: List<LabeledRow>) : WalletBalancePresentation
-    data class Failure(val message: String) : WalletBalancePresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : WalletBalancePresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : WalletBalancePresentation
 }
 
 /**
@@ -147,8 +175,16 @@ internal sealed interface WalletBalancePresentation {
 internal sealed interface TransactionDraftPresentation {
     data object Empty : TransactionDraftPresentation
     data object Loading : TransactionDraftPresentation
-    data class Success(val rows: List<LabeledRow>) : TransactionDraftPresentation
-    data class Failure(val message: String) : TransactionDraftPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : TransactionDraftPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : TransactionDraftPresentation
 }
 
 /**
@@ -167,8 +203,16 @@ internal sealed interface TransactionDraftPresentation {
 internal sealed interface SignedTransactionPresentation {
     data object Empty : SignedTransactionPresentation
     data object Loading : SignedTransactionPresentation
-    data class Success(val rows: List<LabeledRow>) : SignedTransactionPresentation
-    data class Failure(val message: String) : SignedTransactionPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SignedTransactionPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SignedTransactionPresentation
 }
 
 /**
@@ -187,8 +231,16 @@ internal sealed interface SignedTransactionPresentation {
 internal sealed interface SubmitTransactionPresentation {
     data object Empty : SubmitTransactionPresentation
     data object Loading : SubmitTransactionPresentation
-    data class Success(val rows: List<LabeledRow>) : SubmitTransactionPresentation
-    data class Failure(val message: String) : SubmitTransactionPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SubmitTransactionPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SubmitTransactionPresentation
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.sarmidev.kardano.playground.LabeledRow
+import org.sarmidev.kardano.playground.PlaygroundProviderMode
 import org.sarmidev.kardano.playground.SignedTransactionPresentation
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
 import org.sarmidev.kardano.playground.TransactionDraftPresentation
@@ -25,6 +26,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -315,7 +317,11 @@ class PlaygroundViewModelTest {
         assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
         assertEquals(1L, vm.state.value.flowGeneration)
 
-        val latest = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "latest")))
+        val latest = WalletBalancePresentation.Success(
+            rows = listOf(LabeledRow("Balance", "latest")),
+            providerMode = PlaygroundProviderMode.Mock,
+            flowGeneration = 1L,
+        )
         vm.dispatch(PlaygroundIntent.QueryFunds)
         assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
         assertEquals(1L, vm.state.value.flowGeneration)
@@ -324,7 +330,7 @@ class PlaygroundViewModelTest {
         advanceUntilIdle()
         assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
 
-        second.complete(latest)
+        second.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "latest"))))
         advanceUntilIdle()
         assertEquals(latest, vm.state.value.funds)
         assertEquals(1L, vm.state.value.flowGeneration)
@@ -349,5 +355,24 @@ class PlaygroundViewModelTest {
 
         val expectedLive = factory.queryProvider(useLive = true, projectId = "test-project-id")
         assertTrue(received === expectedLive, "expected the same live provider instance the factory returns")
+        val funds = assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+        assertEquals(PlaygroundProviderMode.LivePreprod, funds.providerMode)
+        assertEquals(vm.state.value.flowGeneration, funds.flowGeneration)
+    }
+
+    @Test
+    fun queryFunds_defaultState_stampsMockProvenance() = runTest {
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "0 lovelace")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+
+        val funds = assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+        assertEquals(PlaygroundProviderMode.Mock, funds.providerMode)
+        assertEquals(0L, funds.flowGeneration)
+        assertEquals(0L, vm.state.value.flowGeneration)
     }
 }

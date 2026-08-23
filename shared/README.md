@@ -95,11 +95,13 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   exist so `PlaygroundViewModel` can be unit-tested with fakes (see `PlaygroundViewModelTest`,
   `jvmTest`) without reimplementing or duplicating any `:wallet`/`:tx`/`:provider` call.
 - `playground/data/PlaygroundProviderFactory.kt` — moves the provider-selection logic (mock by
-  default; live Blockfrost preprod once the toggle is on and `project_id` is non-blank, cached
-  per `project_id` the same way the previous `remember(projectId)` block was) out of the Compose
-  layer, so `PlaygroundViewModel` can build a `ChainQueryProvider`/`TxSubmitProvider` pair from
-  `PlaygroundState` without a `remember`. The `project_id` string is still never stored, saved,
-  or logged.
+  default; live Blockfrost preprod once the toggle is on and `project_id` is non-blank) out of
+  the Compose layer, so `PlaygroundViewModel` can build a `ChainQueryProvider`/`TxSubmitProvider`
+  pair from `PlaygroundState` without a `remember`. Live clients are cached by the last non-blank
+  id and dropped when that id changes or live mode is disabled. The session field lives in
+  `PlaygroundState`; the factory also keeps an in-memory cache key. Neither copy is persisted or
+  logged. Provider-backed results carry `PlaygroundProviderMode` (`Mock` / `LivePreprod`) plus
+  the captured `flowGeneration`.
 - `PlaygroundPresenter.kt` is **retained unchanged as the display-mapping layer** — every use
   case and every diagnostics intent still calls into it, and every existing `PlaygroundPresenter`
   test below (`PlaygroundPresenterTest`, `PlaygroundProviderPresenterTest`,
