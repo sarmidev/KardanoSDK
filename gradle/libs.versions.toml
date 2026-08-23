@@ -1,17 +1,18 @@
 [versions]
-agp = "9.0.1"
-android-compileSdk = "36"
+# Compatibility group resolved 2026-08-23 from Maven Central / Google Maven /
+# services.gradle.org. AGP 9.3 requires Gradle >= 9.5.0 and supports API 37.
+# API 37 is published as platforms/android-37.0 (minor 0). See
+# docs/DEPENDENCY_REVIEW.md.
+agp = "9.3.1"
+android-compileSdk = "37"
+android-compileSdkMinor = "0"
 android-minSdk = "24"
-android-targetSdk = "36"
+android-targetSdk = "37"
 androidx-activity = "1.13.0"
-androidx-appcompat = "1.7.1"
-androidx-core = "1.19.0"
-androidx-espresso = "3.7.0"
-androidx-lifecycle = "2.11.0-beta01"
+androidx-lifecycle = "2.11.0"
 androidx-testExt = "1.3.0"
 composeMultiplatform = "1.11.1"
-junit = "4.13.2"
-kotlin = "2.4.0"
+kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 kotlincrypto-blake2 = "0.8.0"
@@ -24,7 +25,9 @@ ionspin-libsodium = "0.9.5"
 # on-device execution on API 24/35/36. See ADR-0010 for the full evidence.
 lazysodium-android = "5.2.0"
 jna = "5.17.0"
-ktor = "3.5.1"
+ktor = "3.5.2"
+# Latest Compose Multiplatform 1.11.x Material3 artifact. 1.12.0-alpha03 tracks
+# Compose 1.12.0-rc01 and is outside this compatibility group.
 material3 = "1.11.0-alpha07"
 # ADR-0016 §9 (Block 1.10b backend adoption): the pre-generated UniFFI bindings in
 # :crypto-signing-backend use kotlinx.atomicfu for their handle-map counter. Version matches what
@@ -33,7 +36,6 @@ atomicfu = "0.26.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
-kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 kotlinx-coroutinesTest = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 kotlincrypto-blake2 = { module = "org.kotlincrypto.hash:blake2", version.ref = "kotlincrypto-blake2" }
@@ -63,11 +65,7 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
-junit = { module = "junit:junit", version.ref = "junit" }
-androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-testExt-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
-androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }
-androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
 androidx-lifecycle-viewmodelCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }

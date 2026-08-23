@@ -76,7 +76,7 @@ Every client installs Ktor `HttpTimeout` from existing `ktor-client-core` (no ex
 dependency): connect 10 seconds, request 30 seconds, socket 30 seconds. There is no
 Ktor `HttpRequestRetry` plugin. That plugin policy is separate from engine-level
 replay: the Android OkHttp engine sets `engine { config { retryOnConnectionFailure(false) } }`
-so the effective Ktor engine client has retry disabled (Ktor 3.5.1 reapplies `true` after
+so the effective Ktor engine client has retry disabled (Ktor 3.5.2 reapplies `true` after
 a preconfigured client). A preconfigured client with retry disabled is kept as defense
 in depth. CIO (JVM) and Darwin (iOS) do not enable an equivalent automatic request
 replay. Timeout failures map to typed `Transport` errors; coroutine cancellation is

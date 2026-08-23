@@ -63,7 +63,7 @@ Read these first:
 - Manual owner device pass still outstanding: TalkBack, VoiceOver, 200% font, 360dp,
   light/dark, in-flight Reset, Mock→Live→Mock, and landing keyboard/hash navigation.
 - Live Blockfrost connect/socket timeouts still depend on the platform engine honoring
-  `HttpTimeout`. OkHttp replay disablement is asserted on the effective Ktor 3.5.1
+  `HttpTimeout`. OkHttp replay disablement is asserted on the effective Ktor 3.5.2
   engine client, not by inducing a live connection failure. Opt-in
   `BLOCKFROST_PROJECT_ID` live tests and the manual Android submit checkpoint remain
   the only live-network coverage.
@@ -101,13 +101,11 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
-  Prompt 5 `90fe0ee`).** Commit 1 re-resolved Action releases live (not from
-  older audit notes), upgraded checkout/setup-java/setup-gradle/Pages Actions
-  to Node 24 runtimes, recorded composite metadata (Pages upload no longer
-  uses floating `upload-artifact@v4`), set setup-gradle cache inputs
-  explicitly, and added `scripts/check_action_pins.py`. `gradle/actions` v6
-  is not adopted. Remaining commits: build-platform upgrades, crypto review,
-  lockfiles, Android lint CI.
+  Prompt 5 `90fe0ee`).** Commit 1 re-resolved Action releases live and added
+  the pin checker. Commit 2 upgrades Gradle 9.7.1 / AGP 9.3.1 / Kotlin 2.4.10
+  / compile+target SDK 37.0 / lifecycle 2.11.0 / Ktor 3.5.2, removes unused
+  catalog entries, and keeps Compose 1.11.1 + Material3 1.11.0-alpha07 as
+  one group. Remaining commits: crypto review, lockfiles, Android lint CI.
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
   `3936047`) — four original commits complete, plus review-fix commits.**
   - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now

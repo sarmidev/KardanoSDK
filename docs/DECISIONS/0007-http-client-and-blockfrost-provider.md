@@ -245,7 +245,9 @@ preconfigured client with retry disabled is therefore overwritten. The Android
 `defaultHttpClient` now also sets `engine { config { retryOnConnectionFailure(false) } }`
 so the effective engine client has retry disabled; the preconfigured client remains as
 defense in depth. Tests assert that reconstructed Ktor apply-order on the live
-`HttpClient` engine config, not a live connection-failure replay.
+`HttpClient` engine config, not a live connection-failure replay. The 2026-08-23
+build-platform pin is Ktor 3.5.2; the same default `config` lambda and apply order
+are still present in that patch.
 
 The exact-cap one-item probe treats HTTP 404 as empty/end-of-results, matching ordinary
 `getUtxos` pagination, and returns `Ok` at the cap. Non-404 probe failures stay typed

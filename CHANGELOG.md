@@ -58,7 +58,7 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   no new dependency): connect 10s, request 30s, socket 30s. Timeout failures map to typed
   `Transport` errors. There is no Ktor `HttpRequestRetry` plugin. Android OkHttp is built
   with `engine { config { retryOnConnectionFailure(false) } }` so the effective Ktor
-  OkHttp engine client has retry disabled (Ktor 3.5.1 reapplies `true` after a
+  OkHttp engine client has retry disabled (Ktor 3.5.2 reapplies `true` after a
   preconfigured client; a preconfigured client with retry disabled is kept as defense
   in depth). That is engine-level, distinct from the Ktor plugin. CIO and Darwin do
   not enable an equivalent automatic request replay. Coroutine cancellation is still
@@ -100,6 +100,18 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- Build-platform compatibility group (2026-08-23): Gradle wrapper 9.1.0 → 9.7.1
+  (distribution SHA-256 `acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a`
+  from `services.gradle.org`), AGP 9.0.1 → 9.3.1, Kotlin 2.4.0 → 2.4.10,
+  Android compile/target SDK 36 → 37 (compile uses `minorApiLevel = 0` because
+  the published platform is `android-37.0`), JetBrains lifecycle Compose
+  2.11.0-beta01 → 2.11.0, Ktor 3.5.1 → 3.5.2. Compose Multiplatform stays
+  1.11.1 and Material3 stays 1.11.0-alpha07 (1.12 artifacts are rc/alpha and
+  outside this group). Unused catalog entries
+  (`androidx-appcompat`, `androidx-core-ktx`, Espresso, JUnit 4,
+  `kotlin-test-junit`) were removed rather than upgraded. Android 17
+  target-sdk notes were reviewed from the published documentation; no
+  device execution is claimed.
 - **Breaking (pre-alpha):** `ProviderError.RemoteStatus` is now
   `RemoteStatus(code: Int, detail: String? = null)`. Existing source call sites that pass
   only `code` remain source-compatible because `detail` defaults to `null`. This is still

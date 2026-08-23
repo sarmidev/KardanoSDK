@@ -140,3 +140,67 @@ The checker walks `.github/workflows/*.{yml,yaml}` and
 `.github/actions/**/action.yml`. Local `./` composites are allowed; their
 own external `uses:` still need a recorded SHA. A recorded composite
 with a non-SHA transitive entry is a finding.
+
+## Build platform and UI/network pins (2026-08-23)
+
+Resolved live from `https://services.gradle.org/versions/current`,
+`https://services.gradle.org/distributions/gradle-9.7.1-bin.zip.sha256`,
+Google Maven `maven-metadata.xml`, and Maven Central `maven-metadata.xml`.
+Pre-upgrade `androidApp:lintDebug` on this host reported 0 errors / 36
+warnings and named several of these upgrades (Gradle 9.7.1, AGP 9.3.1,
+Kotlin 2.4.10, lifecycle 2.11.0, Ktor 3.5.2, OldTargetApi 36).
+
+| Coordinate | Before | After | Source |
+|---|---|---|---|
+| Gradle wrapper | 9.1.0 (`a17ddd85…c806`) | 9.7.1 (`acd53f1e…d20a`) | services.gradle.org current + `.sha256` file |
+| AGP (`com.android.application` / `com.android.kotlin.multiplatform.library`) | 9.0.1 | 9.3.1 | Google Maven last stable (9.4/9.5 are alpha/rc) |
+| Kotlin | 2.4.0 | 2.4.10 | Maven Central last stable (2.4.20 is RC) |
+| Android compile/target SDK | 36 | 37 (compile minor 0) | Installed `platforms/android-37.0`; AGP 9.3 max API 37; min AGP for 37.0 is 9.1.1 |
+| JetBrains lifecycle Compose | 2.11.0-beta01 | 2.11.0 | Maven Central `org.jetbrains.androidx.lifecycle` |
+| Ktor | 3.5.1 | 3.5.2 | Maven Central; 3.5.2 changelog has no OkHttp retry-default change |
+| Compose Multiplatform | 1.11.1 | 1.11.1 | Latest 1.11 stable; 1.12.0-rc01 left out of this group |
+| Compose Material3 | 1.11.0-alpha07 | 1.11.0-alpha07 | Latest 1.11-line artifact; 1.12.0-alpha03 tracks Compose 1.12 |
+| androidx.activity:activity-compose | 1.13.0 | 1.13.0 | Google Maven latest stable |
+| kotlinx-coroutines / serialization | 1.11.0 | 1.11.0 | Maven Central latest stable |
+| foojay-resolver-convention | 1.0.0 | 1.0.0 | Gradle Plugin Portal latest |
+
+Removed unused catalog entries rather than upgrading them:
+`androidx-appcompat`, `androidx-core` / `androidx-core-ktx`,
+`androidx-espresso` / `androidx-espresso-core`, `junit`,
+`kotlin-testJunit`. No call site referenced them.
+
+Crypto / native-support pins (KotlinCrypto, IonSpin, Bouncy Castle, JNA,
+atomicfu, bip32, LazySodium) are unchanged in this commit.
+
+AGP 9.3 requires Gradle >= 9.5.0 (documented on
+https://developer.android.com/build/releases/about-agp). The installed
+platform directory is `android-37.0`, not `android-37`. Modules set
+`compileSdk { version = release(37) { minorApiLevel = 0 } }`. Application
+`targetSdk` uses `release(37)` (that DSL has no minor lambda). Configure,
+`:androidApp:assembleDebug`, and `:desktopApp:compileKotlin` succeeded on
+this host after the upgrade.
+
+Android 17 (`targetSdk` 37) published target-sdk notes reviewed, not
+executed on a device: lock-free `MessageQueue`; `static final` fields
+cannot be changed via reflection/JNI; `ACCESS_LOCAL_NETWORK` for LAN;
+large-screen orientation/aspect/resizability constraints cannot be opted
+out of (`sw >= 600dp`); SMS OTP delay; BluetoothSocket `read` alignment.
+This Playground uses INTERNET to Blockfrost HTTPS, does not reflect on
+`MessageQueue`, and does not modify `static final` fields. No device or
+emulator execution is claimed.
+
+Residual toolchain notes (not blockers): Kotlin/AGP now warn that
+`androidLibrary {}` is deprecated in favor of `android {}`; Gradle 9.6+
+warns on `cinterop.creating` delegates in `:crypto`. Those are not
+migrated here (broad rename / native-source-set behavior). The
+`gradlew wrapper` task rewrote `gradlew` / `gradlew.bat` / the wrapper
+jar; `gradlew.bat` keeps upstream trailing spaces on several `@rem`
+lines, scoped in `.gitattributes` so `git diff --check` stays clean
+without editing the generated script.
+
+## Android 17 target notes (no device run)
+
+Source: https://developer.android.com/about/versions/17/behavior-changes-17
+and https://developer.android.com/about/versions/17/behavior-changes-all
+fetched 2026-08-23. This is a documentation review of the published
+notes, not a runtime pass.

@@ -98,6 +98,12 @@ This policy is mandatory for any security-sensitive unit (checksums, CBOR, addre
 
 ## Verification commands
 
+The wrapper is Gradle **9.7.1** (`distributionSha256Sum` in
+`gradle/wrapper/gradle-wrapper.properties`, checksum file
+`https://services.gradle.org/distributions/gradle-9.7.1-bin.zip.sha256`).
+AGP is **9.3.1**, Kotlin **2.4.10**, Android compile/target API **37**
+(compile `minorApiLevel = 0` for `platforms/android-37.0`).
+
 Run tests per module. iOS simulator tests require macOS with Xcode.
 
 - Core (JVM) tests: `./gradlew :core:jvmTest`
@@ -131,7 +137,7 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
   budget. Public detail stays within 500 characters; a filled byte budget is not parsed
   as JSON.
 - `BlockfrostOkHttpEngineTest` (androidHostTest) asserts the effective OkHttp client
-  Ktor 3.5.1 would build from the production `defaultHttpClient` engine config
+  Ktor 3.5.2 would build from the production `defaultHttpClient` engine config
   (`retryOnConnectionFailure == false` after Ktor's default `config` lambda), and that
   a preconfigured client alone is overwritten by that default. The standalone
   `blockfrostOkHttpClient()` helper is still asserted as defense in depth. That is the
