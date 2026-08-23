@@ -193,9 +193,11 @@ and prefers the longest phrase. It enumerates tracked files with
 `.yml`, `.json`) while reporting the original path. Whole-file exclusions are
 limited to immutable archived snapshots and circular policy/test data.
 Historical wording in evolving ADRs and append-only logs is allowlisted per
-occurrence (path + SHA-256 of the exact line + phrase + 1-based occurrence on
-that line). Hyphen compounds are not exempt. CI runs the unit tests and the
-archive byte check before the scan. It does not scan credentials.
+occurrence (path + 1-based physical line number + SHA-256 of the exact line +
+phrase + 1-based occurrence on that line). Duplicating an allowlisted line
+elsewhere, or inserting a line before it, is a finding until the allowlist is
+re-reviewed (fail-closed). Hyphen compounds are not exempt. CI runs the unit
+tests and the archive byte check before the scan. It does not scan credentials.
 
 `scripts/check_handoff_archive.py` restores the six documented archive link
 rewrites at the byte level (no newline normalization) and hashes the result

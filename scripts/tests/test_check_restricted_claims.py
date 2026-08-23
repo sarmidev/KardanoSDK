@@ -203,67 +203,68 @@ class FilenameAndExtensionTests(unittest.TestCase):
 
 
 class OccurrenceAllowlistTests(unittest.TestCase):
-    def test_exact_historical_adr_occurrence_passes(self) -> None:
-        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
-        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        findings = scanner.scan_text(relative, text)
+    ADR = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
+
+    def test_exact_allowed_line_at_exact_line_number_passes(self) -> None:
+        text = (REPO_ROOT / self.ADR).read_text(encoding="utf-8")
+        findings = scanner.scan_text(self.ADR, text)
         prohibited = scanner.prohibited_findings(findings)
         self.assertEqual(prohibited, [], "\n".join(f.format() for f in prohibited))
         allowed = [f for f in findings if f.reason == "allowed-occurrence"]
         self.assertEqual([f.phrase for f in allowed], ["safe"])
         self.assertEqual(allowed[0].line, 162)
 
+    def test_duplicate_identical_line_elsewhere_fails(self) -> None:
+        original = (REPO_ROOT / self.ADR).read_text(encoding="utf-8")
+        allowed_line = original.splitlines()[161]
+        duplicated = original + "\n" + allowed_line + "\n"
+        findings = scanner.scan_text(self.ADR, duplicated)
+        allowed = [f for f in findings if f.reason == "allowed-occurrence"]
+        prohibited = scanner.prohibited_findings(findings)
+        self.assertEqual([f.line for f in allowed], [162])
+        self.assertEqual([f.phrase for f in prohibited], ["safe"])
+        self.assertGreater(prohibited[0].line, 162)
+
+    def test_shifted_line_number_fails(self) -> None:
+        original = (REPO_ROOT / self.ADR).read_text(encoding="utf-8")
+        shifted = "Inserted line for fail-closed numbering.\n" + original
+        prohibited = scanner.prohibited_findings(scanner.scan_text(self.ADR, shifted))
+        self.assertTrue(any(f.phrase == "safe" and f.line == 163 for f in prohibited))
+
     def test_edited_historical_line_fails(self) -> None:
-        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
-        original = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        original = (REPO_ROOT / self.ADR).read_text(encoding="utf-8")
         edited = original.replace(
             'as "safe" or "restricted"',
             'as "safe" and still safe',
             1,
         )
         self.assertNotEqual(edited, original)
-        prohibited = scanner.prohibited_findings(scanner.scan_text(relative, edited))
+        prohibited = scanner.prohibited_findings(scanner.scan_text(self.ADR, edited))
         self.assertTrue(any(f.phrase == "safe" and not f.permitted for f in prohibited))
 
     def test_appended_positive_claim_in_same_adr_fails(self) -> None:
-        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
-        original = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        original = (REPO_ROOT / self.ADR).read_text(encoding="utf-8")
         appended = original + "\nThis signing path is safe.\n"
-        prohibited = scanner.prohibited_findings(scanner.scan_text(relative, appended))
+        prohibited = scanner.prohibited_findings(scanner.scan_text(self.ADR, appended))
         self.assertEqual([f.phrase for f in prohibited], ["safe"])
         self.assertEqual(prohibited[0].line, original.count("\n") + 2)
 
     def test_second_occurrence_on_allowed_line_fails(self) -> None:
-        line = "historical wording: safe once"
-        relative = "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md"
-        allowed = frozenset(
-            {
-                (
-                    relative,
-                    scanner.line_content_hash(line),
-                    "safe",
-                    1,
-                )
-            }
-        )
-        single = scanner.prohibited_findings(
-            scanner.scan_text(relative, line + "\n", allowed_keys=allowed)
-        )
-        self.assertEqual(single, [])
-        doubled = line.replace("safe once", "safe once and still safe")
-        # Hash changed, so even occurrence 1 fails — also test same-hash two matches.
         same_hash_line = "safe token then another safe token"
         allowed_one = frozenset(
             {
                 (
-                    relative,
+                    self.ADR,
+                    1,
                     scanner.line_content_hash(same_hash_line),
                     "safe",
                     1,
                 )
             }
         )
-        hits = scanner.scan_text(relative, same_hash_line + "\n", allowed_keys=allowed_one)
+        hits = scanner.scan_text(
+            self.ADR, same_hash_line + "\n", allowed_keys=allowed_one
+        )
         self.assertEqual(
             [(h.phrase, h.permitted, h.reason) for h in hits],
             [
@@ -271,7 +272,6 @@ class OccurrenceAllowlistTests(unittest.TestCase):
                 ("safe", False, "restricted-claim"),
             ],
         )
-        self.assertTrue(scanner.prohibited_findings(scanner.scan_text(relative, doubled + "\n")))
 
 
 class CurrentTreeTests(unittest.TestCase):

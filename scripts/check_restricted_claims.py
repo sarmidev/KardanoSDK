@@ -9,10 +9,14 @@ not a nested "safe". Markdown emphasis inside a phrase is ignored for
 matching; reported columns refer to the original line.
 
 Hyphen compounds are not exempt. Historical wording that cannot be
-rewritten is allowlisted per occurrence: repository-relative path + SHA-256
-of the exact line bytes + restricted phrase + 1-based occurrence of that
-phrase on the line. Editing the line, appending a new line, or adding a
-second match of the same phrase on an allowlisted line is a finding.
+rewritten is allowlisted per occurrence: repository-relative path +
+1-based physical line number + SHA-256 of the exact line bytes +
+restricted phrase + 1-based occurrence of that phrase on the line.
+Editing the line, duplicating it elsewhere, appending a new claim, or
+adding a second match of the same phrase on an allowlisted line is a
+finding. Inserting a line before an allowlisted occurrence shifts the
+physical line number and is fail-closed until the allowlist is
+re-reviewed.
 """
 
 from __future__ import annotations
@@ -97,16 +101,20 @@ EMPHASIS_CHARS = frozenset("*_`")
 @dataclass(frozen=True)
 class AllowedOccurrence:
     path: str
+    line: int
     line_sha256: str
     phrase: str
     occurrence: int
     rationale: str
 
 
-# Fingerprints are SHA-256 of the exact line text (UTF-8, no terminator).
+# Key: path + 1-based physical line + SHA-256 of the exact line text
+# (UTF-8, no terminator) + phrase + 1-based phrase occurrence on that line.
+# Line numbers were verified against the current tree on 2026-08-23.
 ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     AllowedOccurrence(
         path="docs/DECISIONS/0001-cbor-and-parser-policy.md",
+        line=43,
         line_sha256="7d60535476c7e82bff82d51140769a7586bea13f709814112ce5e62001d13c3d",
         phrase="audited",
         occurrence=1,
@@ -114,6 +122,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/DECISIONS/0012-address-encoding-and-roundtrip.md",
+        line=95,
         line_sha256="54e0a7d8d2fd9c6174e3b405e3c3fbb57962e81bed5ffca90052962ed06c28ed",
         phrase="safe",
         occurrence=1,
@@ -121,6 +130,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md",
+        line=162,
         line_sha256="c616f1a4dd13029603647ba8b6f6aebecaea8e81835e1511bd1855abf38c5464",
         phrase="safe",
         occurrence=1,
@@ -128,6 +138,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=499,
         line_sha256="ffddc90a8034d71a5b1ac686fdd9bca0d2aae31e0237bc4aaaf98a00a301e1d6",
         phrase="guaranteed",
         occurrence=1,
@@ -135,6 +146,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=594,
         line_sha256="06013b5013fa51aac397e1e0faf2f16c868d84f95cd5bb2d316589c6e029860c",
         phrase="safe",
         occurrence=1,
@@ -142,6 +154,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1382,
         line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
         phrase="secure",
         occurrence=1,
@@ -149,6 +162,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1382,
         line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
         phrase="safe",
         occurrence=1,
@@ -156,6 +170,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1382,
         line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
         phrase="hardened",
         occurrence=1,
@@ -163,6 +178,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1382,
         line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
         phrase="audited",
         occurrence=1,
@@ -170,6 +186,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1383,
         line_sha256="eb5439e8b8fe6825133fc6da007ece68026aa0244dc8ea2d8f7d349b2fb991d1",
         phrase="production-ready",
         occurrence=1,
@@ -177,6 +194,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1383,
         line_sha256="eb5439e8b8fe6825133fc6da007ece68026aa0244dc8ea2d8f7d349b2fb991d1",
         phrase="guaranteed",
         occurrence=1,
@@ -184,6 +202,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1383,
         line_sha256="eb5439e8b8fe6825133fc6da007ece68026aa0244dc8ea2d8f7d349b2fb991d1",
         phrase="cryptographically safe",
         occurrence=1,
@@ -191,6 +210,39 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1430,
+        line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
+        phrase="secure",
+        occurrence=1,
+        rationale="Second dated copy-review note quoting the restricted-claim list.",
+    ),
+    AllowedOccurrence(
+        path="docs/PHASE_1_PLAN.md",
+        line=1430,
+        line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
+        phrase="safe",
+        occurrence=1,
+        rationale="Second dated copy-review note quoting the restricted-claim list.",
+    ),
+    AllowedOccurrence(
+        path="docs/PHASE_1_PLAN.md",
+        line=1430,
+        line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
+        phrase="hardened",
+        occurrence=1,
+        rationale="Second dated copy-review note quoting the restricted-claim list.",
+    ),
+    AllowedOccurrence(
+        path="docs/PHASE_1_PLAN.md",
+        line=1430,
+        line_sha256="a4678abbffdeaff5767b39f6b696e91c545f0ae6446b86e413330943dc3c67d4",
+        phrase="audited",
+        occurrence=1,
+        rationale="Second dated copy-review note quoting the restricted-claim list.",
+    ),
+    AllowedOccurrence(
+        path="docs/PHASE_1_PLAN.md",
+        line=1431,
         line_sha256="f9dc97bc50bbf7996c20954c1865562c6ad6c5aa465ae88f4163d37663687b37",
         phrase="production-ready",
         occurrence=1,
@@ -198,6 +250,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1431,
         line_sha256="f9dc97bc50bbf7996c20954c1865562c6ad6c5aa465ae88f4163d37663687b37",
         phrase="guaranteed",
         occurrence=1,
@@ -205,6 +258,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1431,
         line_sha256="f9dc97bc50bbf7996c20954c1865562c6ad6c5aa465ae88f4163d37663687b37",
         phrase="cryptographically safe",
         occurrence=1,
@@ -212,6 +266,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
     AllowedOccurrence(
         path="docs/PHASE_1_PLAN.md",
+        line=1520,
         line_sha256="3734e748dfca2cead1ee717b4e3696a5d3abb9dc1c1c6bebced6c52b89d4ab15",
         phrase="safe",
         occurrence=1,
@@ -222,6 +277,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
             "crypto/src/androidMain/kotlin/org/sarmidev/kardano/crypto/internal/"
             "pbkdf2/Pbkdf2HmacSha512.android.kt"
         ),
+        line=12,
         line_sha256="3a3933323de4a6e8783b5d2ec76b09203c903432ecb373ef71170814b6e83195",
         phrase="guaranteed",
         occurrence=1,
@@ -232,6 +288,7 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
             "shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/"
             "PlaygroundWalletPresenterTest.kt"
         ),
+        line=138,
         line_sha256="d247a6158c9e5e4220d7d8f79cd2927053f8fd2c0f6964b1f5d7d418c27e21ae",
         phrase="safe",
         occurrence=1,
@@ -239,8 +296,9 @@ ALLOWED_OCCURRENCES: tuple[AllowedOccurrence, ...] = (
     ),
 )
 
-ALLOWED_OCCURRENCE_KEYS: frozenset[tuple[str, str, str, int]] = frozenset(
-    (item.path, item.line_sha256, item.phrase, item.occurrence)
+# (path, line, line_sha256, phrase, occurrence)
+ALLOWED_OCCURRENCE_KEYS: frozenset[tuple[str, int, str, str, int]] = frozenset(
+    (item.path, item.line, item.line_sha256, item.phrase, item.occurrence)
     for item in ALLOWED_OCCURRENCES
 )
 
@@ -361,16 +419,17 @@ def find_matches_in_text(text: str) -> list[tuple[int, int, str, bool, str]]:
 
 def apply_occurrence_allowlist(
     relative_path: str,
+    line_no: int,
     line: str,
     phrase: str,
     occurrence: int,
     permitted: bool,
     reason: str,
-    allowed_keys: frozenset[tuple[str, str, str, int]],
+    allowed_keys: frozenset[tuple[str, int, str, str, int]],
 ) -> tuple[bool, str]:
     if permitted:
         return permitted, reason
-    key = (relative_path, line_content_hash(line), phrase, occurrence)
+    key = (relative_path, line_no, line_content_hash(line), phrase, occurrence)
     if key in allowed_keys:
         return True, "allowed-occurrence"
     return False, reason
@@ -379,7 +438,7 @@ def apply_occurrence_allowlist(
 def scan_text(
     relative_path: str,
     text: str,
-    allowed_keys: frozenset[tuple[str, str, str, int]] | None = None,
+    allowed_keys: frozenset[tuple[str, int, str, str, int]] | None = None,
 ) -> list[Finding]:
     keys = ALLOWED_OCCURRENCE_KEYS if allowed_keys is None else allowed_keys
     findings: list[Finding] = []
@@ -391,6 +450,7 @@ def scan_text(
                 occurrence = phrase_counts[phrase]
                 permitted, reason = apply_occurrence_allowlist(
                     relative_path,
+                    line_no,
                     line,
                     phrase,
                     occurrence,
@@ -425,7 +485,7 @@ def list_tracked_scan_paths(root: Path) -> list[str]:
 def scan_paths(
     root: Path,
     relative_paths: list[str],
-    allowed_keys: frozenset[tuple[str, str, str, int]] | None = None,
+    allowed_keys: frozenset[tuple[str, int, str, str, int]] | None = None,
 ) -> list[Finding]:
     findings: list[Finding] = []
     for relative in relative_paths:

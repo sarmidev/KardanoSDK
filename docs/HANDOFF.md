@@ -122,12 +122,15 @@ Date: 2026-08-23
   - **Review-fix 2 — archive, CI, and docs (`76dc040`).** Byte-level archive
     restore/hash; path-scoped `.gitattributes` for the archive trailing blank
     line; CI runs the scanner/archive tests before scans.
-  - **Review-fix 3 — occurrence allowlist and installer writes (this commit).**
+  - **Review-fix 3 — occurrence allowlist and installer writes (`857ef82`).**
     Evolving ADRs and the append-only Phase 1 log are scanned; historical
-    wording is allowlisted by path + line SHA-256 + phrase + occurrence.
-    Hyphen compounds are not exempt. Suffix matching is case-insensitive.
-    The installer loops `os.write` to completion and sets mode `0755` on the
-    open temp descriptor only.
+    wording is allowlisted per occurrence. Hyphen compounds are not exempt.
+    Suffix matching is case-insensitive. The installer loops `os.write` to
+    completion and sets mode `0755` on the open temp descriptor only.
+  - **Review-fix 4 — line-numbered occurrence keys (this commit).** The
+    allowlist key is path + 1-based physical line + line SHA-256 + phrase +
+    phrase occurrence. Duplicating or shifting an allowlisted line fails
+    until the allowlist is re-reviewed.
 
 ### Session Summary (Provider boundaries and timeouts)
 
