@@ -310,6 +310,7 @@ On `fix/native-build-and-platform-evidence`:
   canonical section 0, one `.dynamic`/`PT_DYNAMIC`, path allowlist of
   remap prefixes plus `/lib64` `/lib` `/usr/lib` `/usr/lib64` and
   rustc `/rust/deps`) and two-build identity; it is not in CHECKSUMS
-  until Phase A/B re-review is GO and a promotion commit lands. Runs
-  `32669707437`, `32670749687`, and `32671207032` are superseded.
+  until Phase A/B re-review is GO and a promotion commit lands. Fresh
+  Phase B at `977d6ad` is run `32671683894` (success; not promoted).
+  Runs `32669707437`, `32670749687`, and `32671207032` are superseded.
   Linux ARM, musl, older glibc, and Windows remain out of scope.

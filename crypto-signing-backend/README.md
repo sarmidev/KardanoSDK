@@ -257,9 +257,14 @@ rustc 1.97 compiler-crate remap observed on ubuntu-22.04 run
 exact prefix plus `/`, so `/cargo-evil` is not `/cargo`.
 `/tmp/untracked-host` and `/usr/local/private-build` are rejected.
 Slash fragments such as `/0` and `/N` (run `32671207032`) are not
-paths. Runs `32669707437`, `32670749687`, and `32671207032` are
-superseded; a fresh Phase A/B at this verifier tip is required before
-any promotion review.
+paths. Fresh Phase B at `977d6ad` is run `32671683894` (A/B + compare +
+JVM KAT success on `ubuntu-22.04`). Artifacts
+`linux-jvm-candidate-a` (id `9501556842`, expires 2026-09-06),
+`linux-jvm-candidate-b` (id `9501556105`, expires 2026-09-06), and
+`linux-jvm-compare-report` (id `9501595446`, expires 2026-09-06) are
+not downloaded and not promoted. Runs `32669707437`, `32670749687`,
+and `32671207032` are superseded. Independent re-review is still
+required before any CHECKSUMS row.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

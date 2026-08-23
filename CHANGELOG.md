@@ -73,10 +73,14 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   and `/usr/lib64` (exact prefix plus `/`; `/tmp/untracked-host` and
   `/usr/local/private-build` fail). Slash fragments such as `/0` and
   `/N` are not paths. Two independent candidate jobs plus JVM KAT must
-  match before any promotion review. Runs `32669707437`, `32670749687`,
-  and `32671207032` are superseded. The ninth CHECKSUMS row is added
-  only after that re-review is GO. Linux ARM, musl, older glibc, and
-  Windows are out of scope.
+  match before any promotion review. Fresh Phase B at `977d6ad` is run
+  `32671683894` (success on `ubuntu-22.04`; artifacts
+  `linux-jvm-candidate-a` `9501556842`, `linux-jvm-candidate-b`
+  `9501556105`, `linux-jvm-compare-report` `9501595446`, expire
+  2026-09-06). Not downloaded or promoted. Runs `32669707437`,
+  `32670749687`, and `32671207032` are superseded. The ninth CHECKSUMS
+  row is added only after that re-review is GO. Linux ARM, musl, older
+  glibc, and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

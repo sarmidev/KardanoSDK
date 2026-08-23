@@ -217,8 +217,11 @@ and runtime prefixes only (`/rust/deps` is the rustc 1.97 compiler-crate
 remap seen on run `32670749687`). Permissions stay `contents: read`. Uploads use
 `if-no-files-found: error`. The job does not write CHECKSUMS or committed
 `src/`. ubuntu-24.04 artifacts and Linux runs `32669707437`,
-`32670749687`, and `32671207032` are superseded. Slash fragments
-`/0` and `/N` are not treated as paths.
+`32670749687`, and `32671207032` are superseded. Fresh Phase B at
+`977d6ad` is run `32671683894` (success; artifacts
+`linux-jvm-candidate-a`/`b` and `linux-jvm-compare-report`, expire
+2026-09-06). Not promoted. Slash fragments `/0` and `/N` are not
+treated as paths.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare
