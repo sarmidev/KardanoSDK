@@ -26,8 +26,10 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * All operations are `suspend` and return a [KardanoResult]; they never throw (a thrown
  * exception across the Swift/ObjC boundary would crash iOS consumers), except to propagate
- * coroutine cancellation. Transport failures, non-success status codes, and response-decode
- * failures are mapped to [SubmitError] variants.
+ * coroutine cancellation. Transport failures (including the explicit
+ * [io.ktor.client.plugins.HttpTimeout] bounds installed by [configureBlockfrost]),
+ * non-success status codes, and response-decode failures are mapped to [SubmitError]
+ * variants. There is no automatic retry; a timed-out or failed submit is not sent again.
  *
  * Instances are created with [create]. Tests use the `internal` constructor to inject an
  * [HttpClient] backed by a mock engine, so mapping can be exercised without a real network.
@@ -68,7 +70,7 @@ public class BlockfrostTxSubmitProvider internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return KardanoResult.Err(SubmitError.Transport(e.message ?: "request failed"))
+            return KardanoResult.Err(SubmitError.Transport(transportFailureMessage(e)))
         }
 
         if (!response.status.isSuccess()) {

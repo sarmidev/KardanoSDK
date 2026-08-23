@@ -32,9 +32,12 @@ import kotlin.coroutines.cancellation.CancellationException
  * [ProtocolParameters], [ChainTip], and [ProviderError].
  *
  * All operations are `suspend` and return a [KardanoResult]; they never throw (a thrown
- * exception across the Swift/ObjC boundary would crash iOS consumers). Transport failures,
- * non-success status codes, and decode failures are mapped to [ProviderError] variants.
- * Transaction submission is not part of this provider (ADR-0006 defers submit to Block 1.11).
+ * exception across the Swift/ObjC boundary would crash iOS consumers). Transport failures
+ * (including the explicit [io.ktor.client.plugins.HttpTimeout] bounds installed by
+ * [configureBlockfrost]), non-success status codes, and decode failures are mapped to
+ * [ProviderError] variants. Coroutine cancellation is rethrown. There is no automatic
+ * retry. Transaction submission is not part of this provider (ADR-0006 defers submit to
+ * Block 1.11).
  *
  * Scope limits for the first MVP:
  * - Values are ADA-only: only the `lovelace` component is summed into [Value.coin]. Native-asset
@@ -82,7 +85,7 @@ public class BlockfrostChainQueryProvider internal constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                return KardanoResult.Err(ProviderError.Transport(e.message ?: "request failed"))
+                return KardanoResult.Err(ProviderError.Transport(transportFailureMessage(e)))
             }
 
             // A 404 here means the address has never been used on-chain, which is an empty
@@ -175,7 +178,7 @@ public class BlockfrostChainQueryProvider internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return KardanoResult.Err(ProviderError.Transport(e.message ?: "request failed"))
+            return KardanoResult.Err(ProviderError.Transport(transportFailureMessage(e)))
         }
         if (!response.status.isSuccess()) {
             return KardanoResult.Err(statusError(response))

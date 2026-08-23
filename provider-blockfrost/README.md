@@ -69,6 +69,11 @@ stay HTTP-free. Per-platform engines: OkHttp (Android), CIO (JVM), Darwin (iOS).
 [ADR-0007](../docs/DECISIONS/0007-http-client-and-blockfrost-provider.md). It depends on the
 `Address.bech32` source string landed in Block 1.3b-pre.
 
+Every client installs Ktor `HttpTimeout` from existing `ktor-client-core` (no extra
+dependency): connect 10 seconds, request 30 seconds, socket 30 seconds. There is no
+automatic retry plugin. Submit is never retried. Timeout failures map to typed
+`Transport` errors; coroutine cancellation is rethrown.
+
 ## API keys / secrets
 
 No key is committed. `BlockfrostConfig` is a regular class (pre-alpha source change: it is

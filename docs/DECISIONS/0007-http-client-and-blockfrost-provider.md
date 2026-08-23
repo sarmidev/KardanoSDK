@@ -200,3 +200,23 @@ configuration, including `project_id`, are never read into `detail`. Coroutine c
 still rethrown.
 
 No other decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): explicit `HttpTimeout`, no automatic retries
+
+§2 installed Ktor `client-core` plus content-negotiation and per-platform engines, but did not
+name a timeout or retry policy. Engine defaults then differed by platform (CIO vs OkHttp vs
+Darwin). This addendum records the explicit policy now installed in `configureBlockfrost`:
+
+- `HttpTimeout` from existing `ktor-client-core` (no new dependency): connect 10s, request 30s,
+  socket 30s.
+- No `HttpRequestRetry` plugin and no other automatic retry. A failed attempt is returned as a
+  typed `Transport` (or the matching `SubmitError.Transport` on submit). Submit is never retried.
+- `CancellationException` is still rethrown.
+
+Tests assert the installed plugin and the documented bounds through an internal
+`BlockfrostHttpTimeoutPolicy` seam, and use a shortened request timeout plus a delayed
+`MockEngine` handler to map timeout to `Transport` without sleeping for 30s.
+
+No other decision in this ADR changes.

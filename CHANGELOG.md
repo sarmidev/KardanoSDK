@@ -54,6 +54,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   branch is reachable with valid input today; they now return a typed error instead of throwing,
   closing the gap between that guarantee and this module's own never-throw policy.
 
+- Explicit Blockfrost HTTP timeouts via Ktor `HttpTimeout` (already in `ktor-client-core`;
+  no new dependency): connect 10s, request 30s, socket 30s. Timeout failures map to typed
+  `Transport` errors. There is no automatic retry; submit is never retried. Coroutine
+  cancellation is still rethrown.
 - `ProviderError.RemoteStatus` now carries an optional `detail` (response-body text only;
   default `null`, source-compatible with existing `RemoteStatus(code)` call sites), matching
   `SubmitError.RemoteStatus`.

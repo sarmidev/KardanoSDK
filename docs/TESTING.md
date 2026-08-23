@@ -118,6 +118,10 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
 - `PlaygroundProviderPresenterTest` / `PlaygroundDemoFlowTest` cover every
   `ProviderError` variant, including `RemoteStatus` with and without `detail` and
   `ResultTruncated`.
+- `BlockfrostHttpTimeoutTest` asserts the documented 10s/30s/30s `HttpTimeout` bounds
+  through an internal policy seam (no 30s sleep), that `configureBlockfrost` installs
+  the plugin, that a delayed `MockEngine` handler with a shortened request timeout maps
+  to `Transport` for both read and submit, and that submit is attempted once.
 - Wallet and transaction (JVM) tests: `./gradlew :wallet:jvmTest :tx:jvmTest`
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`
