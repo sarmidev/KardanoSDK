@@ -46,15 +46,16 @@ import org.sarmidev.kardano.provider.TxSubmitProvider
  * dependent operation — the same mock-by-default / live-Blockfrost-preprod-when-configured
  * behavior the pre-1.12-pre-a screen had.
  *
- * Provider-backed operations capture [PlaygroundState.flowGeneration] at start and fold the
- * result back only when that generation is still current. Diagnostic UTxO/params loads also
- * capture a request token (and the explorer address for UTxOs). A result that still completes
- * after [Job] cancellation is folded under [NonCancellable] so the identity check — not
- * cooperative cancellation — is what discards it. [PlaygroundIntent.ResetFlow] and actual
- * provider-configuration changes cancel in-flight [Job]s and increment the generation in the
- * reducer (the reducer itself remains a pure function). Actual project-id changes and
- * disabling live mode also call [PlaygroundProviderFactory.invalidateLiveCache] immediately.
- * This is sample/diagnostic code in `:shared`; it is not part of the SDK public API.
+ * Provider-backed operations capture [PlaygroundState.flowGeneration] and the matching
+ * per-operation request token at start and fold the result back only when both still match.
+ * Diagnostic UTxO/params loads also capture a request token (and the explorer address for
+ * UTxOs). A result that still completes after [Job] cancellation is folded under
+ * [NonCancellable] so the identity check — not cooperative cancellation — is what discards
+ * it. [PlaygroundIntent.ResetFlow] and actual provider-configuration changes cancel in-flight
+ * [Job]s and increment the generation and the relevant request tokens in the reducer (the
+ * reducer itself remains a pure function). Actual project-id changes and disabling live mode
+ * also call the internal [PlaygroundProviderFactory.invalidateLiveCache] immediately. This is
+ * sample/diagnostic code in `:shared`; it is not part of the SDK public API.
  */
 internal class PlaygroundViewModel(
     private val restoreWallet: RestoreWalletUseCase = RestoreWalletUseCase.Default,
@@ -168,57 +169,69 @@ internal class PlaygroundViewModel(
 
     private fun onQueryFunds() {
         fundsJob?.cancel()
-        val generation = mutableState.value.flowGeneration
         val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startFundsLoading)
+        val generation = mutableState.value.flowGeneration
+        val requestToken = mutableState.value.fundsRequestToken
         val provider = activeQueryProvider()
         fundsJob = viewModelScope.launch {
             val result = queryWalletFunds(provider).withProvenance(mode, generation)
             withContext(NonCancellable) {
-                mutableState.update { PlaygroundReducer.applyFundsResult(it, result, generation) }
+                mutableState.update {
+                    PlaygroundReducer.applyFundsResult(it, result, generation, requestToken)
+                }
             }
         }
     }
 
     private fun onBuildDraft() {
         draftJob?.cancel()
-        val generation = mutableState.value.flowGeneration
         val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startDraftLoading)
+        val generation = mutableState.value.flowGeneration
+        val requestToken = mutableState.value.draftRequestToken
         val provider = activeQueryProvider()
         draftJob = viewModelScope.launch {
             val result = buildTransactionDraft(provider).withProvenance(mode, generation)
             withContext(NonCancellable) {
-                mutableState.update { PlaygroundReducer.applyDraftResult(it, result, generation) }
+                mutableState.update {
+                    PlaygroundReducer.applyDraftResult(it, result, generation, requestToken)
+                }
             }
         }
     }
 
     private fun onSignTransaction() {
         signedJob?.cancel()
-        val generation = mutableState.value.flowGeneration
         val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startSignedLoading)
+        val generation = mutableState.value.flowGeneration
+        val requestToken = mutableState.value.signedRequestToken
         val provider = activeQueryProvider()
         signedJob = viewModelScope.launch {
             val result = signTransaction(provider).withProvenance(mode, generation)
             withContext(NonCancellable) {
-                mutableState.update { PlaygroundReducer.applySignedResult(it, result, generation) }
+                mutableState.update {
+                    PlaygroundReducer.applySignedResult(it, result, generation, requestToken)
+                }
             }
         }
     }
 
     private fun onSubmitTransaction() {
         submitJob?.cancel()
-        val generation = mutableState.value.flowGeneration
         val mode = activeProviderMode()
         mutableState.update(PlaygroundReducer::startSubmitLoading)
+        val generation = mutableState.value.flowGeneration
+        val requestToken = mutableState.value.submitRequestToken
         val queryProvider = activeQueryProvider()
         val submitProvider = activeSubmitProvider()
         submitJob = viewModelScope.launch {
             val result = submitTransaction(queryProvider, submitProvider).withProvenance(mode, generation)
             withContext(NonCancellable) {
-                mutableState.update { PlaygroundReducer.applySubmitResult(it, result, generation) }
+                mutableState.update {
+                    PlaygroundReducer.applySubmitResult(it, result, generation, requestToken)
+                }
             }
         }
     }

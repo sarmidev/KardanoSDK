@@ -88,7 +88,7 @@ internal class PlaygroundProviderFactory {
 
     /**
      * Drops the cached live Blockfrost clients and the in-memory project-id cache key.
-     * Does not log or persist the id. Safe to call when nothing is cached.
+     * Does not log or persist the id. May be called when nothing is cached.
      */
     fun invalidateLiveCache() {
         cachedProjectId = null

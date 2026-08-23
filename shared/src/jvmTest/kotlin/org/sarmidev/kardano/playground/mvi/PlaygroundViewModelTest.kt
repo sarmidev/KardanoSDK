@@ -640,4 +640,122 @@ class PlaygroundViewModelTest {
 
         assertTrue(first !== rebuilt, "an actual project-id change must drop the cache immediately")
     }
+
+    @Test
+    fun queryFunds_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<WalletBalancePresentation>()
+        val second = CompletableDeferred<WalletBalancePresentation>()
+        var calls = 0
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(1L, vm.state.value.fundsRequestToken)
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(2L, vm.state.value.fundsRequestToken)
+        assertEquals(0L, vm.state.value.flowGeneration)
+
+        first.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        val latest = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.funds)
+        assertEquals(2L, vm.state.value.fundsRequestToken)
+    }
+
+    @Test
+    fun buildDraft_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<TransactionDraftPresentation>()
+        val second = CompletableDeferred<TransactionDraftPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(1L, vm.state.value.draftRequestToken)
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(2L, vm.state.value.draftRequestToken)
+
+        first.complete(TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "stale"))))
+        advanceUntilIdle()
+        assertEquals(TransactionDraftPresentation.Loading, vm.state.value.draft)
+
+        val latest = TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.draft)
+    }
+
+    @Test
+    fun signTransaction_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<SignedTransactionPresentation>()
+        val second = CompletableDeferred<SignedTransactionPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            signTransaction = SignTransactionUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(1L, vm.state.value.signedRequestToken)
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(2L, vm.state.value.signedRequestToken)
+
+        first.complete(SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "stale"))))
+        advanceUntilIdle()
+        assertEquals(SignedTransactionPresentation.Loading, vm.state.value.signed)
+
+        val latest = SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.signed)
+    }
+
+    @Test
+    fun submitTransaction_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<SubmitTransactionPresentation>()
+        val second = CompletableDeferred<SubmitTransactionPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertEquals(1L, vm.state.value.submitRequestToken)
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertEquals(2L, vm.state.value.submitRequestToken)
+
+        first.complete(SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "stale"))))
+        advanceUntilIdle()
+        assertEquals(SubmitTransactionPresentation.Loading, vm.state.value.submit)
+
+        val latest = SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.submit)
+    }
 }

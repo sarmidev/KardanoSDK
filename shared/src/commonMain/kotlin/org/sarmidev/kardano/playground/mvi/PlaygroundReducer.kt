@@ -93,9 +93,9 @@ internal object PlaygroundReducer {
         // Provider selection, technicalDetailsExpanded, and diagnostics inputs plus *completed*
         // diagnostic results are preserved. In-flight diagnostic Loading values are converted
         // to Empty so a cancelled load cannot leave the explorer stuck on "Working…".
-        // [PlaygroundState.flowGeneration] and the diagnostic request tokens increment so any
-        // in-flight Funds/Build/Sign/Submit/diagnostic result is discarded when it arrives;
-        // the reducer itself stays pure and does not cancel Jobs.
+        // [PlaygroundState.flowGeneration], guided-operation request tokens, and diagnostic
+        // request tokens increment so any in-flight Funds/Build/Sign/Submit/diagnostic result
+        // is discarded when it arrives; the reducer itself stays pure and does not cancel Jobs.
         is PlaygroundIntent.ResetFlow -> state.copy(
             wallet = WalletPresentation.Empty,
             walletLoading = false,
@@ -106,6 +106,10 @@ internal object PlaygroundReducer {
             demoStep = PlaygroundStep.WALLET,
             section = PlaygroundSection.DEMO,
             flowGeneration = state.flowGeneration + 1,
+            fundsRequestToken = state.fundsRequestToken + 1,
+            draftRequestToken = state.draftRequestToken + 1,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
             providerUtxos = idleDiagnosticUtxos(state.providerUtxos),
             providerParams = idleDiagnosticParams(state.providerParams),
             providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
@@ -146,16 +150,28 @@ internal object PlaygroundReducer {
     fun startWalletLoading(state: PlaygroundState): PlaygroundState = state.copy(walletLoading = true)
 
     fun startFundsLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(funds = WalletBalancePresentation.Loading)
+        state.copy(
+            funds = WalletBalancePresentation.Loading,
+            fundsRequestToken = state.fundsRequestToken + 1,
+        )
 
     fun startDraftLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(draft = TransactionDraftPresentation.Loading)
+        state.copy(
+            draft = TransactionDraftPresentation.Loading,
+            draftRequestToken = state.draftRequestToken + 1,
+        )
 
     fun startSignedLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(signed = SignedTransactionPresentation.Loading)
+        state.copy(
+            signed = SignedTransactionPresentation.Loading,
+            signedRequestToken = state.signedRequestToken + 1,
+        )
 
     fun startSubmitLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(submit = SubmitTransactionPresentation.Loading)
+        state.copy(
+            submit = SubmitTransactionPresentation.Loading,
+            submitRequestToken = state.submitRequestToken + 1,
+        )
 
     fun startProviderUtxosLoading(state: PlaygroundState): PlaygroundState =
         state.copy(
@@ -176,34 +192,67 @@ internal object PlaygroundReducer {
 
     /**
      * Folds [result] into [state] only when [generation] still matches
-     * [PlaygroundState.flowGeneration]. A stale generation is a no-op so a slow Funds/Build/
-     * Sign/Submit/diagnostic call cannot overwrite a newer ResetFlow or provider-configuration
-     * change. Defaulting [generation] to the current value keeps existing synchronous tests
-     * applying immediately.
+     * [PlaygroundState.flowGeneration] **and** [requestToken] still matches the step's
+     * request token. A stale generation is a no-op after ResetFlow or a provider-configuration
+     * change; a stale token is a no-op after a repeated same-step request that still shares
+     * the current generation. Defaulting both to the current values keeps existing synchronous
+     * tests applying immediately.
      */
     fun applyFundsResult(
         state: PlaygroundState,
         result: WalletBalancePresentation,
         generation: Long = state.flowGeneration,
-    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(funds = result)
+        requestToken: Long = state.fundsRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.fundsRequestToken
+    ) {
+        state
+    } else {
+        state.copy(funds = result)
+    }
 
     fun applyDraftResult(
         state: PlaygroundState,
         result: TransactionDraftPresentation,
         generation: Long = state.flowGeneration,
-    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(draft = result)
+        requestToken: Long = state.draftRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.draftRequestToken
+    ) {
+        state
+    } else {
+        state.copy(draft = result)
+    }
 
     fun applySignedResult(
         state: PlaygroundState,
         result: SignedTransactionPresentation,
         generation: Long = state.flowGeneration,
-    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(signed = result)
+        requestToken: Long = state.signedRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.signedRequestToken
+    ) {
+        state
+    } else {
+        state.copy(signed = result)
+    }
 
     fun applySubmitResult(
         state: PlaygroundState,
         result: SubmitTransactionPresentation,
         generation: Long = state.flowGeneration,
-    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(submit = result)
+        requestToken: Long = state.submitRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.submitRequestToken
+    ) {
+        state
+    } else {
+        state.copy(submit = result)
+    }
 
     fun applyAddressResult(state: PlaygroundState, result: AddressPresentation): PlaygroundState =
         state.copy(addressResult = result)
@@ -258,6 +307,10 @@ internal object PlaygroundReducer {
             submit = SubmitTransactionPresentation.Empty,
             providerUtxos = ProviderUtxosPresentation.Empty,
             providerParams = ProviderParamsPresentation.Empty,
+            fundsRequestToken = state.fundsRequestToken + 1,
+            draftRequestToken = state.draftRequestToken + 1,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
             providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
             providerParamsRequestToken = state.providerParamsRequestToken + 1,
         )

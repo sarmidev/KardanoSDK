@@ -104,8 +104,8 @@ internal sealed interface PlaygroundIntent {
      * ([PlaygroundState.useLiveBlockfrost], [PlaygroundState.projectId]),
      * [PlaygroundState.technicalDetailsExpanded], diagnostics inputs, and *completed*
      * diagnostic results are preserved. In-flight diagnostic Loading values become Empty.
-     * Increments [PlaygroundState.flowGeneration] and the diagnostic request tokens so
-     * in-flight provider-backed results are discarded.
+     * Increments [PlaygroundState.flowGeneration], the guided-operation request tokens, and
+     * the diagnostic request tokens so in-flight provider-backed results are discarded.
      */
     data object ResetFlow : PlaygroundIntent
 

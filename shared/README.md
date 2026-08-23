@@ -102,11 +102,13 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   default; live Blockfrost preprod once the toggle is on and `project_id` is non-blank) out of
   the Compose layer, so `PlaygroundViewModel` can build a `ChainQueryProvider`/`TxSubmitProvider`
   pair from `PlaygroundState` without a `remember`. Live clients are cached by the last non-blank
-  id. `invalidateLiveCache()` drops that cache immediately and is invoked by
-  `PlaygroundViewModel` on an actual project-id change and when live mode is disabled — not only
-  on the next lookup. The session field lives in `PlaygroundState`; the factory also keeps an
-  in-memory cache key. Neither copy is persisted or logged. Provider-backed results carry
-  `PlaygroundProviderMode` (`Mock` / `LivePreprod`) plus the captured `flowGeneration`.
+  id. The internal `invalidateLiveCache()` factory method drops that cache immediately and is
+  invoked by `PlaygroundViewModel` on an actual project-id change and when live mode is
+  disabled — not only on the next lookup. The session field lives in `PlaygroundState`; the
+  factory also keeps an in-memory cache key. Neither copy is persisted or logged.
+  Provider-backed results carry `PlaygroundProviderMode` (`Mock` / `LivePreprod`) plus the
+  captured `flowGeneration`. Funds/Build/Sign/Submit also carry a per-operation request token
+  so a repeated same-step request cannot be overwritten by a slower first call.
 - `PlaygroundPresenter.kt` is **retained unchanged as the display-mapping layer** — every use
   case and every diagnostics intent still calls into it, and every existing `PlaygroundPresenter`
   test below (`PlaygroundPresenterTest`, `PlaygroundProviderPresenterTest`,
@@ -664,16 +666,17 @@ The MVI layer added in Block 1.12-pre-a follows the same split. `PlaygroundReduc
 (`commonTest`) drives `PlaygroundReducer` directly — pure, non-suspend, no coroutine, no native
 call — covering the default mock initial state, provider-selection and technical-details
 transitions, `ResetFlow`'s keep-vs-clear behavior (completed diagnostics kept; Loading
-converted to Empty), diagnostic request-token / address-identity applies, and every
-`applyXResult` helper (including the ADA-only/native-asset draft-failure message from Block
-1.11d/1.11d-2 flowing through unchanged). `PlaygroundViewModelTest` (`jvmTest`-only) drives
-`PlaygroundViewModel.dispatch` with every guided-flow and diagnostic-load use case faked
-(`RestoreWalletUseCase`, `QueryWalletFundsUseCase`, `BuildTransactionDraftUseCase`,
-`SignTransactionUseCase`, `SubmitTransactionUseCase`, `LoadProviderUtxosUseCase`,
-`LoadProviderParamsUseCase`), covering each step's success/failure folding (including the
-submit step's accepted/local-id match and mismatch cases), the funds step's loading flag while
-its fake use case is still in flight, `NonCancellable` stale-result discard for ResetFlow /
-address edit/fill / repeated UTxO and params loads / provider-configuration changes, immediate
+converted to Empty), diagnostic and guided-operation request-token / address-identity
+applies, and every `applyXResult` helper (including the ADA-only/native-asset draft-failure
+message from Block 1.11d/1.11d-2 flowing through unchanged). `PlaygroundViewModelTest`
+(`jvmTest`-only) drives `PlaygroundViewModel.dispatch` with every guided-flow and
+diagnostic-load use case faked (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`,
+`BuildTransactionDraftUseCase`, `SignTransactionUseCase`, `SubmitTransactionUseCase`,
+`LoadProviderUtxosUseCase`, `LoadProviderParamsUseCase`), covering each step's
+success/failure folding (including the submit step's accepted/local-id match and mismatch
+cases), the funds step's loading flag while its fake use case is still in flight,
+`NonCancellable` stale-result discard for ResetFlow / address edit/fill / repeated Funds,
+Build, Sign, Submit, UTxO and params loads / provider-configuration changes, immediate
 live-cache invalidation, and that `PlaygroundProviderFactory` selects the same mock-or-live
 provider instance the ViewModel passes to a use case. It is `jvmTest`-only because
 `androidx.lifecycle.ViewModel.viewModelScope`

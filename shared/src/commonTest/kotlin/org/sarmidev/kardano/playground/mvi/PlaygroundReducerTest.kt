@@ -39,6 +39,10 @@ class PlaygroundReducerTest {
         assertEquals(0L, state.flowGeneration)
         assertEquals(0L, state.providerUtxosRequestToken)
         assertEquals(0L, state.providerParamsRequestToken)
+        assertEquals(0L, state.fundsRequestToken)
+        assertEquals(0L, state.draftRequestToken)
+        assertEquals(0L, state.signedRequestToken)
+        assertEquals(0L, state.submitRequestToken)
         assertEquals(WalletPresentation.Empty, state.wallet)
         assertFalse(state.walletLoading)
         assertEquals(WalletBalancePresentation.Empty, state.funds)
@@ -226,6 +230,10 @@ class PlaygroundReducerTest {
 
         assertEquals("abc123", next.projectId)
         assertEquals(3L, next.flowGeneration)
+        assertEquals(1L, next.fundsRequestToken)
+        assertEquals(1L, next.draftRequestToken)
+        assertEquals(1L, next.signedRequestToken)
+        assertEquals(1L, next.submitRequestToken)
         assertEquals(1L, next.providerUtxosRequestToken)
         assertEquals(1L, next.providerParamsRequestToken)
         assertEquals(WalletBalancePresentation.Empty, next.funds)
@@ -260,6 +268,10 @@ class PlaygroundReducerTest {
         assertTrue(next.useLiveBlockfrost)
         assertEquals("abc123", next.projectId)
         assertEquals(1L, next.flowGeneration)
+        assertEquals(1L, next.fundsRequestToken)
+        assertEquals(1L, next.draftRequestToken)
+        assertEquals(1L, next.signedRequestToken)
+        assertEquals(1L, next.submitRequestToken)
         assertEquals(1L, next.providerUtxosRequestToken)
         assertEquals(1L, next.providerParamsRequestToken)
         assertEquals(WalletBalancePresentation.Empty, next.funds)
@@ -268,6 +280,10 @@ class PlaygroundReducerTest {
         val backOff = PlaygroundReducer.reduce(next, PlaygroundIntent.ToggleLiveBlockfrost(false))
         assertFalse(backOff.useLiveBlockfrost)
         assertEquals(2L, backOff.flowGeneration)
+        assertEquals(2L, backOff.fundsRequestToken)
+        assertEquals(2L, backOff.draftRequestToken)
+        assertEquals(2L, backOff.signedRequestToken)
+        assertEquals(2L, backOff.submitRequestToken)
         assertEquals(2L, backOff.providerUtxosRequestToken)
         assertEquals(2L, backOff.providerParamsRequestToken)
     }
@@ -357,6 +373,10 @@ class PlaygroundReducerTest {
         assertEquals("addr_test1xyz", reset.addressInput)
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, reset.providerAddressInput)
         assertEquals(1L, reset.flowGeneration, "ResetFlow must bump generation so in-flight results are stale")
+        assertEquals(1L, reset.fundsRequestToken)
+        assertEquals(1L, reset.draftRequestToken)
+        assertEquals(1L, reset.signedRequestToken)
+        assertEquals(1L, reset.submitRequestToken)
         assertEquals(1L, reset.providerUtxosRequestToken)
         assertEquals(1L, reset.providerParamsRequestToken)
     }
@@ -398,6 +418,16 @@ class PlaygroundReducerTest {
 
         assertEquals(result, next.funds)
         assertEquals(3L, next.flowGeneration)
+    }
+
+    @Test
+    fun applyFundsResult_staleToken_isIgnored() {
+        val result = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale")))
+        val current = PlaygroundState.initial().copy(fundsRequestToken = 3L)
+
+        val next = PlaygroundReducer.applyFundsResult(current, result, requestToken = 2L)
+
+        assertEquals(current, next)
     }
 
     // --- Diagnostics text inputs + seed fill ---
@@ -534,8 +564,38 @@ class PlaygroundReducerTest {
 
     @Test
     fun startFundsLoading_setsFundsToLoading() {
-        val next = PlaygroundReducer.startFundsLoading(PlaygroundState.initial())
+        val next = PlaygroundReducer.startFundsLoading(
+            PlaygroundState.initial().copy(fundsRequestToken = 2L),
+        )
         assertEquals(WalletBalancePresentation.Loading, next.funds)
+        assertEquals(3L, next.fundsRequestToken)
+    }
+
+    @Test
+    fun startDraftLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startDraftLoading(
+            PlaygroundState.initial().copy(draftRequestToken = 1L),
+        )
+        assertEquals(TransactionDraftPresentation.Loading, next.draft)
+        assertEquals(2L, next.draftRequestToken)
+    }
+
+    @Test
+    fun startSignedLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startSignedLoading(
+            PlaygroundState.initial().copy(signedRequestToken = 4L),
+        )
+        assertEquals(SignedTransactionPresentation.Loading, next.signed)
+        assertEquals(5L, next.signedRequestToken)
+    }
+
+    @Test
+    fun startSubmitLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startSubmitLoading(
+            PlaygroundState.initial().copy(submitRequestToken = 0L),
+        )
+        assertEquals(SubmitTransactionPresentation.Loading, next.submit)
+        assertEquals(1L, next.submitRequestToken)
     }
 
     @Test

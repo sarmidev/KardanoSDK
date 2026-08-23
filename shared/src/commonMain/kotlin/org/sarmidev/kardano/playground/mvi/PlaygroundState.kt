@@ -94,8 +94,15 @@ internal enum class RoadmapPhase {
  * toggle change, and an actual [projectId] change each increment it. [PlaygroundViewModel]
  * captures the generation when a Funds/Build/Sign/Submit/diagnostic operation starts and ignores
  * any result whose generation is no longer current, so a slow request cannot overwrite the
- * visitor's newer configuration. The reducer stays a pure function of `(state, intent)` — it
- * never cancels work; the ViewModel holds/cancels [kotlinx.coroutines.Job]s.
+ * visitor's newer configuration.
+ *
+ * [fundsRequestToken], [draftRequestToken], [signedRequestToken], and [submitRequestToken]
+ * increment on each start of that guided operation and whenever ResetFlow or an actual
+ * provider-configuration change invalidates in-flight work. A repeated same-step request
+ * therefore cannot be overwritten by a slower first call that still shares [flowGeneration].
+ * Wallet restore is synchronous (no Job), so it has no request token. The reducer stays a
+ * pure function of `(state, intent)` — it never cancels work; the ViewModel holds/cancels
+ * [kotlinx.coroutines.Job]s.
  *
  * ### Diagnostics (Address Parser, Hex Decoder, CBOR Decoder, generic Provider explorer)
  *
@@ -147,6 +154,10 @@ internal data class PlaygroundState(
     val draft: TransactionDraftPresentation,
     val signed: SignedTransactionPresentation,
     val submit: SubmitTransactionPresentation,
+    val fundsRequestToken: Long = 0L,
+    val draftRequestToken: Long = 0L,
+    val signedRequestToken: Long = 0L,
+    val submitRequestToken: Long = 0L,
     val technicalDetailsExpanded: Set<PlaygroundStep>,
     val addressInput: String,
     val addressResult: AddressPresentation,
@@ -190,6 +201,10 @@ internal data class PlaygroundState(
             draft = TransactionDraftPresentation.Empty,
             signed = SignedTransactionPresentation.Empty,
             submit = SubmitTransactionPresentation.Empty,
+            fundsRequestToken = 0L,
+            draftRequestToken = 0L,
+            signedRequestToken = 0L,
+            submitRequestToken = 0L,
             technicalDetailsExpanded = emptySet(),
             addressInput = "",
             addressResult = AddressPresentation.Empty,

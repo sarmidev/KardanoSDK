@@ -605,6 +605,26 @@ Date: 2026-08-23
 
 Summary:
 
+- **Second independent-review NO-GO fixes on `fix/playground-operation-lifecycle` (one
+  additive commit; prior commits preserved) — DONE.** No SDK protocol behavior changed.
+  - **Commit 7 — guided-operation request identity and documentation corrections.**
+    Funds/Build/Sign/Submit each increment a per-operation request token on start and on
+    ResetFlow / actual provider-configuration change. Apply requires matching generation
+    **and** token so a non-cooperative first call cannot overwrite a newer same-step
+    request. Wallet restore is synchronous (no Job) and has no token. The factory
+    `invalidateLiveCache()` KDoc no longer uses a restricted adjective; HANDOFF/docs now
+    call it an internal factory method (the containing class is `internal`), not public.
+    `NonCancellable` tests cover repeated Funds, Build, Sign, and Submit.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. The factory cache key remains a second in-memory copy of the project id.
+
+### Session Summary (First independent-review NO-GO fixes)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Independent-review NO-GO fixes on `fix/playground-operation-lifecycle` (two additive
   commits; the original four commits are preserved) — DONE.** No SDK protocol behavior changed.
   - **Commit 5 — diagnostics identity, reset normalization, immediate cache drop, race tests.**
@@ -612,8 +632,9 @@ Summary:
     address). Actual address edit/fill increments the UTxO token, clears the UTxO result, and
     cancels the in-flight UTxO job. Apply only when generation, token, and address still match.
     ResetFlow converts diagnostic Loading → Empty and keeps completed diagnostic results.
-    `PlaygroundProviderFactory.invalidateLiveCache()` is public and invoked synchronously on
-    an actual project-id change and when live mode is disabled. `NonCancellable` gated fakes
+    `PlaygroundProviderFactory.invalidateLiveCache()` is an internal factory method and is
+    invoked synchronously on an actual project-id change and when live mode is disabled.
+    `NonCancellable` gated fakes
     prove identity checks discard stale results after ResetFlow, address edit/fill, repeated
     UTxO/params loads, and provider-configuration changes. The project id is never logged or
     persisted.
