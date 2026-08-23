@@ -65,8 +65,16 @@ def _capture(command: list[str], *, env: dict[str, str] | None = None) -> str:
     return ((completed.stdout or "") + (completed.stderr or "")).strip()
 
 
-def rustc_sysroot(env: dict[str, str] | None = None) -> Path | None:
-    text = _capture(["rustc", "--print", "sysroot"], env=env)
+def rustc_sysroot(env: dict[str, str] | None = None, cwd: Path | None = None) -> Path | None:
+    completed = subprocess.run(
+        ["rustc", "--print", "sysroot"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        cwd=cwd,
+    )
+    text = ((completed.stdout or "") + (completed.stderr or "")).strip()
     if not text:
         return None
     path = Path(text.splitlines()[0].strip())
@@ -101,9 +109,19 @@ def remap_pairs(
         (module_root, "/kardano/crypto-signing-backend"),
         (repo_root, "/kardano"),
     ]
-    sysroot = rustc_sysroot(env)
+    sysroot = rustc_sysroot(env, cwd=module_root)
     if sysroot is not None:
         pairs.append((sysroot, "/rustc"))
+    # rustc 1.97 ios std objects embed the SDK used to build that toolchain.
+    for name in (
+        "Xcode_26.2.app",
+        "Xcode_26.3.app",
+        "Xcode_26.4.app",
+        "Xcode_26.4.1.app",
+        "Xcode_26.5.app",
+        "Xcode_26.6.app",
+    ):
+        pairs.append((Path("/Applications") / name, "/xcode-app"))
     pairs.append((rustup_home(), "/rustup"))
     pairs.append((cargo_home(), "/cargo"))
     if ndk_home is not None:
@@ -130,7 +148,8 @@ def remap_pairs(
             continue
         seen.add(key)
         resolved.append((key, dest))
-    resolved.sort(key=lambda item: len(item[0]), reverse=True)
+    # rustc applies remap flags last-match-wins; keep the longest prefix last.
+    resolved.sort(key=lambda item: len(item[0]))
     return resolved
 
 

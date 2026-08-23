@@ -31,7 +31,6 @@ HOST_PATH_MARKERS = (
     b"/var/folders/",
     b"/private/var/folders/",
     b"/opt/homebrew/",
-    b"/Applications/",
     b"/Volumes/",
     b"C:\\",
     b"/Users\\",
