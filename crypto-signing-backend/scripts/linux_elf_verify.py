@@ -41,14 +41,23 @@ Policy (documented, not a strength claim):
   on offset, vaddr, filesz, memsz, and alignment
 - ``DT_VERSYM`` binds to exactly one allocated ``.gnu.version``;
   ``DT_VERDEF``/``DT_VERDEFNUM`` and ``.gnu.version_d`` are all-or-nothing
+- every ``.gnu.version`` entry is parsed; count equals dynsym count.
+  Hidden bit ``0x8000`` is separated from the base index. Indices 0/1
+  follow ELF local/global rules. Base indices greater than 1 resolve
+  uniquely to one ``vna_other`` (undefined symbols) or one ``vd_ndx``
+  (defined symbols). Reserved 0/1 on need/def, duplicate names on one
+  index, need/def collisions, and ``0x7fff`` fail. The required sign
+  export is unhidden and uses global/unversioned or a matching Verdef
+- ELF64 arithmetic uses ``UINT64_MAX``; ``_checked_add`` / ``_checked_mul``
+  reject negatives and sums that exceed ``UINT64_MAX``
 - raw-byte searches catch every documented forbidden build root at any
-  offset; slash-byte scans extract path-like candidates through
-  NUL/control/whitespace/EOF. Allowed prefixes use an exact component
-  boundary (``path == prefix`` or next byte ``/``). Invalid UTF-8
-  candidates fail when they contain a forbidden root or otherwise look
-  like an unapproved absolute path; ``/letter`` plus non-ASCII
-  continuation without a later slash is not a path. ``/proc`` is a
-  runtime prefix (rustc/libstd ``/proc/self/exe``)
+  offset when the following byte is ``/``, a path stop, or EOF; slash-byte
+  scans extract path-like candidates through NUL/control/whitespace/EOF.
+  Allowed prefixes use an exact component boundary (``path == prefix``
+  or next byte ``/``). Invalid UTF-8 candidates fail when they contain a
+  forbidden root or otherwise look like an unapproved absolute path;
+  ``/letter`` plus non-ASCII continuation without a later slash is not a
+  path. ``/proc`` is a runtime prefix (rustc/libstd ``/proc/self/exe``)
 """
 
 from __future__ import annotations
@@ -131,6 +140,12 @@ ELF64_VERSYM_SIZE = 2
 ELF64_VERDEF_SIZE = 20
 ELF64_VERDAUX_SIZE = 8
 VER_DEF_CURRENT = 1
+VER_NDX_LOCAL = 0
+VER_NDX_GLOBAL = 1
+VERSYM_HIDDEN = 0x8000
+VERSYM_NDX_MASK = 0x7FFF
+VER_NDX_UNSPECIFIED = 0x7FFF
+UINT64_MAX = 0xFFFFFFFFFFFFFFFF
 
 MAX_INPUT_BYTES = 16 * 1024 * 1024
 MAX_PHNUM = 128
@@ -321,6 +336,9 @@ class ElfRecord:
     sign_exports: list[dict[str, object]] = field(default_factory=list)
     forbidden_paths: list[str] = field(default_factory=list)
     documented_glibc_baseline: str = DOCUMENTED_GLIBC_BASELINE_LABEL
+    versym_values: list[int] = field(default_factory=list)
+    verneed_indices: dict[int, str] = field(default_factory=dict)
+    verdef_indices: dict[int, str] = field(default_factory=dict)
 
 
 def _u16(data: bytes, offset: int) -> int:
@@ -347,10 +365,46 @@ def _i64(data: bytes, offset: int) -> int:
     return struct.unpack_from("<q", data, offset)[0]
 
 
+def _require_u64(value: int, what: str) -> int:
+    if not isinstance(value, int) or value < 0 or value > UINT64_MAX:
+        raise ElfError(f"{what} is outside 0..UINT64_MAX")
+    return value
+
+
+def _checked_add(left: int, right: int, what: str) -> int:
+    _require_u64(left, what)
+    _require_u64(right, what)
+    if left > UINT64_MAX - right:
+        raise ElfError(f"{what} offset overflow")
+    return left + right
+
+
+def _checked_mul(left: int, right: int, what: str) -> int:
+    _require_u64(left, what)
+    _require_u64(right, what)
+    if right != 0 and left > UINT64_MAX // right:
+        raise ElfError(f"{what} overflow")
+    return left * right
+
+
+def _checked_align_up(value: int, align: int, what: str) -> int:
+    _require_u64(value, what)
+    _require_u64(align, what)
+    if align == 0:
+        raise ElfError(f"{what} alignment is zero")
+    remainder = value % align
+    if remainder == 0:
+        return value
+    return _checked_add(value, align - remainder, what)
+
+
 def _checked_range(offset: int, size: int, limit: int, what: str) -> None:
-    if offset < 0 or size < 0:
-        raise ElfError(f"{what} has a negative file range")
-    if offset > limit or size > limit - offset:
+    _require_u64(offset, f"{what} offset")
+    _require_u64(size, f"{what} size")
+    _require_u64(limit, f"{what} limit")
+    if offset > limit:
+        raise ElfError(f"{what} file range exceeds the file")
+    if size > limit - offset:
         raise ElfError(f"{what} file range exceeds the file")
 
 
@@ -359,13 +413,9 @@ def _table_end(offset: int, count: int, entsize: int, limit: int, what: str) -> 
         raise ElfError(f"{what} count is missing")
     if entsize <= 0:
         raise ElfError(f"{what} entry size is invalid")
-    if count > limit or entsize > limit:
-        raise ElfError(f"{what} count or entry size exceeds the file")
-    if count > (limit // entsize):
-        raise ElfError(f"{what} count*entsize overflows")
-    if offset > limit:
-        raise ElfError(f"{what} offset is out of bounds")
-    end = offset + count * entsize
+    span = _checked_mul(count, entsize, f"{what} count*entsize")
+    end = _checked_add(offset, span, what)
+    _require_u64(limit, f"{what} limit")
     if end > limit:
         raise ElfError(f"{what} table is out of bounds")
     return end
@@ -383,22 +433,15 @@ def _cstring(data: bytes, start: int, limit: int) -> str:
 
 
 def _vaddr_to_offset(segments: list[LoadSegment], vaddr: int) -> int:
+    _require_u64(vaddr, "vaddr")
     for seg in segments:
-        if seg.vaddr <= vaddr < seg.vaddr + seg.memsz:
+        virt_end = _checked_add(seg.vaddr, seg.memsz, "PT_LOAD memsz")
+        if seg.vaddr <= vaddr < virt_end:
             delta = vaddr - seg.vaddr
             if delta >= seg.filesz:
                 raise ElfError(f"vaddr {vaddr:#x} is past the PT_LOAD file size")
-            return seg.offset + delta
+            return _checked_add(seg.offset, delta, "vaddr map")
     raise ElfError(f"vaddr {vaddr:#x} is not in a PT_LOAD segment")
-
-
-def _checked_add(left: int, right: int, what: str) -> int:
-    if left < 0 or right < 0:
-        raise ElfError(f"{what} offset underflow")
-    total = left + right
-    if total < left:
-        raise ElfError(f"{what} offset overflow")
-    return total
 
 
 def _ranges_overlap(start_a: int, end_a: int, start_b: int, end_b: int) -> bool:
@@ -539,7 +582,8 @@ def _validate_section_program_links(
             raise ElfError(".gnu.version sh_entsize is not Elf64_Half")
         if versym.sh_link != dynsym.index:
             raise ElfError(".gnu.version sh_link does not point at .dynsym")
-        expected = (dynsym.sh_size // ELF64_SYM_SIZE) * ELF64_VERSYM_SIZE
+        dynsym_count = dynsym.sh_size // ELF64_SYM_SIZE
+        expected = _checked_mul(dynsym_count, ELF64_VERSYM_SIZE, ".gnu.version count*entsize")
         if versym.sh_size != expected:
             raise ElfError(".gnu.version size does not match .dynsym count")
         _require_vaddr_maps_section(segments, versym_tag, versym, "DT_VERSYM")
@@ -711,6 +755,41 @@ def _leading_ascii_text(raw: bytes) -> str:
     return raw[:end].decode("ascii")
 
 
+def _root_boundary_follows(data: bytes, end: int) -> bool:
+    if end == len(data):
+        return True
+    nxt = data[end]
+    return nxt == 0x2F or nxt in _PATH_STOP
+
+
+def _contains_raw_root(data: bytes, markers: tuple[bytes, ...]) -> bool:
+    for marker in markers:
+        if not marker:
+            continue
+        start = 0
+        while True:
+            index = data.find(marker, start)
+            if index < 0:
+                break
+            if _root_boundary_follows(data, index + len(marker)):
+                return True
+            start = index + 1
+    return False
+
+
+def iter_raw_root_matches(data: bytes, marker: bytes):
+    if not marker:
+        return
+    start = 0
+    while True:
+        index = data.find(marker, start)
+        if index < 0:
+            return
+        if _root_boundary_follows(data, index + len(marker)):
+            yield index
+        start = index + 1
+
+
 def _looks_unapproved_raw_path(raw: bytes) -> bool:
     """Fail-closed rule for invalid UTF-8 slash candidates.
 
@@ -722,7 +801,7 @@ def _looks_unapproved_raw_path(raw: bytes) -> bool:
     """
     if not raw.startswith(b"/") or len(raw) < 2:
         return False
-    if any(marker in raw for marker in FORBIDDEN_BUILD_ROOTS):
+    if _contains_raw_root(raw, FORBIDDEN_BUILD_ROOTS):
         return True
     ascii_prefix = _leading_ascii_text(raw)
     trimmed = ascii_prefix.rstrip("/")
@@ -747,13 +826,13 @@ def _slash_candidate_is_forbidden(
     raw: bytes,
     extra_roots: tuple[bytes, ...],
 ) -> bool:
-    if any(marker and marker in raw for marker in FORBIDDEN_BUILD_ROOTS + extra_roots):
-        return True
-    home = raw.find(_HOME_PREFIX)
-    if home >= 0 and not _is_home_rebuild_tail(raw[home + len(_HOME_PREFIX) :]):
+    if _contains_raw_root(raw, FORBIDDEN_BUILD_ROOTS + extra_roots):
         return True
     if not _is_path_start(data, index):
         return False
+    home = raw.find(_HOME_PREFIX)
+    if home >= 0 and not _is_home_rebuild_tail(raw[home + len(_HOME_PREFIX) :]):
+        return True
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
@@ -778,21 +857,16 @@ def scan_linux_forbidden_paths(
             hits.append(text)
 
     for marker in FORBIDDEN_BUILD_ROOTS + extra_roots:
-        if not marker:
-            continue
-        start = 0
-        while True:
-            index = data.find(marker, start)
-            if index < 0:
-                break
+        for index in iter_raw_root_matches(data, marker):
             add(_display_fragment(data, index))
-            start = index + 1
     start = 0
     while True:
         index = data.find(_HOME_PREFIX, start)
         if index < 0:
             break
-        if not _is_home_rebuild_tail(data[index + len(_HOME_PREFIX) :]):
+        if _is_path_start(data, index) and not _is_home_rebuild_tail(
+            data[index + len(_HOME_PREFIX) :]
+        ):
             add(_display_fragment(data, index))
         start = index + 1
     for index, byte in enumerate(data):
@@ -854,6 +928,50 @@ def require_exact_sign_nm(records: list[PosixNmRecord]) -> PosixNmRecord:
 
 def parse_readelf_version_names(text: str) -> list[str]:
     return [match.group(1) for match in READELF_VER_NAME_RE.finditer(text)]
+
+
+def _readelf_field(line: str, label: str) -> str | None:
+    tokens = line.split()
+    needle = f"{label}:"
+    for index, token in enumerate(tokens):
+        if token == needle and index + 1 < len(tokens):
+            return tokens[index + 1]
+    return None
+
+
+def parse_readelf_need_indices(text: str) -> dict[str, int]:
+    """Exact per-line Name:/Version: pairs from ``readelf --version-info``."""
+    parsed: dict[str, int] = {}
+    for line in text.splitlines():
+        name = _readelf_field(line, "Name")
+        version = _readelf_field(line, "Version")
+        if name is None or version is None or "File:" in line.split():
+            continue
+        if not version.isdigit():
+            raise ElfError(f"readelf Version field {version!r} is not an integer")
+        index = int(version)
+        existing = parsed.get(name)
+        if existing is not None and existing != index:
+            raise ElfError(f"readelf Name {name!r} has conflicting Version fields")
+        parsed[name] = index
+    return parsed
+
+
+def parse_readelf_dynsym_version(line: str) -> tuple[str, str | None] | None:
+    """Split one ``readelf --dyn-syms`` name field. No substring search."""
+    tokens = line.split()
+    if len(tokens) < 8:
+        return None
+    field = tokens[-1]
+    if field == "UND" or field.startswith("["):
+        return None
+    if "@@" in field:
+        name, version = field.split("@@", 1)
+        return name, version
+    if "@" in field:
+        name, version = field.split("@", 1)
+        return name, version
+    return field, None
 
 
 def parse_elf64_le_x86_64_dso(
@@ -921,6 +1039,8 @@ def parse_elf64_le_x86_64_dso(
                 raise ElfError(f"PT_LOAD {index} p_filesz exceeds p_memsz")
             if p_align == 0:
                 raise ElfError(f"PT_LOAD {index} p_align is zero")
+            _checked_add(p_vaddr, p_memsz, "PT_LOAD memsz")
+            _checked_add(p_offset, p_filesz, "PT_LOAD filesz")
             if p_align > 1:
                 if p_align & (p_align - 1):
                     raise ElfError(f"PT_LOAD {index} p_align is not a power of two")
@@ -932,6 +1052,8 @@ def parse_elf64_le_x86_64_dso(
         elif p_type == PT_DYNAMIC:
             if dynamic_phdr is not None:
                 raise ElfError("multiple PT_DYNAMIC headers")
+            _checked_add(p_vaddr, p_memsz, "PT_DYNAMIC memsz")
+            _checked_add(p_offset, p_filesz, "PT_DYNAMIC filesz")
             dynamic_phdr = DynamicPhdr(
                 offset=p_offset,
                 vaddr=p_vaddr,
@@ -987,6 +1109,7 @@ def parse_elf64_le_x86_64_dso(
         raise ElfError("DT_STRTAB/DT_STRSZ is missing")
     if strsz > MAX_INPUT_BYTES:
         raise ElfError("DT_STRSZ exceeds MAX_INPUT_BYTES")
+    _checked_add(strtab_vaddr, strsz, "DT_STRTAB")
     strtab_off = _vaddr_to_offset(segments, strtab_vaddr)
     _checked_range(strtab_off, strsz, len(data), "DT_STRTAB")
     strtab_end = strtab_off + strsz
@@ -1137,7 +1260,11 @@ def parse_elf64_le_x86_64_dso(
 
     parsed_symbols: list[DynSymbol] = []
     for index in range(count):
-        entry = dynsym.sh_offset + index * ELF64_SYM_SIZE
+        entry = _checked_add(
+            dynsym.sh_offset,
+            _checked_mul(index, ELF64_SYM_SIZE, ".dynsym index"),
+            ".dynsym entry",
+        )
         st_name = _u32(data, entry)
         st_info = data[entry + 4]
         st_other = data[entry + 5]
@@ -1169,7 +1296,7 @@ def parse_elf64_le_x86_64_dso(
             raise ElfError("DT_VERNEED/DT_VERNEEDNUM is required when libc.so.6 is needed")
         if values.get(DT_VERSYM) is None:
             raise ElfError("DT_VERSYM is required when libc.so.6 is needed")
-        record.gnu_versions = _parse_verneed(
+        record.gnu_versions, record.verneed_indices = _parse_verneed(
             data,
             segments,
             sections,
@@ -1198,7 +1325,7 @@ def parse_elf64_le_x86_64_dso(
             )
 
     if verdef_vaddr is not None and verdef_num is not None:
-        _parse_verdef(
+        record.verdef_indices = _parse_verdef(
             data,
             segments,
             sections,
@@ -1207,6 +1334,17 @@ def parse_elf64_le_x86_64_dso(
             verdef_num=verdef_num,
             dynstr=dynstr,
         )
+    _check_need_def_collisions(record.verneed_indices, record.verdef_indices)
+    if values.get(DT_VERSYM) is not None:
+        versym_section = _require_unique_named_type(sections, ".gnu.version", SHT_GNU_VERSYM)
+        record.versym_values = _parse_versym_entries(data, versym_section, count)
+        _resolve_versym(
+            parsed_symbols,
+            record.versym_values,
+            record.verneed_indices,
+            record.verdef_indices,
+        )
+        _require_sign_versym(parsed_symbols, record.versym_values, record.verdef_indices)
 
     record.forbidden_paths = scan_linux_forbidden_paths(data, extra_forbidden_roots)
     if record.forbidden_paths:
@@ -1249,6 +1387,121 @@ def _require_sign_export(symbols: list[DynSymbol], e_shnum: int, record: ElfReco
     ]
 
 
+def _reject_reserved_version_index(index: int, what: str) -> None:
+    if index in {VER_NDX_LOCAL, VER_NDX_GLOBAL}:
+        raise ElfError(f"{what} uses reserved version index {index}")
+    if index == VER_NDX_UNSPECIFIED:
+        raise ElfError(f"{what} uses unresolved version index 0x7fff")
+
+
+def _register_need_index(need_indices: dict[int, str], index: int, name: str) -> None:
+    _reject_reserved_version_index(index, "vna_other")
+    existing = need_indices.get(index)
+    if existing is not None and existing != name:
+        raise ElfError(f"duplicate vna_other {index} for {existing!r} and {name!r}")
+    need_indices[index] = name
+
+
+def _register_def_index(def_indices: dict[int, str], index: int, name: str) -> None:
+    _reject_reserved_version_index(index, "vd_ndx")
+    existing = def_indices.get(index)
+    if existing is not None and existing != name:
+        raise ElfError(f"duplicate vd_ndx {index} for {existing!r} and {name!r}")
+    def_indices[index] = name
+
+
+def _check_need_def_collisions(need_indices: dict[int, str], def_indices: dict[int, str]) -> None:
+    overlap = set(need_indices) & set(def_indices)
+    if overlap:
+        raise ElfError(f"version index collision between Verneed and Verdef: {sorted(overlap)}")
+
+
+def _parse_versym_entries(data: bytes, section: Section, count: int) -> list[int]:
+    if section.sh_entsize != ELF64_VERSYM_SIZE:
+        raise ElfError(".gnu.version sh_entsize is not Elf64_Half")
+    expected = _checked_mul(count, ELF64_VERSYM_SIZE, ".gnu.version count*entsize")
+    if section.sh_size != expected:
+        raise ElfError(".gnu.version size does not match .dynsym count")
+    _checked_range(section.sh_offset, section.sh_size, len(data), ".gnu.version")
+    values: list[int] = []
+    for index in range(count):
+        off = _checked_add(
+            section.sh_offset,
+            _checked_mul(index, ELF64_VERSYM_SIZE, ".gnu.version index"),
+            ".gnu.version entry",
+        )
+        values.append(_u16(data, off))
+    return values
+
+
+def _resolve_versym(
+    symbols: list[DynSymbol],
+    raw_values: list[int],
+    need_indices: dict[int, str],
+    def_indices: dict[int, str],
+) -> None:
+    if len(raw_values) != len(symbols):
+        raise ElfError(".gnu.version count does not equal dynsym count")
+    for index, (symbol, raw) in enumerate(zip(symbols, raw_values)):
+        hidden = bool(raw & VERSYM_HIDDEN)
+        base = raw & VERSYM_NDX_MASK
+        defined = symbol.shndx != SHN_UNDEF
+        if base == VER_NDX_UNSPECIFIED:
+            raise ElfError(f"unresolved versym 0x7fff on symbol {symbol.name or index}")
+        if hidden and base in {VER_NDX_LOCAL, VER_NDX_UNSPECIFIED}:
+            raise ElfError(f"hidden/inconsistent versym {raw:#x} on symbol {symbol.name or index}")
+        if index == 0:
+            if base != VER_NDX_LOCAL or hidden:
+                raise ElfError("dynsym 0 versym is not VER_NDX_LOCAL")
+            continue
+        if base == VER_NDX_LOCAL:
+            if symbol.bind != STB_LOCAL:
+                raise ElfError(f"versym local index on non-local symbol {symbol.name or index}")
+            continue
+        if base == VER_NDX_GLOBAL:
+            if symbol.bind == STB_LOCAL:
+                raise ElfError(f"versym global index on local symbol {symbol.name or index}")
+            continue
+        if not defined:
+            if base in def_indices:
+                raise ElfError(f"imported versym {base} points at Verdef")
+            if base not in need_indices:
+                raise ElfError(f"imported versym {base} does not resolve to a Vernaux")
+        else:
+            if base in need_indices:
+                raise ElfError(f"defined versym {base} points at Vernaux")
+            if base not in def_indices:
+                raise ElfError(f"defined versym {base} does not resolve to a Verdef")
+        if symbol.name == SIGN_SYMBOL:
+            if hidden:
+                raise ElfError(f"{SIGN_SYMBOL} versym is hidden")
+            if not defined:
+                raise ElfError(f"{SIGN_SYMBOL} uses an import version")
+            if base != VER_NDX_GLOBAL and base not in def_indices:
+                raise ElfError(f"{SIGN_SYMBOL} versym {base} is not global or a Verdef")
+
+
+def _require_sign_versym(symbols: list[DynSymbol], raw_values: list[int], def_indices: dict[int, str]) -> None:
+    matches = [index for index, item in enumerate(symbols) if item.name == SIGN_SYMBOL]
+    if not matches:
+        raise ElfError(f"{SIGN_SYMBOL} is not exported")
+    index = matches[0]
+    raw = raw_values[index]
+    hidden = bool(raw & VERSYM_HIDDEN)
+    base = raw & VERSYM_NDX_MASK
+    if hidden:
+        raise ElfError(f"{SIGN_SYMBOL} versym is hidden")
+    if base == VER_NDX_UNSPECIFIED:
+        raise ElfError(f"{SIGN_SYMBOL} versym is unresolved")
+    if base != VER_NDX_GLOBAL and base not in def_indices:
+        raise ElfError(f"{SIGN_SYMBOL} versym {base} is not global or a matching Verdef")
+    if base != VER_NDX_GLOBAL and base in def_indices:
+        return
+    if base == VER_NDX_GLOBAL:
+        return
+    raise ElfError(f"{SIGN_SYMBOL} uses an import version")
+
+
 def _parse_verneed(
     data: bytes,
     segments: list[LoadSegment],
@@ -1258,7 +1511,7 @@ def _parse_verneed(
     verneed_vaddr: int,
     verneed_num: int,
     dynstr,
-) -> list[str]:
+) -> tuple[list[str], dict[int, str]]:
     if verneed_num <= 0 or verneed_num > MAX_VERNEED:
         raise ElfError(f"DT_VERNEEDNUM {verneed_num} is missing or exceeds MAX_VERNEED")
     section = _require_unique_named_type(sections, ".gnu.version_r", SHT_GNU_VERNEED)
@@ -1271,7 +1524,8 @@ def _parse_verneed(
     section_start = section.sh_offset
     section_end = _checked_add(section.sh_offset, section.sh_size, ".gnu.version_r")
     mapped = _vaddr_to_offset(segments, verneed_vaddr)
-    if mapped < section_start or mapped + ELF64_VERNEED_SIZE > section_end:
+    mapped_end = _checked_add(mapped, ELF64_VERNEED_SIZE, "DT_VERNEED")
+    if mapped < section_start or mapped_end > section_end:
         raise ElfError("DT_VERNEED is outside the SHT_GNU_verneed section")
     if mapped != section_start:
         raise ElfError("DT_VERNEED does not start at the SHT_GNU_verneed section")
@@ -1284,6 +1538,7 @@ def _parse_verneed(
             raise ElfError(f"{what} is not 4-byte aligned")
 
     names: list[str] = []
+    need_indices: dict[int, str] = {}
     seen_pairs: set[tuple[str, str]] = set()
     visited_vn: set[int] = set()
     visited_vna: set[int] = set()
@@ -1318,11 +1573,13 @@ def _parse_verneed(
             _in_section(aux, ELF64_VERNAUX_SIZE, "Elf64_Vernaux")
             _claim_range(occupied, aux, ELF64_VERNAUX_SIZE, "Elf64_Vernaux")
             visited_vna.add(aux)
+            vna_other = _u16(data, aux + 6)
             vna_name = _u32(data, aux + 8)
             vna_next = _u32(data, aux + 12)
             name = dynstr(vna_name)
             if not name:
                 raise ElfError("empty GNU version name")
+            _register_need_index(need_indices, vna_other, name)
             pair = (file_name, name)
             if pair in seen_pairs:
                 raise ElfError(f"duplicate GNU version requirement {file_name}:{name}")
@@ -1360,7 +1617,7 @@ def _parse_verneed(
             cursor = nxt
     if walked != verneed_num:
         raise ElfError("DT_VERNEEDNUM does not match the walked Verneed count")
-    return names
+    return names, need_indices
 
 
 def _parse_verdef(
@@ -1372,7 +1629,7 @@ def _parse_verdef(
     verdef_vaddr: int,
     verdef_num: int,
     dynstr,
-) -> None:
+) -> dict[int, str]:
     if verdef_num <= 0 or verdef_num > MAX_VERDEF:
         raise ElfError(f"DT_VERDEFNUM {verdef_num} is missing or exceeds MAX_VERDEF")
     section = _require_unique_named_type(sections, ".gnu.version_d", SHT_GNU_VERDEF)
@@ -1397,6 +1654,7 @@ def _parse_verdef(
 
     visited: set[int] = set()
     occupied: list[tuple[int, int]] = []
+    def_indices: dict[int, str] = {}
     cursor = mapped
     walked = 0
     for index in range(verdef_num):
@@ -1406,6 +1664,7 @@ def _parse_verdef(
         _claim_range(occupied, cursor, ELF64_VERDEF_SIZE, "Elf64_Verdef")
         visited.add(cursor)
         vd_version = _u16(data, cursor)
+        vd_ndx = _u16(data, cursor + 4)
         vd_cnt = _u16(data, cursor + 6)
         vd_aux = _u32(data, cursor + 12)
         vd_next = _u32(data, cursor + 16)
@@ -1418,6 +1677,7 @@ def _parse_verdef(
         aux = _checked_add(cursor, vd_aux, "vd_aux")
         if aux <= cursor:
             raise ElfError("vd_aux is not a positive forward offset")
+        first_name = ""
         for aux_index in range(vd_cnt):
             _in_section(aux, ELF64_VERDAUX_SIZE, "Elf64_Verdaux")
             _claim_range(occupied, aux, ELF64_VERDAUX_SIZE, "Elf64_Verdaux")
@@ -1426,6 +1686,8 @@ def _parse_verdef(
             name = dynstr(vda_name)
             if not name:
                 raise ElfError("empty GNU version definition name")
+            if aux_index == 0:
+                first_name = name
             last_aux = aux_index + 1 == vd_cnt
             if last_aux:
                 if vda_next != 0:
@@ -1437,6 +1699,7 @@ def _parse_verdef(
                 if nxt <= aux:
                     raise ElfError("vda_next is not a positive forward offset")
                 aux = nxt
+        _register_def_index(def_indices, vd_ndx, first_name)
         walked += 1
         last_vd = index + 1 == verdef_num
         if last_vd:
@@ -1451,26 +1714,25 @@ def _parse_verdef(
             cursor = nxt
     if walked != verdef_num:
         raise ElfError("DT_VERDEFNUM does not match the walked Verdef count")
+    return def_indices
 
 
 def _note_has_build_id(blob: bytes) -> bool:
     cursor = 0
-    while cursor + 12 <= len(blob):
+    while _checked_add(cursor, 12, "ELF note header") <= len(blob):
         namesz = _u32(blob, cursor)
         descsz = _u32(blob, cursor + 4)
         ntype = _u32(blob, cursor + 8)
-        cursor += 12
-        name_end = cursor + namesz
-        name_pad = (4 - (namesz % 4)) % 4
-        desc_start = name_end + name_pad
-        desc_end = desc_start + descsz
-        desc_pad = (4 - (descsz % 4)) % 4
+        cursor = _checked_add(cursor, 12, "ELF note header")
+        name_end = _checked_add(cursor, namesz, "ELF note name")
+        desc_start = _checked_align_up(name_end, 4, "ELF note name pad")
+        desc_end = _checked_add(desc_start, descsz, "ELF note desc")
         if desc_end > len(blob):
             raise ElfError("truncated ELF note")
         name = blob[cursor:name_end]
         if ntype == NT_GNU_BUILD_ID and name.startswith(b"GNU"):
             return True
-        cursor = desc_end + desc_pad
+        cursor = _checked_align_up(desc_end, 4, "ELF note desc pad")
     return False
 
 
@@ -1527,6 +1789,30 @@ def verify_linux_x86_64_cdylib(
                 f"readelf GLIBC requirement {too_new} exceeds documented baseline "
                 f"{DOCUMENTED_GLIBC_BASELINE_LABEL}"
             )
+        tool_need = parse_readelf_need_indices(record.readelf_version_text)
+        if tool_need:
+            inverted = {name: index for index, name in record.verneed_indices.items()}
+            if tool_need != inverted:
+                raise ElfError(
+                    "readelf --version-info Name/Version indices do not match the parser: "
+                    f"{tool_need} vs {inverted}"
+                )
+        dynsyms = _run([readelf_bin, "--dyn-syms", str(path)])
+        if dynsyms.returncode == 0:
+            for line in (dynsyms.stdout or "").splitlines():
+                parsed = parse_readelf_dynsym_version(line)
+                if parsed is None:
+                    continue
+                name, version = parsed
+                if name != SIGN_SYMBOL:
+                    continue
+                if version is None:
+                    continue
+                if version not in record.verdef_indices.values():
+                    raise ElfError(
+                        f"readelf --dyn-syms {SIGN_SYMBOL} version {version!r} "
+                        "is not a parsed Verdef name"
+                    )
     if nm_bin:
         completed = _run(
             [nm_bin, "-D", "--defined-only", "--format=posix", str(path)]

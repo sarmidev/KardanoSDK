@@ -213,18 +213,15 @@ at `linux-x86-64/`. The ELF verifier accepts only full-string
 Verneed/Vernaux inside one `SHT_GNU_verneed` section, requires canonical
 section 0, one `.dynamic`/`PT_DYNAMIC` pair with exact
 offset/vaddr/filesz/memsz/align, `.dynstr.sh_size == DT_STRSZ`,
-`DT_VERSYM` bound to one allocated `.gnu.version`, and a two-pass path
-scan (raw-byte forbidden roots at any offset, plus slash-byte
-candidates through NUL/control/whitespace/EOF; invalid UTF-8 fails
-when it contains a forbidden root or looks like an unapproved
-absolute path; `/proc` is a runtime prefix). Permissions stay
-`contents: read`. Uploads use `if-no-files-found: error`. The job does
-not write CHECKSUMS or committed `src/`. ubuntu-24.04 artifacts and
-Linux runs `32672020909` and `32672881083` are superseded. Fresh
-Phase B at `c6f19d0` is run `32673275963` (success; artifacts
-`linux-jvm-candidate-a` `9501964027`, `linux-jvm-candidate-b`
-`9501965715`, `linux-jvm-compare-report` `9502002631`, expire
-2026-09-06; not downloaded, not promoted).
+`DT_VERSYM` bound to one allocated `.gnu.version`, parsed Versym
+indices resolved to unique `vna_other`/`vd_ndx` values, `UINT64_MAX`
+checked add/mul, and a two-pass path scan (raw-byte forbidden roots
+at any offset only when the next byte is `/`, a path stop, or EOF,
+plus slash-byte candidates through NUL/control/whitespace/EOF).
+Permissions stay `contents: read`. Uploads use `if-no-files-found:
+error`. The job does not write CHECKSUMS or committed `src/`.
+ubuntu-24.04 artifacts and Linux runs `32673275963` and `32673752819`
+are superseded. A fresh Phase B at this verifier tip is required.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

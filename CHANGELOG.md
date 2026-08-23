@@ -75,11 +75,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   root or an unapproved absolute-looking path; `/proc` is a runtime
   prefix; `/tmp/untracked-host` and `/usr/local/private-build` fail).
   Two independent candidate jobs plus JVM KAT must match before any
-  promotion review. Fresh Phase B at `c6f19d0` is run `32673275963`
-  (success; artifacts expire 2026-09-06; not downloaded). Runs
-  `32672020909` and `32672881083` are superseded. The ninth CHECKSUMS
-  row is added only after that re-review is GO. Linux ARM, musl, older
-  glibc, and Windows are out of scope.
+  promotion review. Versym entries are parsed and resolved to unique
+  `vna_other`/`vd_ndx` values; ELF64 add/mul rejects values outside
+  `0..UINT64_MAX` and sums that overflow; raw known-root matches
+  require a following `/`, path stop, or EOF. Runs `32673275963` and
+  `32673752819` are superseded. The ninth CHECKSUMS row is added only
+  after that re-review is GO. Linux ARM, musl, older glibc, and
+  Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

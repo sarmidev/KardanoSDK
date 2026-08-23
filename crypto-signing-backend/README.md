@@ -248,23 +248,20 @@ unparseable labels fail), Verneed/Vernaux chains bound to one
 size equal to `DT_STRSZ`, `DT_VERSYM` bound to one allocated
 `.gnu.version`, and `.debug_*` / `.zdebug_*` / `.gnu_debuglink`
 material. `nm` corroboration uses `--defined-only --format=posix`
-exact records, not substring search. Path policy is two-pass: raw-byte
-search for documented build roots at any offset, then a slash-byte
-scan that extracts candidates through NUL/control/whitespace/EOF.
-Allowed remap/runtime prefixes use an exact component boundary
-(`path == prefix` or next byte `/`). Invalid UTF-8 candidates fail
-when they contain a forbidden root or look like an unapproved
-absolute path; `/letter` plus non-ASCII continuation without a later
-slash is not treated as a path. `/proc` is a runtime prefix
-(rustc/libstd `/proc/self/exe`). `/tmp/untracked-host` and
-`/usr/local/private-build` are rejected. Fresh Phase B at `c6f19d0` is
-run `32673275963` (A/B + compare + JVM KAT success on `ubuntu-22.04`).
-Artifacts `linux-jvm-candidate-a` (id `9501964027`, expires
-2026-09-06T23:20:21Z), `linux-jvm-candidate-b` (id `9501965715`,
-expires 2026-09-06T23:20:28Z), and `linux-jvm-compare-report` (id
-`9502002631`, expires 2026-09-06T23:23:26Z) are not downloaded and
-not promoted. Runs `32672020909` and `32672881083` are superseded.
-Independent re-review is still required before any CHECKSUMS row.
+exact records, not substring search. Every `.gnu.version` entry is
+parsed; the hidden bit is split from the base index; indices greater
+than 1 resolve uniquely to a Vernaux `vna_other` (undefined) or a
+Verdef `vd_ndx` (defined). The sign export is unhidden and
+global/unversioned or a matching Verdef. ELF64 add/mul checks operands
+against `UINT64_MAX` before summing. Path policy is two-pass: raw-byte
+search for documented build roots at any offset when the next byte is
+`/`, a path stop, or EOF, then a slash-byte scan through
+NUL/control/whitespace/EOF. Allowed remap/runtime prefixes use an
+exact component boundary (`path == prefix` or next byte `/`).
+`/home/runner-up`, `/Userspace`, and `/opt/homebrewery` are not raw
+root hits. `/proc` is a runtime prefix. Runs `32673275963` and
+`32673752819` are superseded; a fresh Phase B at this verifier tip is
+required before any CHECKSUMS row.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

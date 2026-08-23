@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Fresh Phase B at `c6f19d0` run `32673275963` succeeded (A/B + compare + JVM KAT). Artifacts `linux-jvm-candidate-a`/`b` and `linux-jvm-compare-report` expire 2026-09-06. Not promoted. Independent A/B re-review still required. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Versym indices now resolve to unique `vna_other`/`vd_ndx`; ELF64 add/mul is `UINT64_MAX`-checked; raw known roots require a following `/`, path stop, or EOF. Runs `32673275963` and `32673752819` superseded. Not promoted. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -121,9 +121,9 @@ Date: 2026-08-23
   pinned `ubuntu-22.04`
   (ImageOS `ubuntu22`) with rustc 1.97.0 / `x86_64-unknown-linux-gnu`.
   Two independent jobs plus JVM KAT must match; promotion waits for
-  re-review GO. Fresh Phase B at `c6f19d0` is run `32673275963`
-  (success; artifacts expire 2026-09-06; not downloaded). Earlier runs
-  `32672020909` and `32672881083` are superseded.
+  re-review GO. Versym indices resolve uniquely; arithmetic is
+  `UINT64_MAX`-checked; raw known roots use a following-byte boundary.
+  Runs `32673275963` and `32673752819` are superseded.
   CHECKSUMS still has
   the eight committed artifacts. Device runtime remains historical
   (W5-2). Do not start Windows or merge/tag.
@@ -246,9 +246,9 @@ Do not use:
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase A/B re-review is the next gate (promotion
 only after two independent `ubuntu-22.04` hashes match **and** that
-re-review is GO). Fresh Phase B CI at `c6f19d0` is run `32673275963`
-(success, not promoted). Independent re-review is still required.
-Earlier runs `32672020909` and `32672881083` are superseded.
+re-review is GO). Runs `32673275963` and `32673752819` are superseded.
+Independent re-review is still required. A fresh Phase B at the
+current verifier tip is required.
 do not promote from them. Do not start Windows until then. Residual owner work:
 authenticated GitHub artifact download, secret-scanning / Dependabot,
 the manual accessibility walkthrough, and a post-replacement Android
