@@ -128,6 +128,20 @@ patch releases, not `@v4`) and the Pages upload composite's transitive
 `gradle/actions` v6.3.0 remains unused because its default cache provider
 is a separate commercial component with a Terms of Use gate.
 
+## Dependency locking and verification
+
+Library coordinates are locked per project in `*/gradle.lockfile` with
+`LockMode.STRICT` on compile/runtime classpaths. Artifact bytes are
+checked against SHA-256 rows in `gradle/verification-metadata.xml`.
+The Rust wrapper uses `rust-toolchain.toml` channel `1.97.0` and
+`cargo --locked`. Regeneration commands and the tamper-check record
+are in `docs/DEPENDENCY_REVIEW.md` and `docs/TESTING.md`.
+
+Before a release that changes a catalog version, regenerate lock
+state and verification metadata, review the generated diff, and keep
+`Cargo.lock` matched to the exact `Cargo.toml` pins. Do not rewrite
+generated checksums by hand.
+
 ## Publishing artifacts later
 
 Maven publication requires a separate decision covering group ownership, coordinates, versioning,

@@ -100,6 +100,14 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- Dependency locking and verification (2026-08-23): every lockable
+  compile/runtime classpath uses `LockMode.STRICT` with per-project
+  `gradle.lockfile`s; `gradle/verification-metadata.xml` records
+  SHA-256 only. `crypto-signing-backend/rust-toolchain.toml` pins
+  Rust `1.97.0`. Cargo directs are `ed25519-bip32 = "=0.4.2"` and
+  `uniffi = "=0.29.5"`; documented rebuilds use `--locked`. Lock
+  regeneration produced no diff; a tampered `junit` checksum failed
+  the build and was restored.
 - Crypto/native support review (2026-08-23, ADR-0020): Bouncy Castle
   `bcprov-jdk18on` 1.84 → 1.85.2 and JNA 5.17.0 → 5.19.1 after changelog
   review. `:crypto:jvmTest` (78) after the Castle bump;

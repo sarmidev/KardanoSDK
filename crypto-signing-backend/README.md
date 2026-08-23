@@ -67,9 +67,9 @@ compile+link), matching the repo's iOS posture.
 |---|---|---|
 | `ed25519-bip32` (crate) | `0.4.2` (pinned; `Cargo.lock`) | MIT OR Apache-2.0 |
 | `cryptoxide` (transitive; underlying `signature_extended` primitive) | `0.5.3` | MIT OR Apache-2.0 |
-| `uniffi` (Rust crate) | `0.29.5` (resolved from `"0.29.4"`) | MPL-2.0 |
+| `uniffi` (Rust crate) | `=0.29.5` (`Cargo.toml` + `Cargo.lock`) | MPL-2.0 |
 | `gobley-uniffi-bindgen` (CLI, offline binding generation only) | `0.3.7` | Apache-2.0 OR MIT |
-| Rust toolchain (`rustc`/`cargo`) | `1.97.0` | MIT OR Apache-2.0 |
+| Rust toolchain (`rustc`/`cargo`) | `1.97.0` (`rust-toolchain.toml`) | MIT OR Apache-2.0 |
 | `cargo-ndk` (offline Android cross-build only) | `4.1.2` | MIT |
 | Android NDK (offline Android cross-build only) | `27.2.12479018` | Android NDK license (Apache-2.0) |
 | `net.java.dev.jna:jna` (jvm jar / android `@aar`) | `5.19.1` (`gradle/libs.versions.toml`) | Apache-2.0 OR LGPL-2.1 |
@@ -89,18 +89,18 @@ export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/27.2.12479018"
 LIB=libkardano_ed25519_bip32_signing
 
 # 1. JVM cdylibs (macOS arm64 host + x86_64 cross-build)
-cargo build --release --lib
+cargo build --locked --release --lib
 cp target/release/$LIB.dylib                       src/jvmMain/resources/darwin-aarch64/
 rustup target add x86_64-apple-darwin
-cargo build --release --lib --target x86_64-apple-darwin
+cargo build --locked --release --lib --target x86_64-apple-darwin
 cp target/x86_64-apple-darwin/release/$LIB.dylib   src/jvmMain/resources/darwin-x86-64/
 
 # 2. Android .so, 4 ABIs
-cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o src/androidMain/jniLibs build --release --lib
+cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o src/androidMain/jniLibs build --locked --release --lib
 
 # 3. iOS static libs
-cargo build --release --lib --target aarch64-apple-ios
-cargo build --release --lib --target aarch64-apple-ios-sim
+cargo build --locked --release --lib --target aarch64-apple-ios
+cargo build --locked --release --lib --target aarch64-apple-ios-sim
 cp target/aarch64-apple-ios/release/$LIB.a         src/nativeInterop/libs/iosArm64/
 cp target/aarch64-apple-ios-sim/release/$LIB.a     src/nativeInterop/libs/iosSimulatorArm64/
 

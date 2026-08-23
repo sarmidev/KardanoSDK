@@ -90,7 +90,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 3 | `fix/playground-operation-lifecycle` | `a34afdc` | Generation/token lifecycle and accessibility semantics |
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
-| 6 | `fix/build-and-ci-reproducibility` | in progress, stacked on `90fe0ee` | Action SHA upgrades + pin checker (commit 1). Gradle/crypto/lock/lint commits follow. |
+| 6 | `fix/build-and-ci-reproducibility` | in progress, stacked on `90fe0ee` | Commits 1–4 landed (Actions, toolchain group, crypto review, locks/verification). Lint CI remains. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -106,8 +106,9 @@ Date: 2026-08-23
   / compile+target SDK 37.0 / lifecycle 2.11.0 / Ktor 3.5.2, removes unused
   catalog entries, and keeps Compose 1.11.1 + Material3 1.11.0-alpha07 as
   one group. Commit 3 reviews crypto/native pins (Castle 1.85.2, JNA
-  5.19.1; ADR-0020 for remaining 0.x). Remaining commits: lockfiles,
-  Android lint CI.
+  5.19.1; ADR-0020 for remaining 0.x). Commit 4 adds STRICT
+  Gradle lockfiles, SHA-256 verification metadata, `rust-toolchain.toml`
+  1.97.0, and Cargo `--locked` pins. Remaining: Android lint CI.
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
   `3936047`) — four original commits complete, plus review-fix commits.**
   - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now
@@ -210,9 +211,8 @@ Do not use:
 
 ## Next Recommended Task
 
-Prompt 6 commit 1 (Action pins + checker) is on this branch. Remaining Prompt 6
-commits: Gradle/AGP/Kotlin/SDK/UI dependency upgrades, crypto/native review,
-dependency locking/verification, Android lint CI. Residual owner work from
+Prompt 6 commits 1–4 are on this branch. Remaining Prompt 6 commit:
+Android lint CI. Residual owner work from
 Prompt 5: an authenticated GitHub secret-scanning / Dependabot pass, the
 manual accessibility walkthrough, and a human review of the stacked PRs. Do
 not merge from an automated session. `gradle/actions` v6 needs an explicit
