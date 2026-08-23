@@ -28,6 +28,8 @@ def _record_dict(record: natives.ArtifactRecord) -> dict[str, object]:
         "sha256": record.sha256,
         "file": record.file_output,
         "lipo": record.lipo_output,
+        "install_name": record.install_name,
+        "uuid": record.uuid,
         "sign_symbols": record.symbols,
         "symbol_ok": record.symbol_ok,
         "arch_ok": record.arch_ok,

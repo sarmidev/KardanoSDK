@@ -165,7 +165,11 @@ python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.
 ```
 
 Thin wrappers (`scripts/rebuild_macos_jvm.sh`, `rebuild_android.sh`, `rebuild_ios.sh`)
-select one group. `--deterministic` adds `SOURCE_DATE_EPOCH` / `ZERO_AR_DATE` /
+select one group. The default Cargo target directory is this module's gitignored
+`target/` (the same path the committed macOS dylibs record in `LC_ID_DYLIB`).
+`--cargo-target-dir` elsewhere changes that absolute install name and the
+content-hashed `LC_UUID`, so those copies will not match the committed dylibs.
+`--deterministic` adds `SOURCE_DATE_EPOCH` / `ZERO_AR_DATE` /
 `--remap-path-prefix`; that is **not** the README recipe that produced the committed
 binaries, so it is an investigation mode, not the default comparison.
 

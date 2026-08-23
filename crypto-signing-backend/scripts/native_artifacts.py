@@ -153,6 +153,8 @@ class ArtifactRecord:
     sha256: str | None = None
     file_output: str | None = None
     lipo_output: str | None = None
+    install_name: str | None = None
+    uuid: str | None = None
     symbols: list[str] = field(default_factory=list)
     symbol_ok: bool | None = None
     arch_ok: bool | None = None
@@ -205,6 +207,28 @@ def _file_output(path: Path) -> str:
         return ""
     completed = _run([file_bin, str(path)])
     return (completed.stdout or "").strip()
+
+
+def _macho_identity(path: Path) -> tuple[str | None, str | None]:
+    otool = shutil.which("otool")
+    if otool is None:
+        return None, None
+    completed = _run([otool, "-l", str(path)])
+    text = completed.stdout or ""
+    install_name = None
+    uuid = None
+    in_id = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped == "cmd LC_ID_DYLIB":
+            in_id = True
+        elif stripped.startswith("cmd "):
+            in_id = False
+        elif in_id and stripped.startswith("name "):
+            install_name = stripped[5:].split(" (offset", 1)[0].strip()
+        elif stripped.startswith("uuid "):
+            uuid = stripped.split(None, 1)[1].strip()
+    return install_name, uuid
 
 
 def _lipo_output(path: Path) -> str:
@@ -285,6 +309,7 @@ def inspect_artifact(
     record.file_output = _file_output(path)
     if spec.kind in {"dylib", "archive"}:
         record.lipo_output = _lipo_output(path)
+        record.install_name, record.uuid = _macho_identity(path)
     command = _nm_command(spec, path, ndk_home)
     if command is not None:
         completed = _run(command)

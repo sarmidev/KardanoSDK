@@ -106,10 +106,18 @@ def collect_provenance(module_root: Path, env: dict[str, str]) -> dict[str, obje
     }
 
 
-def base_env(*, deterministic: bool, module_root: Path, staging: Path) -> dict[str, str]:
+def base_env(
+    *,
+    deterministic: bool,
+    module_root: Path,
+    cargo_target_dir: Path,
+) -> dict[str, str]:
     env = os.environ.copy()
     env["CARGO_INCREMENTAL"] = "0"
-    env["CARGO_TARGET_DIR"] = str(staging / "cargo-target")
+    # Default is the crate `target/` directory (gitignored), matching README.md.
+    # A separate staging cargo-target changes Mach-O LC_ID_DYLIB (absolute path)
+    # and therefore LC_UUID. Do not point this at src/.
+    env["CARGO_TARGET_DIR"] = str(cargo_target_dir)
     env.setdefault("CARGO_TERM_COLOR", "never")
     if deterministic:
         env["SOURCE_DATE_EPOCH"] = "1"
@@ -239,6 +247,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Comma-separated groups to rebuild.",
     )
     parser.add_argument(
+        "--cargo-target-dir",
+        type=Path,
+        help="Cargo target directory (default: <module>/target, the README recipe).",
+    )
+    parser.add_argument(
         "--deterministic",
         action="store_true",
         help="Add SOURCE_DATE_EPOCH/ZERO_AR_DATE/remap-path-prefix (not the README recipe).",
@@ -258,13 +271,19 @@ def main(argv: list[str] | None = None) -> int:
     staging = args.staging.resolve()
     try:
         _require_empty_staging(staging)
+        cargo_target_dir = (
+            args.cargo_target_dir.resolve()
+            if args.cargo_target_dir
+            else (module_root / "target")
+        )
         env = base_env(
             deterministic=args.deterministic,
             module_root=module_root,
-            staging=staging,
+            cargo_target_dir=cargo_target_dir,
         )
         provenance = collect_provenance(module_root, env)
         provenance["deterministic_flags"] = bool(args.deterministic)
+        provenance["cargo_target_dir"] = str(cargo_target_dir)
         provenance["groups"] = list(groups)
         (staging / "provenance.json").write_text(
             json.dumps(provenance, indent=2, sort_keys=True) + "\n",
