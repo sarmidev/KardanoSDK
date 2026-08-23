@@ -258,6 +258,80 @@ class PlaygroundViewModelTest {
     }
 
     @Test
+    fun queryFunds_slowResultAfterResetFlow_isDiscarded() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(queryWalletFunds = QueryWalletFundsUseCase { pending.await() })
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+        assertEquals(0L, vm.state.value.flowGeneration)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+    }
+
+    @Test
+    fun queryFunds_slowResultAfterProviderToggle_isDiscarded() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(queryWalletFunds = QueryWalletFundsUseCase { pending.await() })
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertTrue(vm.state.value.useLiveBlockfrost)
+    }
+
+    @Test
+    fun queryFunds_projectIdChangeDuringRequest_onlyLatestGenerationApplies() = runTest {
+        val first = CompletableDeferred<WalletBalancePresentation>()
+        val second = CompletableDeferred<WalletBalancePresentation>()
+        var calls = 0
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                calls++
+                if (calls == 1) first.await() else second.await()
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("newer-id"))
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        val latest = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "latest")))
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        first.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+        assertEquals("newer-id", vm.state.value.projectId)
+    }
+
+    @Test
     fun queryFunds_afterEnablingLiveBlockfrostWithProjectId_usesTheLiveProviderFromTheFactory() = runTest {
         val factory = PlaygroundProviderFactory()
         var received: ChainQueryProvider? = null

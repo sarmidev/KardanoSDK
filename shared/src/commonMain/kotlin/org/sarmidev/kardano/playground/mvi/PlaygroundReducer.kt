@@ -65,8 +65,16 @@ internal object PlaygroundReducer {
             },
         )
 
-        is PlaygroundIntent.ToggleLiveBlockfrost -> state.copy(useLiveBlockfrost = intent.enabled)
-        is PlaygroundIntent.UpdateProjectId -> state.copy(projectId = intent.value)
+        is PlaygroundIntent.ToggleLiveBlockfrost -> if (state.useLiveBlockfrost == intent.enabled) {
+            state
+        } else {
+            bumpGenerationAndClearProviderResults(state).copy(useLiveBlockfrost = intent.enabled)
+        }
+        is PlaygroundIntent.UpdateProjectId -> if (state.projectId == intent.value) {
+            state
+        } else {
+            bumpGenerationAndClearProviderResults(state).copy(projectId = intent.value)
+        }
 
         is PlaygroundIntent.ToggleTechnicalDetails -> state.copy(
             technicalDetailsExpanded = if (intent.step in state.technicalDetailsExpanded) {
@@ -84,7 +92,9 @@ internal object PlaygroundReducer {
         // mid-demo "Start over" control and the Summary screen's "Run the demo again" control.
         // Provider selection, technicalDetailsExpanded, and diagnostics inputs/results are
         // intentionally preserved so resetting the flow does not also clear an in-progress
-        // diagnostics exploration or provider configuration.
+        // diagnostics exploration or provider configuration. [PlaygroundState.flowGeneration]
+        // increments so any in-flight Funds/Build/Sign/Submit/diagnostic result is discarded
+        // when it arrives; the reducer itself stays pure and does not cancel Jobs.
         is PlaygroundIntent.ResetFlow -> state.copy(
             wallet = WalletPresentation.Empty,
             walletLoading = false,
@@ -94,6 +104,7 @@ internal object PlaygroundReducer {
             submit = SubmitTransactionPresentation.Empty,
             demoStep = PlaygroundStep.WALLET,
             section = PlaygroundSection.DEMO,
+            flowGeneration = state.flowGeneration + 1,
         )
 
         is PlaygroundIntent.UpdateAddressInput -> state.copy(addressInput = intent.value)
@@ -151,17 +162,36 @@ internal object PlaygroundReducer {
     fun applyWalletResult(state: PlaygroundState, result: WalletPresentation): PlaygroundState =
         state.copy(wallet = result, walletLoading = false)
 
-    fun applyFundsResult(state: PlaygroundState, result: WalletBalancePresentation): PlaygroundState =
-        state.copy(funds = result)
+    /**
+     * Folds [result] into [state] only when [generation] still matches
+     * [PlaygroundState.flowGeneration]. A stale generation is a no-op so a slow Funds/Build/
+     * Sign/Submit/diagnostic call cannot overwrite a newer ResetFlow or provider-configuration
+     * change. Defaulting [generation] to the current value keeps existing synchronous tests
+     * applying immediately.
+     */
+    fun applyFundsResult(
+        state: PlaygroundState,
+        result: WalletBalancePresentation,
+        generation: Long = state.flowGeneration,
+    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(funds = result)
 
-    fun applyDraftResult(state: PlaygroundState, result: TransactionDraftPresentation): PlaygroundState =
-        state.copy(draft = result)
+    fun applyDraftResult(
+        state: PlaygroundState,
+        result: TransactionDraftPresentation,
+        generation: Long = state.flowGeneration,
+    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(draft = result)
 
-    fun applySignedResult(state: PlaygroundState, result: SignedTransactionPresentation): PlaygroundState =
-        state.copy(signed = result)
+    fun applySignedResult(
+        state: PlaygroundState,
+        result: SignedTransactionPresentation,
+        generation: Long = state.flowGeneration,
+    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(signed = result)
 
-    fun applySubmitResult(state: PlaygroundState, result: SubmitTransactionPresentation): PlaygroundState =
-        state.copy(submit = result)
+    fun applySubmitResult(
+        state: PlaygroundState,
+        result: SubmitTransactionPresentation,
+        generation: Long = state.flowGeneration,
+    ): PlaygroundState = if (generation != state.flowGeneration) state else state.copy(submit = result)
 
     fun applyAddressResult(state: PlaygroundState, result: AddressPresentation): PlaygroundState =
         state.copy(addressResult = result)
@@ -175,10 +205,30 @@ internal object PlaygroundReducer {
     fun applyProviderUtxosResult(
         state: PlaygroundState,
         result: ProviderUtxosPresentation,
-    ): PlaygroundState = state.copy(providerUtxos = result)
+        generation: Long = state.flowGeneration,
+    ): PlaygroundState =
+        if (generation != state.flowGeneration) state else state.copy(providerUtxos = result)
 
     fun applyProviderParamsResult(
         state: PlaygroundState,
         result: ProviderParamsPresentation,
-    ): PlaygroundState = state.copy(providerParams = result)
+        generation: Long = state.flowGeneration,
+    ): PlaygroundState =
+        if (generation != state.flowGeneration) state else state.copy(providerParams = result)
+
+    /**
+     * Increments [PlaygroundState.flowGeneration] and clears every provider-backed step/diagnostic
+     * result. Wallet restore is local (not provider-backed) and is left in place. Pure — no Job
+     * cancellation happens here.
+     */
+    private fun bumpGenerationAndClearProviderResults(state: PlaygroundState): PlaygroundState =
+        state.copy(
+            flowGeneration = state.flowGeneration + 1,
+            funds = WalletBalancePresentation.Empty,
+            draft = TransactionDraftPresentation.Empty,
+            signed = SignedTransactionPresentation.Empty,
+            submit = SubmitTransactionPresentation.Empty,
+            providerUtxos = ProviderUtxosPresentation.Empty,
+            providerParams = ProviderParamsPresentation.Empty,
+        )
 }

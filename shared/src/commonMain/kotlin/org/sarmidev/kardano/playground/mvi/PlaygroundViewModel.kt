@@ -2,6 +2,7 @@ package org.sarmidev.kardano.playground.mvi
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,8 +37,13 @@ import org.sarmidev.kardano.provider.TxSubmitProvider
  * [providerFactory] selects the active [ChainQueryProvider]/[TxSubmitProvider] pair from the
  * current [PlaygroundState.useLiveBlockfrost]/[PlaygroundState.projectId] for every provider-
  * dependent operation — the same mock-by-default / live-Blockfrost-preprod-when-configured
- * behavior the pre-1.12-pre-a screen had. This is sample/diagnostic code in `:shared`; it is not
- * part of the SDK public API.
+ * behavior the pre-1.12-pre-a screen had.
+ *
+ * Provider-backed operations capture [PlaygroundState.flowGeneration] at start and fold the
+ * result back only when that generation is still current. [PlaygroundIntent.ResetFlow] and
+ * actual provider-configuration changes cancel in-flight [Job]s and increment the generation
+ * in the reducer (the reducer itself remains a pure function). This is sample/diagnostic code
+ * in `:shared`; it is not part of the SDK public API.
  */
 internal class PlaygroundViewModel(
     private val restoreWallet: RestoreWalletUseCase = RestoreWalletUseCase.Default,
@@ -49,6 +55,13 @@ internal class PlaygroundViewModel(
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(PlaygroundState.initial())
+
+    private var fundsJob: Job? = null
+    private var draftJob: Job? = null
+    private var signedJob: Job? = null
+    private var submitJob: Job? = null
+    private var providerUtxosJob: Job? = null
+    private var providerParamsJob: Job? = null
 
     /** The current [PlaygroundState], observed by [org.sarmidev.kardano.playground.PlaygroundScreen]. */
     val state: StateFlow<PlaygroundState> = mutableState.asStateFlow()
@@ -66,8 +79,39 @@ internal class PlaygroundViewModel(
             is PlaygroundIntent.DecodeCbor -> onDecodeCbor()
             is PlaygroundIntent.LoadProviderUtxos -> onLoadProviderUtxos()
             is PlaygroundIntent.LoadProviderParams -> onLoadProviderParams()
+            is PlaygroundIntent.ResetFlow -> {
+                cancelInFlightOperations()
+                mutableState.update { PlaygroundReducer.reduce(it, intent) }
+            }
+            is PlaygroundIntent.ToggleLiveBlockfrost -> {
+                if (intent.enabled != mutableState.value.useLiveBlockfrost) {
+                    cancelInFlightOperations()
+                }
+                mutableState.update { PlaygroundReducer.reduce(it, intent) }
+            }
+            is PlaygroundIntent.UpdateProjectId -> {
+                if (intent.value != mutableState.value.projectId) {
+                    cancelInFlightOperations()
+                }
+                mutableState.update { PlaygroundReducer.reduce(it, intent) }
+            }
             else -> mutableState.update { PlaygroundReducer.reduce(it, intent) }
         }
+    }
+
+    private fun cancelInFlightOperations() {
+        fundsJob?.cancel()
+        fundsJob = null
+        draftJob?.cancel()
+        draftJob = null
+        signedJob?.cancel()
+        signedJob = null
+        submitJob?.cancel()
+        submitJob = null
+        providerUtxosJob?.cancel()
+        providerUtxosJob = null
+        providerParamsJob?.cancel()
+        providerParamsJob = null
     }
 
     private fun activeQueryProvider(): ChainQueryProvider = providerFactory.queryProvider(
@@ -91,39 +135,47 @@ internal class PlaygroundViewModel(
     }
 
     private fun onQueryFunds() {
+        fundsJob?.cancel()
+        val generation = mutableState.value.flowGeneration
         mutableState.update(PlaygroundReducer::startFundsLoading)
         val provider = activeQueryProvider()
-        viewModelScope.launch {
+        fundsJob = viewModelScope.launch {
             val result = queryWalletFunds(provider)
-            mutableState.update { PlaygroundReducer.applyFundsResult(it, result) }
+            mutableState.update { PlaygroundReducer.applyFundsResult(it, result, generation) }
         }
     }
 
     private fun onBuildDraft() {
+        draftJob?.cancel()
+        val generation = mutableState.value.flowGeneration
         mutableState.update(PlaygroundReducer::startDraftLoading)
         val provider = activeQueryProvider()
-        viewModelScope.launch {
+        draftJob = viewModelScope.launch {
             val result = buildTransactionDraft(provider)
-            mutableState.update { PlaygroundReducer.applyDraftResult(it, result) }
+            mutableState.update { PlaygroundReducer.applyDraftResult(it, result, generation) }
         }
     }
 
     private fun onSignTransaction() {
+        signedJob?.cancel()
+        val generation = mutableState.value.flowGeneration
         mutableState.update(PlaygroundReducer::startSignedLoading)
         val provider = activeQueryProvider()
-        viewModelScope.launch {
+        signedJob = viewModelScope.launch {
             val result = signTransaction(provider)
-            mutableState.update { PlaygroundReducer.applySignedResult(it, result) }
+            mutableState.update { PlaygroundReducer.applySignedResult(it, result, generation) }
         }
     }
 
     private fun onSubmitTransaction() {
+        submitJob?.cancel()
+        val generation = mutableState.value.flowGeneration
         mutableState.update(PlaygroundReducer::startSubmitLoading)
         val queryProvider = activeQueryProvider()
         val submitProvider = activeSubmitProvider()
-        viewModelScope.launch {
+        submitJob = viewModelScope.launch {
             val result = submitTransaction(queryProvider, submitProvider)
-            mutableState.update { PlaygroundReducer.applySubmitResult(it, result) }
+            mutableState.update { PlaygroundReducer.applySubmitResult(it, result, generation) }
         }
     }
 
@@ -147,21 +199,25 @@ internal class PlaygroundViewModel(
     }
 
     private fun onLoadProviderUtxos() {
+        providerUtxosJob?.cancel()
+        val generation = mutableState.value.flowGeneration
         mutableState.update(PlaygroundReducer::startProviderUtxosLoading)
         val provider = activeQueryProvider()
         val addressInput = mutableState.value.providerAddressInput
-        viewModelScope.launch {
+        providerUtxosJob = viewModelScope.launch {
             val result = PlaygroundPresenter.presentProviderUtxos(provider, addressInput)
-            mutableState.update { PlaygroundReducer.applyProviderUtxosResult(it, result) }
+            mutableState.update { PlaygroundReducer.applyProviderUtxosResult(it, result, generation) }
         }
     }
 
     private fun onLoadProviderParams() {
+        providerParamsJob?.cancel()
+        val generation = mutableState.value.flowGeneration
         mutableState.update(PlaygroundReducer::startProviderParamsLoading)
         val provider = activeQueryProvider()
-        viewModelScope.launch {
+        providerParamsJob = viewModelScope.launch {
             val result = PlaygroundPresenter.presentProviderParams(provider)
-            mutableState.update { PlaygroundReducer.applyProviderParamsResult(it, result) }
+            mutableState.update { PlaygroundReducer.applyProviderParamsResult(it, result, generation) }
         }
     }
 }

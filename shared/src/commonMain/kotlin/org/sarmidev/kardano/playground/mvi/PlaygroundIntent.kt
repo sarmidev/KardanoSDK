@@ -64,10 +64,17 @@ internal sealed interface PlaygroundIntent {
 
     // --- Provider selection ---
 
-    /** Toggles the "Use live Blockfrost (preprod)" switch. */
+    /**
+     * Toggles the "Use live Blockfrost (preprod)" switch. An actual change increments
+     * [PlaygroundState.flowGeneration] and clears provider-backed step/diagnostic results.
+     */
     data class ToggleLiveBlockfrost(val enabled: Boolean) : PlaygroundIntent
 
-    /** Updates the in-memory (never persisted/logged) Blockfrost `project_id` field. */
+    /**
+     * Updates the in-memory (never persisted/logged) Blockfrost `project_id` field. An actual
+     * string change increments [PlaygroundState.flowGeneration] and clears provider-backed
+     * step/diagnostic results.
+     */
     data class UpdateProjectId(val value: String) : PlaygroundIntent
 
     // --- Guided flow: Wallet -> Funds -> Build -> Sign -> Submit ---
@@ -96,7 +103,8 @@ internal sealed interface PlaygroundIntent {
      * over" control and the Summary screen's "Run the demo again" control. Provider selection
      * ([PlaygroundState.useLiveBlockfrost], [PlaygroundState.projectId]),
      * [PlaygroundState.technicalDetailsExpanded], and diagnostics inputs are preserved — see
-     * [PlaygroundReducer.reduce]'s handling of this intent.
+     * [PlaygroundReducer.reduce]'s handling of this intent. Increments
+     * [PlaygroundState.flowGeneration] so in-flight provider-backed results are discarded.
      */
     data object ResetFlow : PlaygroundIntent
 

@@ -84,6 +84,15 @@ internal enum class RoadmapPhase {
  * (see [org.sarmidev.kardano.playground.data.PlaygroundProviderFactory]). [projectId] is held
  * only in this in-memory state — never persisted, saved, or logged.
  *
+ * ### Operation generations
+ *
+ * [flowGeneration] is a monotonic counter. [PlaygroundIntent.ResetFlow], an actual live-provider
+ * toggle change, and an actual [projectId] change each increment it. [PlaygroundViewModel]
+ * captures the generation when a Funds/Build/Sign/Submit/diagnostic operation starts and ignores
+ * any result whose generation is no longer current, so a slow request cannot overwrite the
+ * visitor's newer configuration. The reducer stays a pure function of `(state, intent)` — it
+ * never cancels work; the ViewModel holds/cancels [kotlinx.coroutines.Job]s.
+ *
  * ### Diagnostics (Address Parser, Hex Decoder, CBOR Decoder, generic Provider explorer)
  *
  * [addressInput]/[addressResult], [hexInput]/[hexResult], [cborInput]/[cborResult], and
@@ -117,6 +126,12 @@ internal enum class RoadmapPhase {
 internal data class PlaygroundState(
     val useLiveBlockfrost: Boolean,
     val projectId: String,
+    /**
+     * Monotonic operation-generation counter. Incremented by ResetFlow and by actual provider-
+     * configuration changes (live toggle or project-id string). Provider-backed results whose
+     * captured generation no longer matches this value are discarded.
+     */
+    val flowGeneration: Long = 0L,
     val wallet: WalletPresentation,
     val walletLoading: Boolean,
     val funds: WalletBalancePresentation,
@@ -157,6 +172,7 @@ internal data class PlaygroundState(
         fun initial(): PlaygroundState = PlaygroundState(
             useLiveBlockfrost = false,
             projectId = "",
+            flowGeneration = 0L,
             wallet = WalletPresentation.Empty,
             walletLoading = false,
             funds = WalletBalancePresentation.Empty,

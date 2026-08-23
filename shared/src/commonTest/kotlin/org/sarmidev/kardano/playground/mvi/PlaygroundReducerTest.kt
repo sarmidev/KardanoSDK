@@ -2,6 +2,8 @@ package org.sarmidev.kardano.playground.mvi
 
 import org.sarmidev.kardano.playground.LabeledRow
 import org.sarmidev.kardano.playground.MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE
+import org.sarmidev.kardano.playground.ProviderParamsPresentation
+import org.sarmidev.kardano.playground.ProviderUtxosPresentation
 import org.sarmidev.kardano.playground.SignedTransactionPresentation
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
 import org.sarmidev.kardano.playground.TransactionDraftPresentation
@@ -34,6 +36,7 @@ class PlaygroundReducerTest {
 
         assertFalse(state.useLiveBlockfrost)
         assertEquals("", state.projectId)
+        assertEquals(0L, state.flowGeneration)
         assertEquals(WalletPresentation.Empty, state.wallet)
         assertFalse(state.walletLoading)
         assertEquals(WalletBalancePresentation.Empty, state.funds)
@@ -193,26 +196,72 @@ class PlaygroundReducerTest {
     // --- Provider selection: project id + live toggle ---
 
     @Test
-    fun updateProjectId_updatesOnlyProjectId() {
-        val state = PlaygroundState.initial()
+    fun updateProjectId_sameValue_isNoOp() {
+        val state = PlaygroundState.initial().copy(projectId = "abc123", flowGeneration = 4L)
 
         val next = PlaygroundReducer.reduce(state, PlaygroundIntent.UpdateProjectId("abc123"))
 
-        assertEquals("abc123", next.projectId)
-        assertFalse(next.useLiveBlockfrost)
+        assertEquals(state, next)
     }
 
     @Test
-    fun toggleLiveBlockfrost_updatesOnlyTheToggle() {
-        val state = PlaygroundState.initial().copy(projectId = "abc123")
+    fun updateProjectId_actualChange_incrementsGenerationAndClearsProviderResults() {
+        val dirty = PlaygroundState.initial().copy(
+            funds = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "0 lovelace"))),
+            draft = TransactionDraftPresentation.Failure("stale draft"),
+            signed = SignedTransactionPresentation.Loading,
+            submit = SubmitTransactionPresentation.Loading,
+            providerUtxos = ProviderUtxosPresentation.Loading,
+            providerParams = ProviderParamsPresentation.Loading,
+            wallet = WalletPresentation.Success(
+                rows = listOf(LabeledRow("Generated address", "addr_test1abc")),
+                fingerprintMatchesVector = true,
+            ),
+            flowGeneration = 2L,
+        )
+
+        val next = PlaygroundReducer.reduce(dirty, PlaygroundIntent.UpdateProjectId("abc123"))
+
+        assertEquals("abc123", next.projectId)
+        assertEquals(3L, next.flowGeneration)
+        assertEquals(WalletBalancePresentation.Empty, next.funds)
+        assertEquals(TransactionDraftPresentation.Empty, next.draft)
+        assertEquals(SignedTransactionPresentation.Empty, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
+        assertEquals(ProviderParamsPresentation.Empty, next.providerParams)
+        assertEquals(dirty.wallet, next.wallet, "wallet restore is local and must survive a project-id change")
+    }
+
+    @Test
+    fun toggleLiveBlockfrost_sameValue_isNoOp() {
+        val state = PlaygroundState.initial().copy(useLiveBlockfrost = true, flowGeneration = 1L)
 
         val next = PlaygroundReducer.reduce(state, PlaygroundIntent.ToggleLiveBlockfrost(true))
 
+        assertEquals(state, next)
+    }
+
+    @Test
+    fun toggleLiveBlockfrost_actualChange_incrementsGenerationAndClearsProviderResults() {
+        val dirty = PlaygroundState.initial().copy(
+            projectId = "abc123",
+            funds = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "0 lovelace"))),
+            draft = TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1"))),
+            flowGeneration = 0L,
+        )
+
+        val next = PlaygroundReducer.reduce(dirty, PlaygroundIntent.ToggleLiveBlockfrost(true))
+
         assertTrue(next.useLiveBlockfrost)
         assertEquals("abc123", next.projectId)
+        assertEquals(1L, next.flowGeneration)
+        assertEquals(WalletBalancePresentation.Empty, next.funds)
+        assertEquals(TransactionDraftPresentation.Empty, next.draft)
 
         val backOff = PlaygroundReducer.reduce(next, PlaygroundIntent.ToggleLiveBlockfrost(false))
         assertFalse(backOff.useLiveBlockfrost)
+        assertEquals(2L, backOff.flowGeneration)
     }
 
     // --- Technical details toggling ---
@@ -299,6 +348,28 @@ class PlaygroundReducerTest {
         assertEquals(setOf(PlaygroundStep.BUILD), reset.technicalDetailsExpanded)
         assertEquals("addr_test1xyz", reset.addressInput)
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, reset.providerAddressInput)
+        assertEquals(1L, reset.flowGeneration, "ResetFlow must bump generation so in-flight results are stale")
+    }
+
+    @Test
+    fun applyFundsResult_staleGeneration_isIgnored() {
+        val result = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1 lovelace")))
+        val current = PlaygroundState.initial().copy(flowGeneration = 3L)
+
+        val next = PlaygroundReducer.applyFundsResult(current, result, generation = 2L)
+
+        assertEquals(current, next)
+    }
+
+    @Test
+    fun applyFundsResult_currentGeneration_isApplied() {
+        val result = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1 lovelace")))
+        val current = PlaygroundState.initial().copy(flowGeneration = 3L)
+
+        val next = PlaygroundReducer.applyFundsResult(current, result, generation = 3L)
+
+        assertEquals(result, next.funds)
+        assertEquals(3L, next.flowGeneration)
     }
 
     // --- Diagnostics text inputs + seed fill ---
