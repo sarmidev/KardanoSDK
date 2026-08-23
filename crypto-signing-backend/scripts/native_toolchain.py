@@ -169,7 +169,8 @@ def darwin_cc_wrapper_script() -> str:
         "# Link-time override: rustc appends its own -install_name after RUSTFLAGS.\n"
         "# Appending after \"$@\" makes this the last -install_name the linker sees.\n"
         "exec cc \"$@\" "
-        f"-Wl,-install_name,{STABLE_INSTALL_NAME}\n"
+        f"-Wl,-install_name,{STABLE_INSTALL_NAME} "
+        "-Wl,-no_uuid -Wl,-reproducible\n"
     )
 
 
@@ -189,6 +190,11 @@ def rustflags_darwin_jvm(
     if linker is not None:
         flags.append(f"-Clinker={linker}")
     flags.append(f"-Clink-arg=-Wl,-install_name,{STABLE_INSTALL_NAME}")
+    # Same-size local vs macos-26 dylibs differed only in LC_UUID (and the
+    # arm64 ad-hoc signature over that UUID). Drop the UUID and ask ld for
+    # reproducible output. iOS archives already matched without these flags.
+    flags.append("-Clink-arg=-Wl,-no_uuid")
+    flags.append("-Clink-arg=-Wl,-reproducible")
     return flags
 
 
@@ -370,12 +376,18 @@ def assert_android_host(ndk_home: Path) -> dict[str, object]:
     if clang is None:
         raise ToolchainError(f"NDK clang missing under {ndk_home}")
     clang_file = _capture(["file", str(clang)]) if shutil.which("file") else ""
-    can_run = subprocess.run(
-        [str(clang), "--version"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        can_run = subprocess.run(
+            [str(clang), "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except PermissionError as error:
+        raise ToolchainError(
+            f"NDK clang is not executable ({clang}). "
+            "Python zipfile extract must restore the zip Unix execute bits."
+        ) from error
     info = {
         "ndk_clang": str(clang),
         "ndk_clang_file": clang_file,

@@ -320,6 +320,8 @@ def rebuild_macos_jvm(
                 "--",
                 f"-Clinker={env['KARDANO_DARWIN_CC']}",
                 f"-Clink-arg=-Wl,-install_name,{toolchain.STABLE_INSTALL_NAME}",
+                "-Clink-arg=-Wl,-no_uuid",
+                "-Clink-arg=-Wl,-reproducible",
             ],
             cwd=module_root,
             env=env,

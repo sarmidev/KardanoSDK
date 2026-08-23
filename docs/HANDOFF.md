@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | `6ca73dc` | Gate 1 **NO-GO**. Local candidates recorded; clean `macos-26` run `32659532250` failed before a hash compare (image NDK 27.3 / skipped compare-mode). CHECKSUMS/`src/` unchanged. Linux/Windows JVM not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Phase B iterate | Gate 1 **NO-GO**. iOS 2/8 matched on `ea01b12`. Darwin differed only in `LC_UUID`; Android failed because zip-extracted NDK clang was not executable. CHECKSUMS/`src/` unchanged. Linux/Windows JVM not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 

@@ -113,13 +113,37 @@ def download_to(url: str, dest: Path) -> None:
             out.write(chunk)
 
 
+def restore_zip_mode(info: zipfile.ZipInfo, target: Path) -> None:
+    """Apply the zip's Unix mode. zipfile.extract drops execute bits."""
+    if not target.is_file():
+        return
+    unix_mode = info.external_attr >> 16
+    if unix_mode & 0o111:
+        target.chmod(target.stat().st_mode | 0o111)
+    elif unix_mode:
+        target.chmod(unix_mode & 0o7777)
+
+
+def ensure_prebuilt_bins_executable(ndk_home: Path) -> None:
+    prebuilt = ndk_home / "toolchains" / "llvm" / "prebuilt"
+    if not prebuilt.is_dir():
+        return
+    for bin_dir in prebuilt.glob("*/bin"):
+        for path in bin_dir.iterdir():
+            if path.is_file():
+                path.chmod(path.stat().st_mode | 0o111)
+
+
 def extract_zip(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive) as zf:
-        zf.extractall(dest)
+        for info in zf.infolist():
+            target = Path(zf.extract(info, dest))
+            restore_zip_mode(info, target)
     extracted = dest / f"android-ndk-{NDK_RELEASE}"
     if not extracted.is_dir():
         raise InstallError(f"zip did not contain android-ndk-{NDK_RELEASE}")
+    ensure_prebuilt_bins_executable(extracted)
     return extracted
 
 

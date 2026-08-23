@@ -141,6 +141,8 @@ jobs:
             exit 1
           fi
           echo "NDK_HOME=$NDK_HOME"
+          # zipfile extract can still leave clang-18 0644; force bin execute bits.
+          find "$NDK_HOME/toolchains/llvm/prebuilt" -type d -name bin -exec chmod -R a+x {} +
           echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$NDK_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK=$NDK_HOME" >> "$GITHUB_ENV"

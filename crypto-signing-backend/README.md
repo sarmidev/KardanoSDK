@@ -175,7 +175,8 @@ select one group. Both Darwin JVM targets are built with explicit
 host. Inspection is fail-closed: missing `nm`/`llvm-nm`/`lipo`/`file`/`otool`/`ar`,
 a nonzero tool exit, a missing `fn_func_sign` export, a wrong architecture, or a
 dylib install name other than `@rpath/libkardano_ed25519_bip32_signing.dylib` is a
-failed compare.
+failed compare. Darwin JVM links also pass `-Wl,-no_uuid` and `-Wl,-reproducible`
+so LC_UUID cannot differ across otherwise identical hosts.
 
 `.github/workflows/native-rebuild-evidence.yml` pins `macos-26` and Xcode `26.6`
 (`17F113`). The image default NDK is `27.3.13750724`; the workflow unsets
