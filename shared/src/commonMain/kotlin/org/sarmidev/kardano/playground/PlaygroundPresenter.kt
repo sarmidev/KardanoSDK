@@ -630,7 +630,7 @@ internal object PlaygroundPresenter {
         LabeledRow("Address", address.toBech32()),
         LabeledRow("UTxO count", balance.utxoCount.toString()),
         LabeledRow("Balance", "${balance.coin.value} lovelace"),
-        LabeledRow("Test ADA", LovelaceDisplay.ada(balance.coin.value)),
+        LabeledRow("Test ADA", LovelaceDisplay.ada(balance.coin)),
     )
 
     /**
@@ -783,9 +783,9 @@ internal object PlaygroundPresenter {
             add(LabeledRow("Body size", "${bodyBytes.size} bytes"))
             add(LabeledRow("Body CBOR (preview)", bodyHexPreview(bodyBytes)))
             add(LabeledRow("Status", "Unsigned draft — not signed, not submitted"))
-            paymentOutput?.let { add(LabeledRow("Payment", LovelaceDisplay.ada(it.amount.value))) }
-            add(LabeledRow("Network cost", LovelaceDisplay.ada(draft.fee.value)))
-            changeOutput?.let { add(LabeledRow("Change back", LovelaceDisplay.ada(it.amount.value))) }
+            paymentOutput?.let { add(LabeledRow("Payment", LovelaceDisplay.ada(it.amount))) }
+            add(LabeledRow("Network cost", LovelaceDisplay.ada(draft.fee)))
+            changeOutput?.let { add(LabeledRow("Change back", LovelaceDisplay.ada(it.amount))) }
         }
     }
 

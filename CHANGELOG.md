@@ -40,6 +40,14 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   distinct steps, with concrete links to the Quickstart, the technical roadmap, GitHub issues,
   and the Phase 2 plan.
 
+### Changed
+
+- `LovelaceDisplay.ada` (Playground-only display helper) now takes a `Lovelace` instead of a raw
+  `Long`, so a negative amount is rejected at `Lovelace.of` construction time rather than being
+  representable at all (W9-7, 2026-08-22 pre-release audit). No caller passed a raw negative value
+  before this change; this closes the gap at the type level instead of leaving it as an untested
+  assumption.
+
 ### Known limits
 
 - Mainnet, imported wallets, general-purpose signing, and native-asset transaction construction are
