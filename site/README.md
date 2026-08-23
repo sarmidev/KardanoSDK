@@ -93,16 +93,16 @@ adds no Gradle, Kotlin, or npm step, and uses only the official `actions/configu
 `pages: write` / `id-token: write` permissions.
 
 **One-time repository setting required** (not something a workflow file can do): in the GitHub
-repository's **Settings → Pages**, set **Source** to **GitHub Actions**. Until that setting is
-made, pushes to `main` will run the workflow, but GitHub will not serve the deployed result at the
+repository's **Settings → Pages**, **Source** must be set to **GitHub Actions**. Without that
+setting, pushes to `main` run the workflow, but GitHub does not serve the deployed result at the
 Pages URL. The repository must also be public (or on a GitHub plan that allows Pages for private
 repositories) for the published URL to be publicly reachable.
 
-Once enabled, the expected published URL is:
+The site is live at:
 
 ```
 https://sarmidev.github.io/KardanoSDK/
 ```
 
-(the standard project-page URL pattern for the `sarmidev/KardanoSDK` repository — GitHub assigns
-the final URL after the first successful deployment; confirm it under Settings → Pages).
+(the standard project-page URL pattern for the `sarmidev/KardanoSDK` repository; confirm the
+current deployment status under Settings → Pages if in doubt).

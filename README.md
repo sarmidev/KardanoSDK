@@ -38,8 +38,8 @@ and can submit to preprod. It is a developer demo, not a general-purpose wallet.
 ## Public landing page
 
 A short, dependency-free static landing page lives in [`site/`](site/) and deploys to GitHub
-Pages from `main` (see [`site/README.md`](site/README.md) for local preview and the one-time
-Pages repository setting). Expected URL once enabled:
+Pages from `main` (see [`site/README.md`](site/README.md) for local preview and deployment
+details). It is live at
 [sarmidev.github.io/KardanoSDK](https://sarmidev.github.io/KardanoSDK/). It links back to this
 README and the documents below rather than duplicating them.
 
