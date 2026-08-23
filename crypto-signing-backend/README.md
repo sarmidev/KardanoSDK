@@ -251,9 +251,14 @@ material. `nm` corroboration uses `--defined-only --format=posix`
 exact records, not substring search. Path policy is two-pass: raw-byte
 search for documented build roots at any offset, then a slash-byte
 scan that extracts candidates through NUL/control/whitespace/EOF.
-Allowed remap/runtime prefixes use an exact component boundary.
-`/tmp/untracked-host` and `/usr/local/private-build` are rejected.
-Run `32672020909` is superseded; a fresh Phase B at this verifier tip
+Allowed remap/runtime prefixes use an exact component boundary
+(`path == prefix` or next byte `/`). Invalid UTF-8 candidates fail
+when they contain a forbidden root or look like an unapproved
+absolute path; `/letter` plus non-ASCII continuation without a later
+slash is not treated as a path. `/proc` is a runtime prefix
+(rustc/libstd `/proc/self/exe`). `/tmp/untracked-host` and
+`/usr/local/private-build` are rejected. Runs `32672020909` and
+`32672881083` are superseded; a fresh Phase B at this verifier tip
 is required before any CHECKSUMS row.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean

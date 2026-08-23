@@ -44,7 +44,11 @@ Policy (documented, not a strength claim):
 - raw-byte searches catch every documented forbidden build root at any
   offset; slash-byte scans extract path-like candidates through
   NUL/control/whitespace/EOF. Allowed prefixes use an exact component
-  boundary (``path == prefix`` or next byte ``/``)
+  boundary (``path == prefix`` or next byte ``/``). Invalid UTF-8
+  candidates fail when they contain a forbidden root or otherwise look
+  like an unapproved absolute path; ``/letter`` plus non-ASCII
+  continuation without a later slash is not a path. ``/proc`` is a
+  runtime prefix (rustc/libstd ``/proc/self/exe``)
 """
 
 from __future__ import annotations
@@ -199,13 +203,15 @@ ALLOWED_REMAP_PREFIXES = (
     "/runner-temp",  # GHA RUNNER_TEMP (not always under the repo)
     "/runner-workspace",  # GHA RUNNER_WORKSPACE
 )
-# Runtime/system prefixes that a glibc x86-64 ET_DYN may embed (PT_INTERP
-# and multiarch loader/libgcc realpaths). /usr/local and /tmp are not listed.
+# Runtime/system prefixes that a glibc x86-64 ET_DYN may embed (PT_INTERP,
+# multiarch loader/libgcc realpaths, and rustc/libstd current-exe).
+# /usr/local and /tmp are not listed.
 ALLOWED_RUNTIME_PREFIXES = (
     "/lib64",
     "/lib",
     "/usr/lib",
     "/usr/lib64",
+    "/proc",
 )
 ALLOWED_ABSOLUTE_PREFIXES = ALLOWED_REMAP_PREFIXES + ALLOWED_RUNTIME_PREFIXES
 # Raw-byte host/build roots. Matched at any offset, independent of NUL
@@ -698,15 +704,37 @@ def extract_slash_path_candidate(data: bytes, start: int) -> bytes:
     return _extract_through_stop(data, start, MAX_PATH_CANDIDATE)
 
 
+def _leading_ascii_text(raw: bytes) -> str:
+    end = 0
+    while end < len(raw) and raw[end] < 0x80:
+        end += 1
+    return raw[:end].decode("ascii")
+
+
 def _looks_unapproved_raw_path(raw: bytes) -> bool:
+    """Fail-closed rule for invalid UTF-8 slash candidates.
+
+    Binary ``/`` plus a letter and non-ASCII continuation is not a path.
+    Fail when the candidate contains a documented build root, the leading
+    ASCII prefix is an allowed-prefix near-miss, the ASCII prefix is a
+    multi-component unapproved path, or a later ``/`` makes the blob
+    look like an unapproved absolute path.
+    """
     if not raw.startswith(b"/") or len(raw) < 2:
         return False
     if any(marker in raw for marker in FORBIDDEN_BUILD_ROOTS):
         return True
-    second = raw[1]
-    if not (65 <= second <= 90 or 97 <= second <= 122 or second in (0x2E, 0x5F)):
+    ascii_prefix = _leading_ascii_text(raw)
+    trimmed = ascii_prefix.rstrip("/")
+    if trimmed and is_allowed_absolute_path(trimmed):
         return False
-    return True
+    if ascii_prefix and _is_allowed_prefix_near_miss(ascii_prefix):
+        return True
+    if ascii_prefix and is_absolute_path_like(ascii_prefix) and "/" in ascii_prefix[1:]:
+        return True
+    if b"/" in raw[1:]:
+        return True
+    return False
 
 
 def _is_path_start(data: bytes, index: int) -> bool:

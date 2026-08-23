@@ -308,7 +308,9 @@ On `fix/native-build-and-platform-evidence`:
   baseline measured at runtime) with a fail-closed ELF64 verifier
   (full-string `GLIBC_*` tuples, Verneed bound to one `SHT_GNU_verneed`,
   exact `.dynamic`/`PT_DYNAMIC` and `DT_STRTAB`/`DT_VERSYM` relations,
-  raw-byte plus slash-byte path scan) and two-build identity; it is not
+  raw-byte plus slash-byte path scan; invalid UTF-8 fails on a
+  forbidden root or an unapproved absolute-looking path; `/proc` is a
+  runtime prefix) and two-build identity; it is not
   in CHECKSUMS until Phase A/B re-review is GO and a promotion commit
-  lands. Run `32672020909` is superseded.
+  lands. Runs `32672020909` and `32672881083` are superseded.
   Linux ARM, musl, older glibc, and Windows remain out of scope.

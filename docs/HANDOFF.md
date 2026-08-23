@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Path scan is raw-byte roots plus slash-byte candidates. Dynamic/version tags now require exact section/phdr relations. Run `32672020909` superseded. Not promoted. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Path scan is raw-byte roots plus slash-byte candidates; invalid UTF-8 fails only on a forbidden root or an unapproved absolute-looking path; `/proc` is a runtime prefix. Dynamic/version tags require exact section/phdr relations. Runs `32672020909` and `32672881083` superseded. Not promoted. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -115,11 +115,13 @@ Date: 2026-08-23
   offset/vaddr/filesz/memsz/align, `.dynstr.sh_size == DT_STRSZ`,
   `DT_VERSYM` bound to `.gnu.version`). Path policy is a raw-byte
   search for documented build roots at any offset plus a slash-byte
-  scan through NUL/control/whitespace/EOF. Rebuilds run only on pinned
-  `ubuntu-22.04`
+  scan through NUL/control/whitespace/EOF. Invalid UTF-8 candidates
+  fail when they contain a forbidden root or look like an unapproved
+  absolute path; `/proc` is a runtime prefix. Rebuilds run only on
+  pinned `ubuntu-22.04`
   (ImageOS `ubuntu22`) with rustc 1.97.0 / `x86_64-unknown-linux-gnu`.
   Two independent jobs plus JVM KAT must match; promotion waits for
-  re-review GO. Run `32672020909` is superseded.
+  re-review GO. Runs `32672020909` and `32672881083` are superseded.
   CHECKSUMS still has
   the eight committed artifacts. Device runtime remains historical
   (W5-2). Do not start Windows or merge/tag.
@@ -242,7 +244,7 @@ Do not use:
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase A/B re-review is the next gate (promotion
 only after two independent `ubuntu-22.04` hashes match **and** that
-re-review is GO). Run `32672020909` is superseded. Independent
+re-review is GO). Runs `32672020909` and `32672881083` are superseded. Independent
 re-review is still required. Do not promote from earlier runs.
 do not promote from them. Do not start Windows until then. Residual owner work:
 authenticated GitHub artifact download, secret-scanning / Dependabot,

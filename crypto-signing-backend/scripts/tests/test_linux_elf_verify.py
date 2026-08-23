@@ -874,6 +874,7 @@ class LinuxElfVerifyTests(unittest.TestCase):
             b"/lib64-extra\x00",
             b"/rust/deps-evil\x00",
             b"/rust/not-deps\x00",
+            b"/proc-evil\x00",
             b"/usr/local/private-build\x00",
             b"/tmp/untracked-host\x00",
             b"/home/runner\x00",
@@ -953,13 +954,35 @@ class LinuxElfVerifyTests(unittest.TestCase):
         self.assertIn("/home/runner/path", elf.scan_linux_forbidden_paths(b"aa/home/runner/path"))
         self.assertIn("/Users/x", elf.scan_linux_forbidden_paths(b"zz/Users/x"))
         allowed = elf.parse_elf64_le_x86_64_dso(
-            build_elf(embed=b"/cargo/registry\x00/lib64/ld-linux-x86-64.so.2\x00")
+            build_elf(
+                embed=b"/cargo/registry\x00/lib64/ld-linux-x86-64.so.2\x00/proc/self/exe\x00"
+            )
         )
         self.assertEqual(allowed.forbidden_paths, [])
         benign = elf.parse_elf64_le_x86_64_dso(
             build_elf(embed=b"foo/bar slash/text /0 /N\x00")
         )
         self.assertEqual(benign.forbidden_paths, [])
+        noise = (
+            b"/d\x86\x00",
+            b"/c'\xc4\x00",
+            b"/c\xa8\xa6\x8ag\x00",
+            b"/X\xa4\x9e\xaar\x00",
+            b"/B\x85\x00",
+            b"/.\x80\x82\x00",
+            b"/I\x83\xc3\xb8M)\xebH\x00",
+        )
+        for payload in noise:
+            with self.subTest(("noise", payload)):
+                record = elf.parse_elf64_le_x86_64_dso(build_elf(embed=payload))
+                self.assertEqual(record.forbidden_paths, [])
+                self.assertEqual(elf.scan_linux_forbidden_paths(payload), [])
+        with self.assertRaisesRegex(elf.ElfError, "embedded host-absolute"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(embed=b"/usr/local/foo\xff\xfe\x00"))
+        with self.assertRaisesRegex(elf.ElfError, "embedded host-absolute"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(embed=b"/d\x86/unapproved\x00"))
+        with self.assertRaisesRegex(elf.ElfError, "embedded host-absolute"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(embed=b"/proc-evil\x00"))
 
     def test_dynamic_version_relations_are_mutated_closed(self) -> None:
         layout: dict = {}

@@ -71,9 +71,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `DT_VERSYM` bound to one allocated `.gnu.version`; and debug-link
   sections. Path policy is a raw-byte search for documented build roots
   at any offset plus a slash-byte scan through NUL/control/whitespace/EOF
-  (exact prefix component boundary; `/tmp/untracked-host` and
-  `/usr/local/private-build` fail). Two independent candidate jobs plus
-  JVM KAT must match before any promotion review. Run `32672020909` is
+  (exact prefix component boundary; invalid UTF-8 fails on a forbidden
+  root or an unapproved absolute-looking path; `/proc` is a runtime
+  prefix; `/tmp/untracked-host` and `/usr/local/private-build` fail).
+  Two independent candidate jobs plus JVM KAT must match before any
+  promotion review. Runs `32672020909` and `32672881083` are
   superseded. The ninth CHECKSUMS row is added only after that re-review
   is GO. Linux ARM, musl, older glibc, and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and

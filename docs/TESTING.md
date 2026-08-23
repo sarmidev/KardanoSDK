@@ -215,10 +215,12 @@ section 0, one `.dynamic`/`PT_DYNAMIC` pair with exact
 offset/vaddr/filesz/memsz/align, `.dynstr.sh_size == DT_STRSZ`,
 `DT_VERSYM` bound to one allocated `.gnu.version`, and a two-pass path
 scan (raw-byte forbidden roots at any offset, plus slash-byte
-candidates through NUL/control/whitespace/EOF). Permissions stay
+candidates through NUL/control/whitespace/EOF; invalid UTF-8 fails
+when it contains a forbidden root or looks like an unapproved
+absolute path; `/proc` is a runtime prefix). Permissions stay
 `contents: read`. Uploads use `if-no-files-found: error`. The job does
 not write CHECKSUMS or committed `src/`. ubuntu-24.04 artifacts and
-Linux run `32672020909` are superseded.
+Linux runs `32672020909` and `32672881083` are superseded.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare
