@@ -171,6 +171,20 @@ Block 1.11b's Blockfrost provider).
   the existing 1.10c "Signed Transaction" section, gated behind the live Blockfrost toggle,
   reusing the 1.10c build/sign flow, and the accompanying manual Android checkpoint.
 
+  > **Result (Blocks 1.11b/1.11c): IMPLEMENTED.** Both deferred sub-blocks above have since
+  > shipped, exactly as designed:
+  > - `:provider-blockfrost` gained `BlockfrostTxSubmitProvider` — `POST {baseUrl}/tx/submit`,
+  >   `Content-Type: application/cbor`, the `project_id` header via the existing
+  >   `BlockfrostConfig`/`configureBlockfrost` (ADR-0007), a raw CBOR request body, and mapping
+  >   the `200` JSON hex-string response into a `TxHash` and non-2xx statuses into `SubmitError`.
+  > - `:shared` gained the Playground "Submit Transaction (preprod)" checkpoint, below the
+  >   1.10c "Signed Transaction" section, gated behind the live Blockfrost toggle and reusing
+  >   the 1.10c build/sign flow, with the accompanying manual Android checkpoint completed.
+  > - `CHANGELOG.md`, `docs/ROADMAP.md`, `README.md`, and `shared/README.md` all describe
+  >   submission as delivered; this result note reconciles this ADR's own header/§7 text (which
+  >   is left as an accurate record of the Block 1.11a-only decision at the time this ADR was
+  >   written) with that shipped state.
+
 ---
 
 ## Consequences
