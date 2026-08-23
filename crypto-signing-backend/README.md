@@ -149,43 +149,58 @@ never rewritten just to accept a rebuild whose bytes differ for an unexplained r
 
 ## Staged rebuild comparison
 
-Scripts under `scripts/` rebuild the eight committed natives into a **fresh staging
-directory**. They use `cargo --locked` / `cargo ndk ... --locked`, record host OS/arch,
-`rustc`/`cargo`, NDK/`cargo-ndk`/Xcode, the source commit, the `Cargo.lock` digest,
-exported `fn_func_sign` symbols, sizes, and SHA-256, then compare those staged files
-byte-for-byte against the committed copies. They do not copy into `src/`.
+Scripts under `scripts/` rebuild the eight existing-family natives into a **fresh
+staging directory** with a staging-owned, required-empty `CARGO_TARGET_DIR`. They
+never reuse this module's `target/`. They use `cargo --locked` /
+`cargo ndk ... --locked`, remap workspace / Cargo / rustc / Xcode / NDK absolute
+roots, set Darwin `LC_ID_DYLIB` to `@rpath/libkardano_ed25519_bip32_signing.dylib`
+at link time, and record per-command stdout/stderr, timestamps, exit codes, output
+paths, `ar -tv` member hashes, `otool -l`, and an embedded-path scan. They do not
+copy into `src/`.
 
 ```bash
 # from the repository root; staging must be empty or absent
 python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
   --staging /tmp/kardano-native-rebuild \
   --groups macos-jvm,android,ios \
+  --write-candidates crypto-signing-backend/rebuild-candidates \
+  --mode candidate \
   --compare
 python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
 ```
 
 Thin wrappers (`scripts/rebuild_macos_jvm.sh`, `rebuild_android.sh`, `rebuild_ios.sh`)
-select one group. The default Cargo target directory is this module's gitignored
-`target/` (the same path the committed macOS dylibs record in `LC_ID_DYLIB`).
-`--cargo-target-dir` elsewhere changes that absolute install name and the
-content-hashed `LC_UUID`, so those copies will not match the committed dylibs.
-`--deterministic` adds `SOURCE_DATE_EPOCH` / `ZERO_AR_DATE` /
-`--remap-path-prefix`; that is **not** the README recipe that produced the committed
-binaries, so it is an investigation mode, not the default comparison.
+select one group. Both Darwin JVM targets are built with explicit
+`--target aarch64-apple-darwin` and `--target x86_64-apple-darwin` regardless of
+host. Inspection is fail-closed: missing `nm`/`llvm-nm`/`lipo`/`file`/`otool`/`ar`,
+a nonzero tool exit, a missing `fn_func_sign` export, a wrong architecture, or a
+dylib install name other than `@rpath/libkardano_ed25519_bip32_signing.dylib` is a
+failed compare.
 
-`.github/workflows/native-rebuild-evidence.yml` runs the same comparison on a clean
-`macos-latest` runner and uploads the staging report. A mismatch fails the job. The
-workflow does not replace committed natives. Ubuntu runs the catalog tests and
-`cargo metadata --locked` only — it does not rebuild Apple or Android host artifacts
-for comparison against the macOS-built committed files.
+`.github/workflows/native-rebuild-evidence.yml` pins `macos-26` and Xcode `26.6`
+(`17F113`). A clean runner rebuilds into a fresh staging target and compares hashes,
+architectures, symbols, install names, and evidence against
+`rebuild-candidates/CANDIDATE_MANIFEST.sha256` when that file exists, otherwise
+against `CHECKSUMS.sha256`. Uploads use `if-no-files-found: error`. The workflow
+does not replace committed natives. Ubuntu runs the harness tests and
+`cargo metadata --locked` only.
+
+Pinned rebuild toolchain: rustc `1.97.0` (commit `2d8144b7880597b6e6d3dfd63a9a9efae3f533d3`),
+cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
+
+The first harness commit on this branch (`6cb6810`) is historical review debt: it
+defaulted to the module `target/` and treated missing inspection tools as optional.
+Those bytes are not rewritten. Gate 1 remains **NO-GO** until a clean `macos-26`
+runner matches all eight local candidate hashes.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
-`target/`-directory rebuild matched all eight CHECKSUMS rows. The same
+`target/`-directory rebuild matched all eight then-current CHECKSUMS rows. The same
 recipe on GitHub `macos-latest` (run `32658155802`) rebuilt the macOS JVM
-and iOS artifacts and then failed byte-compare (Mach-O `LC_ID_DYLIB` is
+and iOS artifacts and then failed byte-compare (Mach-O `LC_ID_DYLIB` was
 the absolute cargo output path; iOS archives also differed). The Android
 `cargo ndk` step on that runner failed before a compare. Those committed
-bytes are therefore host-path-tied, not clean-runner-identical.
+bytes are host-path-tied. Full remediation is in progress; a host-bound
+exception is not accepted.
 
 **Regeneration rule:** this manifest must be regenerated in the *same commit* as any change to one
 or more of the 8 binaries above (step 6 in the regeneration recipe), never as a separate follow-up

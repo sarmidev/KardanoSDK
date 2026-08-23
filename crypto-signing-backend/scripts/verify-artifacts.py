@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare staged signing-backend natives against committed bytes and CHECKSUMS.
+"""Compare staged signing-backend natives against a checksum manifest.
 
 Never writes into src/. A mismatch is a finding; this tool does not rewrite
 CHECKSUMS.sha256 to accept unexplained output.
@@ -17,6 +17,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import native_artifacts as natives  # noqa: E402
+from native_toolchain import STABLE_INSTALL_NAME  # noqa: E402
 
 
 def _record_dict(record: natives.ArtifactRecord) -> dict[str, object]:
@@ -27,12 +28,24 @@ def _record_dict(record: natives.ArtifactRecord) -> dict[str, object]:
         "size": record.size,
         "sha256": record.sha256,
         "file": record.file_output,
+        "file_returncode": record.file_returncode,
         "lipo": record.lipo_output,
+        "lipo_returncode": record.lipo_returncode,
+        "otool_returncode": record.otool_returncode,
         "install_name": record.install_name,
         "uuid": record.uuid,
+        "linker_version": record.linker_version,
+        "sdk_version": record.sdk_version,
+        "nm_command": record.nm_command,
+        "nm_returncode": record.nm_returncode,
         "sign_symbols": record.symbols,
         "symbol_ok": record.symbol_ok,
         "arch_ok": record.arch_ok,
+        "install_name_ok": record.install_name_ok,
+        "ar_tv_returncode": record.ar_tv_returncode,
+        "member_hashes": record.member_hashes,
+        "embedded_paths": record.embedded_paths,
+        "inspection_errors": record.inspection_errors,
     }
 
 
@@ -42,28 +55,43 @@ def build_report(
     *,
     groups: tuple[str, ...] | None,
     ndk_home: Path | None,
+    mode: str,
+    manifest: Path,
+    require_inspection: bool,
+    expected_install_name: str,
+    evidence_dir: Path | None,
+    logs_dir: Path | None,
 ) -> dict[str, object]:
-    checksums = natives.load_checksums(committed_root)
+    checksums = natives.load_manifest(manifest)
     findings, committed, staged = natives.compare_trees(
         committed_root,
         staged_root,
         checksums=checksums,
         groups=groups,
         ndk_home=ndk_home,
+        compare_committed=(mode == "committed"),
+        require_inspection=require_inspection,
+        expected_install_name=expected_install_name,
+        evidence_dir=evidence_dir,
+        logs_dir=logs_dir,
     )
     diffs: list[dict[str, object]] = []
-    for spec in natives.EXISTING_ARTIFACTS:
-        if groups is not None and spec.group not in groups:
-            continue
-        left = committed_root / spec.relative_path
-        right = staged_root / spec.relative_path
-        if left.is_file() and right.is_file() and natives.sha256_file(left) != natives.sha256_file(right):
-            first = natives.first_differing_byte(left, right)
-            if first is not None:
-                diffs.append({"id": spec.artifact_id, **first})
+    if mode == "committed":
+        for spec in natives.EXISTING_ARTIFACTS:
+            if groups is not None and spec.group not in groups:
+                continue
+            left = committed_root / spec.relative_path
+            right = staged_root / spec.relative_path
+            if left.is_file() and right.is_file() and natives.sha256_file(left) != natives.sha256_file(right):
+                first = natives.first_differing_byte(left, right)
+                if first is not None:
+                    diffs.append({"id": spec.artifact_id, **first})
     return {
         "committed_root": str(committed_root),
         "staged_root": str(staged_root),
+        "mode": mode,
+        "manifest": str(manifest),
+        "expected_install_name": expected_install_name,
         "groups": list(groups) if groups else list(natives.GROUPS),
         "checksum_rows": checksums,
         "committed": [_record_dict(item) for item in committed],
@@ -111,6 +139,43 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="Optional Android NDK root for llvm-nm.",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("committed", "candidate"),
+        default="committed",
+        help="committed compares src/ + CHECKSUMS; candidate compares the manifest only.",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="Checksum manifest path.",
+    )
+    parser.add_argument(
+        "--require-inspection",
+        dest="require_inspection",
+        action="store_true",
+        default=True,
+    )
+    parser.add_argument(
+        "--skip-inspection",
+        dest="require_inspection",
+        action="store_false",
+        help="Hash-only compare (unit tests). Default is fail-closed inspection.",
+    )
+    parser.add_argument(
+        "--expected-install-name",
+        default=STABLE_INSTALL_NAME,
+    )
+    parser.add_argument(
+        "--evidence",
+        type=Path,
+        help="Require inspect evidence files under this directory.",
+    )
+    parser.add_argument(
+        "--logs",
+        type=Path,
+        help="Require retained command *.meta.json logs under this directory.",
+    )
     args = parser.parse_args(argv)
     groups: tuple[str, ...] | None = None
     if args.groups.strip():
@@ -119,11 +184,24 @@ def main(argv: list[str] | None = None) -> int:
         if unknown:
             print(f"unknown groups: {', '.join(unknown)}", file=sys.stderr)
             return 2
+    module_root = args.module_root.resolve()
+    manifest = args.manifest
+    if manifest is None:
+        if args.mode == "candidate":
+            manifest = module_root / "rebuild-candidates" / natives.CANDIDATE_MANIFEST_NAME
+        else:
+            manifest = module_root / natives.CHECKSUMS_NAME
     report = build_report(
-        args.module_root.resolve(),
+        module_root,
         args.staging.resolve(),
         groups=groups,
         ndk_home=args.ndk_home,
+        mode=args.mode,
+        manifest=manifest.resolve(),
+        require_inspection=args.require_inspection,
+        expected_install_name=args.expected_install_name,
+        evidence_dir=args.evidence.resolve() if args.evidence else None,
+        logs_dir=args.logs.resolve() if args.logs else None,
     )
     text = json.dumps(report, indent=2, sort_keys=True)
     if args.report:
@@ -134,7 +212,10 @@ def main(argv: list[str] | None = None) -> int:
     if findings:
         print(f"verify-artifacts failed: {len(findings)} finding(s).", file=sys.stderr)
         return 1
-    print("verify-artifacts passed: staged bytes match committed natives and CHECKSUMS.")
+    if args.mode == "candidate":
+        print("verify-artifacts passed: staged bytes match the candidate manifest.")
+    else:
+        print("verify-artifacts passed: staged bytes match committed natives and CHECKSUMS.")
     return 0
 
 

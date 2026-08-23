@@ -25,7 +25,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   built from the visible Rust source. A staged rebuild harness
   (`crypto-signing-backend/scripts/`) and `native-rebuild-evidence.yml` now rebuild those
   eight targets into a fresh directory and compare them byte-for-byte; a mismatch is a
-  failed job, not a reason to rewrite CHECKSUMS.
+  failed job, not a reason to rewrite CHECKSUMS. The first harness commit (`6cb6810`)
+  is historical review debt (module `target/` default, fail-open inspection). Later
+  commits on `fix/native-build-and-platform-evidence` require a staging-owned empty
+  `CARGO_TARGET_DIR`, remapped absolute source roots, a link-time
+  `@rpath/libkardano_ed25519_bip32_signing.dylib` install name, fail-closed
+  `nm`/`lipo`/`file` checks, and a pinned `macos-26` / Xcode 26.6 runner. Gate 1 is
+  still NO-GO until local candidate hashes match a clean runner.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

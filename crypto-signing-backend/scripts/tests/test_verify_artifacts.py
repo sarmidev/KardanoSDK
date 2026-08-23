@@ -100,8 +100,9 @@ class CompareTreeTests(unittest.TestCase):
     def test_identical_trees_pass(self) -> None:
         payloads = self._payloads()
         committed, staged = self._tree(payloads)
-        findings, _, _ = natives.compare_trees(committed, staged)
-        # file(1)/nm are not required for a byte match of tiny fixtures.
+        findings, _, _ = natives.compare_trees(
+            committed, staged, require_inspection=False
+        )
         leftover = [item for item in findings if item.kind not in {"missing-symbol", "arch-mismatch"}]
         self.assertEqual(leftover, [], "\n".join(item.format() for item in leftover))
 
@@ -110,7 +111,9 @@ class CompareTreeTests(unittest.TestCase):
         committed, staged = self._tree(payloads)
         missing = natives.ARTIFACT_BY_ID["macos-jvm-arm64"].relative_path
         (staged / missing).unlink()
-        findings, _, _ = natives.compare_trees(committed, staged)
+        findings, _, _ = natives.compare_trees(
+            committed, staged, require_inspection=False
+        )
         self.assertTrue(
             any(
                 item.kind == "missing-staged" and item.artifact_id == "macos-jvm-arm64"
@@ -124,7 +127,9 @@ class CompareTreeTests(unittest.TestCase):
         committed, staged = self._tree(payloads)
         extra = staged / "src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so"
         _write(extra, b"extra\n")
-        findings, _, _ = natives.compare_trees(committed, staged)
+        findings, _, _ = natives.compare_trees(
+            committed, staged, require_inspection=False
+        )
         self.assertTrue(
             any(item.kind == "extra-staged" for item in findings),
             "\n".join(item.format() for item in findings),
@@ -135,7 +140,9 @@ class CompareTreeTests(unittest.TestCase):
         committed, staged = self._tree(payloads)
         relative = natives.ARTIFACT_BY_ID["android-x86"].relative_path
         (staged / relative).write_bytes(b"different-bytes\n")
-        findings, _, _ = natives.compare_trees(committed, staged)
+        findings, _, _ = natives.compare_trees(
+            committed, staged, require_inspection=False
+        )
         self.assertTrue(
             any(
                 item.kind == "byte-mismatch" and item.artifact_id == "android-x86"
@@ -168,6 +175,7 @@ class CompareTreeTests(unittest.TestCase):
                 str(committed),
                 "--staging",
                 str(staged),
+                "--skip-inspection",
             ]
         )
         self.assertEqual(rc, 1)

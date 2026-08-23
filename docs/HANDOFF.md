@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | `6325262` | Gate 1 **NO-GO**. Local 8/8 byte-match on the original host; clean `macos-latest` rebuilds do not match committed natives. Linux/Windows JVM artifacts not started. |
+| 7 | `fix/native-build-and-platform-evidence` | `6e4a51d` + Phase A/B commits | Gate 1 **NO-GO** until 8/8 candidate hashes match a clean `macos-26` runner. Full remediation; no host-bound exception. Linux/Windows JVM not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -104,17 +104,19 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence` (stacked on
-  Prompt 6 `2b85ed7`).** Gate 1 landed a staging harness
-  (`crypto-signing-backend/scripts/`) and `native-rebuild-evidence.yml`.
-  On this host, `rebuild_into_staging.py --groups macos-jvm,android,ios
-  --compare` matched all eight committed natives and CHECKSUMS (same
-  `target/` install-name path as the original dylibs). A separate
-  `CARGO_TARGET_DIR` rewrites Mach-O `LC_ID_DYLIB` and the content-hashed
-  `LC_UUID`. Clean-runner run `32658155802` (head `6325262`): Ubuntu
-  catalog + `cargo metadata --locked` passed; macOS JVM and iOS rebuilt
-  then failed byte-compare; Android `cargo ndk` rebuild failed. No
-  CHECKSUMS rewrite. Gates 2–4 (Linux/Windows committed libs, legal
-  packet) were not started. `gh` is not logged in; no PR. Do not merge.
+  Prompt 6 `2b85ed7`, continue from `6e4a51d`).** Independent review confirmed
+  Gate 1 **NO-GO**. Owner chose full cross-host remediation; no host-bound
+  exception. Phase A fail-closes the harness: staging-owned empty
+  `CARGO_TARGET_DIR` (module `target/` refused), remapped source roots,
+  link-time `@rpath/libkardano_ed25519_bip32_signing.dylib`, required
+  `nm`/`lipo`/`file`/`otool`, pinned `macos-26` + Xcode 26.6 (`17F113`),
+  retained command logs and evidence uploads (`if-no-files-found: error`).
+  The large first commit `6cb6810` is historical review debt and is not
+  rewritten. Phase B writes a separate candidate manifest and requires a
+  clean runner to match all 8 hashes before any CHECKSUMS/`src/` replace.
+  Next task after 8/8 candidate match: Phase C replace, then a later Gate 2
+  Linux invocation. Do not start Linux/Windows/legal in this correction.
+  Do not merge or tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope

@@ -194,13 +194,17 @@ python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.
 python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
   --staging /tmp/kardano-native-rebuild \
   --groups macos-jvm,android,ios \
+  --write-candidates crypto-signing-backend/rebuild-candidates \
+  --mode candidate \
   --compare
 ```
 
-`native-rebuild-evidence.yml` runs the catalog tests and `cargo metadata --locked` on
-Ubuntu, and the macOS staged rebuild plus byte comparison on `macos-latest`. The job
-uploads `provenance.json`, `compare-report.json`, and the staged copies; it never
-writes them over `src/`.
+`native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
+Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. The job
+compares hashes/arch/symbols/install names against the candidate manifest when
+present, otherwise CHECKSUMS. Uploads use `if-no-files-found: error`. It never
+writes staged copies over `src/`. CARGO_TARGET_DIR is staging-owned and must be
+empty; the module `target/` is refused.
 
 Documentation and claim-language checks:
 

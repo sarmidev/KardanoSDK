@@ -1,10 +1,10 @@
 name: Native rebuild evidence
 
-# Rebuilds the eight committed signing-backend natives on a clean macOS
-# runner into a fresh staging directory and compares them byte-for-byte
-# against the committed files. Ubuntu runs the verifier unit tests and a
-# locked Cargo metadata check. This workflow never copies into src/ and
-# never rewrites CHECKSUMS.sha256.
+# Rebuilds the eight existing-family signing-backend natives on a pinned
+# macOS 26 + Xcode 26.6 runner into a fresh staging-owned CARGO_TARGET_DIR
+# and compares them to the candidate manifest when present, otherwise to
+# CHECKSUMS.sha256. Ubuntu runs harness tests and cargo metadata --locked.
+# This workflow never copies into src/ and never rewrites CHECKSUMS.sha256.
 
 on:
   pull_request:
@@ -15,6 +15,12 @@ on:
 
 permissions:
   contents: read
+
+env:
+  EXPECTED_IMAGE_OS: macos26
+  EXPECTED_XCODE: "26.6"
+  EXPECTED_XCODE_BUILD: 17F113
+  EXPECTED_RUSTC: "1.97.0"
 
 jobs:
   artifact-catalog-tests:
@@ -44,10 +50,31 @@ jobs:
 
   macos-native-rebuild:
     name: macOS staged rebuild and compare
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pin runner image and Xcode 26.6
+        run: |
+          echo "ImageOS=${ImageOS:-}"
+          echo "ImageVersion=${ImageVersion:-}"
+          if [ "${ImageOS:-}" != "$EXPECTED_IMAGE_OS" ]; then
+            echo "ImageOS ${ImageOS:-unset} != $EXPECTED_IMAGE_OS"
+            exit 1
+          fi
+          if [ -d /Applications/Xcode_26.6.app ]; then
+            sudo xcode-select -s /Applications/Xcode_26.6.app
+          else
+            echo "Xcode_26.6.app is missing"
+            exit 1
+          fi
+          xcodebuild -version
+          XCODE_LINE=$(xcodebuild -version | awk '/^Xcode /{print $2}')
+          BUILD_LINE=$(xcodebuild -version | awk '/^Build version /{print $3}')
+          if [ "$XCODE_LINE" != "$EXPECTED_XCODE" ] || [ "$BUILD_LINE" != "$EXPECTED_XCODE_BUILD" ]; then
+            echo "Xcode $XCODE_LINE ($BUILD_LINE) != $EXPECTED_XCODE ($EXPECTED_XCODE_BUILD)"
+            exit 1
+          fi
       - name: Install rustup 1.29.0 and rustc 1.97.0
         run: >-
           python3 crypto-signing-backend/scripts/install_rustup.py
@@ -57,8 +84,25 @@ jobs:
           --channel 1.97.0
       - name: Put rustup on PATH
         run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Require rustc 1.97.0
+        run: |
+          rustc --version --verbose
+          RELEASE=$(rustc --version | awk '{print $2}')
+          if [ "$RELEASE" != "$EXPECTED_RUSTC" ]; then
+            echo "rustc $RELEASE != $EXPECTED_RUSTC"
+            exit 1
+          fi
       - name: Install cargo-ndk 4.1.2
         run: cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Enable Rosetta for NDK darwin-x86_64 clang
+        run: |
+          # NDK 27.2.12479018 Darwin zip ships darwin-x86_64 prebuilts only.
+          if [ "$(uname -m)" = "arm64" ]; then
+            if ! arch -x86_64 /usr/bin/true; then
+              softwareupdate --install-rosetta --agree-to-license
+            fi
+            arch -x86_64 /usr/bin/true
+          fi
       - name: Install NDK 27.2.12479018
         run: |
           NDK_HOME=$(python3 crypto-signing-backend/scripts/install_ndk.py \
@@ -68,13 +112,26 @@ jobs:
           echo "NDK_HOME=$NDK_HOME"
           echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$NDK_HOME" >> "$GITHUB_ENV"
-      - name: Show rustc, cargo-ndk, and NDK
+      - name: Show rustc, cargo-ndk, NDK, and linker
         run: |
           rustc --version --verbose
           cargo --version --verbose
-          cargo ndk --version || true
+          cargo ndk --version
           test -f "$ANDROID_NDK_HOME/source.properties" && cat "$ANDROID_NDK_HOME/source.properties"
           xcodebuild -version
+          xcode-select -p
+          ld -v || true
+          file "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang"
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang" --version
+      - name: Choose compare mode
+        run: |
+          if [ -f crypto-signing-backend/rebuild-candidates/CANDIDATE_MANIFEST.sha256 ]; then
+            echo "COMPARE_MODE=candidate" >> "$GITHUB_ENV"
+            echo "MANIFEST=crypto-signing-backend/rebuild-candidates/CANDIDATE_MANIFEST.sha256" >> "$GITHUB_ENV"
+          else
+            echo "COMPARE_MODE=committed" >> "$GITHUB_ENV"
+            echo "MANIFEST=crypto-signing-backend/CHECKSUMS.sha256" >> "$GITHUB_ENV"
+          fi
       - name: Rebuild macOS JVM into staging
         run: >-
           python3 crypto-signing-backend/scripts/rebuild_into_staging.py
@@ -87,7 +144,19 @@ jobs:
           --module-root crypto-signing-backend
           --staging "$RUNNER_TEMP/native-rebuild-macos-jvm/artifacts"
           --groups macos-jvm
+          --mode "$COMPARE_MODE"
+          --manifest "$MANIFEST"
+          --evidence "$RUNNER_TEMP/native-rebuild-macos-jvm/evidence"
+          --logs "$RUNNER_TEMP/native-rebuild-macos-jvm/logs"
           --report "$RUNNER_TEMP/native-rebuild-macos-jvm/compare-report.json"
+      - name: Upload macOS JVM evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-rebuild-evidence-macos-jvm
+          path: ${{ runner.temp }}/native-rebuild-macos-jvm
+          if-no-files-found: error
+          retention-days: 14
       - name: Rebuild Android into staging
         if: always()
         run: >-
@@ -101,8 +170,20 @@ jobs:
           --module-root crypto-signing-backend
           --staging "$RUNNER_TEMP/native-rebuild-android/artifacts"
           --groups android
+          --mode "$COMPARE_MODE"
+          --manifest "$MANIFEST"
+          --evidence "$RUNNER_TEMP/native-rebuild-android/evidence"
+          --logs "$RUNNER_TEMP/native-rebuild-android/logs"
           --report "$RUNNER_TEMP/native-rebuild-android/compare-report.json"
           --ndk-home "$ANDROID_NDK_HOME"
+      - name: Upload Android evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-rebuild-evidence-android
+          path: ${{ runner.temp }}/native-rebuild-android
+          if-no-files-found: error
+          retention-days: 14
       - name: Rebuild iOS into staging
         if: always()
         run: >-
@@ -116,15 +197,16 @@ jobs:
           --module-root crypto-signing-backend
           --staging "$RUNNER_TEMP/native-rebuild-ios/artifacts"
           --groups ios
+          --mode "$COMPARE_MODE"
+          --manifest "$MANIFEST"
+          --evidence "$RUNNER_TEMP/native-rebuild-ios/evidence"
+          --logs "$RUNNER_TEMP/native-rebuild-ios/logs"
           --report "$RUNNER_TEMP/native-rebuild-ios/compare-report.json"
-      - name: Upload staging report and rebuilt natives
+      - name: Upload iOS evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: native-rebuild-evidence-macos
-          path: |
-            ${{ runner.temp }}/native-rebuild-macos-jvm
-            ${{ runner.temp }}/native-rebuild-android
-            ${{ runner.temp }}/native-rebuild-ios
-          if-no-files-found: warn
+          name: native-rebuild-evidence-ios
+          path: ${{ runner.temp }}/native-rebuild-ios
+          if-no-files-found: error
           retention-days: 14
