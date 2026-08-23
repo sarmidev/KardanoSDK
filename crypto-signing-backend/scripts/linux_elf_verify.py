@@ -33,13 +33,18 @@ Policy (documented, not a strength claim):
   rejected; ``.dynamic`` is exactly one ``SHT_DYNAMIC`` with
   ``Elf64_Dyn`` entsize, ``sh_link`` to ``.dynstr``, and exact file
   correspondence with the single ``PT_DYNAMIC``
-- printable NUL-terminated absolute path-like strings (leading ``/``,
-  first component starts with a letter/``_``/``.``, and is either at
-  least two characters or followed by ``/``) may use only documented
-  remap prefixes (including rustc ``/rust/deps``) and the listed
-  runtime prefixes, matched as ``path == prefix`` or
-  ``path.startswith(prefix + "/")``. Fragments such as ``/0`` and
-  ``/N`` are not paths.
+- ``.dynstr.sh_size == DT_STRSZ`` and ``DT_STRTAB`` equals
+  ``.dynstr.sh_addr`` and maps to its file range
+- ``.gnu.version_r`` is ``SHF_ALLOC``, ``sh_info == DT_VERNEEDNUM``,
+  and ``DT_VERNEED`` equals its ``sh_addr`` / file range
+- ``.dynamic`` is ``SHF_ALLOC`` and matches the single ``PT_DYNAMIC``
+  on offset, vaddr, filesz, memsz, and alignment
+- ``DT_VERSYM`` binds to exactly one allocated ``.gnu.version``;
+  ``DT_VERDEF``/``DT_VERDEFNUM`` and ``.gnu.version_d`` are all-or-nothing
+- raw-byte searches catch every documented forbidden build root at any
+  offset; slash-byte scans extract path-like candidates through
+  NUL/control/whitespace/EOF. Allowed prefixes use an exact component
+  boundary (``path == prefix`` or next byte ``/``)
 """
 
 from __future__ import annotations
@@ -118,6 +123,10 @@ ELF64_DYN_SIZE = 16
 ELF64_SYM_SIZE = 24
 ELF64_VERNEED_SIZE = 16
 ELF64_VERNAUX_SIZE = 16
+ELF64_VERSYM_SIZE = 2
+ELF64_VERDEF_SIZE = 20
+ELF64_VERDAUX_SIZE = 8
+VER_DEF_CURRENT = 1
 
 MAX_INPUT_BYTES = 16 * 1024 * 1024
 MAX_PHNUM = 128
@@ -128,6 +137,10 @@ MAX_NOTE_BYTES = 4096
 MAX_DYNSYM = 4096
 MAX_VERNEED = 16
 MAX_VERNAUX = 32
+MAX_VERDEF = 16
+MAX_VERDAUX = 32
+MAX_PATH_CANDIDATE = 4096
+MAX_PATH_DISPLAY = 128
 
 # Typical rustc 1.97 x86_64-unknown-linux-gnu cdylib DT_NEEDED set.
 # Extra names fail. Linux ARM loader names are not listed.
@@ -195,6 +208,22 @@ ALLOWED_RUNTIME_PREFIXES = (
     "/usr/lib64",
 )
 ALLOWED_ABSOLUTE_PREFIXES = ALLOWED_REMAP_PREFIXES + ALLOWED_RUNTIME_PREFIXES
+# Raw-byte host/build roots. Matched at any offset, independent of NUL
+# or printable context. /usr/local and /tmp are not runtime prefixes.
+FORBIDDEN_BUILD_ROOTS = (
+    b"/home/runner",
+    b"/Users",
+    b"/var/folders",
+    b"/private/var/folders",
+    b"/opt/homebrew",
+    b"/opt/hostedtoolcache",
+    b"/Volumes",
+    b"/usr/local/private-build",
+    b"/tmp/untracked-host",
+)
+_HOME_PREFIX = b"/home/"
+_HOME_REBUILD = b"rebuild"
+_PATH_STOP = frozenset(range(0x21)) | {0x20}  # NUL, controls, space
 
 NM_DEFINED_FUNC_TYPES = frozenset({"T", "W"})
 # Authoritative glibc labels: two components, or legacy three (GLIBC_2.2.5).
@@ -220,6 +249,15 @@ class LoadSegment:
     filesz: int
     vaddr: int
     memsz: int
+
+
+@dataclass
+class DynamicPhdr:
+    offset: int
+    vaddr: int
+    filesz: int
+    memsz: int
+    align: int
 
 
 @dataclass
@@ -416,58 +454,125 @@ def _require_unique_named_type(
     return section
 
 
+def _require_alloc(section: Section) -> None:
+    if not (section.sh_flags & SHF_ALLOC):
+        raise ElfError(f"{section.name} is not SHF_ALLOC")
+
+
+def _require_vaddr_maps_section(
+    segments: list[LoadSegment],
+    vaddr: int,
+    section: Section,
+    tag_name: str,
+) -> None:
+    if vaddr != section.sh_addr:
+        raise ElfError(f"{tag_name} does not equal {section.name} sh_addr")
+    mapped = _vaddr_to_offset(segments, vaddr)
+    if mapped != section.sh_offset:
+        raise ElfError(f"{tag_name} does not map to {section.name} file offset")
+
+
 def _validate_section_program_links(
     sections: list[Section],
     segments: list[LoadSegment],
-    dynamic_off: int,
-    dynamic_size: int,
+    dynamic_phdr: DynamicPhdr,
+    values: dict[int, int],
     e_shnum: int,
 ) -> None:
     if not sections or sections[0].index != 0:
         raise ElfError("section 0 is missing")
     dynamic = _require_unique_named_type(sections, ".dynamic", SHT_DYNAMIC)
+    _require_alloc(dynamic)
     if dynamic.sh_entsize != ELF64_DYN_SIZE:
         raise ElfError(".dynamic sh_entsize is not Elf64_Dyn")
-    if dynamic.sh_size != dynamic_size or dynamic.sh_offset != dynamic_off:
-        raise ElfError("SHT_DYNAMIC does not correspond to the single PT_DYNAMIC")
+    if dynamic.sh_offset != dynamic_phdr.offset:
+        raise ElfError("PT_DYNAMIC p_offset does not equal .dynamic sh_offset")
+    if dynamic.sh_addr != dynamic_phdr.vaddr:
+        raise ElfError("PT_DYNAMIC p_vaddr does not equal .dynamic sh_addr")
+    if dynamic.sh_size != dynamic_phdr.filesz:
+        raise ElfError("PT_DYNAMIC p_filesz does not equal .dynamic sh_size")
+    if dynamic_phdr.memsz != dynamic_phdr.filesz:
+        raise ElfError("PT_DYNAMIC p_memsz does not equal p_filesz")
+    if dynamic_phdr.align == 0:
+        raise ElfError("PT_DYNAMIC p_align is zero")
+    if dynamic_phdr.align != dynamic.sh_addralign:
+        raise ElfError("PT_DYNAMIC p_align does not equal .dynamic sh_addralign")
     if dynamic.sh_link == 0 or dynamic.sh_link >= e_shnum:
         raise ElfError(".dynamic sh_link is out of range")
     dynstr = _require_unique_named_type(sections, ".dynstr", SHT_STRTAB, unique_type=False)
+    _require_alloc(dynstr)
     if dynamic.sh_link != dynstr.index:
         raise ElfError(".dynamic sh_link does not point at .dynstr")
+    strtab = values.get(DT_STRTAB)
+    strsz = values.get(DT_STRSZ)
+    if strtab is None or strsz is None:
+        raise ElfError("DT_STRTAB/DT_STRSZ is missing")
+    if dynstr.sh_size != strsz:
+        raise ElfError(".dynstr sh_size does not equal DT_STRSZ")
+    _require_vaddr_maps_section(segments, strtab, dynstr, "DT_STRTAB")
 
     dynsym = _require_unique_named_type(sections, ".dynsym", SHT_DYNSYM)
+    _require_alloc(dynsym)
     if dynsym.sh_entsize != ELF64_SYM_SIZE:
         raise ElfError(".dynsym sh_entsize is not Elf64_Sym")
     if dynsym.sh_link != dynstr.index:
         raise ElfError(".dynsym sh_link does not point at .dynstr")
+    symtab = values.get(DT_SYMTAB)
+    if symtab is None:
+        raise ElfError("DT_SYMTAB is missing")
+    _require_vaddr_maps_section(segments, symtab, dynsym, "DT_SYMTAB")
 
+    versym_tag = values.get(DT_VERSYM)
     versyms = _named_sections(sections, ".gnu.version") + _typed_sections(sections, SHT_GNU_VERSYM)
-    if versyms:
+    if versym_tag is None and versyms:
+        raise ElfError("stray .gnu.version section without DT_VERSYM")
+    if versym_tag is not None:
         versym = _require_unique_named_type(sections, ".gnu.version", SHT_GNU_VERSYM)
-        if versym.sh_entsize != 2:
+        _require_alloc(versym)
+        if versym.sh_entsize != ELF64_VERSYM_SIZE:
             raise ElfError(".gnu.version sh_entsize is not Elf64_Half")
         if versym.sh_link != dynsym.index:
             raise ElfError(".gnu.version sh_link does not point at .dynsym")
-        expected = (dynsym.sh_size // ELF64_SYM_SIZE) * 2
+        expected = (dynsym.sh_size // ELF64_SYM_SIZE) * ELF64_VERSYM_SIZE
         if versym.sh_size != expected:
             raise ElfError(".gnu.version size does not match .dynsym count")
+        _require_vaddr_maps_section(segments, versym_tag, versym, "DT_VERSYM")
 
+    verneed_tag = values.get(DT_VERNEED)
+    verneed_num = values.get(DT_VERNEEDNUM)
     verneeds = _named_sections(sections, ".gnu.version_r") + _typed_sections(
         sections, SHT_GNU_VERNEED
     )
-    if verneeds:
+    if verneed_tag is None and verneeds:
+        raise ElfError("stray .gnu.version_r section without DT_VERNEED")
+    if verneed_tag is not None:
+        if verneed_num is None:
+            raise ElfError("DT_VERNEEDNUM is missing")
         verneed = _require_unique_named_type(sections, ".gnu.version_r", SHT_GNU_VERNEED)
+        _require_alloc(verneed)
         if verneed.sh_link != dynstr.index:
             raise ElfError(".gnu.version_r sh_link does not point at .dynstr")
+        if verneed.sh_info != verneed_num:
+            raise ElfError(".gnu.version_r sh_info does not equal DT_VERNEEDNUM")
+        _require_vaddr_maps_section(segments, verneed_tag, verneed, "DT_VERNEED")
 
+    verdef_tag = values.get(DT_VERDEF)
+    verdef_num = values.get(DT_VERDEFNUM)
     verdefs = _named_sections(sections, ".gnu.version_d") + _typed_sections(
         sections, SHT_GNU_VERDEF
     )
-    if verdefs:
+    if (verdef_tag is None) != (verdef_num is None):
+        raise ElfError("DT_VERDEF and DT_VERDEFNUM must both be present or both absent")
+    if verdef_tag is None and verdefs:
+        raise ElfError("stray .gnu.version_d section without DT_VERDEF")
+    if verdef_tag is not None:
         verdef = _require_unique_named_type(sections, ".gnu.version_d", SHT_GNU_VERDEF)
+        _require_alloc(verdef)
         if verdef.sh_link != dynstr.index:
             raise ElfError(".gnu.version_d sh_link does not point at .dynstr")
+        if verdef.sh_info != verdef_num:
+            raise ElfError(".gnu.version_d sh_info does not equal DT_VERDEFNUM")
+        _require_vaddr_maps_section(segments, verdef_tag, verdef, "DT_VERDEF")
 
     for section in sections[1:]:
         if section.sh_flags & SHF_ALLOC and not _section_in_compatible_load(section, segments):
@@ -524,6 +629,10 @@ def _matches_allowed_prefix(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix + "/")
 
 
+def _matches_allowed_prefix_bytes(path: bytes, prefix: bytes) -> bool:
+    return path == prefix or path.startswith(prefix + b"/")
+
+
 def is_allowed_remap_prefix(path: str) -> bool:
     return any(_matches_allowed_prefix(path, prefix) for prefix in ALLOWED_REMAP_PREFIXES)
 
@@ -550,21 +659,84 @@ def is_absolute_path_like(text: str) -> bool:
     return len(first) >= 2 or bool(sep)
 
 
-def extract_nul_terminated_strings(data: bytes) -> list[str]:
-    strings: list[str] = []
-    index = 0
-    length = len(data)
-    while index < length:
-        if 32 <= data[index] < 127:
-            end = index
-            while end < length and 32 <= data[end] < 127:
-                end += 1
-            if end < length and data[end] == 0 and end > index:
-                strings.append(data[index:end].decode("ascii"))
-            index = end + 1 if end < length and data[end] == 0 else end
-        else:
-            index += 1
-    return strings
+def _is_allowed_prefix_near_miss(path: str) -> bool:
+    if is_allowed_absolute_path(path):
+        return False
+    for prefix in ALLOWED_ABSOLUTE_PREFIXES:
+        if path.startswith(prefix) and len(path) > len(prefix) and path[len(prefix)] != "/":
+            return True
+    return False
+
+
+def _is_home_rebuild_tail(rest: bytes) -> bool:
+    if not rest.startswith(_HOME_REBUILD):
+        return False
+    if len(rest) == len(_HOME_REBUILD):
+        return True
+    return rest[len(_HOME_REBUILD)] in _PATH_STOP or rest[len(_HOME_REBUILD)] == 0x2F
+
+
+def _extract_through_stop(data: bytes, start: int, limit: int) -> bytes:
+    end = start
+    stop_at = min(len(data), start + limit)
+    while end < stop_at and data[end] not in _PATH_STOP:
+        end += 1
+    return data[start:end]
+
+
+def _display_fragment(data: bytes, start: int) -> str:
+    raw = _extract_through_stop(data, start, MAX_PATH_DISPLAY)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("latin-1")
+
+
+def extract_slash_path_candidate(data: bytes, start: int) -> bytes:
+    if start < 0 or start >= len(data) or data[start] != 0x2F:
+        return b""
+    return _extract_through_stop(data, start, MAX_PATH_CANDIDATE)
+
+
+def _looks_unapproved_raw_path(raw: bytes) -> bool:
+    if not raw.startswith(b"/") or len(raw) < 2:
+        return False
+    if any(marker in raw for marker in FORBIDDEN_BUILD_ROOTS):
+        return True
+    second = raw[1]
+    if not (65 <= second <= 90 or 97 <= second <= 122 or second in (0x2E, 0x5F)):
+        return False
+    return True
+
+
+def _is_path_start(data: bytes, index: int) -> bool:
+    return index == 0 or data[index - 1] in _PATH_STOP
+
+
+def _slash_candidate_is_forbidden(
+    data: bytes,
+    index: int,
+    raw: bytes,
+    extra_roots: tuple[bytes, ...],
+) -> bool:
+    if any(marker and marker in raw for marker in FORBIDDEN_BUILD_ROOTS + extra_roots):
+        return True
+    home = raw.find(_HOME_PREFIX)
+    if home >= 0 and not _is_home_rebuild_tail(raw[home + len(_HOME_PREFIX) :]):
+        return True
+    if not _is_path_start(data, index):
+        return False
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return _looks_unapproved_raw_path(raw)
+    if is_allowed_absolute_path(text):
+        return False
+    if not is_absolute_path_like(text):
+        return False
+    if "/" in text[1:]:
+        return True
+    return _is_allowed_prefix_near_miss(text)
 
 
 def scan_linux_forbidden_paths(
@@ -572,15 +744,37 @@ def scan_linux_forbidden_paths(
     extra_roots: tuple[bytes, ...] = (),
 ) -> list[str]:
     hits: list[str] = []
-    extra = tuple(root.decode("ascii", errors="ignore") for root in extra_roots if root)
-    for text in extract_nul_terminated_strings(data):
-        if not is_absolute_path_like(text):
+
+    def add(text: str) -> None:
+        if text and text not in hits:
+            hits.append(text)
+
+    for marker in FORBIDDEN_BUILD_ROOTS + extra_roots:
+        if not marker:
             continue
-        allowed = is_allowed_absolute_path(text)
-        extra_hit = any(_matches_allowed_prefix(text, root) for root in extra if root)
-        if extra_hit or not allowed:
-            if text not in hits:
-                hits.append(text)
+        start = 0
+        while True:
+            index = data.find(marker, start)
+            if index < 0:
+                break
+            add(_display_fragment(data, index))
+            start = index + 1
+    start = 0
+    while True:
+        index = data.find(_HOME_PREFIX, start)
+        if index < 0:
+            break
+        if not _is_home_rebuild_tail(data[index + len(_HOME_PREFIX) :]):
+            add(_display_fragment(data, index))
+        start = index + 1
+    for index, byte in enumerate(data):
+        if byte != 0x2F:
+            continue
+        raw = extract_slash_path_candidate(data, index)
+        if len(raw) < 2:
+            continue
+        if _slash_candidate_is_forbidden(data, index, raw, extra_roots):
+            add(_display_fragment(data, index))
     return hits
 
 
@@ -683,8 +877,7 @@ def parse_elf64_le_x86_64_dso(
         raise ElfError("program header table overlaps the ELF header")
 
     segments: list[LoadSegment] = []
-    dynamic_off: int | None = None
-    dynamic_size = 0
+    dynamic_phdr: DynamicPhdr | None = None
     notes: list[tuple[int, int]] = []
     for index in range(e_phnum):
         off = e_phoff + index * e_phentsize
@@ -709,15 +902,22 @@ def parse_elf64_le_x86_64_dso(
                 LoadSegment(offset=p_offset, filesz=p_filesz, vaddr=p_vaddr, memsz=p_memsz)
             )
         elif p_type == PT_DYNAMIC:
-            if dynamic_off is not None:
+            if dynamic_phdr is not None:
                 raise ElfError("multiple PT_DYNAMIC headers")
-            dynamic_off = p_offset
-            dynamic_size = p_filesz
+            dynamic_phdr = DynamicPhdr(
+                offset=p_offset,
+                vaddr=p_vaddr,
+                filesz=p_filesz,
+                memsz=p_memsz,
+                align=p_align,
+            )
         elif p_type == PT_NOTE:
             notes.append((p_offset, p_filesz))
 
-    if dynamic_off is None:
+    if dynamic_phdr is None:
         raise ElfError("PT_DYNAMIC is missing")
+    dynamic_off = dynamic_phdr.offset
+    dynamic_size = dynamic_phdr.filesz
     if dynamic_size < ELF64_DYN_SIZE or dynamic_size % ELF64_DYN_SIZE != 0:
         raise ElfError("PT_DYNAMIC size is not a multiple of 16")
     tag_count = dynamic_size // ELF64_DYN_SIZE
@@ -752,6 +952,8 @@ def parse_elf64_le_x86_64_dso(
     syment = values.get(DT_SYMENT)
     verneed_vaddr = values.get(DT_VERNEED)
     verneed_num = values.get(DT_VERNEEDNUM)
+    verdef_vaddr = values.get(DT_VERDEF)
+    verdef_num = values.get(DT_VERDEFNUM)
 
     if strtab_vaddr is None or strsz is None:
         raise ElfError("DT_STRTAB/DT_STRSZ is missing")
@@ -867,7 +1069,7 @@ def parse_elf64_le_x86_64_dso(
                 sh_addralign=sh_addralign,
             )
         )
-    _validate_section_program_links(sections, segments, dynamic_off, dynamic_size, e_shnum)
+    _validate_section_program_links(sections, segments, dynamic_phdr, values, e_shnum)
 
     for off, size in notes:
         if size > MAX_NOTE_BYTES:
@@ -937,6 +1139,8 @@ def parse_elf64_le_x86_64_dso(
     if "libc.so.6" in record.needed:
         if verneed_vaddr is None or verneed_num is None:
             raise ElfError("DT_VERNEED/DT_VERNEEDNUM is required when libc.so.6 is needed")
+        if values.get(DT_VERSYM) is None:
+            raise ElfError("DT_VERSYM is required when libc.so.6 is needed")
         record.gnu_versions = _parse_verneed(
             data,
             segments,
@@ -964,6 +1168,17 @@ def parse_elf64_le_x86_64_dso(
                 f"GLIBC requirement {too_new} exceeds documented baseline "
                 f"{DOCUMENTED_GLIBC_BASELINE_LABEL}"
             )
+
+    if verdef_vaddr is not None and verdef_num is not None:
+        _parse_verdef(
+            data,
+            segments,
+            sections,
+            e_shnum,
+            verdef_vaddr=verdef_vaddr,
+            verdef_num=verdef_num,
+            dynstr=dynstr,
+        )
 
     record.forbidden_paths = scan_linux_forbidden_paths(data, extra_forbidden_roots)
     if record.forbidden_paths:
@@ -1118,6 +1333,96 @@ def _parse_verneed(
     if walked != verneed_num:
         raise ElfError("DT_VERNEEDNUM does not match the walked Verneed count")
     return names
+
+
+def _parse_verdef(
+    data: bytes,
+    segments: list[LoadSegment],
+    sections: list[Section],
+    e_shnum: int,
+    *,
+    verdef_vaddr: int,
+    verdef_num: int,
+    dynstr,
+) -> None:
+    if verdef_num <= 0 or verdef_num > MAX_VERDEF:
+        raise ElfError(f"DT_VERDEFNUM {verdef_num} is missing or exceeds MAX_VERDEF")
+    section = _require_unique_named_type(sections, ".gnu.version_d", SHT_GNU_VERDEF)
+    if section.sh_link == 0 or section.sh_link >= e_shnum:
+        raise ElfError(".gnu.version_d sh_link is out of range")
+    if sections[section.sh_link].name != ".dynstr":
+        raise ElfError(".gnu.version_d sh_link does not point at .dynstr")
+    if section.sh_size < ELF64_VERDEF_SIZE:
+        raise ElfError(".gnu.version_d is smaller than one Elf64_Verdef")
+    section_start = section.sh_offset
+    section_end = _checked_add(section.sh_offset, section.sh_size, ".gnu.version_d")
+    mapped = _vaddr_to_offset(segments, verdef_vaddr)
+    if mapped != section_start:
+        raise ElfError("DT_VERDEF does not start at the SHT_GNU_verdef section")
+
+    def _in_section(offset: int, size: int, what: str) -> None:
+        end = _checked_add(offset, size, what)
+        if offset < section_start or end > section_end:
+            raise ElfError(f"{what} is outside the SHT_GNU_verdef section")
+        if offset % 4 != 0:
+            raise ElfError(f"{what} is not 4-byte aligned")
+
+    visited: set[int] = set()
+    occupied: list[tuple[int, int]] = []
+    cursor = mapped
+    walked = 0
+    for index in range(verdef_num):
+        if cursor in visited:
+            raise ElfError("Elf64_Verdef entry was revisited")
+        _in_section(cursor, ELF64_VERDEF_SIZE, "Elf64_Verdef")
+        _claim_range(occupied, cursor, ELF64_VERDEF_SIZE, "Elf64_Verdef")
+        visited.add(cursor)
+        vd_version = _u16(data, cursor)
+        vd_cnt = _u16(data, cursor + 6)
+        vd_aux = _u32(data, cursor + 12)
+        vd_next = _u32(data, cursor + 16)
+        if vd_version != VER_DEF_CURRENT:
+            raise ElfError(f"vd_version {vd_version} is not VER_DEF_CURRENT")
+        if vd_cnt == 0 or vd_cnt > MAX_VERDAUX:
+            raise ElfError("vd_cnt is missing or exceeds MAX_VERDAUX")
+        if vd_aux == 0:
+            raise ElfError("vd_aux is missing")
+        aux = _checked_add(cursor, vd_aux, "vd_aux")
+        if aux <= cursor:
+            raise ElfError("vd_aux is not a positive forward offset")
+        for aux_index in range(vd_cnt):
+            _in_section(aux, ELF64_VERDAUX_SIZE, "Elf64_Verdaux")
+            _claim_range(occupied, aux, ELF64_VERDAUX_SIZE, "Elf64_Verdaux")
+            vda_name = _u32(data, aux)
+            vda_next = _u32(data, aux + 4)
+            name = dynstr(vda_name)
+            if not name:
+                raise ElfError("empty GNU version definition name")
+            last_aux = aux_index + 1 == vd_cnt
+            if last_aux:
+                if vda_next != 0:
+                    raise ElfError("final vda_next is not zero")
+            else:
+                if vda_next == 0:
+                    raise ElfError("Elf64_Verdaux chain is truncated")
+                nxt = _checked_add(aux, vda_next, "vda_next")
+                if nxt <= aux:
+                    raise ElfError("vda_next is not a positive forward offset")
+                aux = nxt
+        walked += 1
+        last_vd = index + 1 == verdef_num
+        if last_vd:
+            if vd_next != 0:
+                raise ElfError("final vd_next is not zero")
+        else:
+            if vd_next == 0:
+                raise ElfError("Elf64_Verdef chain is truncated")
+            nxt = _checked_add(cursor, vd_next, "vd_next")
+            if nxt <= cursor:
+                raise ElfError("vd_next is not a positive forward offset")
+            cursor = nxt
+    if walked != verdef_num:
+        raise ElfError("DT_VERDEFNUM does not match the walked Verdef count")
 
 
 def _note_has_build_id(blob: bytes) -> bool:

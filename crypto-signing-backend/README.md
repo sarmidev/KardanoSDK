@@ -244,27 +244,17 @@ export semantics, GNU version requirements (full-string
 numeric compare against baseline `(2, 35, 0)`; `GLIBC_PRIVATE` and
 unparseable labels fail), Verneed/Vernaux chains bound to one
 `SHT_GNU_verneed` section, canonical section 0, one `.dynamic` /
-`PT_DYNAMIC` pair, program/section range and alignment arithmetic, and
-`.debug_*` / `.zdebug_*` / `.gnu_debuglink` material. `nm` corroboration
-uses `--defined-only --format=posix` exact records, not substring
-search. Printable NUL-terminated absolute path-like strings may use
-only the documented remap prefixes (`/cargo-target`, `/kardano`,
-`/rustc`, `/rust/deps`, `/rustup`, `/cargo`, `/home/rebuild`,
-`/runner-temp`, `/runner-workspace`) and the runtime prefixes
-(`/lib64`, `/lib`, `/usr/lib`, `/usr/lib64`). `/rust/deps` is the
-rustc 1.97 compiler-crate remap observed on ubuntu-22.04 run
-`32670749687` (gimli/addr2line/rustc-demangle/miniz_oxide). Match is
-exact prefix plus `/`, so `/cargo-evil` is not `/cargo`.
+`PT_DYNAMIC` pair with exact offset/vaddr/filesz/memsz/align, `.dynstr`
+size equal to `DT_STRSZ`, `DT_VERSYM` bound to one allocated
+`.gnu.version`, and `.debug_*` / `.zdebug_*` / `.gnu_debuglink`
+material. `nm` corroboration uses `--defined-only --format=posix`
+exact records, not substring search. Path policy is two-pass: raw-byte
+search for documented build roots at any offset, then a slash-byte
+scan that extracts candidates through NUL/control/whitespace/EOF.
+Allowed remap/runtime prefixes use an exact component boundary.
 `/tmp/untracked-host` and `/usr/local/private-build` are rejected.
-Slash fragments such as `/0` and `/N` (run `32671207032`) are not
-paths. Fresh Phase B at `977d6ad` is run `32671683894` (A/B + compare +
-JVM KAT success on `ubuntu-22.04`). Artifacts
-`linux-jvm-candidate-a` (id `9501556842`, expires 2026-09-06),
-`linux-jvm-candidate-b` (id `9501556105`, expires 2026-09-06), and
-`linux-jvm-compare-report` (id `9501595446`, expires 2026-09-06) are
-not downloaded and not promoted. Runs `32669707437`, `32670749687`,
-and `32671207032` are superseded. Independent re-review is still
-required before any CHECKSUMS row.
+Run `32672020909` is superseded; a fresh Phase B at this verifier tip
+is required before any CHECKSUMS row.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

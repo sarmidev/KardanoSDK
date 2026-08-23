@@ -76,6 +76,14 @@ def build_elf(
     vna_next_nonfinal: int | None = None,
     verneed_cycle: bool = False,
     vernaux_overlap: bool = False,
+    skip_versym_tag: bool = False,
+    skip_versym_section: bool = False,
+    extra_versym_section: bool = False,
+    verdef_tag_only: bool = False,
+    verdefnum_only: bool = False,
+    stray_verdef_section: bool = False,
+    include_verdef: bool = False,
+    layout: dict | None = None,
 ) -> bytes:
     """Minimal ELF64 LE ET_DYN with PT_LOAD + PT_DYNAMIC + sections."""
     dynstr_entries = [b"\x00"]
@@ -116,16 +124,25 @@ def build_elf(
         dyn_tags.append((elf.DT_RPATH, rpath_off))
     if runpath_off is not None:
         dyn_tags.append((elf.DT_RUNPATH, runpath_off))
+    verneed_num = (
+        verneed_num_override
+        if verneed_num_override is not None
+        else (2 if loader_verneed else 1)
+    )
     if not skip_verneed and version_offs:
         dyn_tags.append((elf.DT_VERNEED, 0))
         if duplicate_verneed_tag:
             dyn_tags.append((elf.DT_VERNEED, 0))
-        dyn_tags.append(
-            (
-                elf.DT_VERNEEDNUM,
-                verneed_num_override if verneed_num_override is not None else (2 if loader_verneed else 1),
-            )
-        )
+        dyn_tags.append((elf.DT_VERNEEDNUM, verneed_num))
+        if not skip_versym_tag:
+            dyn_tags.append((elf.DT_VERSYM, 0))
+    if include_verdef:
+        dyn_tags.append((elf.DT_VERDEF, 0))
+        dyn_tags.append((elf.DT_VERDEFNUM, 1))
+    elif verdef_tag_only:
+        dyn_tags.append((elf.DT_VERDEF, 0))
+    elif verdefnum_only:
+        dyn_tags.append((elf.DT_VERDEFNUM, 1))
     dyn_tags.append((elf.DT_NULL, 0))
     dynamic = b"".join(struct.pack("<qQ", tag, value) for tag, value in dyn_tags)
 
@@ -201,6 +218,13 @@ def build_elf(
             struct.pack_into("<I", buf, elf.ELF64_VERNEED_SIZE + 12, 4)
         verneed = bytes(buf)
 
+    verdef = b""
+    if include_verdef:
+        name_off = soname_off if soname_off is not None else offsets.get(soname, 0)
+        verdef = struct.pack("<HHHHIII", 1, 0, 1, 1, 0, elf.ELF64_VERDEF_SIZE, 0) + struct.pack(
+            "<II", name_off, 0
+        )
+
     shstr_names = [b"\x00", b".dynstr\x00", b".dynamic\x00", b".dynsym\x00", b".shstrtab\x00"]
     if debug_section:
         shstr_names.append(debug_section.encode("utf-8") + b"\x00")
@@ -214,6 +238,16 @@ def build_elf(
         shstr_names.append(b".dynamic2\x00")
     if extra_verneed_section:
         shstr_names.append(b".gnu.version_r2\x00")
+    have_versym_section = bool(
+        not skip_verneed and version_offs and not skip_versym_section and not skip_versym_tag
+    )
+    if have_versym_section:
+        shstr_names.append(b".gnu.version\x00")
+    if extra_versym_section:
+        shstr_names.append(b".gnu.version2\x00")
+    have_verdef_section = bool(include_verdef or stray_verdef_section)
+    if have_verdef_section:
+        shstr_names.append(b".gnu.version_d\x00")
     if alloc_outside_load:
         shstr_names.append(b".outside\x00")
     shstrtab = b"".join(shstr_names)
@@ -238,6 +272,14 @@ def build_elf(
     cursor += len(dynamic)
     dynsym_off = cursor
     cursor += len(dynsym)
+    symbol_count = len(dynsym) // elf.ELF64_SYM_SIZE
+    versym = b"\x00\x00" * symbol_count if have_versym_section else b""
+    versym_off = cursor
+    cursor += len(versym)
+    verdef_pad = b"\x00" * ((4 - (cursor % 4)) % 4)
+    cursor += len(verdef_pad)
+    verdef_off = cursor
+    cursor += len(verdef)
     verneed_pad = b"\x00" * ((4 - (cursor % 4)) % 4)
     cursor += len(verneed_pad)
     verneed_off = cursor
@@ -258,12 +300,19 @@ def build_elf(
             value = dynsym_off
         elif tag == elf.DT_VERNEED:
             value = verneed_off
+        elif tag == elf.DT_VERSYM:
+            value = versym_off
+        elif tag == elf.DT_VERDEF:
+            value = verdef_off
         patched.append(struct.pack("<qQ", tag, value))
     dynamic = b"".join(patched)
 
     have_verneed_section = bool(not skip_verneed and version_offs and not skip_verneed_section)
     shnum = 5
+    shnum += 1 if have_versym_section else 0
     shnum += 1 if have_verneed_section else 0
+    shnum += 1 if have_verdef_section else 0
+    shnum += 1 if extra_versym_section else 0
     shnum += 1 if debug_section else 0
     shnum += 1 if note else 0
     shnum += 1 if embed or section_overflow else 0
@@ -324,6 +373,7 @@ def build_elf(
         flags: int = 0,
         addr: int | None = None,
         align: int = 1,
+        info: int = 0,
     ) -> bytes:
         if addr is None:
             addr = offset if flags & elf.SHF_ALLOC else 0
@@ -336,7 +386,7 @@ def build_elf(
             offset,
             size,
             link,
-            0,
+            info,
             align,
             entsize,
         )
@@ -378,6 +428,18 @@ def build_elf(
         ),
         shdr(b".shstrtab\x00", elf.SHT_STRTAB, shstr_off_file, len(shstrtab)),
     ]
+    if have_versym_section:
+        sections.append(
+            shdr(
+                b".gnu.version\x00",
+                elf.SHT_GNU_VERSYM,
+                versym_off,
+                len(versym),
+                elf.ELF64_VERSYM_SIZE,
+                3,
+                flags=elf.SHF_ALLOC,
+            )
+        )
     if have_verneed_section:
         sections.append(
             shdr(
@@ -387,6 +449,19 @@ def build_elf(
                 len(verneed),
                 link=1,
                 flags=elf.SHF_ALLOC,
+                info=verneed_num,
+            )
+        )
+    if have_verdef_section:
+        sections.append(
+            shdr(
+                b".gnu.version_d\x00",
+                elf.SHT_GNU_VERDEF,
+                verdef_off,
+                len(verdef) or 20,
+                link=1,
+                flags=elf.SHF_ALLOC,
+                info=1 if include_verdef else 0,
             )
         )
     if debug_section:
@@ -418,6 +493,19 @@ def build_elf(
                 len(verneed),
                 link=1,
                 flags=elf.SHF_ALLOC,
+                info=verneed_num,
+            )
+        )
+    if extra_versym_section:
+        sections.append(
+            shdr(
+                b".gnu.version2\x00",
+                elf.SHT_GNU_VERSYM,
+                versym_off,
+                len(versym) or 2,
+                elf.ELF64_VERSYM_SIZE,
+                3,
+                flags=elf.SHF_ALLOC,
             )
         )
     if alloc_outside_load:
@@ -438,6 +526,9 @@ def build_elf(
         + dynstr
         + dynamic
         + dynsym
+        + versym
+        + verdef_pad
+        + verdef
         + verneed_pad
         + verneed
         + note
@@ -445,6 +536,34 @@ def build_elf(
         + shstrtab
         + b"".join(sections)
     )
+    if layout is not None:
+        layout.clear()
+        indexes = {".dynstr": 1, ".dynamic": 2, ".dynsym": 3, ".shstrtab": 4}
+        next_index = 5
+        if have_versym_section:
+            indexes[".gnu.version"] = next_index
+            next_index += 1
+        if have_verneed_section:
+            indexes[".gnu.version_r"] = next_index
+            next_index += 1
+        if have_verdef_section:
+            indexes[".gnu.version_d"] = next_index
+        layout.update(
+            {
+                "dynstr_off": dynstr_off,
+                "dynstr_size": len(dynstr),
+                "dynamic_off": dynamic_off,
+                "dynamic_size": len(dynamic),
+                "dynsym_off": dynsym_off,
+                "versym_off": versym_off,
+                "verneed_off": verneed_off,
+                "verdef_off": verdef_off,
+                "e_shoff": shoff,
+                "e_phoff": elf.ELF64_EHDR_SIZE,
+                "section_index": indexes,
+                "verneed_num": verneed_num,
+            }
+        )
     if truncate is not None:
         return blob[:truncate]
     return blob
@@ -457,6 +576,8 @@ class LinuxElfVerifyTests(unittest.TestCase):
         self.assertEqual(record.needed, [LIBC])
         self.assertIn(SIGN, record.symbols)
         self.assertEqual(record.glibc_requirements, ["GLIBC_2.2.5", "GLIBC_2.35"])
+        self.assertIn(".gnu.version", record.section_names)
+        self.assertIn(".gnu.version_r", record.section_names)
         self.assertEqual(len(record.sign_exports), 1)
 
     def test_wrong_class_endian_machine_type_are_rejected(self) -> None:
@@ -810,3 +931,115 @@ class LinuxElfVerifyTests(unittest.TestCase):
                 with patch.object(elf, "_run", run_with(f"  Name: {label}\n")):
                     with self.assertRaisesRegex(elf.ElfError, needle):
                         elf.verify_linux_x86_64_cdylib(path, readelf="readelf", nm=None)
+
+    def test_raw_and_slash_path_detection(self) -> None:
+        cases = (
+            b"prefix /home/runner/path\x00",
+            b"/home/runner/unterminated",
+            b"/home/runner/\xc3\xa9\x00",
+            b"/home/runner/\xff\xfe\x00",
+            b"/home/runner/path\nmore",
+            b"/home/runner/path\tmore",
+            b"xxxx/home/runner/embedded\x00",
+            b"/cargo-evil\x00",
+            b"/usr/local/private-build\x00",
+            b"/Users/sarmidev\x00",
+            b"/tmp/untracked-host\x00",
+        )
+        for payload in cases:
+            with self.subTest(payload):
+                with self.assertRaisesRegex(elf.ElfError, "embedded host-absolute"):
+                    elf.parse_elf64_le_x86_64_dso(build_elf(embed=payload))
+        self.assertIn("/home/runner/path", elf.scan_linux_forbidden_paths(b"aa/home/runner/path"))
+        self.assertIn("/Users/x", elf.scan_linux_forbidden_paths(b"zz/Users/x"))
+        allowed = elf.parse_elf64_le_x86_64_dso(
+            build_elf(embed=b"/cargo/registry\x00/lib64/ld-linux-x86-64.so.2\x00")
+        )
+        self.assertEqual(allowed.forbidden_paths, [])
+        benign = elf.parse_elf64_le_x86_64_dso(
+            build_elf(embed=b"foo/bar slash/text /0 /N\x00")
+        )
+        self.assertEqual(benign.forbidden_paths, [])
+
+    def test_dynamic_version_relations_are_mutated_closed(self) -> None:
+        layout: dict = {}
+        blob = bytearray(build_elf(layout=layout))
+        self.assertTrue(elf.parse_elf64_le_x86_64_dso(bytes(blob)))
+
+        def shoff(name: str) -> int:
+            return layout["e_shoff"] + layout["section_index"][name] * elf.ELF64_SHDR_SIZE
+
+        dynstr_hdr = shoff(".dynstr")
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, dynstr_hdr + 32, layout["dynstr_size"] + 8)
+        with self.assertRaisesRegex(elf.ElfError, "sh_size does not equal DT_STRSZ"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, dynstr_hdr + 16, layout["dynstr_off"] + 1)
+        with self.assertRaisesRegex(elf.ElfError, "DT_STRTAB does not equal"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        version_r = shoff(".gnu.version_r")
+        mutated = bytearray(blob)
+        struct.pack_into("<I", mutated, version_r + 44, layout["verneed_num"] + 1)
+        with self.assertRaisesRegex(elf.ElfError, "sh_info does not equal DT_VERNEEDNUM"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, version_r + 8, 0)
+        with self.assertRaisesRegex(elf.ElfError, "not SHF_ALLOC"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, version_r + 16, layout["verneed_off"] + 16)
+        with self.assertRaisesRegex(elf.ElfError, "DT_VERNEED does not equal"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        dynamic_hdr = shoff(".dynamic")
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, dynamic_hdr + 8, 0)
+        with self.assertRaisesRegex(elf.ElfError, "not SHF_ALLOC"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        pt_dynamic = layout["e_phoff"] + elf.ELF64_PHDR_SIZE
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, pt_dynamic + 40, layout["dynamic_size"] + 16)
+        with self.assertRaisesRegex(elf.ElfError, "p_memsz does not equal p_filesz"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, pt_dynamic + 48, 8)
+        with self.assertRaisesRegex(elf.ElfError, "p_align does not equal"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, pt_dynamic + 16, layout["dynamic_off"] + 8)
+        with self.assertRaisesRegex(elf.ElfError, "p_vaddr does not equal"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        versym = shoff(".gnu.version")
+        mutated = bytearray(blob)
+        struct.pack_into("<Q", mutated, versym + 32, 2)
+        with self.assertRaisesRegex(elf.ElfError, "size does not match .dynsym count"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        mutated = bytearray(blob)
+        struct.pack_into("<I", mutated, versym + 40, 1)
+        with self.assertRaisesRegex(elf.ElfError, "sh_link does not point at .dynsym"):
+            elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+
+        with self.assertRaisesRegex(elf.ElfError, "DT_VERSYM is required"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(skip_versym_tag=True))
+        with self.assertRaisesRegex(elf.ElfError, "exactly one .gnu.version"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(skip_versym_section=True))
+        with self.assertRaisesRegex(elf.ElfError, "exactly one .gnu.version"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(extra_versym_section=True))
+        with self.assertRaisesRegex(elf.ElfError, "both be present"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(verdef_tag_only=True))
+        with self.assertRaisesRegex(elf.ElfError, "both be present"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(verdefnum_only=True))
+        with self.assertRaisesRegex(elf.ElfError, "stray .gnu.version_d"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(stray_verdef_section=True))
+        record = elf.parse_elf64_le_x86_64_dso(build_elf(include_verdef=True))
+        self.assertEqual(record.soname, SONAME)
