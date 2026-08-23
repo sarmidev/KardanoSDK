@@ -524,6 +524,10 @@ class ToolchainFlagTests(unittest.TestCase):
         self.assertTrue(any(item == "-Cdebuginfo=0" for item in flags))
         self.assertFalse(any("rpath" in item.lower() for item in flags))
 
+    def test_capture_missing_host_tool_is_empty(self) -> None:
+        self.assertEqual(toolchain._capture(["__kardano_missing_xcrun__"]), "")
+        self.assertEqual(rebuild._capture(["__kardano_missing_xcodebuild__"]), "")
+
     def test_linux_rebuild_refuses_non_linux_hosts(self) -> None:
         if __import__("platform").system() == "Linux" and __import__(
             "platform"

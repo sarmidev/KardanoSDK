@@ -75,13 +75,16 @@ def require_native_linux_x86_64() -> None:
 
 
 def _capture(command: list[str], *, env: dict[str, str] | None = None) -> str:
-    completed = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+    except FileNotFoundError:
+        return ""
     return ((completed.stdout or "") + (completed.stderr or "")).strip()
 
 
@@ -146,18 +149,19 @@ def remap_pairs(
     pairs.append((cargo_home(), "/cargo"))
     if ndk_home is not None:
         pairs.append((ndk_home, "/android-ndk"))
-    applications = Path("/Applications")
-    if applications.is_dir():
-        for app in sorted(applications.glob("Xcode*.app")):
-            pairs.append((app, "/xcode-app"))
-            pairs.append((app / "Contents" / "Developer", "/xcode"))
-    else:
-        pairs.append((XCODE_26_6_APP, "/xcode-app"))
-        pairs.append((XCODE_DEFAULT_APP, "/xcode-app"))
-    for sdk in ("macosx", "iphoneos", "iphonesimulator"):
-        sdk_path = _capture(["xcrun", "--sdk", sdk, "--show-sdk-path"], env=env)
-        if sdk_path and not sdk_path.startswith("xcrun:"):
-            pairs.append((Path(sdk_path.splitlines()[0]), f"/sdk/{sdk}"))
+    if platform.system() == "Darwin":
+        applications = Path("/Applications")
+        if applications.is_dir():
+            for app in sorted(applications.glob("Xcode*.app")):
+                pairs.append((app, "/xcode-app"))
+                pairs.append((app / "Contents" / "Developer", "/xcode"))
+        else:
+            pairs.append((XCODE_26_6_APP, "/xcode-app"))
+            pairs.append((XCODE_DEFAULT_APP, "/xcode-app"))
+        for sdk in ("macosx", "iphoneos", "iphonesimulator"):
+            sdk_path = _capture(["xcrun", "--sdk", sdk, "--show-sdk-path"], env=env)
+            if sdk_path and not sdk_path.startswith("xcrun:"):
+                pairs.append((Path(sdk_path.splitlines()[0]), f"/sdk/{sdk}"))
     pairs.append((Path.home(), "/home/rebuild"))
 
     resolved: list[tuple[str, str]] = []

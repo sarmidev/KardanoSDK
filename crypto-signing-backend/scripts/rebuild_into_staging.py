@@ -211,14 +211,17 @@ class CommandRecorder:
 
 
 def _capture(command: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> str:
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return ""
     return ((completed.stdout or "") + (completed.stderr or "")).strip()
 
 
@@ -279,7 +282,11 @@ def collect_provenance(module_root: Path, env: dict[str, str]) -> dict[str, obje
         "ndk_home": ndk,
         "ndk_source_properties": ndk_revision,
         "expected_ndk_revision": toolchain.NDK_REVISION,
-        "xcodebuild": _capture(["xcodebuild", "-version"], env=env),
+        "xcodebuild": (
+            _capture(["xcodebuild", "-version"], env=env)
+            if platform.system() == "Darwin"
+            else ""
+        ),
         "sw_vers": _capture(["sw_vers"]) if platform.system() == "Darwin" else "",
         "ld_version": _capture(["ld", "-v"]) if platform.system() == "Darwin" else "",
         "rust_channel": toolchain.RUST_CHANNEL,
@@ -790,6 +797,9 @@ def main(argv: list[str] | None = None) -> int:
                 ]
             )
             return rc
+    except FileNotFoundError as error:
+        print(f"rebuild failed: missing host tool: {error}", file=sys.stderr)
+        return 1
     except (RebuildError, toolchain.ToolchainError) as error:
         print(f"rebuild failed: {error}", file=sys.stderr)
         return 1
