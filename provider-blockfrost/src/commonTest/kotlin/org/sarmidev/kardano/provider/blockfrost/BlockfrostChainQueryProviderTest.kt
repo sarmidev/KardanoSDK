@@ -282,6 +282,28 @@ class BlockfrostChainQueryProviderTest {
     }
 
     @Test
+    fun getUtxosExactCapProbe404ReturnsOk() = runTest {
+        var probePage: String? = null
+        var probeCount: String? = null
+        val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
+        val provider = provider(pagination = pagination) { request ->
+            when (request.url.parameters["page"]) {
+                "1" -> json(BlockfrostFixtures.utxoPage(2))
+                "2" -> json(BlockfrostFixtures.utxoPage(2))
+                else -> {
+                    probePage = request.url.parameters["page"]
+                    probeCount = request.url.parameters["count"]
+                    json("{\"status_code\":404}", HttpStatusCode.NotFound)
+                }
+            }
+        }
+        val utxos = ok(provider.getUtxos(address(TESTNET_ADDRESS)))
+        assertEquals(4, utxos.size)
+        assertEquals("3", probePage)
+        assertEquals("1", probeCount, "probe must request one item, not a full extra page")
+    }
+
+    @Test
     fun getUtxosExactCapProbeHttpFailureKeepsTypedError() = runTest {
         val pagination = UtxoPaginationPolicy(pageCount = 2, maxPages = 2)
         val provider = provider(pagination = pagination) { request ->

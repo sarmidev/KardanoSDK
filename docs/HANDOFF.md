@@ -629,12 +629,19 @@ Summary:
     bytes). `getUtxos` rejects an oversized page as `Deserialization` and uses a one-item
     probe of the next page for exact-cap completeness. `RemoteStatus`/`ResultTruncated`
     are documented as pre-alpha source breaks (no binary or exhaustive-`when` claim).
+  - **Third review-fix commit (additive).** The Android `defaultHttpClient` now sets
+    `engine { config { retryOnConnectionFailure(false) } }` so the *effective* Ktor 3.5.1
+    OkHttp engine client has retry disabled (Ktor's default `config` lambda reapplies
+    `true` after `preconfigured`). Exact-cap probe HTTP 404 is treated as an empty probe
+    (`Ok` at the cap), matching ordinary UTxO pagination; non-404 probe failures stay
+    typed. `UtxoPaginationPolicy` rejects overflowing `pageCount * maxPages` and
+    `maxPages == Int.MAX_VALUE` at construction.
   - **Residual limitations.** Live Blockfrost connect/socket timeouts still depend on the
     platform engine honoring `HttpTimeout`. OkHttp replay disablement is asserted on the
-    configured client, not by inducing a live connection failure. Opt-in
-    `BLOCKFROST_PROJECT_ID` live tests and the manual Android submit checkpoint remain
-    the only live-network coverage. The factory cache key is still a second in-memory
-    copy of the project id.
+    effective engine configuration/client Ktor would build, not by inducing a live
+    connection failure. Opt-in `BLOCKFROST_PROJECT_ID` live tests and the manual Android
+    submit checkpoint remain the only live-network coverage. The factory cache key is
+    still a second in-memory copy of the project id.
 
 ### Session Summary (Final-review Medium lifecycle race)
 

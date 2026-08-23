@@ -202,8 +202,9 @@ configuration.
 §5 said pagination is a provider-internal concern and that a concrete implementation aggregates
 paged responses up to a bounded maximum. A full last page is not enough to claim that more
 items exist. `ProviderError.ResultTruncated(fetchedCount, cap)` is the typed failure only after
-a one-item probe of the next page is non-empty. An empty probe is a complete `Ok` at exactly
-the cap. A page larger than the requested count is an invalid remote payload
+a one-item probe of the next page is non-empty. An empty probe (including a backend 404
+that the concrete provider already treats as empty/end-of-results on ordinary pages) is
+a complete `Ok` at exactly the cap. A page larger than the requested count is an invalid remote payload
 (`Deserialization`), not ordinary truncation. `getUtxos` still returns a bounded `List<Utxo>`
 on success; page cursors remain out of the public API.
 

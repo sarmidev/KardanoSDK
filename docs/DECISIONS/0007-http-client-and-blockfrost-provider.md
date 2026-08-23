@@ -234,3 +234,25 @@ materialize the rest). A filled byte budget is not parsed as JSON. Envelope `mes
 `error` fields are capped to the same 500-character budget.
 
 No other decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): effective OkHttp engine retry, probe 404, pagination arithmetic
+
+Ktor 3.5.1's `OkHttpEngine.createOkHttpClient` applies the default `OkHttpConfig.config`
+lambda (`retryOnConnectionFailure(true)`) after `preconfigured.newBuilder()`. A
+preconfigured client with retry disabled is therefore overwritten. The Android
+`defaultHttpClient` now also sets `engine { config { retryOnConnectionFailure(false) } }`
+so the effective engine client has retry disabled; the preconfigured client remains as
+defense in depth. Tests assert that reconstructed Ktor apply-order on the live
+`HttpClient` engine config, not a live connection-failure replay.
+
+The exact-cap one-item probe treats HTTP 404 as empty/end-of-results, matching ordinary
+`getUtxos` pagination, and returns `Ok` at the cap. Non-404 probe failures stay typed
+errors.
+
+`UtxoPaginationPolicy` validates bounds at construction, before `cap` or `maxPages + 1`
+are used: `pageCount` and `maxPages` must be positive; `maxPages < Int.MAX_VALUE`;
+`pageCount * maxPages` must fit in `Int`. The type remains an internal test seam.
+
+No other decision in this ADR changes.

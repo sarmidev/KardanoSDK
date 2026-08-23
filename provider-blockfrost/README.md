@@ -36,8 +36,10 @@ coroutine cancellation), which keeps the API compatible with Swift/ObjC interop.
   Other endpoints keep `404` as `ProviderError.NotFound`.
 - UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). A page larger than
   the requested count is `ProviderError.Deserialization` (not sliced). After 100 full pages,
-  a one-item probe of page 101 decides completeness: empty → `Ok` with exactly 10_000;
-  non-empty → `ProviderError.ResultTruncated`; probe failure → the real typed error.
+  a one-item probe of page 101 decides completeness: empty (including HTTP 404, the same
+  empty/end-of-results signal as ordinary UTxO pagination) → `Ok` with exactly 10_000;
+  non-empty → `ProviderError.ResultTruncated`; other probe failures keep the real typed
+  error.
 - Non-success read statuses other than `404`/`429` map to `ProviderError.RemoteStatus(code,
   detail?)`. `detail` is parsed from the response body only (never request headers or the
   `project_id`).
@@ -73,10 +75,12 @@ stay HTTP-free. Per-platform engines: OkHttp (Android), CIO (JVM), Darwin (iOS).
 Every client installs Ktor `HttpTimeout` from existing `ktor-client-core` (no extra
 dependency): connect 10 seconds, request 30 seconds, socket 30 seconds. There is no
 Ktor `HttpRequestRetry` plugin. That plugin policy is separate from engine-level
-replay: Android OkHttp is built with `retryOnConnectionFailure(false)` so a connection
-failure cannot replay `POST /tx/submit`. CIO (JVM) and Darwin (iOS) do not enable an
-equivalent automatic request replay. Timeout failures map to typed `Transport` errors;
-coroutine cancellation is rethrown.
+replay: the Android OkHttp engine sets `engine { config { retryOnConnectionFailure(false) } }`
+so the effective Ktor engine client has retry disabled (Ktor 3.5.1 reapplies `true` after
+a preconfigured client). A preconfigured client with retry disabled is kept as defense
+in depth. CIO (JVM) and Darwin (iOS) do not enable an equivalent automatic request
+replay. Timeout failures map to typed `Transport` errors; coroutine cancellation is
+rethrown.
 
 Error `detail` is read from a bounded prefix of the response body channel
 (`MAX_ERROR_DETAIL_CHARS` characters; the reader pulls at most

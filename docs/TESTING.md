@@ -113,8 +113,12 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
 - `BlockfrostChainQueryProviderTest` covers `403`/`500` response-body detail (and
   malformed/blank bodies), cancellation rethrow, oversized-page rejection, and the UTxO
   cap: an internal `UtxoPaginationPolicy` test seam (not public) exercises an exact-cap
-  empty one-item probe (`Ok`), a non-empty probe (`ResultTruncated`), and a probe HTTP
-  failure (typed `RemoteStatus`), without allocating 10_000 entries.
+  empty one-item probe (`Ok`), an exact-cap probe HTTP 404 (`Ok`, same empty/end
+  semantics as ordinary UTxO pagination), a non-empty probe (`ResultTruncated`), and a
+  non-404 probe HTTP failure (typed `RemoteStatus`), without allocating 10_000 entries.
+  `UtxoPaginationPolicyTest` asserts construction-time bounds (positive
+  `pageCount`/`maxPages`, `maxPages < Int.MAX_VALUE`, checked `pageCount * maxPages`)
+  using extreme `Int` values only — no large page allocations.
 - `PlaygroundProviderPresenterTest` / `PlaygroundDemoFlowTest` cover every
   `ProviderError` variant, including `RemoteStatus` with and without `detail` and
   `ResultTruncated`.
@@ -126,9 +130,13 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
   envelope with a long `message` field, and a UTF-8 4-byte code point split by the byte
   budget. Public detail stays within 500 characters; a filled byte budget is not parsed
   as JSON.
-- `BlockfrostOkHttpEngineTest` (androidHostTest) asserts
-  `blockfrostOkHttpClient().retryOnConnectionFailure == false`. That is the engine-level
-  submit-replay switch, not Ktor `HttpRequestRetry`.
+- `BlockfrostOkHttpEngineTest` (androidHostTest) asserts the effective OkHttp client
+  Ktor 3.5.1 would build from the production `defaultHttpClient` engine config
+  (`retryOnConnectionFailure == false` after Ktor's default `config` lambda), and that
+  a preconfigured client alone is overwritten by that default. The standalone
+  `blockfrostOkHttpClient()` helper is still asserted as defense in depth. That is the
+  engine-level submit-replay switch, not Ktor `HttpRequestRetry`, and is not a live
+  connection-failure replay.
 - Wallet and transaction (JVM) tests: `./gradlew :wallet:jvmTest :tx:jvmTest`
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`

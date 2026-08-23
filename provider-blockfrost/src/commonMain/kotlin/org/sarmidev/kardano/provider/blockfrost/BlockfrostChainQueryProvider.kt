@@ -49,9 +49,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * - UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). A page that
  *   contains more entries than the requested count is [ProviderError.Deserialization]
  *   (invalid remote payload; it is not sliced). After 100 full pages, a one-item probe
- *   of the next page decides completeness: empty → [KardanoResult.Ok] with exactly the
- *   cap; non-empty → [ProviderError.ResultTruncated]; probe failure → the real typed
- *   error (not a completeness claim).
+ *   of the next page decides completeness: empty (including HTTP 404, the same
+ *   empty/end-of-results signal as ordinary UTxO pagination) → [KardanoResult.Ok]
+ *   with exactly the cap; non-empty → [ProviderError.ResultTruncated]; other probe
+ *   failures keep their real typed error (not a completeness claim).
  *
  * Instances are created with [create]. Tests use the `internal` constructor to inject an
  * [HttpClient] backed by a mock engine, so mapping can be exercised without a real network.
@@ -135,9 +136,10 @@ public class BlockfrostChainQueryProvider internal constructor(
 
     /**
      * After [UtxoPaginationPolicy.maxPages] full pages, requests exactly one item on the
-     * next page. An empty probe means the cap is the complete result; a non-empty probe
-     * is [ProviderError.ResultTruncated]. Transport, status, and decode failures keep
-     * their real typed errors — they are not treated as completeness.
+     * next page. An empty probe — including HTTP 404, matching ordinary UTxO pagination —
+     * means the cap is the complete result; a non-empty probe is
+     * [ProviderError.ResultTruncated]. Transport, non-404 status, and decode failures
+     * keep their real typed errors — they are not treated as completeness.
      */
     private suspend fun probeBeyondCap(
         address: Address,
@@ -156,6 +158,9 @@ public class BlockfrostChainQueryProvider internal constructor(
             return KardanoResult.Err(ProviderError.Transport(transportFailureMessage(e)))
         }
 
+        if (response.status == HttpStatusCode.NotFound) {
+            return KardanoResult.Ok(accumulated)
+        }
         if (!response.status.isSuccess()) {
             return KardanoResult.Err(statusError(response))
         }
