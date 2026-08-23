@@ -22,8 +22,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   native signing-backend binaries, plus a "Verifying the committed binaries" section in
   `crypto-signing-backend/README.md` explaining what it does and does not prove (W5-2). It is a
   tamper/transfer-integrity check tied to a specific commit, not proof that the binaries were
-  built from the visible Rust source; independent reproducible-build verification remains an open
-  residual risk.
+  built from the visible Rust source. A staged rebuild harness
+  (`crypto-signing-backend/scripts/`) and `native-rebuild-evidence.yml` now rebuild those
+  eight targets into a fresh directory and compare them byte-for-byte; a mismatch is a
+  failed job, not a reason to rewrite CHECKSUMS.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

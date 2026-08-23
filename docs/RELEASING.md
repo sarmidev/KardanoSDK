@@ -125,6 +125,7 @@ patch releases, not `@v4`) and the Pages upload composite's transitive
 | upload-pages-artifact | `v5.0.0` `fc324d3547104276b827a68afc52ff2a11cc49c9` |
 | deploy-pages | `v5.0.0` `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128` |
 | Transitive Pages upload | `actions/upload-artifact` `v7.0.0` `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f` |
+| First-party report upload | `actions/upload-artifact` `v7.0.1` `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` (`native-rebuild-evidence.yml` only) |
 
 `gradle/actions` v6.3.0 remains unused because its default cache provider
 is a separate commercial component with a Terms of Use gate.

@@ -143,12 +143,37 @@ shasum -a 256 -c CHECKSUMS.sha256
 
 **What this manifest does and does not prove.** A passing check confirms only that the binaries in
 your working tree are byte-identical to the ones this manifest was generated against — it is a
-tamper/corruption/transfer-integrity check, tied to a specific commit. **It does not prove, and
-this project does not claim, that these binaries were actually built from the visible Rust source**
-(`src/commonMain/rust/lib.rs` and the pinned `Cargo.lock`) — that would require an independent
-reproducible-build verification (rebuilding with the exact pinned toolchain in step 1 above and
-diffing the result against the committed binaries), which this project has not performed and which
-remains an open residual risk (see `docs/AUDIT/2026-08-22-pre-release-audit.md` §6 item 7).
+tamper/corruption/transfer-integrity check, tied to a specific commit. Independent rebuild
+comparison is a separate step (see "Staged rebuild comparison" below). The checksum file is
+never rewritten just to accept a rebuild whose bytes differ for an unexplained reason.
+
+## Staged rebuild comparison
+
+Scripts under `scripts/` rebuild the eight committed natives into a **fresh staging
+directory**. They use `cargo --locked` / `cargo ndk ... --locked`, record host OS/arch,
+`rustc`/`cargo`, NDK/`cargo-ndk`/Xcode, the source commit, the `Cargo.lock` digest,
+exported `fn_func_sign` symbols, sizes, and SHA-256, then compare those staged files
+byte-for-byte against the committed copies. They do not copy into `src/`.
+
+```bash
+# from the repository root; staging must be empty or absent
+python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
+  --staging /tmp/kardano-native-rebuild \
+  --groups macos-jvm,android,ios \
+  --compare
+python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
+```
+
+Thin wrappers (`scripts/rebuild_macos_jvm.sh`, `rebuild_android.sh`, `rebuild_ios.sh`)
+select one group. `--deterministic` adds `SOURCE_DATE_EPOCH` / `ZERO_AR_DATE` /
+`--remap-path-prefix`; that is **not** the README recipe that produced the committed
+binaries, so it is an investigation mode, not the default comparison.
+
+`.github/workflows/native-rebuild-evidence.yml` runs the same comparison on a clean
+`macos-latest` runner and uploads the staging report. A mismatch fails the job. The
+workflow does not replace committed natives. Ubuntu runs the catalog tests and
+`cargo metadata --locked` only — it does not rebuild Apple or Android host artifacts
+for comparison against the macOS-built committed files.
 
 **Regeneration rule:** this manifest must be regenerated in the *same commit* as any change to one
 or more of the 8 binaries above (step 6 in the regeneration recipe), never as a separate follow-up

@@ -92,7 +92,8 @@ Stacked remediations, each additive (no amend / no force-push):
 | 3 | `fix/playground-operation-lifecycle` | `a34afdc` | Generation/token lifecycle and accessibility semantics |
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
-| 6 | `fix/build-and-ci-reproducibility` | in progress, stacked on `90fe0ee` | Original five commits plus review-fix commits. Verify is green on run `32655202142`. |
+| 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
+| 7 | `fix/native-build-and-platform-evidence` | in progress, stacked on `2b85ed7` | Staged native rebuild harness and clean-runner comparison. Linux/Windows JVM artifacts only after Gate 1 byte-match. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 

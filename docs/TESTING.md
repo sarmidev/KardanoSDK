@@ -187,11 +187,27 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
 - JVM signing runtime coverage currently requires the committed macOS native artifacts. Linux and
   Windows JVM signing artifacts are not included.
 
+Native rebuild comparison (does not overwrite committed binaries):
+
+```bash
+python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
+python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
+  --staging /tmp/kardano-native-rebuild \
+  --groups macos-jvm,android,ios \
+  --compare
+```
+
+`native-rebuild-evidence.yml` runs the catalog tests and `cargo metadata --locked` on
+Ubuntu, and the macOS staged rebuild plus byte comparison on `macos-latest`. The job
+uploads `provenance.json`, `compare-report.json`, and the staged copies; it never
+writes them over `src/`.
+
 Documentation and claim-language checks:
 
 ```bash
 rg -n "TESTING|fixtures|test vector|commonTest|jvmTest|iosSimulatorArm64Test|testAndroidHostTest" README.md docs/ core/README.md shared/README.md
 python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive scripts.tests.test_check_action_pins
+python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
 python3 scripts/check_handoff_archive.py
 python3 scripts/check_restricted_claims.py
 python3 scripts/check_action_pins.py

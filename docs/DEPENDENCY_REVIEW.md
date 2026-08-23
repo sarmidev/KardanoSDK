@@ -56,6 +56,7 @@ This batch upgrades from the exact patch pins above, not from a moving
 | `actions/configure-pages` | v6.0.0 | `45bfe0192ca1faeb007ade9deae92b16b8254a0d` | node24 | javascript |
 | `actions/upload-pages-artifact` | v5.0.0 | `fc324d3547104276b827a68afc52ff2a11cc49c9` | composite | composite |
 | `actions/deploy-pages` | v5.0.0 | `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128` | node24 | javascript |
+| `actions/upload-artifact` | v7.0.1 | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | node24 | javascript |
 
 Release pages:
 
@@ -65,6 +66,7 @@ Release pages:
 - https://github.com/actions/configure-pages/releases/tag/v6.0.0
 - https://github.com/actions/upload-pages-artifact/releases/tag/v5.0.0
 - https://github.com/actions/deploy-pages/releases/tag/v5.0.0
+- https://github.com/actions/upload-artifact/releases/tag/v7.0.1
 
 `checkout` v7.0.1, `setup-java` v5.7.0, `configure-pages` v6.0.0, and
 `deploy-pages` v5.0.0 are javascript Actions (`runs.using: node24`).
@@ -125,6 +127,12 @@ The other composite steps are inline `run:` archive commands (no further
 and is newer than the composite's v7.0.0 pin. This repo does not rewrite
 the official Pages packaging steps; it records that transitive SHA and
 requires it to stay pinned.
+
+`native-rebuild-evidence.yml` uses `actions/upload-artifact` as a
+first-party workflow pin at v7.0.1 (same SHA as above). That Action's
+`action.yml` is javascript (`runs.using: node24`) with no nested `uses:`.
+The job uploads staging reports and rebuilt copies only; it never writes
+those files back over the committed natives.
 
 `configure-pages` and `deploy-pages` are javascript Actions and have no
 nested `uses:`.

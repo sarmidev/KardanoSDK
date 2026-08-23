@@ -148,6 +148,26 @@ ACTION_PINS: tuple[ActionPin, ...] = (
         kind="javascript",
         note="Previous pin was v4.0.5. v5.0.0 is Node 24; javascript action.",
     ),
+    ActionPin(
+        action="actions/upload-artifact",
+        sha="043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        release="v7.0.1",
+        resolved_on="2026-08-23",
+        source="https://github.com/actions/upload-artifact/releases/tag/v7.0.1",
+        runtime="node24",
+        kind="javascript",
+        note=(
+            "First-party pin for native-rebuild-evidence.yml report upload. "
+            "Resolved live from releases/latest (v7.0.1, published "
+            "2026-04-10T17:31:14Z). The tag object is a commit "
+            "(043fb46d1a93c77aae656e7c1c64a875d1fc6a0a). action.yml is "
+            "javascript (runs.using: node24) with no nested uses:. This is "
+            "newer than the Pages composite's transitive v7.0.0 pin "
+            "(bbbca2ddaa5d8feaa63e36b76fdaad77386f024f). The workflow "
+            "uploads staging reports only; it does not replace committed "
+            "natives."
+        ),
+    ),
 )
 
 REVIEW_DOC = "docs/DEPENDENCY_REVIEW.md"

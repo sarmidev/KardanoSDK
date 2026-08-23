@@ -1,0 +1,93 @@
+name: Native rebuild evidence
+
+# Rebuilds the eight committed signing-backend natives on a clean macOS
+# runner into a fresh staging directory and compares them byte-for-byte
+# against the committed files. Ubuntu runs the verifier unit tests and a
+# locked Cargo metadata check. This workflow never copies into src/ and
+# never rewrites CHECKSUMS.sha256.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "fix/**"
+
+permissions:
+  contents: read
+
+jobs:
+  artifact-catalog-tests:
+    name: Artifact catalog and Cargo lock check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run verify-artifacts unit tests
+        run: >-
+          python3 -m unittest
+          discover
+          -s crypto-signing-backend/scripts/tests
+          -p "test_*.py"
+      - name: Install rustup 1.29.0 and rustc 1.97.0
+        run: >-
+          python3 crypto-signing-backend/scripts/install_rustup.py
+          --skip-if-present
+          --dest "$RUNNER_TEMP/rustup-init"
+          --cargo-home "$HOME/.cargo"
+          --channel 1.97.0
+      - name: Put rustup on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Cargo metadata --locked
+        working-directory: crypto-signing-backend
+        run: cargo metadata --locked --format-version 1 >/dev/null
+
+  macos-native-rebuild:
+    name: macOS staged rebuild and compare
+    runs-on: macos-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install rustup 1.29.0 and rustc 1.97.0
+        run: >-
+          python3 crypto-signing-backend/scripts/install_rustup.py
+          --skip-if-present
+          --dest "$RUNNER_TEMP/rustup-init"
+          --cargo-home "$HOME/.cargo"
+          --channel 1.97.0
+      - name: Put rustup on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install cargo-ndk 4.1.2
+        run: cargo install cargo-ndk --version 4.1.2 --locked
+      - name: Install NDK 27.2.12479018
+        run: |
+          NDK_HOME=$(python3 crypto-signing-backend/scripts/install_ndk.py \
+            --dest "$RUNNER_TEMP/kardano-ndk" \
+            --cache-zip "$RUNNER_TEMP/android-ndk-r27c-darwin.zip" \
+            --print-home | tail -n 1)
+          echo "ANDROID_NDK_HOME=$NDK_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$NDK_HOME" >> "$GITHUB_ENV"
+      - name: Rebuild into staging (README recipe)
+        run: >-
+          python3 crypto-signing-backend/scripts/rebuild_into_staging.py
+          --staging "$RUNNER_TEMP/native-rebuild-staging"
+          --groups macos-jvm,android,ios
+      - name: Compare staged bytes to committed natives
+        run: >-
+          python3 crypto-signing-backend/scripts/verify-artifacts.py
+          --module-root crypto-signing-backend
+          --staging "$RUNNER_TEMP/native-rebuild-staging/artifacts"
+          --groups macos-jvm,android,ios
+          --report "$RUNNER_TEMP/native-rebuild-staging/compare-report.json"
+          --ndk-home "$ANDROID_NDK_HOME"
+      - name: Upload staging report and rebuilt natives
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-rebuild-evidence-macos
+          path: |
+            ${{ runner.temp }}/native-rebuild-staging/provenance.json
+            ${{ runner.temp }}/native-rebuild-staging/compare-report.json
+            ${{ runner.temp }}/native-rebuild-staging/artifacts
+          if-no-files-found: warn
+          retention-days: 14
