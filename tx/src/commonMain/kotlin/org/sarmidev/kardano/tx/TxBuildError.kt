@@ -122,13 +122,28 @@ public sealed interface TxBuildError {
      * even starts, so [available] here only ever totals the ADA-only candidates — a
      * native-asset UTxO's lovelace is never counted toward covering the shortfall.
      *
+     * [excludedNativeAssetUtxoCount] and [excludedNativeAssetLovelace] (W8-2, 2026-08-22
+     * pre-release audit) let a caller distinguish "genuinely insufficient ADA" from "this
+     * wallet actually holds plenty of value, it's just locked in UTxOs this ADA-only builder
+     * cannot spend" — a distinction the type previously had no field for, forcing a caller to
+     * fall back to a generic message even when the real cause was visible to the builder. Both
+     * default to `0`/`0L` and are `0`/`0L` whenever every candidate was already ADA-only.
+     *
      * @property required the lovelace amount required.
      * @property available the lovelace amount the (ADA-only, native-asset-filtered) candidate
      *   inputs actually total.
+     * @property excludedNativeAssetUtxoCount how many of
+     *   [TransactionBuildRequest.candidateInputs] were excluded from [available] because they
+     *   carried native assets.
+     * @property excludedNativeAssetLovelace the total lovelace held in those excluded
+     *   native-asset-carrying candidates — value the wallet holds but this ADA-only builder
+     *   could not spend toward the shortfall.
      */
     public data class InsufficientFunds(
         public val required: Long,
         public val available: Long,
+        public val excludedNativeAssetUtxoCount: Int = 0,
+        public val excludedNativeAssetLovelace: Long = 0L,
     ) : TxBuildError
 
     /**

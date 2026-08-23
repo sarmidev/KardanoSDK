@@ -73,7 +73,9 @@ public object TransactionBuilder {
      * wallet with a mix of ADA-only and native-asset UTxOs can still build/sign/submit using just
      * the ADA-only ones; if the ADA-only ones alone cannot cover `payment + fee`, the usual
      * [TxBuildError.InsufficientFunds] is returned (its `available` total reflects only the
-     * ADA-only candidates, since the native-asset ones were never counted). Next,
+     * ADA-only candidates, since the native-asset ones were never counted — their count and
+     * total are instead reported separately via `excludedNativeAssetUtxoCount`/
+     * `excludedNativeAssetLovelace`, W8-2). Next,
      * [TxBuildError.InvalidOutputAmount] if the payment itself is below its min-ADA. It then
      * runs the largest-first coin-selection / fee fixed-point loop (see the type-level KDoc) —
      * which can itself fail with [TxBuildError.FeeEstimateDidNotConverge] if even the final
@@ -109,6 +111,7 @@ public object TransactionBuilder {
         // ones (Block 1.11d-2) rather than have the whole request declined because one candidate
         // happened to carry a token.
         val adaOnlyCandidates = request.candidateInputs.filterNot { it.value.hasNativeAssets }
+        val nativeAssetCandidates = request.candidateInputs.filter { it.value.hasNativeAssets }
         if (adaOnlyCandidates.isEmpty()) {
             return KardanoResult.Err(
                 TxBuildError.UnsupportedFeature(
@@ -131,7 +134,7 @@ public object TransactionBuilder {
             )
         }
 
-        val selection = InputSelection(adaOnlyCandidates)
+        val selection = InputSelection(adaOnlyCandidates, nativeAssetCandidates)
 
         var fee = request.protocolParameters.minFeeConstant
         var attempt = when (val r = evaluateAttempt(request, selection, fee)) {
@@ -296,8 +299,17 @@ public object TransactionBuilder {
      * (ADR-0014 §6): each call to [ensureCovers] adds just enough of the remaining candidates,
      * in that fixed order, to reach the requested total, never re-ordering or dropping a
      * previously selected input.
+     *
+     * [excludedNativeAssetCandidates] (W8-2) are never selected from — they are carried only so
+     * [ensureCovers] can attach their count/total to [TxBuildError.InsufficientFunds] if
+     * selection exhausts [candidates] without reaching the required total, so a caller can
+     * distinguish "genuinely insufficient ADA" from "value exists but is locked in excluded
+     * native-asset UTxOs."
      */
-    private class InputSelection(candidates: List<Utxo>) {
+    private class InputSelection(
+        candidates: List<Utxo>,
+        private val excludedNativeAssetCandidates: List<Utxo> = emptyList(),
+    ) {
         private val sortedCandidates: List<Utxo> = candidates.sortedWith(candidateOrder)
         private val selected: MutableList<Utxo> = mutableListOf()
 
@@ -311,7 +323,16 @@ public object TransactionBuilder {
         fun ensureCovers(required: Long): KardanoResult<Unit, TxBuildError> {
             while (selectedSum < required) {
                 if (selected.size >= sortedCandidates.size) {
-                    return KardanoResult.Err(TxBuildError.InsufficientFunds(required, selectedSum))
+                    return KardanoResult.Err(
+                        TxBuildError.InsufficientFunds(
+                            required = required,
+                            available = selectedSum,
+                            excludedNativeAssetUtxoCount = excludedNativeAssetCandidates.size,
+                            excludedNativeAssetLovelace = excludedNativeAssetCandidates.fold(0L) { sum, utxo ->
+                                addExact(sum, utxo.value.coin.value) ?: Long.MAX_VALUE
+                            },
+                        ),
+                    )
                 }
                 val next = sortedCandidates[selected.size]
                 val newSum = addExact(selectedSum, next.value.coin.value)

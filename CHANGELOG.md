@@ -24,6 +24,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   tamper/transfer-integrity check tied to a specific commit, not proof that the binaries were
   built from the visible Rust source; independent reproducible-build verification remains an open
   residual risk.
+- `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
+  `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
+  a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
+  excluded native-asset UTxOs" (W8-2). Direct tests now assert the transaction value-conservation
+  identity (`sum(selected inputs) == sum(outputs) + fee`) across the exact-payment/no-change,
+  change-emitted, multiple-input, and native-asset-filtered branches, plus that the
+  insufficient-funds and fee-overflow paths never produce a draft at all (W8-1).
 
 ### Changed
 
