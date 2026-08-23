@@ -107,6 +107,9 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
   signing artifacts target macOS hosts:
   `./gradlew :crypto:jvmTest :crypto-signing-backend:jvmTest :wallet:jvmTest :shared:jvmTest`
 - Provider (JVM) tests: `./gradlew :provider:jvmTest :provider-blockfrost:jvmTest`
+- `BlockfrostConfigTest` asserts that `toString`, `assertEquals` failure text, and
+  `List`/`Set`/`Map` rendering never include the project id, and that two configs with
+  the same fields are not equal (identity equality; the type is no longer a `data class`).
 - Wallet and transaction (JVM) tests: `./gradlew :wallet:jvmTest :tx:jvmTest`
 - Desktop (JVM) tests: `./gradlew :shared:jvmTest`
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`

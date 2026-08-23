@@ -160,3 +160,24 @@ The resulting, narrowly-scoped change to `mapUtxo`: any `amount` entry whose `un
 from the summed `coin`, unchanged from before). Quantities, policy ids, and asset names of
 those entries are still not represented or stored anywhere. No other mapping, endpoint, or
 error-handling decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): `BlockfrostConfig` is no longer a data class
+
+§3 introduced `BlockfrostConfig(projectId, network = PREPROD)` as the public config. It shipped
+as a `data class` with a hand-written redacted `toString()`, but the compiler-generated
+`equals` / `hashCode` / `copy` / `componentN` still retained the raw `projectId`.
+
+A repository-wide search found no call site that compared, hashed, copied, or destructured a
+`BlockfrostConfig`. Value equality is therefore not required. This addendum records the
+pre-alpha source change:
+
+- `BlockfrostConfig` is a regular class. Equality is referential (identity). `hashCode` is the
+  identity hash and is not derived from `projectId`.
+- `toString` remains redacted (`projectId=<redacted>`).
+- The public `projectId` and `network` accessors remain: the HTTP factory sends `projectId` as
+  the `project_id` header, and both providers bind `network`.
+- `copy` / `componentN` are not generated.
+
+No other decision in this ADR changes.

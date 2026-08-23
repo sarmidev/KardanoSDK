@@ -66,7 +66,13 @@ stay HTTP-free. Per-platform engines: OkHttp (Android), CIO (JVM), Darwin (iOS).
 
 ## API keys / secrets
 
-No key is committed. `BlockfrostConfig.projectId` is supplied at runtime, for both the
+No key is committed. `BlockfrostConfig` is a regular class (pre-alpha source change: it is
+no longer a `data class`). Equality is referential; `toString` redacts `projectId`; there
+is no `copy` / `componentN`. The public `projectId` and `network` accessors remain because
+callers and the HTTP factory need them. The key is never logged, persisted, or hashed into
+`equals`/`hashCode`.
+
+`BlockfrostConfig.projectId` is supplied at runtime, for both the
 read-only and the submit provider:
 
 - Android: the Playground `project_id` field (session memory in `PlaygroundState` plus an

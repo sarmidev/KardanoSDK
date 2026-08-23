@@ -83,6 +83,12 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- **Breaking (pre-alpha):** `BlockfrostConfig` is no longer a `data class`. Equality is
+  referential (identity), `toString` still redacts `projectId`, and `copy` / `componentN`
+  are not generated. `equals` / `hashCode` no longer incorporate the project id, so
+  collection-key and assertion-diff paths cannot reconstruct the key from those members.
+  No current call site compared, hashed, copied, or destructured a config. The public
+  `projectId` and `network` accessors are unchanged.
 - **Breaking:** `TransactionDraft` now carries `network: Network` and
   `scope: TransactionDraftScope` (ADR-0019). Both are stamped internally by
   `TransactionBodySerializer` / `TransactionBuilder` and participate in equality, hash code,
