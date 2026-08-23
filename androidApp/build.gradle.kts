@@ -22,18 +22,12 @@ dependencies {
 
 android {
     namespace = "org.sarmidev.kardano"
-    compileSdk {
-        version = release(libs.versions.android.compileSdk.get().toInt()) {
-            minorApiLevel = libs.versions.android.compileSdkMinor.get().toInt()
-        }
-    }
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
         applicationId = "org.sarmidev.kardano"
         minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk {
-            version = release(libs.versions.android.targetSdk.get().toInt())
-        }
+        targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
     }
@@ -61,5 +55,8 @@ android {
         disable += "GradleDependency"
         disable += "NewerVersionAvailable"
         disable += "AndroidGradlePluginVersion"
+        // ADR-0021: API 37 is deferred until a Kotlin-supported AGP
+        // can target it. OldTargetApi would otherwise fail CI on 36.
+        disable += "OldTargetApi"
     }
 }

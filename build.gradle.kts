@@ -12,19 +12,17 @@ plugins {
 }
 
 allprojects {
-    // STRICT lock state for compile/runtime classpaths only.
-    // lockAllConfigurations() plus Configuration.resolve() cannot pick a
-    // unique AGP variant for Android instrumented-test (and some app)
-    // classpaths outside their task graph.
     dependencyLocking {
         lockMode.set(LockMode.STRICT)
-    }
-    configurations.matching { isLockableClasspath(it) }.configureEach {
-        resolutionStrategy.activateDependencyLocking()
+        // Every configuration Gradle can lock. Suffix filters missed
+        // Kotlin/Native *CompileKlibraries, lint models, and KMP
+        // androidDeviceTest classpaths. Unavoidable exclusions are
+        // listed in docs/DEPENDENCY_REVIEW.md (none today).
+        lockAllConfigurations()
     }
 }
 
-// Resolve locks by running the real compile/test tasks so AGP/KMP
+// Resolve locks by running the real compile/test/lint tasks so AGP/KMP
 // variant attributes are present. Invoke as:
 //   ./gradlew --no-configuration-cache resolveAndLockAll --write-locks
 tasks.register("resolveAndLockAll") {
@@ -62,23 +60,9 @@ tasks.register("resolveAndLockAll") {
             ":androidApp:assembleDebug",
             ":androidApp:assembleRelease",
             ":androidApp:compileDebugUnitTestKotlin",
-            ":androidApp:generateReleaseLintModel",
+            ":androidApp:lintDebug",
+            ":androidApp:lintRelease",
             ":desktopApp:compileKotlin",
         )
     dependsOn(lockTasks)
-    // Pure-JVM :desktopApp compile can be UP-TO-DATE and skip resolution,
-    // which leaves no gradle.lockfile. Resolve its lockable classpaths
-    // after compileKotlin so STRICT mode has state to persist.
-    doLast {
-        project(":desktopApp").configurations
-            .filter { isLockableClasspath(it) }
-            .forEach { it.resolve() }
-    }
-}
-
-fun isLockableClasspath(configuration: Configuration): Boolean {
-    if (!configuration.isCanBeResolved) return false
-    val name = configuration.name
-    if (name.contains("AndroidTest", ignoreCase = true)) return false
-    return name.endsWith("CompileClasspath") || name.endsWith("RuntimeClasspath")
 }

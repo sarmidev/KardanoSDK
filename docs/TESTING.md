@@ -98,11 +98,12 @@ This policy is mandatory for any security-sensitive unit (checksums, CBOR, addre
 
 ## Verification commands
 
-The wrapper is Gradle **9.7.1** (`distributionSha256Sum` in
+The wrapper is Gradle **9.5.0** (`distributionSha256Sum` in
 `gradle/wrapper/gradle-wrapper.properties`, checksum file
-`https://services.gradle.org/distributions/gradle-9.7.1-bin.zip.sha256`).
-AGP is **9.3.1**, Kotlin **2.4.10**, Android compile/target API **37**
-(compile `minorApiLevel = 0` for `platforms/android-37.0`).
+`https://services.gradle.org/distributions/gradle-9.5.0-bin.zip.sha256`).
+AGP is **9.1.0**, Kotlin **2.4.10**, Android compile/target API **36**.
+That is the official Kotlin 2.4.10 envelope (ADR-0021). API 37 is
+deferred until a Kotlin-supported AGP documents it.
 
 Run tests per module. iOS simulator tests require macOS with Xcode.
 

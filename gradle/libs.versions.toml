@@ -1,15 +1,16 @@
 [versions]
-# Compatibility group resolved 2026-08-23 from Maven Central / Google Maven /
-# services.gradle.org. AGP 9.3 requires Gradle >= 9.5.0 and supports API 37.
-# API 37 is published as platforms/android-37.0 (minor 0). See
-# docs/DEPENDENCY_REVIEW.md.
-agp = "9.3.1"
-android-compileSdk = "37"
-android-compileSdkMinor = "0"
+# Official Kotlin 2.4.10 envelope (kotlinlang.org, fetched 2026-08-23):
+# Gradle 7.6.3–9.5.0, AGP 8.5.2–9.1.0. This pin is the max fully supported
+# pair (Gradle 9.5.0 + AGP 9.1.0). API 37 is deferred (ADR-0021) because
+# AGP 9.1.0's published max compile/target is API 36.
+agp = "9.1.0"
+android-compileSdk = "36"
 android-minSdk = "24"
-android-targetSdk = "37"
+android-targetSdk = "36"
 androidx-activity = "1.13.0"
-androidx-lifecycle = "2.11.0"
+# 2.11.0 requires compile SDK 37 and AGP >= 9.2.0 (AndroidX release notes).
+# That AGP is outside Kotlin 2.4.10's official max (9.1.0). See ADR-0021.
+androidx-lifecycle = "2.10.0"
 androidx-testExt = "1.3.0"
 composeMultiplatform = "1.11.1"
 kotlin = "2.4.10"

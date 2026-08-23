@@ -74,7 +74,7 @@ compile+link), matching the repo's iOS posture.
 | Android NDK (offline Android cross-build only) | `27.2.12479018` | Android NDK license (Apache-2.0) |
 | `net.java.dev.jna:jna` (jvm jar / android `@aar`) | `5.19.1` (`gradle/libs.versions.toml`) | Apache-2.0 OR LGPL-2.1 |
 | `org.jetbrains.kotlinx:atomicfu` (bindings' handle-map counter) | `0.26.1` (`gradle/libs.versions.toml`) | Apache-2.0 |
-| Kotlin / Gradle / AGP | `2.4.10` / `9.7.1` / `9.3.1` (repo-pinned) | — |
+| Kotlin / Gradle / AGP | `2.4.10` / `9.5.0` / `9.1.0` (repo-pinned; ADR-0021) | — |
 
 `rustup`, `cargo-ndk`, the Android NDK, and `gobley-uniffi-bindgen` are host-machine toolchain
 installs used only for the offline regeneration below; none is a Gradle build dependency of this

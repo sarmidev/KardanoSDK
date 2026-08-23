@@ -37,7 +37,7 @@ promise and they do not keep exhaustive `when` expressions compiling without edi
 2. Run the JVM, Android-host, iOS compile, and Android lint Debug/Release
    checks documented in `TESTING.md`. Lint warnings fail the build.
    Confirm the wrapper SHA-256 still matches
-   `https://services.gradle.org/distributions/gradle-9.7.1-bin.zip.sha256`
+   `https://services.gradle.org/distributions/gradle-9.5.0-bin.zip.sha256`
    when that is the pinned wrapper.
 3. Run `git diff --check`, `python3 scripts/check_restricted_claims.py`,
    and `python3 scripts/check_action_pins.py`.

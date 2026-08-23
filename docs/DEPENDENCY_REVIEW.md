@@ -143,21 +143,25 @@ with a non-SHA transitive entry is a finding.
 
 ## Build platform and UI/network pins (2026-08-23)
 
-Resolved live from `https://services.gradle.org/versions/current`,
-`https://services.gradle.org/distributions/gradle-9.7.1-bin.zip.sha256`,
-Google Maven `maven-metadata.xml`, and Maven Central `maven-metadata.xml`.
-Pre-upgrade `androidApp:lintDebug` on this host reported 0 errors / 36
-warnings and named several of these upgrades (Gradle 9.7.1, AGP 9.3.1,
-Kotlin 2.4.10, lifecycle 2.11.0, Ktor 3.5.2, OldTargetApi 36).
+Historical Prompt 6 commit 2 used Gradle 9.7.1 / AGP 9.3.1 / API 37
+because those versions existed on Maven and local builds passed.
+The official Kotlin 2.4.10 table (fetched 2026-08-23 from
+https://kotlinlang.org/docs/gradle-configure-project.html) covers
+Gradle **7.6.3–9.5.0** and AGP **8.5.2–9.1.0** only. The review-fix
+moves to that envelope. See ADR-0021.
 
-| Coordinate | Before | After | Source |
+Resolved live from `https://services.gradle.org/distributions/gradle-9.5.0-bin.zip.sha256`,
+Google Maven `maven-metadata.xml`, Maven Central `maven-metadata.xml`,
+and the Kotlin compatibility table.
+
+| Coordinate | Prompt 6 commit 2 | Review-fix pin | Source |
 |---|---|---|---|
-| Gradle wrapper | 9.1.0 (`a17ddd85…c806`) | 9.7.1 (`acd53f1e…d20a`) | services.gradle.org current + `.sha256` file |
-| AGP (`com.android.application` / `com.android.kotlin.multiplatform.library`) | 9.0.1 | 9.3.1 | Google Maven last stable (9.4/9.5 are alpha/rc) |
-| Kotlin | 2.4.0 | 2.4.10 | Maven Central last stable (2.4.20 is RC) |
-| Android compile/target SDK | 36 | 37 (compile minor 0) | Installed `platforms/android-37.0`; AGP 9.3 max API 37; min AGP for 37.0 is 9.1.1 |
-| JetBrains lifecycle Compose | 2.11.0-beta01 | 2.11.0 | Maven Central `org.jetbrains.androidx.lifecycle` |
-| Ktor | 3.5.1 | 3.5.2 | Maven Central; 3.5.2 changelog has no OkHttp retry-default change |
+| Gradle wrapper | 9.7.1 (`acd53f1e…d20a`) | **9.5.0** (`553c78f5…b746`) | Kotlin 2.4.10 max + services.gradle.org `.sha256` |
+| AGP | 9.3.1 | **9.1.0** | Kotlin 2.4.10 max (Google also publishes 9.1.1; not used) |
+| Kotlin | 2.4.10 | **2.4.10** | Maven Central last stable (2.4.20 is RC) |
+| Android compile/target SDK | 37 (minor 0) | **36** | AGP 9.1.0 published max; API 37 deferred (ADR-0021) |
+| JetBrains lifecycle Compose | 2.11.0 | **2.10.0** | AndroidX 2.11.0 requires compile SDK 37 and AGP >= 9.2.0 |
+| Ktor | 3.5.2 | **3.5.2** | Maven Central; unchanged |
 | Compose Multiplatform | 1.11.1 | 1.11.1 | Latest 1.11 stable; 1.12.0-rc01 left out of this group |
 | Compose Material3 | 1.11.0-alpha07 | 1.11.0-alpha07 | Latest 1.11-line artifact; 1.12.0-alpha03 tracks Compose 1.12 |
 | androidx.activity:activity-compose | 1.13.0 | 1.13.0 | Google Maven latest stable |
@@ -173,31 +177,20 @@ Crypto / native-support pins as of commit 3: see ADR-0020. Bouncy Castle
 1.85.2 and JNA 5.19.1 were upgraded; the 0.x pins were retained with
 dated acceptance.
 
-AGP 9.3 requires Gradle >= 9.5.0 (documented on
-https://developer.android.com/build/releases/about-agp). The installed
-platform directory is `android-37.0`, not `android-37`. Modules set
-`compileSdk { version = release(37) { minorApiLevel = 0 } }`. Application
-`targetSdk` uses `release(37)` (that DSL has no minor lambda). Configure,
-`:androidApp:assembleDebug`, and `:desktopApp:compileKotlin` succeeded on
-this host after the upgrade.
+Modules set integer `compileSdk` / `targetSdk` **36**. API 37 remains
+installed on this host (`platforms/android-37.0`) but is not targeted
+(ADR-0021). `OldTargetApi` is disabled for that dated deferral only.
 
-Android 17 (`targetSdk` 37) published target-sdk notes reviewed, not
-executed on a device: lock-free `MessageQueue`; `static final` fields
-cannot be changed via reflection/JNI; `ACCESS_LOCAL_NETWORK` for LAN;
-large-screen orientation/aspect/resizability constraints cannot be opted
-out of (`sw >= 600dp`); SMS OTP delay; BluetoothSocket `read` alignment.
-This Playground uses INTERNET to Blockfrost HTTPS, does not reflect on
-`MessageQueue`, and does not modify `static final` fields. No device or
-emulator execution is claimed.
-
-Residual toolchain notes (not blockers): Kotlin/AGP now warn that
-`androidLibrary {}` is deprecated in favor of `android {}`; Gradle 9.6+
-warns on `cinterop.creating` delegates in `:crypto`. Those are not
-migrated here (broad rename / native-source-set behavior). The
+Residual toolchain notes (not blockers): Kotlin/AGP still warn that
+`androidLibrary {}` is deprecated in favor of `android {}`; cinterop
+commonization remains off. Those are not migrated here. The
 `gradlew wrapper` task rewrote `gradlew` / `gradlew.bat` / the wrapper
 jar; `gradlew.bat` keeps upstream trailing spaces on several `@rem`
 lines, scoped in `.gitattributes` so `git diff --check` stays clean
 without editing the generated script.
+
+Independent publisher checksum comparison is in
+[DEPENDENCY_PROVENANCE.md](DEPENDENCY_PROVENANCE.md).
 
 ## Android 17 target notes (no device run)
 
@@ -206,49 +199,52 @@ and https://developer.android.com/about/versions/17/behavior-changes-all
 fetched 2026-08-23. This is a documentation review of the published
 notes, not a runtime pass.
 
-## Gradle dependency locking (2026-08-23)
-
-Strict locking is on for every project compile/runtime classpath that
-this repository can lock without an AGP variant-selection failure.
+## Gradle dependency locking (2026-08-23 review-fix)
 
 | Item | Value |
 |---|---|
 | Mode | `LockMode.STRICT` in the root `build.gradle.kts` `allprojects` block |
-| Activated configurations | resolvable names ending in `CompileClasspath` or `RuntimeClasspath` |
-| Excluded | any name containing `AndroidTest` (instrumented-test classpaths) |
-| Generation task | `./gradlew --no-daemon --no-configuration-cache resolveAndLockAll --write-locks` |
+| Activated configurations | `lockAllConfigurations()` — no suffix filter |
+| Exclusions | none. `Configuration.resolve()` is **not** used; AGP/KMP variant
+  attributes come from the real task graph (`resolveAndLockAll`) |
+| Generation | `./gradlew --no-daemon --no-configuration-cache resolveAndLockAll --write-locks` |
 | Per-project state | `<project>/gradle.lockfile` for all ten included projects |
-| Settings catalog | `settings-gradle.lockfile` (`empty=incomingCatalogForLibs0`) |
+| Settings catalog | `settings-gradle.lockfile` |
 
-`lockAllConfigurations()` plus `Configuration.resolve()` cannot pick a
-unique AGP variant for `:androidApp` instrumented-test classpaths (and
-some app classpaths) **outside** the AGP task graph. Those
-configurations are left unlocked rather than forcing a broken resolve.
-Kotlin/Native configurations use names such as `*CompileKlibraries`,
-not `*CompileClasspath`, so they are not in the lockable set; their
-Maven artifacts still appear in verification metadata because iOS
-compile was part of the generation graph.
+`lockAllConfigurations()` plus a blind `Configuration.resolve()` still
+fails on AGP variant ambiguity (`debugAndroidTestCompileClasspath`,
+some `:shared` variants) **outside** the task graph. That is a Gradle
+limitation, not an exclusion list. Generation depends on compile, test,
+assemble, and lint tasks so those configurations resolve with attributes.
 
-Plugin versions remain catalog-pinned (`gradle/libs.versions.toml`).
-`settings.gradle.kts` pins `org.gradle.toolchains.foojay-resolver-convention`
-at `1.0.0`. Buildscript classpaths are not lock-activated (this repo
-uses the `plugins {}` DSL). Gradle still prints persist lines for
-buildscript / "unknown" during `--write-locks`; those lines did not
-write extra lockfiles.
+Confirmed on this macOS arm64 host after generation: lockfiles include
+Kotlin/Native `*CompileKlibraries` (for example
+`iosArm64CompileKlibraries` in `:core` / `:provider-blockfrost`), lint
+classpaths, and plugin/compiler classpaths that Gradle can lock.
+Buildscript / "unknown" persist lines still appear; they did not write
+extra lockfiles. Plugin and buildscript artifacts are checked through
+`gradle/verification-metadata.xml` (see provenance).
 
-`:desktopApp` compile can be UP-TO-DATE and skip resolution, so
-`resolveAndLockAll` explicitly resolves that project's lockable
-classpaths in `doLast`. `:androidApp:compileDebugUnitTestKotlin` and
-`:androidApp:generateReleaseLintModel` are in the lock graph so STRICT
-mode has state for lint's unit-test classpaths (there is no
-`compileReleaseUnitTestKotlin` task in this module).
+Host-specific rows that are real variant selection, not accidents:
+
+- `:desktopApp` / `:shared` Compose `desktop-jvm-macos-arm64` and
+  `skiko-awt-runtime-macos-arm64` — generated on this runner. Ubuntu
+  Verify does not compile `:desktopApp`. Windows variants are omitted
+  until Prompt 7.
+- `kotlin-native-prebuilt` macos-aarch64 appears in verification
+  metadata because iOS compile ran here. Ubuntu JVM/lint jobs do not
+  download that tarball.
+
+Re-running `resolveAndLockAll --write-locks` twice on this host after
+the review-fix moves produced no lockfile diff.
 
 ## Android lint gate (2026-08-23)
 
 `androidApp` lint uses `abortOnError`, `warningsAsErrors`, and
-`checkReleaseBuilds`. Disabled checks are only the online freshness
+`checkReleaseBuilds`. Disabled checks are the online freshness
 detectors — `GradleDependency`, `NewerVersionAvailable`,
-`AndroidGradlePluginVersion` — because catalog pins, lockfiles, and
+`AndroidGradlePluginVersion` — plus `OldTargetApi` (ADR-0021: API 37
+is deferred). Catalog pins, lockfiles, and
 `gradle/verification-metadata.xml` already record reviewed versions.
 No lint baseline is committed.
 
@@ -275,31 +271,30 @@ generated lock lines.
 | File | `gradle/verification-metadata.xml` |
 | Algorithms | SHA-256 only (`verify-signatures` is `false`) |
 | Generation | `./gradlew --no-daemon --no-configuration-cache --write-verification-metadata sha256` plus the same compile/test/assemble graph as lock generation |
-| Host | macOS arm64, Gradle 9.7.1 |
-| Bootstrap | Gradle writes `origin="Generated by Gradle"` on every checksum |
+| Host | macOS arm64, Gradle 9.5.0 (review-fix) |
+| Bootstrap | Gradle writes `origin="Generated by Gradle"` on resolved checksums |
 
-Review performed on the generated file (checksums were not invented
-or rewritten):
+Linux AAPT2 `aapt2-9.1.0-14792394-linux.jar` was **not** invented and
+was **not** produced by the macOS Gradle run. It was downloaded from
+Google Maven and recorded only after the publisher `.sha256` sidecar
+matched. See [DEPENDENCY_PROVENANCE.md](DEPENDENCY_PROVENANCE.md).
 
-- No `sha1`, `md5`, or `pgp` entries.
+Review of the generated file:
+
+- No `sha1`, `md5`, or `pgp` entries (except the independent JNA
+  SHA-1 sidecar comparison in the provenance page).
 - No `trusted-artifacts` exceptions.
-- Spot-check: local Gradle-cache `junit-4.13.2.jar` SHA-256
-  `8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3`
-  matches the metadata row.
-- Spot-check: Maven Central
-  `org/bouncycastle/bcprov-jdk18on/1.85.2/bcprov-jdk18on-1.85.2.jar.sha256`
-  is `986b0fb92ec10e0c66b43e036ce0077e6150cfaecd1db9fb92b56672e157afe5`,
-  matching the metadata row.
 
-Tamper proof (not committed): the `junit-4.13.2.jar` SHA-256 first
-nibble was changed `8` → `9`. `:core:jvmTest` failed at
-`:core:compileTestKotlinJvm` with `Dependency verification failed`
-for `junit:junit:4.13.2`. The generated checksum was restored.
+Tamper proof (not committed): flipping the first nibble of the
+`junit-4.13.2.jar` SHA-256 makes `:core:compileTestKotlinJvm` fail
+with `Dependency verification failed`. That is enforcement evidence
+only. Publisher comparison is the provenance page.
 
-A first Ubuntu CI run may still request a Linux-only artifact that
-this macOS generation did not hash. If that happens, regenerate
-metadata on that runner with `--write-verification-metadata sha256`
-and review the diff. Do not invent checksums to hide the miss.
+Docker was not available on the generation host. Ubuntu Verify
+(`push` to `main` and `fix/**`, plus `pull_request`) is the remaining
+Linux-resolved evidence for any artifact this record still misses.
+Do not invent checksums to hide a miss. No Windows classifiers until
+Prompt 7.
 
 ## Cargo lock and Rust toolchain (2026-08-23)
 
