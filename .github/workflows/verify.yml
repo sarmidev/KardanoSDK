@@ -10,6 +10,88 @@ permissions:
   contents: read
 
 jobs:
+  restricted-claim-scan:
+    name: Restricted-claim (banned-word) scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Scan tracked docs/markdown/source for banned claim language
+        # Scope note (W9-3, 2026-08-22 pre-release audit): this is a banned-word/claim-language
+        # scan only, mirroring docs/RELEASING.md step 3's manual "restricted-claim scan". It is
+        # NOT a secrets/credentials scanner -- that is a separate, larger tool-selection decision
+        # tracked separately, not covered by this step.
+        #
+        # The banned-word list mirrors .cursor/rules/kardano-sdk-guardrails.mdc's "No banned
+        # words" rule exactly: secure, safe, hardened, audited, production-ready, guaranteed,
+        # cryptographically safe.
+        #
+        # Excluded paths, each by deliberate design, not oversight:
+        #   - docs/AUDIT/**            : audit reports quote and discuss this exact policy; a
+        #                                report analyzing the banned-word rule is not itself
+        #                                making a restricted claim.
+        #   - docs/DECISIONS/**        : frozen historical ADRs (this repo's convention is to
+        #                                append a dated result note rather than rewrite one), not
+        #                                living product claims.
+        #   - docs/HANDOFF.md,
+        #     docs/PHASE_1_PLAN.md     : large, continuously-growing, dated historical
+        #                                session/phase logs that are appended to, never rewritten
+        #                                -- the same rationale as docs/DECISIONS/.
+        #   - docs/AI_WORKING_AGREEMENT.md,
+        #     .cursor/rules/**         : these documents *define* the banned-word policy itself;
+        #                                scanning the policy definition for the policy's own
+        #                                words would be circular.
+        #   - docs/TESTING.md         : documents this exact manual scan command, containing the
+        #                                word list verbatim.
+        #   - crypto/.../Bip39EnglishWordlist.kt : the cited, verbatim official BIP-39 wordlist
+        #                                ("safe" is wordlist entry #1479 -- data, not a claim).
+        #   - shared/.../ui/DemoCopyTest.kt : a test fixture that defines this same word list as
+        #                                data, to verify Playground copy against it.
+        #   - crypto/.../Pbkdf2HmacSha512.android.kt : one factual, hedged Android-platform-API
+        #                                availability note ("only guaranteed from Android API
+        #                                level 26"), not a product claim.
+        #   - shared/.../PlaygroundWalletPresenterTest.kt : one code comment ("safe to run under
+        #                                testAndroidHostTest"), not a product claim.
+        #
+        # Pattern refinements (both verified against the current tree, see the commit message):
+        #   - A banned word immediately preceded by "not" (allowing markdown emphasis like
+        #     "**not**" in between) is treated as an honest negation/disclaimer, e.g. this repo's
+        #     own "Not audited." wording, not a restricted claim.
+        #   - A banned word immediately preceded by a hyphen (e.g. "display-safe", "type-safe")
+        #     is treated as a technical compound adjective describing a code property, not a
+        #     product-wide claim.
+        run: |
+          set -euo pipefail
+
+          EXCLUDE_REGEX='^(docs/AUDIT/|docs/DECISIONS/|docs/HANDOFF\.md$|docs/PHASE_1_PLAN\.md$|docs/AI_WORKING_AGREEMENT\.md$|docs/TESTING\.md$|\.cursor/rules/|crypto/src/commonMain/kotlin/org/sarmidev/kardano/crypto/mnemonic/Bip39EnglishWordlist\.kt$|shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/ui/DemoCopyTest\.kt$|crypto/src/androidMain/kotlin/org/sarmidev/kardano/crypto/internal/pbkdf2/Pbkdf2HmacSha512\.android\.kt$|shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/PlaygroundWalletPresenterTest\.kt$)'
+          BANNED_WORDS='(secure|safe|hardened|audited|production-ready|guaranteed|cryptographically safe)'
+          NEGATION_QUALIFIER='not[^A-Za-z]{0,6}(secure|safe|hardened|audited|production-ready|guaranteed)'
+          HYPHEN_QUALIFIER='[A-Za-z]-(secure|safe|hardened|audited)'
+
+          FILES=$(git ls-files -- '*.md' '*.mdc' '*.html' '*.kt' '*.kts' | grep -Ev "$EXCLUDE_REGEX" || true)
+
+          if [ -z "$FILES" ]; then
+            echo "No files to scan"
+            exit 0
+          fi
+
+          RAW=$(printf '%s\n' "$FILES" | xargs grep -EIn "\\b${BANNED_WORDS}\\b" || true)
+
+          if [ -z "$RAW" ]; then
+            echo "Banned-word scan passed (no candidate lines)."
+            exit 0
+          fi
+
+          FILTERED=$(printf '%s\n' "$RAW" | grep -Eiv "$NEGATION_QUALIFIER" | grep -Eiv "$HYPHEN_QUALIFIER" || true)
+
+          if [ -n "$FILTERED" ]; then
+            echo "$FILTERED"
+            echo "::error::Banned word/claim-language found above (see .cursor/rules/kardano-sdk-guardrails.mdc's 'No banned words' rule)."
+            exit 1
+          fi
+
+          echo "Banned-word scan passed ($(printf '%s\n' "$FILES" | wc -l | tr -d ' ') files scanned)."
+
   portable-jvm-and-android-host:
     name: Portable JVM and Android host tests
     runs-on: ubuntu-latest
