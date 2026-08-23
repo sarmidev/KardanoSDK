@@ -703,6 +703,8 @@ internal object PlaygroundPresenter {
             is SigningScopeViolationReason.UnsupportedDraftShape ->
                 "Signing rejected: draft shape is not the Phase 1 ADA-only single-payment " +
                     "path (${reason.detail})."
+            is SigningScopeViolationReason.UnrecognizedFixtureIdentity ->
+                "Signing rejected: mnemonic is not the cited Phase 1 test fixture."
         }
 
     /**

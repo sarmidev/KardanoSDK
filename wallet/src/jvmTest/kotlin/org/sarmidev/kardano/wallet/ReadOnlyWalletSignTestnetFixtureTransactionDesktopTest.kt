@@ -156,6 +156,28 @@ class ReadOnlyWalletSignTestnetFixtureTransactionDesktopTest {
     }
 
     @Test
+    fun signTestnetFixtureTransaction_differentValidMnemonic_isUnrecognizedFixtureIdentityBeforeSigning() {
+        // Cited Trezor BIP-39 English vector (12-word all-zero entropy), already used by
+        // `:crypto`'s `MnemonicVectorsTest`. Structurally valid, not the Phase 1 fixture.
+        // Source: trezor/python-mnemonic vectors.json (MIT), commit
+        // b57a5ad77a981e743f4167ab2f7927a55c1e82a8.
+        val otherMnemonic = listOf(
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "about",
+        )
+
+        val result = ReadOnlyWallet.signTestnetFixtureTransaction(
+            otherMnemonic,
+            Network.TESTNET,
+            fixtureDraft(),
+        )
+
+        val err = assertIs<KardanoResult.Err<WalletError>>(result)
+        val violation = assertIs<WalletError.SigningScopeViolation>(err.error)
+        assertIs<SigningScopeViolationReason.UnrecognizedFixtureIdentity>(violation.reason)
+    }
+
+    @Test
     fun signTestnetFixtureTransaction_doesNotMutateDraftBodyOrFee() {
         val draft = fixtureDraft()
         val originalBody = draft.bodyCbor()

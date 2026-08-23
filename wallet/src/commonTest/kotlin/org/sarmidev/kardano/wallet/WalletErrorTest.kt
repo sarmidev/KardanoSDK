@@ -103,6 +103,15 @@ class WalletErrorTest {
     }
 
     @Test
+    fun signingScopeViolationVariant_unrecognizedFixtureIdentity_isDistinct() {
+        val error = WalletError.SigningScopeViolation(
+            SigningScopeViolationReason.UnrecognizedFixtureIdentity,
+        )
+
+        assertEquals(SigningScopeViolationReason.UnrecognizedFixtureIdentity, error.reason)
+    }
+
+    @Test
     fun distinctVariants_areNotEqual() {
         val mnemonicError: WalletError = WalletError.Mnemonic(MnemonicError.ChecksumMismatch)
         val overflowError: WalletError = WalletError.BalanceOverflow(partialCount = 0)

@@ -52,4 +52,11 @@ public sealed interface SigningScopeViolationReason {
     public data class UnsupportedDraftShape(
         public val detail: String,
     ) : SigningScopeViolationReason
+
+    /**
+     * The supplied mnemonic is structurally valid BIP-39 but does not derive to
+     * [Phase1FixtureIdentity]'s cited payment-credential fingerprint. Returned after
+     * derivation/address construction and before [org.sarmidev.kardano.crypto.signing.Signing.sign].
+     */
+    public data object UnrecognizedFixtureIdentity : SigningScopeViolationReason
 }

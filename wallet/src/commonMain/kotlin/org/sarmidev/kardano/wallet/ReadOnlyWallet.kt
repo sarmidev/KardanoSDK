@@ -247,9 +247,17 @@ public class ReadOnlyWallet private constructor(
          * 3. the declared [network] argument does not equal [TransactionDraft.network];
          * 4. the draft's input/output counts are not the Phase 1 ADA-only single-payment shape.
          *
-         * Those four checks close the ADR-0018 compiled-artifact gap (a mainnet-built draft
-         * signed under a declared-`TESTNET` argument). They return
-         * [WalletError.SigningScopeViolation] and do not parse [words]. The required
+         * After those checks, this function derives the payment public key through the same
+         * [KeyDerivation] / [Hashing] / [AddressCredential] path [restore] uses and compares
+         * the CIP-19 payment-credential fingerprint to [Phase1FixtureIdentity]. A different
+         * structurally valid BIP-39 mnemonic fails with
+         * [SigningScopeViolationReason.UnrecognizedFixtureIdentity] before [Signing.sign].
+         * The fixture mnemonic phrase is not stored in this module.
+         *
+         * Those checks close the ADR-0018 compiled-artifact gap (a mainnet-built draft
+         * signed under a declared-`TESTNET` argument, or an arbitrary mnemonic). Scope and
+         * network failures return [WalletError.SigningScopeViolation] and do not parse
+         * [words]. The required
          * [ExperimentalKardanoSigningScope] opt-in remains a Kotlin-compiler intent signal
          * (ADR-0018) and does not replace these runtime checks; it also does not carry over as
          * a Swift compile-time gate (ADR-0019).
@@ -315,6 +323,26 @@ public class ReadOnlyWallet private constructor(
                 paymentPublicKey = when (val result = derivation.publicKey(paymentPrivateKey)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
+                }
+
+                val paymentCredentialHash = when (
+                    val result = Hashing.default().blake2b224(paymentPublicKey.publicKeyBytes())
+                ) {
+                    is KardanoResult.Ok -> result.value.toByteArray()
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Hashing(result.error))
+                }
+                val paymentCredential = when (
+                    val result = AddressCredential.keyHash(paymentCredentialHash)
+                ) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.AddressBuild(result.error))
+                }
+                if (!Phase1FixtureIdentity.matchesPaymentCredential(paymentCredential.hashBytes())) {
+                    return KardanoResult.Err(
+                        WalletError.SigningScopeViolation(
+                            SigningScopeViolationReason.UnrecognizedFixtureIdentity,
+                        ),
+                    )
                 }
 
                 val bodyHash = when (val result = Hashing.default().blake2b256(draft.bodyCbor())) {
