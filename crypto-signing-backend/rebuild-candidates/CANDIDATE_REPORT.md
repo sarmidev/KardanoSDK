@@ -5,7 +5,9 @@ These hashes are **not** CHECKSUMS.sha256. Committed src/ binaries are unchanged
 Stable Darwin install name: `@rpath/libkardano_ed25519_bip32_signing.dylib`
 
 Darwin keeps `LC_UUID` (macos-26 dyld requires it) and passes `-Wl,-reproducible`.
-Android and iOS already matched clean macos-26 run `32660838357`.
+Android and iOS matched clean macos-26 runs `32660838357` and `32661414105`.
+Darwin did **not** rematch on `32661414105` (local macOS 26.2 vs runner 26.5.2).
+Do not copy these Darwin hashes into CHECKSUMS until a clean runner matches them.
 
 | Artifact | SHA-256 |
 |---|---|

@@ -183,9 +183,10 @@ content-derived; macos-26 `dyld` rejects dylibs that omit `LC_UUID`.
 `ANDROID_NDK*` and installs revision `27.2.12479018` under a required-empty dest.
 A clean runner rebuilds into a fresh staging target and compares hashes,
 architectures, symbols, install names, and evidence against
-`CHECKSUMS.sha256`. Uploads use `if-no-files-found: error`. The workflow
-does not replace committed natives. Ubuntu runs the harness tests and
-`cargo metadata --locked` only.
+`rebuild-candidates/CANDIDATE_MANIFEST.sha256` when that file exists,
+otherwise `CHECKSUMS.sha256`. Uploads use `if-no-files-found: error`. The
+workflow does not replace committed natives. Ubuntu runs the harness tests
+and `cargo metadata --locked` only.
 
 Pinned rebuild toolchain: rustc `1.97.0` (commit `2d8144b7880597b6e6d3dfd63a9a9efae3f533d3`),
 cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
@@ -193,10 +194,15 @@ cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
 The first harness commit on this branch (`6cb6810`) is historical review debt: it
 defaulted to the module `target/` and treated missing inspection tools as optional.
 Those bytes are not rewritten. Clean `macos-26` run `32660838357` matched
-Android and iOS candidates. Darwin candidates must keep `LC_UUID` (dyld
-rejects `-no_uuid`) and rematch with `-Wl,-reproducible`. Gate 1 stays
-**NO-GO** until all eight candidate hashes match a clean runner. `src/` and
-`CHECKSUMS.sha256` are unchanged until that rematch.
+Android and iOS candidates but used unloadable `-no_uuid` Darwin dylibs.
+Run `32661414105` at `7ed38e4` (`-Wl,-reproducible`, `LC_UUID` kept) matched
+Android and iOS again (6/8). Darwin JVM still differs: same size, same
+`@rpath` install name, same code/data; only `LC_UUID` (x86_64: 16 bytes)
+and the arm64 ad-hoc signature over that UUID (31 bytes). Two local
+staging paths produced identical Darwin bytes; the remaining gap is
+host OS (`26.2`/`25C56` vs runner `26.5.2`/`25F84`) with the same Xcode
+`26.6`/`17F113` and `ld-1267`. Gate 1 stays **NO-GO**. `src/` and
+`CHECKSUMS.sha256` are unchanged. Gate 2 Linux is not started.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current CHECKSUMS rows. The same

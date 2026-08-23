@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Phase B rematch | Gate 1 **NO-GO**. Run `32660838357` matched Android+iOS (6/8). Darwin `-no_uuid` matched but dyld refused the dylibs. Darwin rematch uses `-Wl,-reproducible` and keeps `LC_UUID`. CHECKSUMS/`src/` unchanged. Linux/Windows JVM not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 1 NO-GO | Darwin `LC_UUID` still host-OS-bound after `-Wl,-reproducible`. Android+iOS 6/8 match on `32661414105`. CHECKSUMS/`src/` unchanged. Linux/Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -112,11 +112,19 @@ Date: 2026-08-23
   `nm`/`lipo`/`file`/`otool`, pinned `macos-26` + Xcode 26.6 (`17F113`),
   retained command logs and evidence uploads (`if-no-files-found: error`).
   The large first commit `6cb6810` is historical review debt and is not
-  rewritten. Phase B writes a separate candidate manifest and requires a
-  clean runner to match all 8 hashes before any CHECKSUMS/`src/` replace.
-  Next task after 8/8 candidate match: Phase C replace, then a later Gate 2
-  Linux invocation. Do not start Linux/Windows/legal in this correction.
-  Do not merge or tag.
+  rewritten. Phase B writes a separate candidate manifest. Android cargo-ndk
+  failures were flattened zip symlinks / missing execute bits, not a
+  rustc 1.97 / cargo-ndk 4.1.2 / NDK 27.2 incompatibility. Clean run
+  `32661414105` at `7ed38e4` matched Android+iOS (6/8) and failed Darwin:
+  local vs runner dylibs are the same size with the same `@rpath` name;
+  x86_64 differs only at `LC_UUID` 16 bytes; arm64 adds 31 ad-hoc
+  signature bytes over that UUID. Two local staging paths were
+  byte-identical. Local OS `26.2`/`25C56` vs runner `26.5.2`/`25F84`;
+  both use Xcode `26.6`/`17F113` and `ld-1267`. `-no_uuid` matched hashes
+  but dyld refused the dylibs. Phase C did not run. Next task: a later
+  invocation that rematches Darwin `LC_UUID` across those OS builds, then
+  Phase C, then Gate 2 Linux. Do not start Linux/Windows/legal. Do not
+  merge or tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope

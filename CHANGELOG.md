@@ -31,15 +31,18 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `CARGO_TARGET_DIR`, remapped absolute source roots, a link-time
   `@rpath/libkardano_ed25519_bip32_signing.dylib` install name, fail-closed
   `nm`/`lipo`/`file` checks, and a pinned `macos-26` / Xcode 26.6 runner. Gate 1 is
-  still NO-GO until local candidate hashes match a clean runner. macos-26 image
-  `ANDROID_NDK*` defaults to `27.3.13750724`; the rebuild job now ignores those
-  names and fail-closes on any NDK other than `27.2.12479018`. Python zip
-  extract now restores NDK clang execute bits and Unix `clang -> clang-18`
-  symlinks (CI `Exec format error` / `clang-18: command not found`). Darwin JVM candidates drop `LC_UUID` via
-  `-Wl,-reproducible` while keeping `LC_UUID` (macos-26 dyld rejects
-  `-no_uuid`). Clean run `32660838357` matched Android and iOS
-  candidates; Darwin rematch is still required before replacing
-  `src/` or CHECKSUMS.
+  still NO-GO. macos-26 image `ANDROID_NDK*` defaults to `27.3.13750724`;
+  the rebuild job ignores those names and fail-closes on any NDK other
+  than `27.2.12479018`. Python zip extract restores NDK clang execute
+  bits and Unix `clang -> clang-18` symlinks (CI `Exec format error` /
+  `clang-18: command not found`). Darwin JVM keeps `LC_UUID` and passes
+  `-Wl,-reproducible` (macos-26 dyld rejects `-no_uuid`). Clean run
+  `32660838357` matched Android and iOS. Run `32661414105` at `7ed38e4`
+  rematched those six again; Darwin still differs only in `LC_UUID` and
+  the arm64 ad-hoc signature over it (local macOS `26.2` vs runner
+  `26.5.2`, same Xcode `26.6` / `ld-1267`). Candidate compare now
+  records staged UUID/install-name and byte-cluster offsets. `src/` and
+  CHECKSUMS are unchanged. Gate 2 Linux is not started.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
