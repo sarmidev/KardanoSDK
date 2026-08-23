@@ -288,7 +288,25 @@ def collect_provenance(module_root: Path, env: dict[str, str]) -> dict[str, obje
             else ""
         ),
         "sw_vers": _capture(["sw_vers"]) if platform.system() == "Darwin" else "",
-        "ld_version": _capture(["ld", "-v"]) if platform.system() == "Darwin" else "",
+        "ld_version": (
+            _capture(["ld", "-v"])
+            if platform.system() == "Darwin"
+            else _capture(["ld", "--version"])
+        ),
+        "os_release": (
+            Path("/etc/os-release").read_text(encoding="utf-8")
+            if Path("/etc/os-release").is_file()
+            else ""
+        ),
+        "ldd_version": _capture(["ldd", "--version"]) if platform.system() == "Linux" else "",
+        "cc_version": (
+            _capture(["cc", "--version"]) or _capture(["gcc", "--version"])
+            if platform.system() == "Linux"
+            else ""
+        ),
+        "documented_glibc_baseline": toolchain.EXPECTED_LINUX_GLIBC_LABEL,
+        "linux_runs_on": toolchain.EXPECTED_LINUX_RUNS_ON,
+        "linux_image_os": toolchain.EXPECTED_LINUX_IMAGE_OS,
         "rust_channel": toolchain.RUST_CHANNEL,
         "expected_xcode": {
             "version": toolchain.EXPECTED_XCODE_VERSION,
@@ -553,8 +571,20 @@ def rebuild_linux_jvm(
     record = natives.inspect_artifact(spec, dest)
     natives.write_inspect_evidence(record, staging / "evidence")
     _require_fatal_inspection(spec, record)
+    extra_roots = linux_elf.build_forbidden_roots(
+        module_root,
+        module_root.parent,
+        staging,
+        Path(env["CARGO_TARGET_DIR"]),
+        toolchain.cargo_home(),
+        toolchain.rustup_home(),
+    )
     try:
-        linux_elf.verify_linux_x86_64_cdylib(dest, require_tools=True)
+        linux_elf.verify_linux_x86_64_cdylib(
+            dest,
+            require_tools=True,
+            extra_forbidden_roots=extra_roots,
+        )
     except linux_elf.ElfError as error:
         raise RebuildError(f"{spec.artifact_id} ELF verify failed: {error}") from error
 
@@ -595,11 +625,16 @@ def rebuild_ios(
 
 
 def _require_fatal_inspection(spec: natives.ArtifactSpec, record: natives.ArtifactRecord) -> None:
-    fatal = [
-        message
-        for message in record.inspection_errors
-        if not message.startswith("embedded host-absolute")
-    ]
+    # linux-so host-absolute path findings are fatal. Darwin/Android still
+    # record them as inspection notes without aborting the rebuild.
+    if spec.kind == "linux-so":
+        fatal = list(record.inspection_errors)
+    else:
+        fatal = [
+            message
+            for message in record.inspection_errors
+            if not message.startswith("embedded host-absolute")
+        ]
     if fatal:
         raise RebuildError(f"{spec.artifact_id} inspection failed: " + "; ".join(fatal))
 

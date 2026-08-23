@@ -60,10 +60,15 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   Verify runs `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`
   and `:androidApp:assembleDebug`/`assembleRelease` in addition to the
   eight iOS compiles and Android lint. Gate 1 is GO at `d09db44`. Gate 2
-  Linux x86-64 JVM rebuilds on native `ubuntu-24.04` only (JNA prefix
-  `linux-x86-64/`, ELF64 fail-closed verifier, two independent candidate
-  jobs). The ninth CHECKSUMS row is added only after those hashes match.
-  Linux ARM and Windows are out of scope.
+  Linux x86-64 JVM rebuilds on pinned `ubuntu-22.04` only (JNA prefix
+  `linux-x86-64/`, ImageOS `ubuntu22`, documented glibc floor 2.35
+  measured at runtime). The ELF64 verifier is fail-closed on exact
+  `.dynsym` export semantics, GNU version requirements, host-absolute
+  path bytes, program/section ranges, duplicate singleton dynamic tags,
+  and debug-link sections. Two independent candidate jobs plus JVM KAT
+  must match before any promotion review. The ninth CHECKSUMS row is
+  added only after that re-review is GO. Linux ARM, musl, older glibc,
+  and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

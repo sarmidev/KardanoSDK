@@ -24,6 +24,8 @@ from linux_elf_verify import (
     STABLE_SONAME as LINUX_STABLE_SONAME,
     verify_linux_x86_64_cdylib,
     ElfError,
+    parse_posix_nm_defined,
+    require_exact_sign_nm,
 )
 from native_toolchain import STABLE_INSTALL_NAME
 
@@ -36,9 +38,11 @@ SIGN_SYMBOL = "uniffi_kardano_ed25519_bip32_signing_fn_func_sign"
 SHA256_LINE_RE = re.compile(r"^([0-9a-f]{64})  (.+)$")
 HOST_PATH_MARKERS = (
     b"/Users/",
+    b"/home/runner/",
     b"/var/folders/",
     b"/private/var/folders/",
     b"/opt/homebrew/",
+    b"/opt/hostedtoolcache/",
     b"/Volumes/",
     b"C:\\",
     b"/Users\\",
@@ -63,6 +67,7 @@ REQUIRED_EVIDENCE_SUFFIXES = {
         ".path-scan.txt",
         ".elf.json",
         ".readelf-d.txt",
+        ".readelf-version.txt",
     ),
     "archive": (
         ".inspect.json",
@@ -258,6 +263,8 @@ class ArtifactRecord:
     rpath: list[str] = field(default_factory=list)
     runpath: list[str] = field(default_factory=list)
     elf_ok: bool | None = None
+    readelf_version_text: str = ""
+    glibc_requirements: list[str] = field(default_factory=list)
 
 
 _UNSET = object()
@@ -387,7 +394,7 @@ def _nm_command(
     if spec.kind == "linux-so":
         nm = hooks.which("nm") or hooks.llvm_nm_path()
         if nm:
-            return [nm, "-D", str(path)]
+            return [nm, "-D", "--defined-only", "--format=posix", str(path)]
         return None
     if spec.kind == "so":
         llvm_nm = _ndk_llvm_nm(hooks.ndk_home) or hooks.which("llvm-nm")
@@ -611,6 +618,8 @@ def inspect_artifact(
             record.runpath = list(elf_record.runpath)
             record.elf_ok = True
             record.otool_output = elf_record.readelf_text
+            record.readelf_version_text = elf_record.readelf_version_text
+            record.glibc_requirements = list(elf_record.glibc_requirements)
             if elf_record.nm_text and not record.nm_output:
                 record.nm_output = elf_record.nm_text
                 record.nm_returncode = elf_record.nm_returncode
@@ -637,10 +646,20 @@ def inspect_artifact(
             record.inspection_errors.append(f"nm exited {completed.returncode}")
             record.symbol_ok = False
         else:
-            record.symbols = exported_sign_symbols(record.nm_output)
-            record.symbol_ok = any(SIGN_SYMBOL in line for line in record.symbols)
-            if not record.symbol_ok:
-                record.inspection_errors.append(f"{SIGN_SYMBOL} is not exported")
+            if spec.kind == "linux-so":
+                try:
+                    nm_records = parse_posix_nm_defined(record.nm_output)
+                    require_exact_sign_nm(nm_records)
+                    record.symbols = [item.name for item in nm_records]
+                    record.symbol_ok = True
+                except ElfError as error:
+                    record.symbol_ok = False
+                    record.inspection_errors.append(str(error))
+            else:
+                record.symbols = exported_sign_symbols(record.nm_output)
+                record.symbol_ok = any(SIGN_SYMBOL in line for line in record.symbols)
+                if not record.symbol_ok:
+                    record.inspection_errors.append(f"{SIGN_SYMBOL} is not exported")
 
     record.embedded_paths = scan_embedded_absolute_paths(path)
     if record.embedded_paths:
@@ -700,6 +719,7 @@ def write_inspect_evidence(record: ArtifactRecord, evidence_dir: Path) -> list[P
         "rpath": record.rpath,
         "runpath": record.runpath,
         "elf_ok": record.elf_ok,
+        "glibc_requirements": record.glibc_requirements,
     }
     import json
 
@@ -722,6 +742,7 @@ def write_inspect_evidence(record: ArtifactRecord, evidence_dir: Path) -> list[P
                     "runpath": record.runpath,
                     "elf_ok": record.elf_ok,
                     "symbol_ok": record.symbol_ok,
+                    "glibc_requirements": record.glibc_requirements,
                 },
                 indent=2,
                 sort_keys=True,
@@ -729,6 +750,7 @@ def write_inspect_evidence(record: ArtifactRecord, evidence_dir: Path) -> list[P
             + "\n",
         )
         dump(".readelf-d.txt", (record.otool_output or "") + "\n")
+        dump(".readelf-version.txt", (record.readelf_version_text or "") + "\n")
     if record.spec.kind == "archive":
         dump(".ar-tv.txt", (record.ar_tv or "") + "\n")
         dump(

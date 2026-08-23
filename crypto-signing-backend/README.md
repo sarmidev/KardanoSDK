@@ -43,9 +43,12 @@ does not invent a second loader path.
 - `darwin-aarch64` — committed; **runtime-verified** here (`jvmTest` on the macOS arm64 host).
 - `darwin-x86-64` — committed; cross-built on macOS, **not** runtime-verified on this arm64 host.
 - `linux-x86-64` — JNA prefix for Linux x86-64 (`libkardano_ed25519_bip32_signing.so`).
-  Built only on a native Ubuntu x86-64 host (`x86_64-unknown-linux-gnu`). Not committed
-  until two independent runner hashes match and a promotion commit adds the CHECKSUMS
-  row. Linux ARM (`linux-aarch64`) is out of scope.
+  Built only on a native Ubuntu 22.04 x86-64 host (`x86_64-unknown-linux-gnu`,
+  ImageOS `ubuntu22`). Documented runtime floor is glibc 2.35, measured from
+  `ldd --version` on the runner (not assumed). Not committed until two
+  independent runner hashes match, Phase A/B re-review is GO, and a promotion
+  commit adds the CHECKSUMS row. Linux ARM, musl, and older glibc are out of
+  scope.
 - **Windows JVM hosts are not covered.**
 
 ## Verified (ADR-0016 §7d / §9f) — legs against this real module
@@ -233,8 +236,16 @@ replacement set, not the W5-2 host-path rows. A matching checksum is
 identity of those committed bytes, not proof of source provenance.
 The current verifier accepts both committed Darwin dylibs (canonical
 UUID match; arm64 ad-hoc exact-identifier). Linux x86-64 JVM rebuilds
-are native Ubuntu only (`linux-jvm-rebuild-evidence.yml`); they are
-not written into CHECKSUMS until two independent candidates match.
+are native `ubuntu-22.04` only (`linux-jvm-rebuild-evidence.yml`); they
+are not written into CHECKSUMS until two independent candidates match
+and re-review is GO. The ELF verifier is fail-closed on `.dynsym`
+export semantics, GNU version requirements (GLIBC greater than the
+measured 2.35 baseline is rejected), host-absolute path bytes, program
+and section file ranges, duplicate singleton dynamic tags, and
+`.debug_*` / `.zdebug_*` / `.gnu_debuglink` material. `nm` corroboration
+uses `--defined-only --format=posix` exact records, not substring
+search. Remapped prefixes that may appear are `/cargo-target`,
+`/kardano`, `/rustc`, `/rustup`, `/cargo`, and `/home/rebuild` only.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

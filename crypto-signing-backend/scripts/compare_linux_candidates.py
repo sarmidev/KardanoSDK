@@ -47,6 +47,11 @@ def _report(path: Path) -> dict[str, object]:
         "has_build_id": record.has_build_id,
         "readelf_returncode": record.readelf_returncode,
         "nm_returncode": record.nm_returncode,
+        "glibc_requirements": record.glibc_requirements,
+        "gnu_versions": record.gnu_versions,
+        "sign_exports": record.sign_exports,
+        "documented_glibc_baseline": record.documented_glibc_baseline,
+        "forbidden_paths": record.forbidden_paths,
     }
 
 
@@ -67,13 +72,35 @@ def main(argv: list[str] | None = None) -> int:
         left = {}
         right = {}
     else:
-        for key in ("sha256", "size", "soname", "needed", "rpath", "runpath"):
+        for key in (
+            "sha256",
+            "size",
+            "soname",
+            "needed",
+            "rpath",
+            "runpath",
+            "glibc_requirements",
+            "sign_exports",
+        ):
             if left.get(key) != right.get(key):
                 findings.append(f"{key} differs: {left.get(key)!r} vs {right.get(key)!r}")
-        left_syms = set(left.get("symbols") or [])
-        right_syms = set(right.get("symbols") or [])
-        if natives.SIGN_SYMBOL not in left_syms or natives.SIGN_SYMBOL not in right_syms:
-            findings.append("sign symbol missing from one candidate")
+        left_syms = [item for item in (left.get("symbols") or []) if item == natives.SIGN_SYMBOL]
+        right_syms = [item for item in (right.get("symbols") or []) if item == natives.SIGN_SYMBOL]
+        if len(left_syms) != 1 or len(right_syms) != 1:
+            findings.append("sign symbol missing or ambiguous on one candidate")
+        if left.get("forbidden_paths") or right.get("forbidden_paths"):
+            findings.append("embedded host-absolute paths are present")
+        baseline = linux_elf.DOCUMENTED_GLIBC_BASELINE_LABEL
+        for side, report in (("left", left), ("right", right)):
+            if report.get("documented_glibc_baseline") != baseline:
+                findings.append(f"{side} glibc baseline is not {baseline}")
+            too_new = [
+                name
+                for name in (report.get("glibc_requirements") or [])
+                if not linux_elf.glibc_requirement_allowed(name)
+            ]
+            if too_new:
+                findings.append(f"{side} GLIBC requirement {too_new} exceeds {baseline}")
     payload = {
         "left": left,
         "right": right,
@@ -81,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
         "ok": not findings,
         "relative_path": natives.LINUX_JVM_ARTIFACTS[0].relative_path,
         "jna_prefix": linux_elf.JNA_RESOURCE_PREFIX,
+        "documented_glibc_baseline": linux_elf.DOCUMENTED_GLIBC_BASELINE_LABEL,
+        "linux_runs_on": "ubuntu-22.04",
     }
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

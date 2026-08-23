@@ -185,9 +185,10 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
 - iOS simulator/device execution requires a local macOS/Xcode environment; compile/link checks are
   run where that environment is unavailable.
 - JVM signing runtime coverage uses the committed macOS natives on Darwin. Linux x86-64
-  uses JNA prefix `linux-x86-64/` and is rebuilt only on native Ubuntu; the `.so` is not
-  in CHECKSUMS until two independent candidates match. Linux ARM and Windows are out of
-  scope.
+  uses JNA prefix `linux-x86-64/` and is rebuilt only on native `ubuntu-22.04`
+  (glibc >= 2.35, measured at runtime). The `.so` is not in CHECKSUMS until two
+  independent candidates match and re-review is GO. Linux ARM, musl, older
+  glibc, and Windows are out of scope.
 
 Native rebuild comparison (does not overwrite committed binaries):
 
@@ -202,11 +203,14 @@ python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
 ```
 
 `linux-jvm-rebuild-evidence.yml` rebuilds `x86_64-unknown-linux-gnu` twice on
-native `ubuntu-24.04` (ImageOS `ubuntu24`), compares SHA-256 + ELF reports,
-then runs `:crypto-signing-backend:jvmTest` `:crypto:jvmTest` `:wallet:jvmTest`
-`:shared:jvmTest` against the candidate at `linux-x86-64/`. Permissions stay
-`contents: read`. Uploads use `if-no-files-found: error`. The job does not
-write CHECKSUMS or committed `src/`.
+pinned `ubuntu-22.04` (ImageOS `ubuntu22`, not `ubuntu-latest`), records
+`/etc/os-release`, `ldd --version`, and compiler/linker versions, compares
+SHA-256 + ELF reports + GNU version requirements against the documented
+glibc 2.35 baseline, then runs `:crypto-signing-backend:jvmTest`
+`:crypto:jvmTest` `:wallet:jvmTest` `:shared:jvmTest` against the candidate
+at `linux-x86-64/`. Permissions stay `contents: read`. Uploads use
+`if-no-files-found: error`. The job does not write CHECKSUMS or committed
+`src/`. ubuntu-24.04 artifacts from earlier Gate 2 runs are superseded.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

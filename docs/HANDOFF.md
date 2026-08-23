@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Tip `d09db44` plus Linux x86-64 JVM candidate rebuild (native Ubuntu only). Not in CHECKSUMS until two independent hashes match. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Not in CHECKSUMS until two independent hashes match and Phase A/B re-review is GO. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -103,15 +103,18 @@ Stacked remediations, each additive (no amend / no force-push):
 
 Date: 2026-08-23
 
-- **Native rebuild evidence on `fix/native-build-and-platform-evidence` (continue
-  from `d09db44`).** Gate 1 is GO. Gate 2 Linux x86-64 JVM uses JNA prefix
+- **Native rebuild evidence on `fix/native-build-and-platform-evidence`.**
+  Gate 1 is GO at `d09db44`. Gate 2 Linux x86-64 JVM uses JNA prefix
   `linux-x86-64/` and a fail-closed ELF64 verifier (ET_DYN, EM_X86_64,
-  allowlisted `DT_NEEDED`, exact SONAME, no RPATH/RUNPATH, no build-id,
-  no `.debug_*`). Rebuilds run only on native `ubuntu-24.04` with rustc
-  1.97.0 / `x86_64-unknown-linux-gnu`. Two independent jobs must match
-  before promotion. CHECKSUMS still has the eight committed artifacts.
-  Device runtime remains historical (W5-2). Do not start Windows or
-  merge/tag.
+  `e_version == EV_CURRENT`, allowlisted `DT_NEEDED`, exact SONAME, no
+  RPATH/RUNPATH, no build-id, no `.debug_*` / `.zdebug_*` /
+  `.gnu_debuglink`, exact `.dynsym` sign export, GLIBC requirements at
+  or below the documented 2.35 baseline, no host-absolute path bytes).
+  Rebuilds run only on pinned `ubuntu-22.04` (ImageOS `ubuntu22`) with
+  rustc 1.97.0 / `x86_64-unknown-linux-gnu`. Two independent jobs plus
+  JVM KAT must match; promotion waits for re-review GO. CHECKSUMS still
+  has the eight committed artifacts. Device runtime remains historical
+  (W5-2). Do not start Windows or merge/tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope
@@ -229,12 +232,13 @@ Do not use:
 ## Next Recommended Task
 
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
-`d09db44`. Gate 2 Linux re-review is the next gate (promotion only after
-two independent Ubuntu hashes match). Do not start Windows until that
-re-review is GO. Residual owner work: authenticated GitHub secret-scanning
-/ Dependabot, the manual accessibility walkthrough, and a post-replacement
-Android device `connectedAndroidDeviceTest`. Do not merge from an
-automated session.
+`d09db44`. Gate 2 Linux Phase A/B re-review is the next gate (promotion
+only after two independent `ubuntu-22.04` hashes match **and** that
+re-review is GO). Do not start Windows until then. Residual owner work:
+authenticated GitHub artifact download, secret-scanning / Dependabot,
+the manual accessibility walkthrough, and a post-replacement Android
+device `connectedAndroidDeviceTest`. Do not merge from an automated
+session.
 
 ## Prompt For Cursor Business/Product Work
 

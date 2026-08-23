@@ -303,7 +303,9 @@ On `fix/native-build-and-platform-evidence`:
   `:androidApp:assembleDebug`/`assembleRelease` in addition to the
   existing iOS compiles and Android lint. Device runtime remains an
   open owner/manual gate bound to W5-2 checksums. Gate 1 is GO at
-  `d09db44`. Gate 2 Linux x86-64 JVM is a native Ubuntu candidate path
-  (`linux-x86-64/libkardano_ed25519_bip32_signing.so`) with a fail-closed
-  ELF64 verifier and two-build identity; it is not in CHECKSUMS until
-  promotion. Linux ARM and Windows remain out of scope.
+  `d09db44`. Gate 2 Linux x86-64 JVM is a native `ubuntu-22.04` candidate
+  path (`linux-x86-64/libkardano_ed25519_bip32_signing.so`, glibc 2.35
+  baseline measured at runtime) with a fail-closed ELF64 verifier and
+  two-build identity; it is not in CHECKSUMS until Phase A/B re-review
+  is GO and a promotion commit lands. Linux ARM, musl, older glibc, and
+  Windows remain out of scope.

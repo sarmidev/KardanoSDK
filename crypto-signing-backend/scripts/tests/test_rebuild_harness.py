@@ -516,6 +516,12 @@ class ToolchainFlagTests(unittest.TestCase):
         self.assertIn("-Wl,-reproducible", script)
         self.assertIn('exec cc "$@"', script)
 
+    def test_linux_runner_pin_is_ubuntu_22_04(self) -> None:
+        self.assertEqual(toolchain.EXPECTED_LINUX_RUNS_ON, "ubuntu-22.04")
+        self.assertEqual(toolchain.EXPECTED_LINUX_IMAGE_OS, "ubuntu22")
+        self.assertEqual(toolchain.EXPECTED_LINUX_GLIBC_LABEL, "2.35")
+        self.assertEqual(toolchain.EXPECTED_LINUX_GLIBC_BASELINE, (2, 35, 0))
+
     def test_linux_flags_include_soname_and_no_build_id(self) -> None:
         pairs = [("/workspace", "/kardano")]
         flags = toolchain.rustflags_linux_jvm(pairs)

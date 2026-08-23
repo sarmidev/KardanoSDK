@@ -19,8 +19,12 @@ LIB_STEM = "libkardano_ed25519_bip32_signing"
 STABLE_INSTALL_NAME = f"@rpath/{LIB_STEM}.dylib"
 STABLE_LINUX_SONAME = f"{LIB_STEM}.so"
 LINUX_JVM_TARGET = "x86_64-unknown-linux-gnu"
-EXPECTED_LINUX_IMAGE_OS = "ubuntu24"
-EXPECTED_LINUX_RUNS_ON = "ubuntu-24.04"
+EXPECTED_LINUX_IMAGE_OS = "ubuntu22"
+EXPECTED_LINUX_RUNS_ON = "ubuntu-22.04"
+# Consumer/runtime floor is the pinned runner's glibc. Ubuntu 22.04 is 2.35.
+# Measured at rebuild time; do not assume. musl and older glibc are out of scope.
+EXPECTED_LINUX_GLIBC_BASELINE = (2, 35, 0)
+EXPECTED_LINUX_GLIBC_LABEL = "2.35"
 
 RUST_CHANNEL = "1.97.0"
 RUSTC_COMMIT = "2d8144b7880597b6e6d3dfd63a9a9efae3f533d3"
@@ -366,8 +370,34 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
         raise ToolchainError(
             "macos-jvm/ios and linux-jvm cannot share one runner"
         )
+    linux_os_release = ""
+    linux_ldd = ""
+    linux_cc = ""
+    linux_ld = ""
+    host_glibc = None
     if needs_linux:
         require_native_linux_x86_64()
+        os_release_path = Path("/etc/os-release")
+        linux_os_release = (
+            os_release_path.read_text(encoding="utf-8") if os_release_path.is_file() else ""
+        )
+        linux_ldd = _capture(["ldd", "--version"])
+        linux_cc = _capture(["cc", "--version"]) or _capture(["gcc", "--version"])
+        linux_ld = _capture(["ld", "--version"])
+        from linux_elf_verify import parse_ldd_glibc_version
+
+        host_glibc = parse_ldd_glibc_version(linux_ldd)
+        if host_glibc is None:
+            raise ToolchainError(
+                "unable to parse host glibc from ldd --version "
+                f"({linux_ldd!r}); Linux x86-64 glibc "
+                f">= {EXPECTED_LINUX_GLIBC_LABEL} is required"
+            )
+        if host_glibc < EXPECTED_LINUX_GLIBC_BASELINE:
+            raise ToolchainError(
+                f"host glibc {host_glibc[0]}.{host_glibc[1]} is older than "
+                f"documented baseline {EXPECTED_LINUX_GLIBC_LABEL}"
+            )
     if os.environ.get("GITHUB_ACTIONS") == "true":
         if needs_linux:
             if image_os != EXPECTED_LINUX_IMAGE_OS:
@@ -393,6 +423,19 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
         "image_version": os.environ.get("ImageVersion", ""),
         "runner_os": os.environ.get("RUNNER_OS", ""),
         "github_actions": os.environ.get("GITHUB_ACTIONS", ""),
+        "linux_os_release": linux_os_release,
+        "linux_ldd_version": linux_ldd,
+        "linux_cc_version": linux_cc,
+        "linux_ld_version": linux_ld,
+        "linux_glibc_host": (
+            f"{host_glibc[0]}.{host_glibc[1]}"
+            + (f".{host_glibc[2]}" if host_glibc and host_glibc[2] else "")
+            if host_glibc
+            else ""
+        ),
+        "linux_glibc_baseline_documented": EXPECTED_LINUX_GLIBC_LABEL,
+        "linux_runs_on": EXPECTED_LINUX_RUNS_ON if needs_linux else "",
+        "linux_image_os": EXPECTED_LINUX_IMAGE_OS if needs_linux else "",
     }
 
 
