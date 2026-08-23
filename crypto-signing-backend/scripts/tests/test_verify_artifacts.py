@@ -164,6 +164,19 @@ class CompareTreeTests(unittest.TestCase):
         self.assertEqual(diff["committed"], "42")
         self.assertEqual(diff["staged"], "43")
 
+    def test_difference_clusters_report_every_range(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        left = root / "left.bin"
+        right = root / "right.bin"
+        left.write_bytes(b"AAAABBBBCCCC")
+        right.write_bytes(b"AAAAxBBByCCC")
+        clusters = natives.difference_clusters(left, right)
+        self.assertEqual(
+            [(item["offset"], item["length"]) for item in clusters],
+            [(4, 1), (8, 1)],
+        )
+
     def test_cli_exits_nonzero_on_mismatch(self) -> None:
         payloads = self._payloads()
         committed, staged = self._tree(payloads)

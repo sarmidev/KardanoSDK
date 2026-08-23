@@ -809,13 +809,18 @@ def compare_trees(
             continue
         if expected_digest and staged.sha256 != expected_digest:
             kind = "byte-mismatch" if compare_committed else "candidate-mismatch"
+            extras = [f"size {staged.size}"]
+            if staged.uuid:
+                extras.append(f"LC_UUID {staged.uuid}")
+            if staged.install_name:
+                extras.append(f"LC_ID_DYLIB {staged.install_name}")
             findings.append(
                 Finding(
                     kind,
                     spec.artifact_id,
                     spec.relative_path,
                     f"staged {staged.sha256} != manifest {expected_digest} "
-                    f"(size {staged.size})",
+                    f"({', '.join(str(item) for item in extras)})",
                 )
             )
         elif (
@@ -881,6 +886,42 @@ def compare_trees(
             )
         )
     return findings, committed_records, staged_records
+
+
+def difference_clusters(
+    left: Path,
+    right: Path,
+    *,
+    limit: int = 32,
+) -> list[dict[str, int | str]]:
+    """Return contiguous differing byte ranges between two files.
+
+    Used when hashes differ so a NO-GO report can name exact offsets
+    instead of only the first byte. Does not hide unmatched ranges.
+    """
+    if not left.is_file() or not right.is_file():
+        return []
+    left_bytes = left.read_bytes()
+    right_bytes = right.read_bytes()
+    n = min(len(left_bytes), len(right_bytes))
+    clusters: list[dict[str, int | str]] = []
+    index = 0
+    while index < n and len(clusters) < limit:
+        if left_bytes[index] != right_bytes[index]:
+            start = index
+            while index < n and left_bytes[index] != right_bytes[index]:
+                index += 1
+            clusters.append(
+                {
+                    "offset": start,
+                    "length": index - start,
+                    "left_hex": left_bytes[start:index].hex(),
+                    "right_hex": right_bytes[start:index].hex(),
+                }
+            )
+        else:
+            index += 1
+    return clusters
 
 
 def first_differing_byte(left: Path, right: Path) -> dict[str, int | str] | None:

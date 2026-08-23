@@ -76,16 +76,42 @@ def build_report(
         logs_dir=logs_dir,
     )
     diffs: list[dict[str, object]] = []
-    if mode == "committed":
-        for spec in natives.EXISTING_ARTIFACTS:
-            if groups is not None and spec.group not in groups:
-                continue
+    staged_by_id = {item.spec.artifact_id: item for item in staged}
+    for spec in natives.EXISTING_ARTIFACTS:
+        if groups is not None and spec.group not in groups:
+            continue
+        expected = checksums.get(spec.relative_path)
+        staged_record = staged_by_id.get(spec.artifact_id)
+        if staged_record is None or not staged_record.exists:
+            continue
+        if expected and staged_record.sha256 == expected:
+            continue
+        if mode == "committed":
             left = committed_root / spec.relative_path
             right = staged_root / spec.relative_path
-            if left.is_file() and right.is_file() and natives.sha256_file(left) != natives.sha256_file(right):
-                first = natives.first_differing_byte(left, right)
-                if first is not None:
-                    diffs.append({"id": spec.artifact_id, **first})
+            if not (left.is_file() and right.is_file()):
+                continue
+            if natives.sha256_file(left) == natives.sha256_file(right):
+                continue
+            first = natives.first_differing_byte(left, right)
+            entry: dict[str, object] = {"id": spec.artifact_id, "path": spec.relative_path}
+            if first is not None:
+                entry.update(first)
+            entry["clusters"] = natives.difference_clusters(left, right)
+            diffs.append(entry)
+            continue
+        diffs.append(
+            {
+                "id": spec.artifact_id,
+                "path": spec.relative_path,
+                "kind": "candidate-mismatch",
+                "staged_sha256": staged_record.sha256,
+                "manifest_sha256": expected,
+                "size": staged_record.size,
+                "uuid": staged_record.uuid,
+                "install_name": staged_record.install_name,
+            }
+        )
     return {
         "committed_root": str(committed_root),
         "staged_root": str(staged_root),
