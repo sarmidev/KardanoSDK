@@ -96,4 +96,37 @@ public class TransactionDraft internal constructor(
     override fun toString(): String =
         "TransactionDraft(inputs=${selectedInputs.size}, outputs=${outputs.size}, " +
             "fee=$fee, ttl=$ttl, network=$network, scope=$scope, bodyBytes=${bodyBytes.size})"
+
+    /**
+     * Returns a copy of this draft whose [scope] is not
+     * [TransactionDraftScope.Phase1AdaOnlySinglePayment].
+     *
+     * Production constructors never produce that scope. This exists so signing-policy tests
+     * can prove an unrecognized scope is rejected before any mnemonic is parsed.
+     */
+    public fun withUnsupportedScopeForPolicyTest(): TransactionDraft =
+        TransactionDraft(
+            selectedInputs = selectedInputs,
+            outputs = outputs,
+            fee = fee,
+            ttl = ttl,
+            bodyCborBytes = bodyBytes,
+            network = network,
+            scope = UnsupportedTransactionDraftScope,
+        )
+
+    /**
+     * Returns a copy of this draft with no selected inputs — not a Phase 1 ADA-only
+     * single-payment shape. Production constructors never emit this.
+     */
+    public fun withIncompatibleShapeForPolicyTest(): TransactionDraft =
+        TransactionDraft(
+            selectedInputs = emptyList(),
+            outputs = outputs,
+            fee = fee,
+            ttl = ttl,
+            bodyCborBytes = bodyBytes,
+            network = network,
+            scope = scope,
+        )
 }

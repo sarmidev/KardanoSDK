@@ -14,11 +14,13 @@ import org.sarmidev.kardano.tx.TxBuildError
  * A typed error produced by [ReadOnlyWallet.restore], [ReadOnlyWallet.balance], or
  * [ReadOnlyWallet.signTestnetFixtureTransaction].
  *
- * Every variant except [BalanceOverflow] wraps an already-typed error from the module that
- * produced it, rather than re-deriving a parallel taxonomy (ADR-0013 §6): a caller can always
- * pattern-match through to the original [MnemonicError], [KeyDerivationError], [CryptoError],
- * [AddressError], [ProviderError], [SigningError], or [TxBuildError]. [BalanceOverflow] is the
- * one variant that originates in this module's own balance-summation logic. See
+ * Every variant except [BalanceOverflow], [InvariantViolation], and [SigningScopeViolation]
+ * wraps an already-typed error from the module that produced it, rather than re-deriving a
+ * parallel taxonomy (ADR-0013 §6): a caller can always pattern-match through to the original
+ * [MnemonicError], [KeyDerivationError], [CryptoError], [AddressError], [ProviderError],
+ * [SigningError], or [TxBuildError]. [BalanceOverflow] originates in this module's own
+ * balance-summation logic; [SigningScopeViolation] is the Phase 1 signing-policy check
+ * (ADR-0019 §2). See
  * [ADR-0013](../../../../../../docs/DECISIONS/0013-wallet-boundary-and-read-only-state.md) and,
  * for [Signing] and [TransactionAssembly] (Block 1.10b),
  * [ADR-0015](../../../../../../docs/DECISIONS/0015-transaction-signing.md) §5.
@@ -97,4 +99,16 @@ public sealed interface WalletError {
      * @property detail a short, human-readable description of which invariant did not hold.
      */
     public data class InvariantViolation(public val detail: String) : WalletError
+
+    /**
+     * [ReadOnlyWallet.signTestnetFixtureTransaction] rejected the call because the draft's
+     * bound network, scope, or shape is outside the Phase 1 testnet ADA-only path, or the
+     * declared network disagrees with the draft (ADR-0019 §2). Returned before the mnemonic
+     * is parsed.
+     *
+     * @property reason the exact check that failed.
+     */
+    public data class SigningScopeViolation(
+        public val reason: SigningScopeViolationReason,
+    ) : WalletError
 }

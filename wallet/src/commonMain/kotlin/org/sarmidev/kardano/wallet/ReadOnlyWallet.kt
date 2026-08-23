@@ -20,6 +20,7 @@ import org.sarmidev.kardano.provider.ChainQueryProvider
 import org.sarmidev.kardano.provider.Utxo
 import org.sarmidev.kardano.tx.TransactionAssembler
 import org.sarmidev.kardano.tx.TransactionDraft
+import org.sarmidev.kardano.tx.TransactionDraftScope
 import org.sarmidev.kardano.tx.TransactionWitnessSet
 import org.sarmidev.kardano.tx.VerificationKeyWitness
 
@@ -41,11 +42,12 @@ import org.sarmidev.kardano.tx.VerificationKeyWitness
  * ([balance]), and — as of Block 1.10b, ADR-0015 §1 — sign an already-built
  * [org.sarmidev.kardano.tx.TransactionDraft] into a signed, unsubmitted artifact
  * ([signTestnetFixtureTransaction]). Its scope-explicit name and [ExperimentalKardanoSigningScope]
- * opt-in requirement (ADR-0018) are this repository's compiler/IDE-visible signal that it is
- * not a general-purpose wallet signing API — see its own KDoc for the exact scope (ADR-0015
- * §2a) and [ExperimentalKardanoSigningScope]'s KDoc for exactly what that signal does and does
- * not achieve. This type never submits a transaction (submission is Block 1.11) and introduces
- * no persistence: an instance lives only as long as the caller keeps the in-memory reference.
+ * opt-in requirement (ADR-0018) remain a compiler/IDE-visible signal that it is not a
+ * general-purpose wallet signing API; ADR-0019 additionally binds [TransactionDraft] to
+ * network/scope and rejects a mismatched or mainnet draft before any mnemonic is parsed. See
+ * [signTestnetFixtureTransaction]'s own KDoc for the exact checks. This type never submits a
+ * transaction (submission is Block 1.11) and introduces no persistence: an instance lives only
+ * as long as the caller keeps the in-memory reference.
  *
  * @property network the network [address] was generated for.
  * @property address the wallet's generated testnet/mainnet base address.
@@ -234,18 +236,23 @@ public class ReadOnlyWallet private constructor(
          * Signs [draft] with the payment key derived from [words], returning the full signed
          * `transaction` and the transaction id (ADR-0015 §1-§3, Block 1.10b).
          *
-         * This is **not** a general-purpose wallet signing API (ADR-0015 §2a): it authorizes
-         * signing only for the Phase 1 testnet test-fixture flow already used by [restore] —
-         * `Network.TESTNET`, the cited test-only mnemonic, and an ADA-only single-payment
-         * [TransactionDraft] produced by `TransactionBuilder`/`TransactionBodySerializer`. Its
-         * name and the required [ExperimentalKardanoSigningScope] opt-in (ADR-0018) say so
-         * explicitly at every call site — **both are intent signals, not runtime enforcement**:
-         * this function still takes whatever [words]/[network]/[draft] it is given and has no
-         * way to verify that [words] is the Phase 1 fixture, that [network] is testnet, or that
-         * [draft] was built for the network [network] claims — that guarantee is a call-site/
-         * checkpoint discipline, not a check this function performs. See
-         * [ExperimentalKardanoSigningScope]'s KDoc for exactly what opting in does and does not
-         * mean, including why it has no effect on Swift/iOS consumers of the compiled framework.
+         * This is **not** a general-purpose wallet signing API (ADR-0015 §2a, ADR-0019): it
+         * authorizes signing only for the Phase 1 testnet test-fixture flow — `Network.TESTNET`,
+         * the cited test-only mnemonic, and an ADA-only single-payment [TransactionDraft]
+         * produced by `TransactionBuilder`/`TransactionBodySerializer`. Before [Mnemonic.parse]
+         * or any key derivation, this function rejects the call when:
+         * 1. [TransactionDraft.scope] is not
+         *    [org.sarmidev.kardano.tx.TransactionDraftScope.Phase1AdaOnlySinglePayment];
+         * 2. [TransactionDraft.network] is not [Network.TESTNET];
+         * 3. the declared [network] argument does not equal [TransactionDraft.network];
+         * 4. the draft's input/output counts are not the Phase 1 ADA-only single-payment shape.
+         *
+         * Those four checks close the ADR-0018 compiled-artifact gap (a mainnet-built draft
+         * signed under a declared-`TESTNET` argument). They return
+         * [WalletError.SigningScopeViolation] and do not parse [words]. The required
+         * [ExperimentalKardanoSigningScope] opt-in remains a Kotlin-compiler intent signal
+         * (ADR-0018) and does not replace these runtime checks; it also does not carry over as
+         * a Swift compile-time gate (ADR-0019).
          *
          * Derives the account-0 payment key ([PAYMENT_PATH]) exactly as [restore] does, then:
          * hashes [draft]'s body ([Hashing.blake2b256]) to the 32-byte `bodyHash` / transaction
@@ -260,35 +267,26 @@ public class ReadOnlyWallet private constructor(
          * returning, on every path (success or failure); the returned
          * [WalletSignedTransaction] retains none of them.
          *
-         * **[network] is intentionally not read by this function's implementation.** Payment-key
-         * derivation ([PAYMENT_PATH]) and signing are network-independent, and this function
-         * builds no address, so there is nothing here for [network] to affect. It is kept as an
-         * explicit parameter — rather than dropped — purely so this entry point's signature
-         * mirrors [restore]'s `(words, network)` shape exactly, per ADR-0015 §1's design, and so
-         * it reads at every call site as the same explicit network declaration [restore] already
-         * requires. Enforcing [network] `==` [Network.TESTNET] is a **Phase 1 call-site/test
-         * discipline, not a runtime check this function performs** (ADR-0015 §2a, ADR-0018):
-         * `:wallet` cannot itself recognize the Phase 1 test fixture or reject mainnet, so every
-         * Phase 1 caller must pass [Network.TESTNET] and the cited fixture explicitly.
-         *
          * @param words the candidate BIP-39 mnemonic words for the signing key. Phase 1
          *   call sites must pass the cited test-only fixture.
-         * @param network the network this call site declares it is signing for. Not read by
-         *   this function's implementation (see above); Phase 1 call sites must pass
-         *   [Network.TESTNET].
+         * @param network the network this call site declares it is signing for. Cross-checked
+         *   against [TransactionDraft.network]; must be [Network.TESTNET].
          * @param draft the already-built, unsigned draft to sign. Not rebuilt or altered.
+         *   Must be a testnet Phase 1 ADA-only single-payment draft.
          * @return [KardanoResult.Ok] with the [WalletSignedTransaction], or
          *   [KardanoResult.Err] with a [WalletError] describing the first failure
-         *   ([WalletError.Mnemonic], [WalletError.Derivation], [WalletError.Hashing],
-         *   [WalletError.Signing], or [WalletError.TransactionAssembly]). Never throws.
+         *   ([WalletError.SigningScopeViolation], [WalletError.Mnemonic],
+         *   [WalletError.Derivation], [WalletError.Hashing], [WalletError.Signing], or
+         *   [WalletError.TransactionAssembly]). Never throws.
          */
         @ExperimentalKardanoSigningScope
-        @Suppress("UNUSED_PARAMETER")
         public fun signTestnetFixtureTransaction(
             words: List<String>,
             network: Network,
             draft: TransactionDraft,
         ): KardanoResult<WalletSignedTransaction, WalletError> {
+            validateSigningScope(network, draft)?.let { return KardanoResult.Err(it) }
+
             val mnemonic = when (val result = Mnemonic.parse(words)) {
                 is KardanoResult.Ok -> result.value
                 is KardanoResult.Err -> return KardanoResult.Err(WalletError.Mnemonic(result.error))
@@ -361,6 +359,46 @@ public class ReadOnlyWallet private constructor(
                 paymentPrivateKey?.clear()
                 paymentPublicKey?.clear()
             }
+        }
+
+        /**
+         * ADR-0019 §2: reject a draft that is not the Phase 1 testnet ADA-only path, or whose
+         * bound network disagrees with [declaredNetwork], before [Mnemonic.parse].
+         *
+         * @return the [WalletError.SigningScopeViolation] to return, or `null` when the draft
+         *   may proceed to mnemonic parsing.
+         */
+        private fun validateSigningScope(
+            declaredNetwork: Network,
+            draft: TransactionDraft,
+        ): WalletError.SigningScopeViolation? {
+            if (draft.scope !is TransactionDraftScope.Phase1AdaOnlySinglePayment) {
+                return WalletError.SigningScopeViolation(
+                    SigningScopeViolationReason.UnsupportedDraftScope(draft.scope),
+                )
+            }
+            if (draft.network != Network.TESTNET) {
+                return WalletError.SigningScopeViolation(
+                    SigningScopeViolationReason.UnsupportedDraftNetwork(draft.network),
+                )
+            }
+            if (declaredNetwork != draft.network) {
+                return WalletError.SigningScopeViolation(
+                    SigningScopeViolationReason.DeclaredNetworkMismatch(
+                        declared = declaredNetwork,
+                        draftNetwork = draft.network,
+                    ),
+                )
+            }
+            if (draft.selectedInputs.isEmpty() || draft.outputs.size !in 1..2) {
+                return WalletError.SigningScopeViolation(
+                    SigningScopeViolationReason.UnsupportedDraftShape(
+                        "expected at least one input and 1 or 2 ADA-only outputs, " +
+                            "got inputs=${draft.selectedInputs.size} outputs=${draft.outputs.size}",
+                    ),
+                )
+            }
+            return null
         }
 
         /**

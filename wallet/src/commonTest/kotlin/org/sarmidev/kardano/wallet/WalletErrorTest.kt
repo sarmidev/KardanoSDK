@@ -95,6 +95,14 @@ class WalletErrorTest {
     }
 
     @Test
+    fun signingScopeViolationVariant_carriesReason() {
+        val reason = SigningScopeViolationReason.UnsupportedDraftNetwork(Network.MAINNET)
+        val error = WalletError.SigningScopeViolation(reason)
+
+        assertEquals(reason, error.reason)
+    }
+
+    @Test
     fun distinctVariants_areNotEqual() {
         val mnemonicError: WalletError = WalletError.Mnemonic(MnemonicError.ChecksumMismatch)
         val overflowError: WalletError = WalletError.BalanceOverflow(partialCount = 0)

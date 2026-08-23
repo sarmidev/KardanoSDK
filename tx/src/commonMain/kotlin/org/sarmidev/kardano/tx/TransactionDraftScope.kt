@@ -19,3 +19,9 @@ public sealed interface TransactionDraftScope {
      */
     public data object Phase1AdaOnlySinglePayment : TransactionDraftScope
 }
+
+/**
+ * Never stamped by [TransactionBodySerializer] or [TransactionBuilder]. Present so
+ * signing-policy tests can construct a draft whose scope Phase 1 signing rejects.
+ */
+internal data object UnsupportedTransactionDraftScope : TransactionDraftScope

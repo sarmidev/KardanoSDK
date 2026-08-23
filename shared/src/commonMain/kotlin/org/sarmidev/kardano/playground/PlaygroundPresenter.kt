@@ -36,6 +36,7 @@ import org.sarmidev.kardano.tx.TransactionOutput
 import org.sarmidev.kardano.tx.TxBuildError
 import org.sarmidev.kardano.wallet.ExperimentalKardanoSigningScope
 import org.sarmidev.kardano.wallet.ReadOnlyWallet
+import org.sarmidev.kardano.wallet.SigningScopeViolationReason
 import org.sarmidev.kardano.wallet.WalletBalance
 import org.sarmidev.kardano.wallet.WalletError
 import org.sarmidev.kardano.wallet.WalletSignedTransaction
@@ -682,7 +683,27 @@ internal object PlaygroundPresenter {
         is WalletError.TransactionAssembly ->
             "Transaction assembly failed: ${presentTxBuildError(error.error)}"
         is WalletError.InvariantViolation -> "Internal error: ${error.detail}"
+        is WalletError.SigningScopeViolation -> presentSigningScopeViolation(error.reason)
     }
+
+    /**
+     * Maps a [SigningScopeViolationReason] to a human-readable single-line message. Names the
+     * rejected network or scope without implying a readiness claim (ADR-0019).
+     */
+    internal fun presentSigningScopeViolation(reason: SigningScopeViolationReason): String =
+        when (reason) {
+            is SigningScopeViolationReason.UnsupportedDraftScope ->
+                "Signing rejected: draft scope ${reason.scope} is not the Phase 1 ADA-only " +
+                    "single-payment path."
+            is SigningScopeViolationReason.UnsupportedDraftNetwork ->
+                "Signing rejected: draft was built for ${reason.draftNetwork.name}, not testnet."
+            is SigningScopeViolationReason.DeclaredNetworkMismatch ->
+                "Signing rejected: declared network ${reason.declared.name} does not match " +
+                    "draft network ${reason.draftNetwork.name}."
+            is SigningScopeViolationReason.UnsupportedDraftShape ->
+                "Signing rejected: draft shape is not the Phase 1 ADA-only single-payment " +
+                    "path (${reason.detail})."
+        }
 
     /**
      * Maps a [SigningError] to a human-readable single-line message. Never renders key,

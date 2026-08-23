@@ -13,6 +13,7 @@ import org.sarmidev.kardano.tx.TransactionBodySerializer
 import org.sarmidev.kardano.tx.TransactionDraft
 import org.sarmidev.kardano.tx.TransactionOutput
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.fail
 
@@ -42,16 +43,21 @@ class ReadOnlyWalletSignTestnetFixtureTransactionMnemonicTest {
     private companion object {
         const val TESTNET_TYPE_00 =
             "addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs68faae"
+        const val MAINNET_TYPE_00 =
+            "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+
+        val unusedWords = listOf("not", "a", "mnemonic")
     }
 
-    private fun fixtureDraft(): TransactionDraft {
-        val address = requireNotNull(Address.parse(TESTNET_TYPE_00).getOrNull())
+    private fun fixtureDraft(network: Network = Network.TESTNET): TransactionDraft {
+        val bech32 = if (network == Network.TESTNET) TESTNET_TYPE_00 else MAINNET_TYPE_00
+        val address = requireNotNull(Address.parse(bech32).getOrNull())
         val txHash = requireNotNull(TxHash.of(ByteArray(TxHash.SIZE) { 1 }).getOrNull())
         val utxoRef = requireNotNull(UtxoRef.of(txHash, 0L).getOrNull())
         val fee = requireNotNull(Lovelace.of(170_000L).getOrNull())
         val output = TransactionOutput(address, requireNotNull(Lovelace.of(2_000_000L).getOrNull()))
         val request = TransactionBodyRequest(
-            network = Network.TESTNET,
+            network = network,
             inputs = listOf(utxoRef),
             outputs = listOf(output),
             fee = fee,
@@ -87,5 +93,60 @@ class ReadOnlyWalletSignTestnetFixtureTransactionMnemonicTest {
         val err = assertIs<KardanoResult.Err<WalletError>>(result)
         val mnemonicError = assertIs<WalletError.Mnemonic>(err.error)
         assertIs<MnemonicError.WordNotInWordlist>(mnemonicError.error)
+    }
+
+    @Test
+    fun signTestnetFixtureTransaction_mainnetDraftDeclaredTestnet_isSigningScopeViolationBeforeMnemonicParse() {
+        val result = ReadOnlyWallet.signTestnetFixtureTransaction(
+            unusedWords,
+            Network.TESTNET,
+            fixtureDraft(Network.MAINNET),
+        )
+
+        val err = assertIs<KardanoResult.Err<WalletError>>(result)
+        val violation = assertIs<WalletError.SigningScopeViolation>(err.error)
+        val reason = assertIs<SigningScopeViolationReason.UnsupportedDraftNetwork>(violation.reason)
+        assertEquals(Network.MAINNET, reason.draftNetwork)
+    }
+
+    @Test
+    fun signTestnetFixtureTransaction_testnetDraftDeclaredMainnet_isSigningScopeViolationBeforeMnemonicParse() {
+        val result = ReadOnlyWallet.signTestnetFixtureTransaction(
+            unusedWords,
+            Network.MAINNET,
+            fixtureDraft(Network.TESTNET),
+        )
+
+        val err = assertIs<KardanoResult.Err<WalletError>>(result)
+        val violation = assertIs<WalletError.SigningScopeViolation>(err.error)
+        val reason = assertIs<SigningScopeViolationReason.DeclaredNetworkMismatch>(violation.reason)
+        assertEquals(Network.MAINNET, reason.declared)
+        assertEquals(Network.TESTNET, reason.draftNetwork)
+    }
+
+    @Test
+    fun signTestnetFixtureTransaction_unsupportedScope_isSigningScopeViolationBeforeMnemonicParse() {
+        val result = ReadOnlyWallet.signTestnetFixtureTransaction(
+            unusedWords,
+            Network.TESTNET,
+            fixtureDraft().withUnsupportedScopeForPolicyTest(),
+        )
+
+        val err = assertIs<KardanoResult.Err<WalletError>>(result)
+        val violation = assertIs<WalletError.SigningScopeViolation>(err.error)
+        assertIs<SigningScopeViolationReason.UnsupportedDraftScope>(violation.reason)
+    }
+
+    @Test
+    fun signTestnetFixtureTransaction_incompatibleShape_isSigningScopeViolationBeforeMnemonicParse() {
+        val result = ReadOnlyWallet.signTestnetFixtureTransaction(
+            unusedWords,
+            Network.TESTNET,
+            fixtureDraft().withIncompatibleShapeForPolicyTest(),
+        )
+
+        val err = assertIs<KardanoResult.Err<WalletError>>(result)
+        val violation = assertIs<WalletError.SigningScopeViolation>(err.error)
+        assertIs<SigningScopeViolationReason.UnsupportedDraftShape>(violation.reason)
     }
 }

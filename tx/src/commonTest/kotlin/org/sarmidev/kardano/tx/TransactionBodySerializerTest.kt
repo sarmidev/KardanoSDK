@@ -304,6 +304,31 @@ class TransactionBodySerializerTest {
     }
 
     @Test
+    fun withUnsupportedScopeForPolicyTest_replacesScopeOnly() {
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBodySerializer.serialize(
+                TransactionBodyRequest(
+                    network = Network.TESTNET,
+                    inputs = listOf(utxoRef(1, 0L)),
+                    outputs = listOf(paymentOutput()),
+                    fee = lovelace(DEFAULT_FEE),
+                ),
+            ),
+        ).value
+
+        val rewritten = draft.withUnsupportedScopeForPolicyTest()
+
+        assertEquals(UnsupportedTransactionDraftScope, rewritten.scope)
+        assertEquals(draft.network, rewritten.network)
+        assertEquals(draft.selectedInputs, rewritten.selectedInputs)
+        assertEquals(draft.outputs, rewritten.outputs)
+        assertEquals(draft.fee, rewritten.fee)
+        assertEquals(draft.ttl, rewritten.ttl)
+        assertEquals(draft.bodyCbor().toList(), rewritten.bodyCbor().toList())
+        assertTrue(draft != rewritten)
+    }
+
+    @Test
     fun negativeTtlIsRejectedAsSerializationError() {
         val request = TransactionBodyRequest(
             network = Network.TESTNET,
