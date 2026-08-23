@@ -33,10 +33,13 @@ Policy (documented, not a strength claim):
   rejected; ``.dynamic`` is exactly one ``SHT_DYNAMIC`` with
   ``Elf64_Dyn`` entsize, ``sh_link`` to ``.dynstr``, and exact file
   correspondence with the single ``PT_DYNAMIC``
-- printable NUL-terminated absolute path-like strings (start with ``/``,
-  length >= 2) may use only documented remap prefixes (including rustc
-  ``/rust/deps``) and the listed runtime prefixes, matched as
-  ``path == prefix`` or ``path.startswith(prefix + "/")``
+- printable NUL-terminated absolute path-like strings (leading ``/``,
+  first component starts with a letter/``_``/``.``, and is either at
+  least two characters or followed by ``/``) may use only documented
+  remap prefixes (including rustc ``/rust/deps``) and the listed
+  runtime prefixes, matched as ``path == prefix`` or
+  ``path.startswith(prefix + "/")``. Fragments such as ``/0`` and
+  ``/N`` are not paths.
 """
 
 from __future__ import annotations
@@ -530,7 +533,21 @@ def is_allowed_absolute_path(path: str) -> bool:
 
 
 def is_absolute_path_like(text: str) -> bool:
-    return len(text) >= 2 and text.startswith("/")
+    """True for an absolute filesystem-like path, not a slash fragment.
+
+    The first component must start with an ASCII letter, underscore, or
+    dot. A one-character component is path-like only when a later ``/``
+    follows (``/n/foo``), so ``/0`` and ``/N`` are not treated as paths.
+    """
+    if len(text) < 2 or not text.startswith("/"):
+        return False
+    first, sep, _remainder = text[1:].partition("/")
+    if not first:
+        return False
+    head = first[0]
+    if not head.isascii() or not (head.isalpha() or head in "._"):
+        return False
+    return len(first) >= 2 or bool(sep)
 
 
 def extract_nul_terminated_strings(data: bytes) -> list[str]:

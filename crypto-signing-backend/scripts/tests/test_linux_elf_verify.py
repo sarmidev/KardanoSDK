@@ -763,9 +763,14 @@ class LinuxElfVerifyTests(unittest.TestCase):
                 with self.assertRaisesRegex(elf.ElfError, "embedded host-absolute"):
                     elf.parse_elf64_le_x86_64_dso(build_elf(embed=payload))
         benign = elf.parse_elf64_le_x86_64_dso(
-            build_elf(embed=b"foo/bar not-a-path GLIBC_2.35 slash/text\x00")
+            build_elf(embed=b"foo/bar not-a-path GLIBC_2.35 slash/text\x00/0\x00/N\x00")
         )
         self.assertEqual(benign.forbidden_paths, [])
+        self.assertFalse(elf.is_absolute_path_like("/0"))
+        self.assertFalse(elf.is_absolute_path_like("/N"))
+        self.assertFalse(elf.is_absolute_path_like("//cargo"))
+        self.assertTrue(elf.is_absolute_path_like("/tmp/untracked-host"))
+        self.assertTrue(elf.is_absolute_path_like("/cargo-evil"))
         with self.assertRaisesRegex(elf.ElfError, "embedded host-absolute"):
             elf.parse_elf64_le_x86_64_dso(
                 build_elf(embed=b"note\x00/tmp/untracked-host\x00more\x00")

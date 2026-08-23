@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Verifier fail-closes unparseable `GLIBC_*`, Verneed chains, section 0 / `.dynamic`, and non-allowlisted absolute paths. Allowlist includes rustc `/rust/deps`. Runs `32669707437` and `32670749687` superseded. Not in CHECKSUMS until two independent hashes match and Phase A/B re-review is GO. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Verifier fail-closes unparseable `GLIBC_*`, Verneed chains, section 0 / `.dynamic`, and non-allowlisted path-like strings. Allowlist includes rustc `/rust/deps`. Slash fragments `/0` `/N` are not paths. Runs `32669707437`, `32670749687`, and `32671207032` superseded. Not in CHECKSUMS until two independent hashes match and Phase A/B re-review is GO. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -118,7 +118,8 @@ Date: 2026-08-23
   (ImageOS `ubuntu22`) with rustc 1.97.0 / `x86_64-unknown-linux-gnu`.
   Two independent jobs plus JVM KAT must match; promotion waits for
   re-review GO. Runs `32669707437` and `32670749687` (path allowlist
-  missed rustc `/rust/deps`) are superseded. CHECKSUMS still has
+  missed rustc `/rust/deps`) and `32671207032` (`/0` `/N` slash
+  fragments) are superseded. CHECKSUMS still has
   the eight committed artifacts. Device runtime remains historical
   (W5-2). Do not start Windows or merge/tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
@@ -240,7 +241,8 @@ Do not use:
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase A/B re-review is the next gate (promotion
 only after two independent `ubuntu-22.04` hashes match **and** that
-re-review is GO). Runs `32669707437` and `32670749687` are superseded;
+re-review is GO). Runs `32669707437`, `32670749687`, and `32671207032`
+are superseded;
 do not promote from them. Do not start Windows until then. Residual owner work:
 authenticated GitHub artifact download, secret-scanning / Dependabot,
 the manual accessibility walkthrough, and a post-replacement Android

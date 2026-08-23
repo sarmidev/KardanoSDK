@@ -311,5 +311,5 @@ On `fix/native-build-and-platform-evidence`:
   remap prefixes plus `/lib64` `/lib` `/usr/lib` `/usr/lib64` and
   rustc `/rust/deps`) and two-build identity; it is not in CHECKSUMS
   until Phase A/B re-review is GO and a promotion commit lands. Runs
-  `32669707437` and `32670749687` are superseded.
+  `32669707437`, `32670749687`, and `32671207032` are superseded.
   Linux ARM, musl, older glibc, and Windows remain out of scope.

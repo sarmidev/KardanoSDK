@@ -256,8 +256,10 @@ rustc 1.97 compiler-crate remap observed on ubuntu-22.04 run
 `32670749687` (gimli/addr2line/rustc-demangle/miniz_oxide). Match is
 exact prefix plus `/`, so `/cargo-evil` is not `/cargo`.
 `/tmp/untracked-host` and `/usr/local/private-build` are rejected.
-Runs `32669707437` and `32670749687` are superseded; a fresh Phase A/B
-at this verifier tip is required before any promotion review.
+Slash fragments such as `/0` and `/N` (run `32671207032`) are not
+paths. Runs `32669707437`, `32670749687`, and `32671207032` are
+superseded; a fresh Phase A/B at this verifier tip is required before
+any promotion review.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)
