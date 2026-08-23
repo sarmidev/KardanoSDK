@@ -180,25 +180,39 @@ Documentation and claim-language checks:
 
 ```bash
 rg -n "TESTING|fixtures|test vector|commonTest|jvmTest|iosSimulatorArm64Test|testAndroidHostTest" README.md docs/ core/README.md shared/README.md
-python3 scripts/check_restricted_claims.py
 python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive
+python3 scripts/check_handoff_archive.py
+python3 scripts/check_restricted_claims.py
 ```
 
 `scripts/check_restricted_claims.py` classifies each restricted-claim phrase
 match on its own (never a whole-line exclusion), reports `path:line:column`,
-and prefers the longest phrase. It is the CI `restricted-claim-scan` job. It
-does not scan credentials.
+and prefers the longest phrase. It enumerates tracked files with
+`git ls-files -z` and scans `.md`, `.mdc`, `.html`, `.kt`, `.kts`, `.swift`,
+`.xml`, `.properties`, `.toml`, `.yaml`, `.yml`, and `.json`. Exclusions are
+exact files only. CI runs the unit tests and the archive byte check before the
+scan. It does not scan credentials.
+
+`scripts/check_handoff_archive.py` restores the six documented archive link
+rewrites at the byte level (no newline normalization) and hashes the result
+with SHA-256. The archived snapshot keeps its original trailing blank line;
+`.gitattributes` scopes `whitespace=-blank-at-eof` to that file only so
+`git diff --check` stays clean without a global whitespace suppress.
 
 Full-history credential scan (Gitleaks CLI, not a third-party Action wrapper):
 
 ```bash
+python3 -m unittest scripts.tests.test_gitleaks_allowlist
 python3 scripts/install_gitleaks.py
 python3 scripts/check_gitleaks.py
-python3 -m unittest scripts.tests.test_gitleaks_allowlist
 ```
 
 The installer verifies the official `gitleaks_*_checksums.txt` digest and the
-selected archive digest before extracting. The binary is written to
-`.gitleaks-bin/` (gitignored) and is never committed. Output is redacted.
-Allowlists are match-level only (cited CIP-19 payment-credential hex + exact
-test path). See `.gitleaks.toml` and `docs/RELEASING.md`.
+selected archive digest, reads the expected member into memory, and writes the
+binary through an exclusive temporary sibling (mode `0755`) before an atomic
+replace. It refuses a destination symlink and a world-writable archive member.
+The binary is written to `.gitleaks-bin/` (gitignored) and is never committed.
+CI runs the helper/installer/allowlist tests before install and scan. Output
+is redacted. Allowlists are match-level only (cited CIP-19 payment-credential
+hex **and** an exact repo-root path, including the helper). See
+`.gitleaks.toml` and `docs/RELEASING.md`.

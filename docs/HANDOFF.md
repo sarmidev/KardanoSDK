@@ -87,7 +87,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 2 | `fix/signing-scope-enforcement` | `a632b7d` | ADR-0019 draft binding and fixture-identity checks |
 | 3 | `fix/playground-operation-lifecycle` | `a34afdc` | Generation/token lifecycle and accessibility semantics |
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
-| 5 | `fix/release-docs-and-scanners` | this branch, stacked on `3936047` | Docs reconciliation (landed), HANDOFF curation (this commit), then restricted-claim and Gitleaks scanners |
+| 5 | `fix/release-docs-and-scanners` | four original + two review-fix, stacked on `3936047` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Review-fix commits harden scanners and archive/CI. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -98,22 +98,31 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
-  `3936047`) — IN PROGRESS.**
-  - **Commit 1 — documentation reconciliation.** ADR-0015 header now matches the
-    completed 1.10c result note. ADR-0017 header and Non-goals point at the shipped
-    1.11b/1.11c result note. `PROJECT_BRIEF` links `DELIVERY_RECORD` directly. Module
-    README status lines use "Not independently reviewed"; provider READMEs keep the
-    testnet/preprod qualifier. Audit §7 records the new status pointers.
-  - **Commit 2 — this HANDOFF curation.** Historical implementation and session content
-    preserved verbatim in `docs/archive/handoff/2026-08-23-pre-curation.md`. Coverage
-    is checked by `scripts/check_handoff_archive.py`.
-  - **Commit 3 — restricted-claim scanner.** `scripts/check_restricted_claims.py`
-    replaces the inline `verify.yml` grep. Classification is per match; output is
-    `path:line:column`; longest phrase wins. Unit tests cover same-line mixed
-    hits, exclusion boundaries, and near-miss words.
-  - **Commit 4 — full-history Gitleaks.** Checksum-verified CLI installer
-    (`v8.30.1`, official GitHub release checksums file). CI checkout uses
-    `fetch-depth: 0`. Allowlists are match-level CIP-19 test-path entries only.
+  `3936047`) — four original commits complete, plus two review-fix commits.**
+  - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now
+    matches the completed 1.10c result note. ADR-0017 header and Non-goals point
+    at the shipped 1.11b/1.11c result note. `PROJECT_BRIEF` links
+    `DELIVERY_RECORD` directly. Module README status lines use "Not independently
+    reviewed"; provider READMEs keep the testnet/preprod qualifier. Audit §7
+    records the new status pointers.
+  - **Commit 2 — HANDOFF curation (`8854146`).** Historical implementation and
+    session content preserved verbatim in
+    `docs/archive/handoff/2026-08-23-pre-curation.md`. Coverage is checked by
+    `scripts/check_handoff_archive.py`.
+  - **Commit 3 — restricted-claim scanner (`fe7db78`).**
+    `scripts/check_restricted_claims.py` replaces the inline `verify.yml` grep.
+    Classification is per match; output is `path:line:column`; longest phrase
+    wins.
+  - **Commit 4 — full-history Gitleaks (`d62a8ae`).** Checksum-verified CLI
+    installer (`v8.30.1`). CI checkout uses `fetch-depth: 0`.
+  - **Review-fix 1 — scanner hardening (`641a5c3`).** Root-exact Gitleaks
+    allowlist including the helper path; explicit `display-safe` compound only;
+    sentence-boundary negation; Markdown-emphasis matching; exact-file claim
+    exclusions; `git ls-files -z`; installer refuses dest symlinks and
+    world-writable archive members.
+  - **Review-fix 2 — archive, CI, and docs (this commit).** Byte-level archive
+    restore/hash; path-scoped `.gitattributes` for the archive trailing blank
+    line; CI runs the scanner/archive tests before scans.
 
 ### Session Summary (Provider boundaries and timeouts)
 
@@ -182,9 +191,10 @@ Do not use:
 
 ## Next Recommended Task
 
-Prompt 5 on this branch is implemented. Residual owner work: an authenticated
-GitHub secret-scanning / Dependabot pass, the manual accessibility walkthrough,
-and a human review of the stacked PRs. Do not merge from an automated session.
+Prompt 5 on this branch is complete (four original commits plus two review-fix
+commits). Residual owner work: an authenticated GitHub secret-scanning /
+Dependabot pass, the manual accessibility walkthrough, and a human review of
+the stacked PRs. Do not merge from an automated session.
 
 ## Prompt For Cursor Business/Product Work
 

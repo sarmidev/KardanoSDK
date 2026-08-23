@@ -4,11 +4,8 @@
 The 2026-08-23 snapshot is a verbatim copy of docs/HANDOFF.md at
 fix/provider-boundaries-and-timeouts (3936047), except the six
 `](DECISIONS/` Markdown links are rewritten to `](../../DECISIONS/` so they
-resolve from docs/archive/handoff/. Reversing that rewrite must restore the
-recorded SHA-256.
-
-This script is a coverage check, not a claim about completeness of later
-edits to the living docs/HANDOFF.md.
+resolve from docs/archive/handoff/. Reversing that rewrite at the byte
+level must restore the recorded SHA-256. Newlines are not normalized.
 """
 
 from __future__ import annotations
@@ -20,13 +17,13 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Recorded from docs/HANDOFF.md immediately before the 2026-08-23 curation
-# (UTF-8 SHA-256 of the living file at 3936047).
+# (SHA-256 of the raw file bytes at 3936047).
 PRE_CURATION_SHA256 = "39998bd77ee96a55c3e2473e4aee73f7a9cc2a65f91136fc340a1af849cf21c4"
 PRE_CURATION_BYTES = 358808
 PRE_CURATION_LINES = 4875
 ARCHIVE_RELATIVE = Path("docs/archive/handoff/2026-08-23-pre-curation.md")
-LINK_ARCHIVE_PREFIX = "](../../DECISIONS/"
-LINK_ORIGINAL_PREFIX = "](DECISIONS/"
+LINK_ARCHIVE_PREFIX = b"](../../DECISIONS/"
+LINK_ORIGINAL_PREFIX = b"](DECISIONS/"
 EXPECTED_LINK_REWRITES = 6
 DECISIONS_TARGETS = (
     "docs/DECISIONS/0010-key-derivation-backend-swap-and-public-key-projection.md",
@@ -37,12 +34,18 @@ DECISIONS_TARGETS = (
 )
 
 
-def sha256_utf8(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
-def restore_original_links(archive_text: str) -> str:
-    return archive_text.replace(LINK_ARCHIVE_PREFIX, LINK_ORIGINAL_PREFIX)
+def restore_original_links(archive_bytes: bytes) -> bytes:
+    return archive_bytes.replace(LINK_ARCHIVE_PREFIX, LINK_ORIGINAL_PREFIX)
+
+
+def count_lines(data: bytes) -> int:
+    if not data:
+        return 0
+    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
 
 
 def verify_pre_curation_snapshot(repo_root: Path = REPO_ROOT) -> list[str]:
@@ -51,29 +54,28 @@ def verify_pre_curation_snapshot(repo_root: Path = REPO_ROOT) -> list[str]:
     if not archive_path.is_file():
         return [f"missing archive snapshot: {ARCHIVE_RELATIVE.as_posix()}"]
 
-    archive_text = archive_path.read_text(encoding="utf-8")
-    rewrite_count = archive_text.count(LINK_ARCHIVE_PREFIX)
+    archive_bytes = archive_path.read_bytes()
+    rewrite_count = archive_bytes.count(LINK_ARCHIVE_PREFIX)
     if rewrite_count != EXPECTED_LINK_REWRITES:
         errors.append(
             f"expected {EXPECTED_LINK_REWRITES} rewritten DECISIONS links, "
             f"found {rewrite_count}"
         )
-    if LINK_ORIGINAL_PREFIX in archive_text:
+    if LINK_ORIGINAL_PREFIX in archive_bytes:
         errors.append("archive still contains unresolved ](DECISIONS/ links")
 
-    restored = restore_original_links(archive_text)
-    restored_bytes = len(restored.encode("utf-8"))
-    restored_lines = restored.count("\n") + (0 if restored.endswith("\n") else 1)
-    restored_sha = sha256_utf8(restored)
+    restored = restore_original_links(archive_bytes)
+    restored_sha = sha256_bytes(restored)
     if restored_sha != PRE_CURATION_SHA256:
         errors.append(
             f"restored snapshot SHA-256 {restored_sha} != recorded "
             f"{PRE_CURATION_SHA256}"
         )
-    if restored_bytes != PRE_CURATION_BYTES:
+    if len(restored) != PRE_CURATION_BYTES:
         errors.append(
-            f"restored snapshot is {restored_bytes} bytes, expected {PRE_CURATION_BYTES}"
+            f"restored snapshot is {len(restored)} bytes, expected {PRE_CURATION_BYTES}"
         )
+    restored_lines = count_lines(restored)
     if restored_lines != PRE_CURATION_LINES:
         errors.append(
             f"restored snapshot is {restored_lines} lines, expected {PRE_CURATION_LINES}"

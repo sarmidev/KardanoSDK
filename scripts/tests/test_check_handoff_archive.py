@@ -1,4 +1,4 @@
-"""Coverage tests for the HANDOFF archive inventory check."""
+"""Coverage tests for the HANDOFF archive byte inventory check."""
 
 from __future__ import annotations
 
@@ -24,12 +24,40 @@ class HandoffArchiveCheckTests(unittest.TestCase):
             root = Path(tmp)
             dest = root / archive.ARCHIVE_RELATIVE
             dest.parent.mkdir(parents=True)
-            original = (REPO_ROOT / archive.ARCHIVE_RELATIVE).read_text(encoding="utf-8")
-            dest.write_text(original.replace("Kardano SDK", "Changed SDK", 1), encoding="utf-8")
+            original = (REPO_ROOT / archive.ARCHIVE_RELATIVE).read_bytes()
+            dest.write_bytes(original.replace(b"Kardano SDK", b"Changed SDK", 1))
             for relative in archive.DECISIONS_TARGETS:
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text("placeholder\n", encoding="utf-8")
+                target.write_bytes(b"placeholder\n")
+            errors = archive.verify_pre_curation_snapshot(root)
+            self.assertTrue(any("SHA-256" in error for error in errors))
+
+    def test_crlf_mutation_fails_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dest = root / archive.ARCHIVE_RELATIVE
+            dest.parent.mkdir(parents=True)
+            original = (REPO_ROOT / archive.ARCHIVE_RELATIVE).read_bytes()
+            dest.write_bytes(original.replace(b"\n", b"\r\n"))
+            for relative in archive.DECISIONS_TARGETS:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"placeholder\n")
+            errors = archive.verify_pre_curation_snapshot(root)
+            self.assertTrue(any("SHA-256" in error for error in errors))
+
+    def test_encoding_mutation_fails_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dest = root / archive.ARCHIVE_RELATIVE
+            dest.parent.mkdir(parents=True)
+            original = (REPO_ROOT / archive.ARCHIVE_RELATIVE).read_bytes()
+            dest.write_bytes(original + "é".encode("latin-1"))
+            for relative in archive.DECISIONS_TARGETS:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"placeholder\n")
             errors = archive.verify_pre_curation_snapshot(root)
             self.assertTrue(any("SHA-256" in error for error in errors))
 
@@ -38,10 +66,7 @@ class HandoffArchiveCheckTests(unittest.TestCase):
             root = Path(tmp)
             dest = root / archive.ARCHIVE_RELATIVE
             dest.parent.mkdir(parents=True)
-            dest.write_text(
-                (REPO_ROOT / archive.ARCHIVE_RELATIVE).read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
+            dest.write_bytes((REPO_ROOT / archive.ARCHIVE_RELATIVE).read_bytes())
             errors = archive.verify_pre_curation_snapshot(root)
             self.assertTrue(any("link target missing" in error for error in errors))
 

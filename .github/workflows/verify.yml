@@ -16,6 +16,13 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Run restricted-claim and archive regression tests
+        run: >-
+          python3 -m unittest
+          scripts.tests.test_check_restricted_claims
+          scripts.tests.test_check_handoff_archive
+      - name: Verify HANDOFF archive bytes
+        run: python3 scripts/check_handoff_archive.py
       - name: Scan tracked docs/markdown/source for banned claim language
         # Scope note (W9-3): claim-language scan only. Credential scanning is a
         # separate job. Phrase list, match-by-match classification, and exact
@@ -32,6 +39,8 @@ jobs:
           fetch-depth: 0
       - name: Fetch every ref the checkout can see
         run: git fetch --prune --tags origin
+      - name: Run Gitleaks helper, installer, and allowlist tests
+        run: python3 -m unittest scripts.tests.test_gitleaks_allowlist
       - name: Install pinned Gitleaks CLI
         # CLI only — not a third-party Action wrapper. Version and SHA-256 are
         # pinned in scripts/install_gitleaks.py (resolved live from the

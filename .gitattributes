@@ -1,0 +1,4 @@
+# The archived HANDOFF snapshot is a byte-for-byte copy of the pre-curation
+# file, including its trailing blank line. Scope the check to this path only
+# so `git diff --check` stays clean without disabling whitespace globally.
+docs/archive/handoff/2026-08-23-pre-curation.md whitespace=-blank-at-eof

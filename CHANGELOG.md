@@ -157,17 +157,19 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
   full commit SHA with a version comment instead of a floating major-version tag, so a
   compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).
-- `verify.yml` gained a `restricted-claim-scan` job that runs
+- `verify.yml` gained a `restricted-claim-scan` job that runs the restricted-claim
+  and archive unit tests, the HANDOFF archive byte check, then
   `scripts/check_restricted_claims.py`. The script classifies each phrase match on its
   own (never a whole-line exclusion), reports `path:line:column`, and prefers the
-  longest phrase. Exclusions are exact paths or frozen-record prefixes, each with a
-  rationale in the script. This is a claim-language scan only, not credential scanning
+  longest phrase. Exclusions are exact files only, each with a rationale in the
+  script. This is a claim-language scan only, not credential scanning
   (W9-3 / NF-5).
-- `verify.yml` gained a `credential-scan` job that installs the Gitleaks CLI
-  (`v8.30.1`, checksum-verified from the official GitHub release checksums file) and
-  scans complete git history with redacted output. Allowlists are match-level only
-  for the cited CIP-19 payment-credential hex on the exact test paths that
-  `generic-api-key` flags (W9-3).
+- `verify.yml` gained a `credential-scan` job that runs the Gitleaks helper /
+  installer / allowlist tests, installs the Gitleaks CLI (`v8.30.1`,
+  checksum-verified from the official GitHub release checksums file), and scans
+  complete git history with redacted output. Allowlists are match-level only
+  for the cited CIP-19 payment-credential hex **and** an exact repo-root path,
+  including the helper that historically embedded that vector (W9-3).
 - The Playground demo is now a linear, guided story (Welcome → five-step Demo → Summary) with
   plain-language copy, one primary action per step, and technical detail (hashes, fees, CBOR,
   UTxOs, witnesses) collapsed behind an optional "Technical details" toggle, replacing the earlier

@@ -71,10 +71,13 @@ Policy:
    dated file under `docs/archive/handoff/` without editing the prose.
 3. After a move, adjust only repo-relative Markdown links that would otherwise
    break. Do not rewrite historical meaning.
-4. Record the original UTF-8 SHA-256 and extend `scripts/check_handoff_archive.py`
-   so the snapshot can be restored and hashed.
+4. Record the original SHA-256 of the raw file bytes and extend
+   `scripts/check_handoff_archive.py` so the snapshot can be restored and
+   hashed at the byte level (no newline normalization).
 5. Run `python3 scripts/check_handoff_archive.py` before declaring the curation
-   done.
+   done. If the snapshot already ends with a trailing blank line, add a
+   path-scoped `.gitattributes` `whitespace=-blank-at-eof` for that file only
+   so `git diff --check` stays clean.
 
 ## CI tool review — Gitleaks
 
@@ -90,7 +93,7 @@ third-party GitHub Action wrapper.
 | Installer | `scripts/install_gitleaks.py` — verifies the checksums file, then the selected archive, then extracts. The binary is never committed. |
 | Why not an Action wrapper | This repo pins Actions by commit SHA already; a wrapper would add a second, unverified tool chain. Installing the CLI lets CI and a local checkout run the same pinned binary. |
 | Scan scope | Full git history (`fetch-depth: 0`, `git fetch --prune --tags origin`, `gitleaks detect --log-opts=--all`). Output is redacted. |
-| Allowlist | Match-level only in `.gitleaks.toml`: the cited CIP-19 payment-credential hex **and** the exact test path that `generic-api-key` flags. No directory, rule, or commit exclusions. |
+| Allowlist | Match-level only in `.gitleaks.toml`: the cited CIP-19 payment-credential hex **and** an exact repo-root path (`^…$`). Paths are the cited test files plus `scripts/gitleaks_allowlist.py` (the helper historically embedded the same vector). No directory, rule, or commit exclusions. |
 
 This tool is CI-only. It is not redistributed in an SDK artifact.
 
