@@ -61,6 +61,8 @@ tasks.register("resolveAndLockAll") {
             ":shared:testAndroidHostTest",
             ":androidApp:assembleDebug",
             ":androidApp:assembleRelease",
+            ":androidApp:compileDebugUnitTestKotlin",
+            ":androidApp:generateReleaseLintModel",
             ":desktopApp:compileKotlin",
         )
     dependsOn(lockTasks)

@@ -51,4 +51,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    lint {
+        abortOnError = true
+        warningsAsErrors = true
+        checkReleaseBuilds = true
+        // Online freshness detectors. Coordinates are catalog-pinned,
+        // lockfiled, and SHA-256 verified (docs/DEPENDENCY_REVIEW.md).
+        // A newer-library lint hit must not bypass that review.
+        disable += "GradleDependency"
+        disable += "NewerVersionAvailable"
+        disable += "AndroidGradlePluginVersion"
+    }
 }

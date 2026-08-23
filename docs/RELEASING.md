@@ -34,7 +34,8 @@ promise and they do not keep exhaustive `when` expressions compiling without edi
 ## Release checklist
 
 1. Choose a semantic version and create a release branch if the change needs stabilisation.
-2. Run the JVM, Android-host, and iOS compile checks documented in `TESTING.md`.
+2. Run the JVM, Android-host, iOS compile, and Android lint Debug/Release
+   checks documented in `TESTING.md`. Lint warnings fail the build.
    Confirm the wrapper SHA-256 still matches
    `https://services.gradle.org/distributions/gradle-9.7.1-bin.zip.sha256`
    when that is the pinned wrapper.

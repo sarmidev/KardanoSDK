@@ -238,7 +238,31 @@ write extra lockfiles.
 
 `:desktopApp` compile can be UP-TO-DATE and skip resolution, so
 `resolveAndLockAll` explicitly resolves that project's lockable
-classpaths in `doLast`.
+classpaths in `doLast`. `:androidApp:compileDebugUnitTestKotlin` and
+`:androidApp:generateReleaseLintModel` are in the lock graph so STRICT
+mode has state for lint's unit-test classpaths (there is no
+`compileReleaseUnitTestKotlin` task in this module).
+
+## Android lint gate (2026-08-23)
+
+`androidApp` lint uses `abortOnError`, `warningsAsErrors`, and
+`checkReleaseBuilds`. Disabled checks are only the online freshness
+detectors — `GradleDependency`, `NewerVersionAvailable`,
+`AndroidGradlePluginVersion` — because catalog pins, lockfiles, and
+`gradle/verification-metadata.xml` already record reviewed versions.
+No lint baseline is committed.
+
+Asset disposition after Debug+Release lint (`No issues found.`):
+
+| Finding | Disposition |
+|---|---|
+| Freshness / OldTargetApi / AGP / Kotlin | Resolved by commits 2–4 or disabled as online freshness |
+| `MonochromeLauncherIcon` | Added `drawable-nodpi/ic_launcher_monochrome.png` (white silhouette from `drawable-xxxhdpi/ic_launcher_foreground.png` alpha) to both adaptive XMLs |
+| `IconLocation` | Moved splash PNGs to `drawable-nodpi/` and `drawable-night-nodpi/` |
+| `IconLauncherShape` on 10 legacy `ic_launcher.png` squares | 1-pixel transparent inset so the asset is not a filled square. Mark and brand fill are unchanged. Owner visual check remains for pre-API-26 tiles. Round mipmaps were already not filled squares. |
+
+`verify.yml` job `android-lint` runs both variants. Existing
+claim / archive / Gitleaks / action-pin jobs are unchanged.
 
 Re-running `resolveAndLockAll --write-locks` on 2026-08-23 produced
 byte-identical SHA-256 hashes for every lockfile. Do not hand-edit

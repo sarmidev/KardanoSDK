@@ -139,3 +139,29 @@ jobs:
           :wallet:compileKotlinIosArm64
           :tx:compileKotlinIosArm64
           :shared:compileKotlinIosArm64
+
+  android-lint:
+    name: Android lint Debug and Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          # Explicit v4.4.3/v5.0.2 defaults. v6 is not adopted (see
+          # docs/DEPENDENCY_REVIEW.md).
+          cache-disabled: false
+          cache-read-only: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}
+          cache-write-only: false
+          cache-cleanup: on-success
+      - name: Lint Debug and Release
+        run: >-
+          ./gradlew --no-daemon
+          :androidApp:lintDebug
+          :androidApp:lintRelease

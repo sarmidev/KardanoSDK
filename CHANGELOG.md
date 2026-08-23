@@ -100,6 +100,15 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- Android lint is now a CI gate (`:androidApp:lintDebug` and
+  `lintRelease`, `warningsAsErrors`). Online freshness detectors
+  (`GradleDependency`, `NewerVersionAvailable`,
+  `AndroidGradlePluginVersion`) are disabled because coordinates are
+  catalog-pinned, lockfiled, and SHA-256 verified. Adaptive icons gained
+  a monochrome layer from the first-party mark; splash PNGs moved to
+  `drawable-nodpi` / `drawable-night-nodpi`; legacy square launchers
+  received a 1-pixel transparent inset so they are not a filled square.
+  Owner should still glance at the pre-API-26 launcher tiles.
 - Dependency locking and verification (2026-08-23): every lockable
   compile/runtime classpath uses `LockMode.STRICT` with per-project
   `gradle.lockfile`s; `gradle/verification-metadata.xml` records
