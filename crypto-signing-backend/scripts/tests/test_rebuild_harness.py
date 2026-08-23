@@ -340,6 +340,32 @@ class PinnedNdkTests(unittest.TestCase):
         with self.assertRaises(rebuild.RebuildError):
             rebuild.require_pinned_ndk(ndk)
 
+    def test_zip_extract_recreates_clang_symlink(self) -> None:
+        import zipfile
+
+        import install_ndk as ndk_install
+
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        archive = root / "android-ndk-r27c-darwin.zip"
+        dest = root / "extracted"
+        dest.mkdir()
+        bin_prefix = "android-ndk-r27c/toolchains/llvm/prebuilt/darwin-x86_64/bin/"
+        with zipfile.ZipFile(archive, "w") as zf:
+            link = zipfile.ZipInfo(bin_prefix + "clang")
+            link.create_system = 3
+            link.external_attr = 0o120777 << 16
+            zf.writestr(link, b"clang-18")
+            payload = zipfile.ZipInfo(bin_prefix + "clang-18")
+            payload.create_system = 3
+            payload.external_attr = 0o100755 << 16
+            zf.writestr(payload, b"#!/bin/sh\necho clang\n")
+        extracted = ndk_install.extract_zip(archive, dest)
+        clang = extracted / "toolchains/llvm/prebuilt/darwin-x86_64/bin/clang"
+        self.assertTrue(clang.is_symlink())
+        self.assertEqual(os.readlink(clang), "clang-18")
+        self.assertTrue(os.access(clang.resolve(), os.X_OK))
+
     def test_zip_extract_restores_clang_execute_bit(self) -> None:
         import zipfile
 
@@ -368,6 +394,16 @@ class PinnedNdkTests(unittest.TestCase):
         )
         self.assertTrue(clang.is_file())
         self.assertTrue(os.access(clang, os.X_OK))
+
+    def test_flattened_clang_symlink_is_rejected(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        clang = root / "toolchains/llvm/prebuilt/darwin-x86_64/bin/clang"
+        clang.parent.mkdir(parents=True)
+        clang.write_text("clang-18", encoding="utf-8")
+        with self.assertRaises(toolchain.ToolchainError) as raised:
+            toolchain.assert_android_host(root)
+        self.assertIn("flattened zip symlink", str(raised.exception))
 
     def test_pin_ndk_env_overrides_all_names(self) -> None:
         env = {

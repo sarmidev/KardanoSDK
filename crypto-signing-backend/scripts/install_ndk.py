@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import os
 import platform
+import stat
 import sys
 import tempfile
 import urllib.request
@@ -113,9 +114,13 @@ def download_to(url: str, dest: Path) -> None:
             out.write(chunk)
 
 
+def is_zip_symlink(info: zipfile.ZipInfo) -> bool:
+    return stat.S_ISLNK(info.external_attr >> 16)
+
+
 def restore_zip_mode(info: zipfile.ZipInfo, target: Path) -> None:
     """Apply the zip's Unix mode. zipfile.extract drops execute bits."""
-    if not target.is_file():
+    if target.is_symlink() or not target.is_file():
         return
     unix_mode = info.external_attr >> 16
     if unix_mode & 0o111:
@@ -134,12 +139,31 @@ def ensure_prebuilt_bins_executable(ndk_home: Path) -> None:
                 path.chmod(path.stat().st_mode | 0o111)
 
 
+def extract_zip_member(zf: zipfile.ZipFile, info: zipfile.ZipInfo, dest: Path) -> Path:
+    """Extract one member, restoring Unix symlinks that zipfile would flatten.
+
+    NDK darwin zips store `bin/clang` as a symlink to `clang-18`. Plain
+    `ZipFile.extract` writes the target name as an ASCII file; running that
+    file on the runner is `clang-18: command not found` / Exec format error.
+    """
+    target = dest / info.filename
+    if is_zip_symlink(info):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        link_dest = zf.read(info).decode("utf-8")
+        if target.exists() or target.is_symlink():
+            target.unlink()
+        target.symlink_to(link_dest)
+        return target
+    extracted = Path(zf.extract(info, dest))
+    restore_zip_mode(info, extracted)
+    return extracted
+
+
 def extract_zip(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive) as zf:
         for info in zf.infolist():
-            target = Path(zf.extract(info, dest))
-            restore_zip_mode(info, target)
+            extract_zip_member(zf, info, dest)
     extracted = dest / f"android-ndk-{NDK_RELEASE}"
     if not extracted.is_dir():
         raise InstallError(f"zip did not contain android-ndk-{NDK_RELEASE}")

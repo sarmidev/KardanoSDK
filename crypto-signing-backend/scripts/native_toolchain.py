@@ -376,6 +376,11 @@ def assert_android_host(ndk_home: Path) -> dict[str, object]:
     if clang is None:
         raise ToolchainError(f"NDK clang missing under {ndk_home}")
     clang_file = _capture(["file", str(clang)]) if shutil.which("file") else ""
+    if "ASCII text" in clang_file:
+        raise ToolchainError(
+            f"NDK clang at {clang} is a flattened zip symlink ({clang_file!r}). "
+            "extract_zip must recreate Unix symlinks such as clang -> clang-18."
+        )
     try:
         can_run = subprocess.run(
             [str(clang), "--version"],
@@ -383,10 +388,10 @@ def assert_android_host(ndk_home: Path) -> dict[str, object]:
             text=True,
             check=False,
         )
-    except PermissionError as error:
+    except (PermissionError, OSError) as error:
         raise ToolchainError(
-            f"NDK clang is not executable ({clang}). "
-            "Python zipfile extract must restore the zip Unix execute bits."
+            f"NDK clang could not be executed ({clang}): {error}. "
+            "Python zipfile extract must restore Unix symlinks and execute bits."
         ) from error
     info = {
         "ndk_clang": str(clang),

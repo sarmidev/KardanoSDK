@@ -169,7 +169,12 @@ jobs:
             ls -la "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt" || true
             exit 1
           fi
+          ls -la "$(dirname "$CLANG")"
           file "$CLANG"
+          if file "$CLANG" | grep -q "ASCII text"; then
+            echo "clang is a flattened zip symlink, not a Mach-O binary"
+            exit 1
+          fi
           if [ "$(uname -m)" = "arm64" ]; then
             arch -x86_64 "$CLANG" --version
           else

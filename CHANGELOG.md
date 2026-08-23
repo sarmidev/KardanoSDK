@@ -34,8 +34,8 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   still NO-GO until local candidate hashes match a clean runner. macos-26 image
   `ANDROID_NDK*` defaults to `27.3.13750724`; the rebuild job now ignores those
   names and fail-closes on any NDK other than `27.2.12479018`. Python zip
-  extract now restores NDK clang execute bits (CI `Permission denied` on
-  `darwin-x86_64/bin/clang`). Darwin JVM candidates drop `LC_UUID` via
+  extract now restores NDK clang execute bits and Unix `clang -> clang-18`
+  symlinks (CI `Exec format error` / `clang-18: command not found`). Darwin JVM candidates drop `LC_UUID` via
   `-Wl,-no_uuid` / `-Wl,-reproducible`. iOS candidate hashes already matched
   a clean `macos-26` runner on `ea01b12`.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
