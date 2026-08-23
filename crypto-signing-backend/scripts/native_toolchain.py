@@ -170,7 +170,7 @@ def darwin_cc_wrapper_script() -> str:
         "# Appending after \"$@\" makes this the last -install_name the linker sees.\n"
         "exec cc \"$@\" "
         f"-Wl,-install_name,{STABLE_INSTALL_NAME} "
-        "-Wl,-no_uuid -Wl,-reproducible\n"
+        "-Wl,-reproducible\n"
     )
 
 
@@ -190,10 +190,8 @@ def rustflags_darwin_jvm(
     if linker is not None:
         flags.append(f"-Clinker={linker}")
     flags.append(f"-Clink-arg=-Wl,-install_name,{STABLE_INSTALL_NAME}")
-    # Same-size local vs macos-26 dylibs differed only in LC_UUID (and the
-    # arm64 ad-hoc signature over that UUID). Drop the UUID and ask ld for
-    # reproducible output. iOS archives already matched without these flags.
-    flags.append("-Clink-arg=-Wl,-no_uuid")
+    # macos-26 dyld refuses dylibs without LC_UUID ("missing LC_UUID load
+    # command"). Ask ld for a content-derived UUID instead of omitting it.
     flags.append("-Clink-arg=-Wl,-reproducible")
     return flags
 

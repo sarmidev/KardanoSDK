@@ -423,13 +423,13 @@ class ToolchainFlagTests(unittest.TestCase):
         flags = toolchain.rustflags_darwin_jvm(pairs)
         self.assertTrue(any(toolchain.STABLE_INSTALL_NAME in item for item in flags))
         self.assertTrue(any(item.startswith("--remap-path-prefix=") for item in flags))
-        self.assertTrue(any("-Wl,-no_uuid" in item for item in flags))
+        self.assertFalse(any("-Wl,-no_uuid" in item for item in flags))
         self.assertTrue(any("-Wl,-reproducible" in item for item in flags))
 
     def test_darwin_wrapper_appends_install_name(self) -> None:
         script = toolchain.darwin_cc_wrapper_script()
         self.assertIn(f"-Wl,-install_name,{toolchain.STABLE_INSTALL_NAME}", script)
-        self.assertIn("-Wl,-no_uuid", script)
+        self.assertNotIn("-Wl,-no_uuid", script)
         self.assertIn("-Wl,-reproducible", script)
         self.assertIn('exec cc "$@"', script)
 

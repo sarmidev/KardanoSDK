@@ -175,16 +175,15 @@ select one group. Both Darwin JVM targets are built with explicit
 host. Inspection is fail-closed: missing `nm`/`llvm-nm`/`lipo`/`file`/`otool`/`ar`,
 a nonzero tool exit, a missing `fn_func_sign` export, a wrong architecture, or a
 dylib install name other than `@rpath/libkardano_ed25519_bip32_signing.dylib` is a
-failed compare. Darwin JVM links also pass `-Wl,-no_uuid` and `-Wl,-reproducible`
-so LC_UUID cannot differ across otherwise identical hosts.
+failed compare. Darwin JVM links also pass `-Wl,-reproducible` so `LC_UUID` is
+content-derived; macos-26 `dyld` rejects dylibs that omit `LC_UUID`.
 
 `.github/workflows/native-rebuild-evidence.yml` pins `macos-26` and Xcode `26.6`
 (`17F113`). The image default NDK is `27.3.13750724`; the workflow unsets
 `ANDROID_NDK*` and installs revision `27.2.12479018` under a required-empty dest.
 A clean runner rebuilds into a fresh staging target and compares hashes,
 architectures, symbols, install names, and evidence against
-`rebuild-candidates/CANDIDATE_MANIFEST.sha256` when that file exists, otherwise
-against `CHECKSUMS.sha256`. Uploads use `if-no-files-found: error`. The workflow
+`CHECKSUMS.sha256`. Uploads use `if-no-files-found: error`. The workflow
 does not replace committed natives. Ubuntu runs the harness tests and
 `cargo metadata --locked` only.
 
@@ -193,8 +192,11 @@ cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
 
 The first harness commit on this branch (`6cb6810`) is historical review debt: it
 defaulted to the module `target/` and treated missing inspection tools as optional.
-Those bytes are not rewritten. Gate 1 remains **NO-GO** until a clean `macos-26`
-runner matches all eight local candidate hashes.
+Those bytes are not rewritten. Clean `macos-26` run `32660838357` matched
+Android and iOS candidates. Darwin candidates must keep `LC_UUID` (dyld
+rejects `-no_uuid`) and rematch with `-Wl,-reproducible`. Gate 1 stays
+**NO-GO** until all eight candidate hashes match a clean runner. `src/` and
+`CHECKSUMS.sha256` are unchanged until that rematch.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current CHECKSUMS rows. The same

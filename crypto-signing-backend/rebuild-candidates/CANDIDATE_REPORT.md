@@ -4,10 +4,13 @@ These hashes are **not** CHECKSUMS.sha256. Committed src/ binaries are unchanged
 
 Stable Darwin install name: `@rpath/libkardano_ed25519_bip32_signing.dylib`
 
+Darwin keeps `LC_UUID` (macos-26 dyld requires it) and passes `-Wl,-reproducible`.
+Android and iOS already matched clean macos-26 run `32660838357`.
+
 | Artifact | SHA-256 |
 |---|---|
-| `macos-jvm-arm64` | `da88e7b2cc7c40eafec45dec91a88ddfe32ef337818f42fcceafd17e31574afb` |
-| `macos-jvm-x86_64` | `1f85388d385b348db6fcbff006e63a5dc6cb8f59363e9094b0f326a03ac55fe4` |
+| `macos-jvm-arm64` | `72d91b312741a11ce6a05d244a8727564ab304837ebe09fdc46116b381505ba0` |
+| `macos-jvm-x86_64` | `d1d27c9aa60b099253fb618cfa03a09cc320ceb1085724cc295ee1edd260a2fc` |
 | `android-arm64-v8a` | `0110314867664f9856c306e8a5dbd9ea7c78b8811e5614283455775324cb9b51` |
 | `android-armeabi-v7a` | `37751f5668a4be6ffea0fb3cbfa4e39087ededcdc0f577190ac61d63bb2985ac` |
 | `android-x86` | `8a4615594c75ecc628579f19f4a82398fee8bafb3dfc91ddea0408430d05614c` |

@@ -36,8 +36,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   names and fail-closes on any NDK other than `27.2.12479018`. Python zip
   extract now restores NDK clang execute bits and Unix `clang -> clang-18`
   symlinks (CI `Exec format error` / `clang-18: command not found`). Darwin JVM candidates drop `LC_UUID` via
-  `-Wl,-no_uuid` / `-Wl,-reproducible`. iOS candidate hashes already matched
-  a clean `macos-26` runner on `ea01b12`.
+  `-Wl,-reproducible` while keeping `LC_UUID` (macos-26 dyld rejects
+  `-no_uuid`). Clean run `32660838357` matched Android and iOS
+  candidates; Darwin rematch is still required before replacing
+  `src/` or CHECKSUMS.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
