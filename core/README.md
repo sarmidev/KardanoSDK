@@ -97,6 +97,11 @@ this reorganization, but fully qualified names and imports moved into the packag
   indefinite lengths, reserved additional info, non-canonical encodings, out-of-range
   integers/counts, over-deep nesting, over-large collections, malformed UTF-8, over-limit
   input, and trailing bytes are rejected with a typed `CborError`, never normalized.
+  `Cbor.encode`'s assembled output is also bounded: per-element limits alone do not stop a
+  wide, flat collection of many near-limit elements from assembling into an output larger
+  than any single limit, so the running total is checked with `Long` arithmetic (reusing
+  `CBOR_MAX_INPUT_BYTES` as the output bound) and rejected with `CborError.OutputTooLong`
+  before the final buffer is allocated or concatenated.
 - `Address` — structural CIP-19 address parsing (Block 0.7). `Address.parse(bech32)`
   returns a `KardanoResult<Address, AddressError>` (never throws) for the Shelley address
   types parsed so far: base (`addr` / `addr_test`, CIP-19 header types 0-3), pointer

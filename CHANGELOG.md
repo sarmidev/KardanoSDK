@@ -31,6 +31,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   identity (`sum(selected inputs) == sum(outputs) + fee`) across the exact-payment/no-change,
   change-emitted, multiple-input, and native-asset-filtered branches, plus that the
   insufficient-funds and fee-overflow paths never produce a draft at all (W8-1).
+- `CborError.OutputTooLong`: `Cbor.encode` now sums its assembled output size with `Long`
+  arithmetic and rejects before allocating or concatenating the final buffer once the total would
+  exceed `Cbor.CBOR_MAX_INPUT_BYTES` — closing a gap where a within-per-element-limits tree (for
+  example a flat array of many near-64KiB byte strings) could otherwise assemble into an output
+  far larger than any single limit (W6-2).
 
 ### Changed
 

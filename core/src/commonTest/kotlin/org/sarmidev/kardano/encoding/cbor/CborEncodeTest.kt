@@ -231,6 +231,43 @@ class CborEncodeTest {
         )
     }
 
+    // W6-2 remediation: per-element bounds alone do not stop a wide, flat array of many
+    // near-limit byte strings from assembling into an output over CBOR_MAX_INPUT_BYTES (1 MiB).
+    // 17 elements of 64 KiB each is ~1.09 MiB — just over the limit — while each element stays
+    // well under CBOR_MAX_BYTESTRING_BYTES (64 KiB) and the array stays well under
+    // CBOR_MAX_COLLECTION_ELEMENTS, so this exercises OutputTooLong specifically, not either of
+    // those per-element checks. Deliberately small (~1.1 MiB total), not a multi-gigabyte
+    // fixture.
+    @Test
+    fun rejectsEncodeOutputOverTotalLimit() {
+        val elementSize = 64 * 1024
+        val elementCount = 17
+        val items = List<CborValue>(elementCount) { CborValue.CborByteString(ByteArray(elementSize)) }
+        val value = arr(*items.toTypedArray())
+
+        // Sanity: every individual bound this tree could otherwise trip is satisfied.
+        assertTrue(elementSize <= Cbor.CBOR_MAX_BYTESTRING_BYTES)
+        assertTrue(elementCount <= Cbor.CBOR_MAX_COLLECTION_ELEMENTS)
+
+        val error = assertIs<KardanoResult.Err<CborError>>(Cbor.encode(value)).error
+        assertIs<CborError.OutputTooLong>(error)
+        assertEquals(Cbor.CBOR_MAX_INPUT_BYTES, error.max)
+        assertTrue(error.actual > Cbor.CBOR_MAX_INPUT_BYTES, "actual (${error.actual}) must exceed max")
+    }
+
+    // At exactly the limit, encode still succeeds (16 * 64 KiB = 1 MiB exactly, plus a handful
+    // of head-byte overhead pushes it slightly over — so this uses a size just under the byte
+    // budget to confirm the boundary is not off-by-one in the rejecting direction).
+    @Test
+    fun acceptsEncodeOutputAtTotalLimit() {
+        val elementSize = 64 * 1024
+        val elementCount = 15
+        val items = List<CborValue>(elementCount) { CborValue.CborByteString(ByteArray(elementSize)) }
+        val value = arr(*items.toTypedArray())
+        val result = assertIs<KardanoResult.Ok<ByteArray>>(Cbor.encode(value))
+        assertTrue(result.value.size <= Cbor.CBOR_MAX_INPUT_BYTES)
+    }
+
     @Test
     fun rejectsUnsignedWithNegativeValue() {
         val error = assertIs<KardanoResult.Err<CborError>>(
@@ -299,7 +336,7 @@ class CborEncodeTest {
         val text = value.toString()
         assertTrue(text.contains("size="), "toString should keep a structural marker")
         assertFalse(
-            text.contains(Hex.encode(value.toByteArray())),
+            text.contains(hexOk(value.toByteArray())),
             "toString must not render the wrapped bytes",
         )
     }
@@ -380,9 +417,12 @@ class CborEncodeTest {
         val encoded = assertIs<KardanoResult.Ok<ByteArray>>(Cbor.encode(value)).value
         assertTrue(
             encoded.contentEquals(bytes(expectedHex)),
-            "expected $expectedHex but got ${Hex.encode(encoded)}",
+            "expected $expectedHex but got ${hexOk(encoded)}",
         )
     }
+
+    private fun hexOk(bytes: ByteArray): String =
+        assertIs<KardanoResult.Ok<String>>(Hex.encode(bytes)).value
 
     private fun u(value: Long): CborValue.CborUnsigned = CborValue.CborUnsigned(value)
     private fun txt(value: String): CborValue.CborTextString = CborValue.CborTextString(value)

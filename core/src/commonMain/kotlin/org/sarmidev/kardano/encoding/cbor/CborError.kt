@@ -29,6 +29,26 @@ public sealed interface CborError {
      */
     public data class InputTooLong(public val max: Int, public val actual: Int) : CborError
 
+    /**
+     * [Cbor.encode]'s assembled output would have exceeded the named limit.
+     *
+     * Per-element bounds ([Cbor.CBOR_MAX_BYTESTRING_BYTES], [Cbor.CBOR_MAX_STRING_BYTES],
+     * [Cbor.CBOR_MAX_COLLECTION_ELEMENTS]) each bound one value in isolation, but a tree that
+     * passes every individual bound can still assemble into an output far larger than any
+     * single element — for example a wide, flat array of many near-limit byte strings. This
+     * variant is returned instead, checked with [Long] arithmetic before the final output
+     * buffer is allocated or concatenated, so [Cbor.encode] never allocates or copies a
+     * multi-gigabyte buffer for an oversized tree. The limit reuses [Cbor.CBOR_MAX_INPUT_BYTES]
+     * so that anything [Cbor.encode] produces is, by construction, within what [Cbor.decode]
+     * would accept as input.
+     *
+     * @property max the maximum total output size allowed, in bytes
+     *   ([Cbor.CBOR_MAX_INPUT_BYTES]).
+     * @property actual the total output size that would have resulted, in bytes. A [Long]
+     *   because the true total can exceed [Int.MAX_VALUE] for a sufficiently adversarial tree.
+     */
+    public data class OutputTooLong(public val max: Int, public val actual: Long) : CborError
+
     /** The input was empty; a CBOR value requires at least one byte. */
     public data object EmptyInput : CborError
 

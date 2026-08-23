@@ -219,3 +219,24 @@ This addendum records the resulting, narrowly-scoped change made in Block 1.10b:
 No other CBOR policy in this ADR changes. This is not a general reopening of the "floats and
 simple values are out of scope" rule — a future addition of `undefined`, floats, or any other
 major-type-7 value still requires its own explicit ADR update, per this ADR's original policy.
+
+---
+
+## Addendum (2026-08-23): `Cbor.encode` cumulative output bound (pre-release remediation)
+
+The Parser limits section above lists `CBOR_MAX_INPUT_BYTES` as bounding total **input** size
+on decode. `Cbor.encode` did not enforce an equivalent bound on its assembled **output**: its
+per-element limits (`CBOR_MAX_BYTESTRING_BYTES`, `CBOR_MAX_STRING_BYTES`) and its
+per-collection limit (`CBOR_MAX_COLLECTION_ELEMENTS`) each bound one value in isolation, but a
+tree that satisfies every individual bound could still assemble into an output far larger than
+any one of them — for example a flat array of many near-limit byte strings. This was recorded
+as a finding (W6-2) in `docs/AUDIT/2026-08-22-pre-release-audit.md`.
+
+This addendum records the fix: `Cbor.encode`'s internal array/map assembly step now sums the
+running output size with `Long` arithmetic and rejects with a new `CborError.OutputTooLong`
+before allocating or concatenating the final buffer, once the total would exceed
+`CBOR_MAX_INPUT_BYTES` — reusing the existing input bound as the output bound, so anything
+`Cbor.encode` produces is, by construction, within what `Cbor.decode` would accept. This adds
+no new named constant and changes no per-element limit; it closes the gap between the
+per-element checks and the whole-tree total. See `core/src/commonMain/kotlin/org/sarmidev/kardano/encoding/cbor/Cbor.kt`
+and `CborError.kt` for the implementation, and `CborEncodeTest.kt` for the boundary tests.

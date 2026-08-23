@@ -115,6 +115,19 @@ class CborDecodeTest {
         assertEquals(CborError.IntegerOutOfRange(1), decodeError("3b8000000000000000"))
     }
 
+    // The total-input limit is checked before any item is decoded. One byte over the limit is
+    // rejected; exactly at the limit, decoding proceeds to the next check (EmptyInput does not
+    // apply here since the buffer is non-empty, so TrailingBytes/UnexpectedEndOfInput follows —
+    // this test only asserts the boundary that matters, InputTooLong itself).
+    @Test
+    fun rejectsInputOverTotalLimit() {
+        val oversized = ByteArray(Cbor.CBOR_MAX_INPUT_BYTES + 1)
+        assertEquals(
+            CborError.InputTooLong(Cbor.CBOR_MAX_INPUT_BYTES, oversized.size),
+            assertIs<KardanoResult.Err<CborError>>(Cbor.decode(oversized)).error,
+        )
+    }
+
     @Test
     fun rejectsEmptyInput() {
         assertEquals(CborError.EmptyInput, assertIs<KardanoResult.Err<CborError>>(Cbor.decode(ByteArray(0))).error)

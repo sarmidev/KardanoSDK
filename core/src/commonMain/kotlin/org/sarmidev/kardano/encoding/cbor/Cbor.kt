@@ -61,10 +61,14 @@ import org.sarmidev.kardano.encoding.cbor.CborValue.CborUnsigned
  *
  * The encoder emits canonical (shortest-form, definite-length) encodings for the supported
  * types only. Decoding and encoding return a [KardanoResult] and never throw on malformed
- * input. No buffer is ever allocated from an untrusted declared length or element count: a
- * declared length is validated against the total input limit, then against the remaining
- * bytes, then against the named size limit, before any payload is copied; a declared element
- * count is validated against the named element-count limit before any element is read.
+ * input or on an oversized tree. No buffer is ever allocated from an untrusted declared
+ * length or element count: a declared length is validated against the total input limit,
+ * then against the remaining bytes, then against the named size limit, before any payload is
+ * copied; a declared element count is validated against the named element-count limit before
+ * any element is read. On encode, the assembled output's total size is also checked against
+ * [CBOR_MAX_INPUT_BYTES] before the final buffer is allocated ([CborError.OutputTooLong]), so
+ * a within-per-element-limits tree that would still assemble into an oversized output is
+ * rejected rather than driving a very large allocation.
  *
  * @see <a href="https://www.rfc-editor.org/rfc/rfc8949">RFC 8949 (CBOR)</a>
  * @see <a href="https://www.rfc-editor.org/rfc/rfc8949#appendix-A">RFC 8949 Appendix A</a>
@@ -179,11 +183,15 @@ public object Cbor {
      * UTF-8, or a string longer than its named limit are rejected with a typed [CborError].
      *
      * Arrays and maps are emitted in definite-length form, subject to the named element-count
-     * ([CBOR_MAX_COLLECTION_ELEMENTS]) and nesting-depth ([CBOR_MAX_NESTING_DEPTH]) limits. For
-     * a [CborValue.CborMap] the caller must supply entries already in the Phase 0 deterministic
-     * key order (per ADR-0001, RFC 8949 §4.2.1: strictly ascending by the bytewise comparison
-     * of each key's canonical encoding) with no duplicate keys. The encoder does **not** sort
-     * or deduplicate: a map whose keys are out of order is rejected with
+     * ([CBOR_MAX_COLLECTION_ELEMENTS]) and nesting-depth ([CBOR_MAX_NESTING_DEPTH]) limits, and
+     * the assembled output as a whole is bounded by [CBOR_MAX_INPUT_BYTES]
+     * ([CborError.OutputTooLong]): per-element bounds alone do not prevent a wide, flat
+     * collection of many near-limit elements from assembling into a far larger output, so the
+     * running total is checked with [Long] arithmetic before the final buffer is allocated or
+     * concatenated. For a [CborValue.CborMap] the caller must supply entries already in the
+     * Phase 0 deterministic key order (per ADR-0001, RFC 8949 §4.2.1: strictly ascending by the
+     * bytewise comparison of each key's canonical encoding) with no duplicate keys. The encoder
+     * does **not** sort or deduplicate: a map whose keys are out of order is rejected with
      * [CborError.NonCanonicalMapKeyOrder] and one with a repeated key with
      * [CborError.DuplicateMapKey].
      *
@@ -268,7 +276,7 @@ public object Cbor {
                 is KardanoResult.Ok -> parts.add(r.value)
             }
         }
-        return KardanoResult.Ok(concat(parts))
+        return concat(parts)
     }
 
     private fun encodeMap(value: CborMap, depth: Int): KardanoResult<ByteArray, CborError> {
@@ -306,20 +314,33 @@ public object Cbor {
             parts.add(valueBytes)
             previousKey = keyBytes
         }
-        return KardanoResult.Ok(concat(parts))
+        return concat(parts)
     }
 
-    /** Concatenates [parts] into a single [ByteArray] in order. */
-    private fun concat(parts: List<ByteArray>): ByteArray {
-        var total = 0
-        for (part in parts) total += part.size
-        val out = ByteArray(total)
+    /**
+     * Concatenates [parts] into a single [ByteArray] in order, or rejects with
+     * [CborError.OutputTooLong] if the combined size would exceed [CBOR_MAX_INPUT_BYTES].
+     *
+     * The total is summed with [Long] arithmetic — every part's size is a non-negative [Int]
+     * bounded well below [Int.MAX_VALUE] by the per-element limits, and [parts] itself is
+     * bounded by [CBOR_MAX_COLLECTION_ELEMENTS], so this sum cannot overflow a [Long]. The
+     * limit is checked against that [Long] total before [ByteArray] allocation or any copy,
+     * so an oversized tree is rejected instead of driving a multi-gigabyte allocation; once
+     * the check passes, the total is known to fit an [Int].
+     */
+    private fun concat(parts: List<ByteArray>): KardanoResult<ByteArray, CborError> {
+        var total = 0L
+        for (part in parts) total += part.size.toLong()
+        if (total > CBOR_MAX_INPUT_BYTES.toLong()) {
+            return KardanoResult.Err(CborError.OutputTooLong(CBOR_MAX_INPUT_BYTES, total))
+        }
+        val out = ByteArray(total.toInt())
         var position = 0
         for (part in parts) {
             part.copyInto(out, position)
             position += part.size
         }
-        return out
+        return KardanoResult.Ok(out)
     }
 
     /**
