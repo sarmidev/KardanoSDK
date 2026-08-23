@@ -96,6 +96,14 @@ class PlaygroundSubmitTransactionPresenterTest {
     }
 
     @Test
+    fun presentSubmitError_submissionNotSupported_matchesTheExtractedMockConstant() {
+        // Pins the literal PlaygroundDemoFlow keys off (Block 1.12-pre-e) to the presenter's
+        // actual output, so the two can never silently drift apart.
+        val msg = PlaygroundPresenter.presentSubmitError(SubmitError.SubmissionNotSupported)
+        assertEquals(MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE, msg)
+    }
+
+    @Test
     fun presentSubmitError_emptyTransaction_mentionsEmpty() {
         val msg = PlaygroundPresenter.presentSubmitError(SubmitError.EmptyTransaction)
         assertTrue(msg.contains("empty", ignoreCase = true), "got: $msg")

@@ -21,6 +21,17 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- The Playground demo is now a linear, guided story (Welcome → five-step Demo → Summary) with
+  plain-language copy, one primary action per step, and technical detail (hashes, fees, CBOR,
+  UTxOs, witnesses) collapsed behind an optional "Technical details" toggle, replacing the earlier
+  Overview/Try SDK/Roadmap tab row. Mock mode stays the default and recommended path; the mock
+  submission step is presented as an honest "nothing was sent" outcome rather than an error or a
+  faked success. Live Blockfrost preprod mode moved into a collapsed "Advanced" control, and its
+  project-id field is now masked. Turning on the switch without entering a project id explicitly
+  reports that configuration is incomplete and keeps identifying the active provider as the
+  offline mock; the UI only claims live requests once both inputs are present. This is a
+  presentation-only change — no SDK public API, provider, wallet, signing, or
+  transaction-construction behavior changed.
 - Native-asset UTxOs are filtered out of the ADA-only Phase 1 transaction flow rather than causing
   the whole candidate set to fail when ADA-only UTxOs remain available.
 - The public landing page's Roadmap section (`site/index.html#roadmap`) now presents Phase 1

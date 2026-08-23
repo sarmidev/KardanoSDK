@@ -1540,8 +1540,71 @@ Non-goals:
 :shared:compileKotlinIosArm64 :desktopApp:compileKotlin :androidApp:assembleDebug` pass; `git diff
 --check` clean; no banned words on touched files. Manual light/dark review covered the Android
 launcher (adaptive + legacy, day/night), the iOS AppIcon default/dark slots, the Desktop window/
-dock icon, and the in-app header/badges/buttons in both themes. **Next: Block 1.12 (Phase 1
-Closure / MVP Review).**
+dock icon, and the in-app header/badges/buttons in both themes. **Next: Block 1.12-pre-e (Guided
+Playground Demo Redesign).**
+
+### 1.12-pre-e Guided Playground Demo Redesign
+
+Redesign the Playground into a linear, self-explaining five-step demo (Welcome → Demo → Summary)
+for a short public video: one screen at a time, one plain-language explanation and one obvious
+button per step, and every technical detail (hashes, fees, CBOR, UTxOs, witnesses) collapsed
+behind an optional "Technical details" toggle. **Presentation only** — no SDK public API, no
+`:core`/`:crypto`/`:wallet`/`:tx`/`:provider`/`:provider-blockfrost` change, no new dependency; the
+1.12-pre-a MVI split and every existing `RestoreWallet`/`QueryFunds`/`BuildDraft`/
+`SignTransaction`/`SubmitTransaction` call are unchanged.
+
+Context:
+
+- The Block 1.12-pre-c-2 tab row (Overview / Try SDK / Roadmap) put a developer-facing prose page
+  in front of the working flow — the opposite of what a short, guided video needs. Reviewers with
+  no Cardano background also found the flow's own language (UTxO, CBOR, witnesses, fee/change in
+  raw lovelace) hard to follow without narration.
+
+Objective:
+
+- Replace the tab row with a linear journey: **Welcome** (what the demo does, a five-step
+  preview, one *Start the demo* button) → **Demo** (one `FlowStepCard` at a time, driven by a new
+  `PlaygroundState.demoStep` cursor, with `Step N of 5`, a recap strip of finished steps, and
+  *Back*/*Continue*/*Start over* controls) → **Summary** (a plain-language recap plus an honest
+  "what this demo is not" scope list, and *Run the demo again*). **About** (the former Overview
+  content, re-copied) and **Roadmap** become secondary screens off Welcome/Summary, each with a
+  "Back to the demo" control.
+- Add `PlaygroundDemoFlow.kt`, a pure `commonTest`-covered object owning step outcome
+  classification (`StepOutcome`: `NOT_STARTED`/`WORKING`/`DONE`/`INFO`/`ERROR`), continue-gating,
+  friendly-reason mapping for a documented subset of existing error messages, and
+  address/id truncation — so no composable computes this logic itself.
+- Classify the mock Submit step's unchanged, honest `SubmitError.SubmissionNotSupported` failure
+  as a new, neutral `StepOutcome.INFO` ("stopped on purpose") rather than a red `ERROR`, keyed off
+  a byte-identical constant extracted from `PlaygroundPresenter.presentSubmitError` — the
+  underlying `Failure` state and the mock provider's behavior do not change.
+- Add `DemoCopy.kt`, a single reviewable, data-driven table holding every Welcome/Demo/Summary
+  string, asserted jargon- and banned-word-free outside two documented, narrower exceptions (the
+  collapsed "Advanced" disclosure and the Summary's scope-boundary list).
+- Add four purely additive, ADA-formatted `LabeledRow`s to `PlaygroundPresenter.kt` (`Test ADA`,
+  `Payment`, `Network cost`, `Change back`) via a new `LovelaceDisplay.ada(lovelace)` helper, so
+  the main narrative reads in ADA while every existing raw-lovelace row stays available under
+  Technical details.
+- Relocate `DiagnosticsSection` (content unchanged) under the About screen's "Developer tools"
+  heading, since it is unrelated to the guided demo's fixture wallet.
+- Mask the Blockfrost preprod project-id field (`PasswordVisualTransformation`) and distinguish
+  switch intent from effective provider state: a blank id keeps Mock active and displays a
+  configuration-required message; live-request copy appears only once the id is non-blank.
+
+Non-goals:
+
+- No wallet import, no user-supplied mnemonic, no mainnet, no native assets, no scripts, no
+  metadata, no multisig, no polling.
+- No change to which use case runs, which provider it receives, or in what order; no change to
+  `TestWalletFixture`, `PlaygroundMockSampleData`'s seeded UTxOs, or `PlaygroundProviderFactory`.
+- No new Compose UI-test dependency; navigation/gating/copy are covered at the reducer/derived-
+  state level (`commonTest`) plus `@Preview`s for visual review, the same testing shape the rest
+  of `:shared` uses.
+
+**Status: complete.** `./gradlew :shared:jvmTest :shared:testAndroidHostTest
+:shared:compileKotlinIosArm64 :desktopApp:compileKotlin :androidApp:assembleDebug` pass; `git diff
+--check` clean; no banned words on touched files; the pre-existing, unrelated working-tree edit in
+`core/src/commonMain/kotlin/org/sarmidev/kardano/encoding/cbor/CborValue.kt` was left untouched.
+**Next: Block 1.12 (Phase 1 Closure / MVP Review).**
 
 ### 1.12 Phase 1 Closure / MVP Review
 

@@ -31,9 +31,30 @@ internal object PlaygroundReducer {
 
     /** Handles every intent that requires no SDK/provider call. See class KDoc for the split. */
     fun reduce(state: PlaygroundState, intent: PlaygroundIntent): PlaygroundState = when (intent) {
-        is PlaygroundIntent.NavigateToOverview -> state.copy(section = PlaygroundSection.OVERVIEW)
-        is PlaygroundIntent.NavigateToTrySdk -> state.copy(section = PlaygroundSection.TRY_SDK)
+        is PlaygroundIntent.NavigateToWelcome -> state.copy(section = PlaygroundSection.WELCOME)
+        is PlaygroundIntent.NavigateToDemo -> state.copy(section = PlaygroundSection.DEMO)
+        is PlaygroundIntent.NavigateToSummary -> state.copy(section = PlaygroundSection.SUMMARY)
+        is PlaygroundIntent.NavigateToAbout -> state.copy(section = PlaygroundSection.ABOUT)
         is PlaygroundIntent.NavigateToRoadmap -> state.copy(section = PlaygroundSection.ROADMAP)
+
+        // A no-op unless the current step is resolved (DONE or the honest mock-stop INFO); from
+        // the last step it moves to the Summary screen instead of stepping demoStep further.
+        is PlaygroundIntent.ContinueDemo -> if (!PlaygroundDemoFlow.canContinue(state)) {
+            state
+        } else {
+            val next = PlaygroundDemoFlow.nextStep(state.demoStep)
+            if (next == null) {
+                state.copy(section = PlaygroundSection.SUMMARY)
+            } else {
+                state.copy(demoStep = next)
+            }
+        }
+
+        // A no-op on the first step; never clears a step's result.
+        is PlaygroundIntent.BackDemo -> {
+            val previous = PlaygroundDemoFlow.previousStep(state.demoStep)
+            if (previous == null) state else state.copy(demoStep = previous)
+        }
 
         // Tapping the already-selected phase collapses its detail; tapping another expands it.
         is PlaygroundIntent.SelectRoadmapPhase -> state.copy(
@@ -58,9 +79,12 @@ internal object PlaygroundReducer {
         is PlaygroundIntent.ToggleCodeExamples ->
             state.copy(codeExamplesExpanded = !state.codeExamplesExpanded)
 
-        // Resets only the five guided-flow step results (and the Wallet step's loading flag);
-        // provider selection and diagnostics inputs/results are intentionally preserved so
-        // resetting the flow does not also clear an in-progress diagnostics exploration.
+        // Resets the five guided-flow step results (and the Wallet step's loading flag), and
+        // (Block 1.12-pre-e) returns demoStep/section to the start of the demo — serving both a
+        // mid-demo "Start over" control and the Summary screen's "Run the demo again" control.
+        // Provider selection, technicalDetailsExpanded, and diagnostics inputs/results are
+        // intentionally preserved so resetting the flow does not also clear an in-progress
+        // diagnostics exploration or provider configuration.
         is PlaygroundIntent.ResetFlow -> state.copy(
             wallet = WalletPresentation.Empty,
             walletLoading = false,
@@ -68,6 +92,8 @@ internal object PlaygroundReducer {
             draft = TransactionDraftPresentation.Empty,
             signed = SignedTransactionPresentation.Empty,
             submit = SubmitTransactionPresentation.Empty,
+            demoStep = PlaygroundStep.WALLET,
+            section = PlaygroundSection.DEMO,
         )
 
         is PlaygroundIntent.UpdateAddressInput -> state.copy(addressInput = intent.value)

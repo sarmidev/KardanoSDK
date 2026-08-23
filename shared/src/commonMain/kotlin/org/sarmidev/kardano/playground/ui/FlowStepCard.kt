@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,37 +21,45 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.sarmidev.kardano.playground.LabeledRow
 
 /**
- * One card in the guided **Wallet → Funds → Build → Sign → Submit** flow (Block 1.12-pre-b).
- *
- * Presents a single step as a self-contained unit: a numbered heading with a live [status]
- * chip, a one-line [explanation], any state [badges], a primary [action] button (which shows a
- * spinner while [actionLoading]), the step's [keyOutput] (its most important result), and an
- * optional collapsible [details] block behind a "Details" toggle. This is a pure presentation
- * shell — it dispatches [onAction]/[onToggleDetails] callbacks and renders provided content; it
- * holds no SDK logic and reads no state itself.
+ * One card in the guided demo (Block 1.12-pre-b; reworked into a plain-language single-step card
+ * in Block 1.12-pre-e). Presents exactly one step as a self-contained unit: a numbered heading
+ * with a live [status] chip, a one-line [explanation] of what the SDK does and why, one primary
+ * [action] button (which shows a spinner while [actionLoading]), a plain-language
+ * [resultHeadline]/[resultDetail] pair once the step has something to report, an optional
+ * [guidance] line pointing at what happens next, an optional collapsible [details] block behind
+ * a "Technical details" toggle, and an optional [secondaryActions] row (Continue / Back / Try
+ * again). This is a pure presentation shell — it dispatches [onAction]/[onToggleDetails]
+ * callbacks and renders provided content; it holds no SDK logic and reads no state itself.
  */
 @Composable
 internal fun FlowStepCard(
     stepNumber: Int,
+    stepCount: Int,
     title: String,
     explanation: String,
     status: StepStatus,
-    badges: List<Badge>,
     actionLabel: String,
     actionLoading: Boolean,
     onAction: () -> Unit,
-    showDetailsToggle: Boolean,
-    detailsExpanded: Boolean,
-    onToggleDetails: () -> Unit,
-    keyOutput: @Composable ColumnScope.() -> Unit,
-    details: @Composable ColumnScope.() -> Unit,
+    modifier: Modifier = Modifier,
+    resultHeadline: String? = null,
+    resultDetail: String? = null,
+    resultIsError: Boolean = false,
+    guidance: String? = null,
+    showDetailsToggle: Boolean = false,
+    detailsExpanded: Boolean = false,
+    onToggleDetails: () -> Unit = {},
+    details: @Composable ColumnScope.() -> Unit = {},
+    secondaryActions: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -60,7 +69,7 @@ internal fun FlowStepCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                StepNumber(stepNumber)
+                StepNumber(stepNumber, stepCount)
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
@@ -74,8 +83,6 @@ internal fun FlowStepCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
-            if (badges.isNotEmpty()) BadgeRow(badges)
 
             Button(
                 onClick = onAction,
@@ -94,7 +101,19 @@ internal fun FlowStepCard(
                 }
             }
 
-            keyOutput()
+            if (resultHeadline != null) {
+                ResultHeadline(resultHeadline, isError = resultIsError)
+            }
+            if (resultDetail != null) {
+                ResultDetail(resultDetail)
+            }
+            if (guidance != null) {
+                Text(
+                    text = guidance,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
 
             if (showDetailsToggle) {
                 TextButton(
@@ -105,16 +124,26 @@ internal fun FlowStepCard(
                 }
                 if (detailsExpanded) details()
             }
+
+            if (secondaryActions != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    content = secondaryActions,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun StepNumber(number: Int) {
+private fun StepNumber(number: Int, count: Int) {
     Surface(
         color = MaterialTheme.colorScheme.primary,
         shape = CircleShape,
-        modifier = Modifier.size(28.dp),
+        modifier = Modifier
+            .size(28.dp)
+            .semantics { contentDescription = "Step $number of $count" },
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
@@ -124,6 +153,28 @@ private fun StepNumber(number: Int) {
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/** A short, bold plain-language headline summarizing a step's result — success/info or error. */
+@Composable
+internal fun ResultHeadline(text: String, isError: Boolean = false) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+    )
+}
+
+/** A supporting sentence under a [ResultHeadline], selectable for values worth copying. */
+@Composable
+internal fun ResultDetail(text: String) {
+    SelectionContainer {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

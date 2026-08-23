@@ -96,6 +96,8 @@ class PlaygroundTransactionDraftPresenterTest {
         assertEquals("${draft.bodyCbor().size} bytes", rowByLabel["Body size"])
         assertTrue(rowByLabel.containsKey("Body CBOR (preview)"), "expected a body CBOR preview row")
         assertEquals("Unsigned draft — not signed, not submitted", rowByLabel["Status"])
+        assertEquals(LovelaceDisplay.ada(draft.outputs[0].amount.value), rowByLabel["Payment"])
+        assertEquals(LovelaceDisplay.ada(draft.fee.value), rowByLabel["Network cost"])
     }
 
     @Test
@@ -110,6 +112,7 @@ class PlaygroundTransactionDraftPresenterTest {
         val success = assertIs<TransactionDraftPresentation.Success>(presentation)
         val rowByLabel = success.rows.associate { it.label to it.value }
         assertEquals("${draft.outputs[1].amount.value} lovelace", rowByLabel["Change"])
+        assertEquals(LovelaceDisplay.ada(draft.outputs[1].amount.value), rowByLabel["Change back"])
     }
 
     // --- mapTransactionDraftResult: Err (insufficient funds / builder error presentation) ---

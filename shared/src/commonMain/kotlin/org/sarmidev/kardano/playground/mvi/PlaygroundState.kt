@@ -26,14 +26,21 @@ internal enum class PlaygroundStep {
 }
 
 /**
- * Which top-level Playground section is currently shown (Block 1.12-pre-c-2). This is a
- * sample-app navigation concept only — a lightweight in-state switch between the landing
- * overview, the interactive transaction flow, and the roadmap screen. It is not an SDK concept
- * and is not part of any public API.
+ * Which top-level Playground section is currently shown (introduced in Block 1.12-pre-c-2 as
+ * `OVERVIEW`/`TRY_SDK`/`ROADMAP`; restructured in Block 1.12-pre-e into a linear guided-demo
+ * journey). This is a sample-app navigation concept only — a lightweight in-state switch
+ * between the five sections below. It is not an SDK concept and is not part of any public API.
+ *
+ * The journey is linear rather than tabbed: [WELCOME] (the default landing screen) leads into
+ * [DEMO] (the single-step-at-a-time guided flow), which ends at [SUMMARY]; [ABOUT] (the former
+ * `OVERVIEW` content, including Diagnostics) and [ROADMAP] are reachable as secondary screens
+ * from [WELCOME] and [SUMMARY], each with a way back into [DEMO].
  */
 internal enum class PlaygroundSection {
-    OVERVIEW,
-    TRY_SDK,
+    WELCOME,
+    DEMO,
+    SUMMARY,
+    ABOUT,
     ROADMAP,
 }
 
@@ -96,13 +103,16 @@ internal enum class RoadmapPhase {
  * landing area shown above the guided flow — it carries no SDK semantics and gates nothing but
  * the visibility of static, illustrative snippets.
  *
- * ### Section navigation + roadmap (Block 1.12-pre-c-2)
+ * ### Section navigation + roadmap (Block 1.12-pre-c-2, restructured in Block 1.12-pre-e)
  *
- * [section] selects which top-level sample-app section is shown — the landing [OVERVIEW]
- * [PlaygroundSection.OVERVIEW], the interactive [TRY_SDK][PlaygroundSection.TRY_SDK] flow, or the
- * [ROADMAP][PlaygroundSection.ROADMAP] screen; it defaults to `OVERVIEW`.
- * [selectedRoadmapPhase] is the roadmap card whose detail is expanded (null = none expanded).
- * Both are presentation-only navigation state with no SDK semantics.
+ * [section] selects which top-level sample-app section is shown; it defaults to
+ * [PlaygroundSection.WELCOME]. [demoStep] is the single guided-flow step currently shown on the
+ * [PlaygroundSection.DEMO] screen (Block 1.12-pre-e's one-step-at-a-time journey); it defaults
+ * to [PlaygroundStep.WALLET]. [PlaygroundDemoFlow][org.sarmidev.kardano.playground.mvi.PlaygroundDemoFlow]
+ * derives gating (whether the visitor can continue) and outcome classification from [demoStep]
+ * plus the matching `*Presentation` field — this class holds only the raw cursor, no derived
+ * gating logic. [selectedRoadmapPhase] is the roadmap card whose detail is expanded (null = none
+ * expanded). All three are presentation-only navigation state with no SDK semantics.
  */
 internal data class PlaygroundState(
     val useLiveBlockfrost: Boolean,
@@ -124,13 +134,25 @@ internal data class PlaygroundState(
     val providerUtxos: ProviderUtxosPresentation,
     val providerParams: ProviderParamsPresentation,
     val codeExamplesExpanded: Boolean = false,
-    val section: PlaygroundSection = PlaygroundSection.OVERVIEW,
+    val section: PlaygroundSection = PlaygroundSection.WELCOME,
     val selectedRoadmapPhase: RoadmapPhase? = RoadmapPhase.PHASE_1,
+    val demoStep: PlaygroundStep = PlaygroundStep.WALLET,
 ) {
+    /**
+     * Whether the provider factory can actually use live Blockfrost preprod.
+     *
+     * Turning on the advanced switch expresses intent only; the factory continues to serve the
+     * offline mock until a non-blank project id is present. UI copy and outcome classification
+     * must use this effective state rather than [useLiveBlockfrost] alone.
+     */
+    val isLivePreprodActive: Boolean
+        get() = useLiveBlockfrost && projectId.isNotBlank()
+
     companion object {
         /**
-         * The initial state: the Overview section, the Phase 1 roadmap card pre-expanded, mock
-         * provider, every guided step empty/collapsed, and the diagnostics defaults.
+         * The initial state: the Welcome section, the guided demo cursor at the first
+         * ([PlaygroundStep.WALLET]) step, the Phase 1 roadmap card pre-expanded, mock provider,
+         * every guided step empty/collapsed, and the diagnostics defaults.
          */
         fun initial(): PlaygroundState = PlaygroundState(
             useLiveBlockfrost = false,
@@ -152,8 +174,9 @@ internal data class PlaygroundState(
             providerUtxos = ProviderUtxosPresentation.Empty,
             providerParams = ProviderParamsPresentation.Empty,
             codeExamplesExpanded = false,
-            section = PlaygroundSection.OVERVIEW,
+            section = PlaygroundSection.WELCOME,
             selectedRoadmapPhase = RoadmapPhase.PHASE_1,
+            demoStep = PlaygroundStep.WALLET,
         )
     }
 }

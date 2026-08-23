@@ -21,16 +21,40 @@ internal enum class SeedAddressKind {
  */
 internal sealed interface PlaygroundIntent {
 
-    // --- Section navigation (Block 1.12-pre-c-2, sample-app only) ---
+    // --- Section navigation (Block 1.12-pre-c-2, restructured into a linear demo journey in
+    // Block 1.12-pre-e; sample-app only) ---
 
-    /** Shows the landing [PlaygroundSection.OVERVIEW] section. */
-    data object NavigateToOverview : PlaygroundIntent
+    /** Shows the [PlaygroundSection.WELCOME] landing screen. */
+    data object NavigateToWelcome : PlaygroundIntent
 
-    /** Shows the interactive [PlaygroundSection.TRY_SDK] transaction-flow section. */
-    data object NavigateToTrySdk : PlaygroundIntent
+    /** Shows the [PlaygroundSection.DEMO] guided-flow screen at its current [PlaygroundState.demoStep]. */
+    data object NavigateToDemo : PlaygroundIntent
+
+    /** Shows the [PlaygroundSection.SUMMARY] recap screen. */
+    data object NavigateToSummary : PlaygroundIntent
+
+    /** Shows the [PlaygroundSection.ABOUT] screen (capabilities, code examples, Diagnostics). */
+    data object NavigateToAbout : PlaygroundIntent
 
     /** Shows the [PlaygroundSection.ROADMAP] screen. */
     data object NavigateToRoadmap : PlaygroundIntent
+
+    /**
+     * Advances [PlaygroundState.demoStep] to the next step, or — from the last step — moves to
+     * [PlaygroundSection.SUMMARY]. A no-op unless
+     * [org.sarmidev.kardano.playground.mvi.PlaygroundDemoFlow.canContinue] is true for the
+     * current state (the current step must have a [org.sarmidev.kardano.playground.mvi.StepOutcome.DONE]
+     * or [org.sarmidev.kardano.playground.mvi.StepOutcome.INFO] outcome). Presentation-only —
+     * it calls no SDK itself.
+     */
+    data object ContinueDemo : PlaygroundIntent
+
+    /**
+     * Steps [PlaygroundState.demoStep] back one step. A no-op on the first
+     * ([PlaygroundStep.WALLET]) step. Never clears a step's result — going back and forward
+     * again still shows whatever the step last produced. Presentation-only.
+     */
+    data object BackDemo : PlaygroundIntent
 
     /**
      * Selects (or, if already selected, collapses) the roadmap card whose detail is shown.
@@ -66,9 +90,13 @@ internal sealed interface PlaygroundIntent {
     // --- Flow-wide controls ---
 
     /**
-     * Resets every guided-flow step back to its initial/empty state. Provider selection
-     * ([PlaygroundState.useLiveBlockfrost], [PlaygroundState.projectId]) and diagnostics inputs
-     * are preserved — see [PlaygroundReducer.reduce]'s handling of this intent.
+     * Resets every guided-flow step back to its initial/empty state, and (Block 1.12-pre-e)
+     * also returns [PlaygroundState.demoStep] to [PlaygroundStep.WALLET] and
+     * [PlaygroundState.section] to [PlaygroundSection.DEMO] — serving both the mid-demo "Start
+     * over" control and the Summary screen's "Run the demo again" control. Provider selection
+     * ([PlaygroundState.useLiveBlockfrost], [PlaygroundState.projectId]),
+     * [PlaygroundState.technicalDetailsExpanded], and diagnostics inputs are preserved — see
+     * [PlaygroundReducer.reduce]'s handling of this intent.
      */
     data object ResetFlow : PlaygroundIntent
 

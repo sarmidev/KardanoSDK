@@ -204,6 +204,11 @@ Diagnostics**.
 
 ## Playground sections and roadmap screen (Block 1.12-pre-c-2)
 
+> **Superseded on navigation only** by Block 1.12-pre-e's guided-demo redesign (see
+> "Playground guided demo (Block 1.12-pre-e)" below): the tab row, `PlaygroundSection.OVERVIEW`/
+> `TRY_SDK`, and `NavigateToOverview`/`NavigateToTrySdk` described in this section no longer exist.
+> The roadmap screen's card content and tap-to-expand behavior described here are unchanged.
+
 Block 1.12-pre-c-2 splits the sample app into three navigable sections and adds a dedicated,
 tappable roadmap screen, and softens the Wallet step's main-UX wording. It is **sample-app
 UX/content only** — the 1.12-pre-a MVI architecture and all SDK behavior are preserved (no SDK
@@ -306,6 +311,88 @@ MVI state/intents/reducer, and every use case/provider factory call are unchange
 - **Not changed.** `PlaygroundScreen.kt`'s root gradient already read
   `MaterialTheme.colorScheme.surface`/`background` rather than a hardcoded color, so it picks up
   the new palette automatically; no edit was needed there.
+
+## Playground guided demo (Block 1.12-pre-e)
+
+Block 1.12-pre-e is a **presentation-only redesign** of the Playground, aimed at a first-time
+viewer with no Cardano knowledge watching a short public video: it replaces the Block
+1.12-pre-c-2 tab row (Overview / Try SDK / Roadmap) with a **linear, one-step-at-a-time guided
+story** — Welcome → Demo (five steps) → Summary — with plain-language copy, one obvious primary
+action per step, and every technical term (hashes, fees, CBOR, UTxOs, witnesses) collapsed behind
+an optional "Technical details" toggle. It touches only `playground/mvi` + `playground/ui` plus
+two additive display rows and one extracted constant in `PlaygroundPresenter.kt` — **no SDK
+public API, no provider/wallet/tx/signing/crypto change, no new dependency**, and every existing
+test/behavior the earlier Playground blocks documented above still holds.
+
+- **Sections, not tabs.** `PlaygroundSection` is now `WELCOME` / `DEMO` / `SUMMARY` / `ABOUT` /
+  `ROADMAP` (default `WELCOME`), superseding 1.12-pre-c-2's `OVERVIEW` / `TRY_SDK` / `ROADMAP` on
+  navigation only — `NavigateToOverview`/`NavigateToTrySdk` are renamed to
+  `NavigateToAbout`/`NavigateToDemo`, and `NavigateToWelcome`/`NavigateToSummary` are new. Welcome
+  is the landing screen (what the demo does, a five-step preview, *Start the demo*); About (the
+  former Overview content) and Roadmap are secondary screens reachable from Welcome and Summary,
+  each with a "Back to the demo" control back into `DEMO`.
+- **One step at a time.** `PlaygroundState.demoStep: PlaygroundStep` (default `WALLET`) is a new
+  presentation-only cursor into the same five steps 1.12-pre-c-2 already had —
+  **Wallet → Funds → Build → Sign → Submit**, unchanged — rendered one `FlowStepCard` at a time by
+  `DemoStepSection.kt` instead of all five stacked. Above the card: `Step N of 5` plus a compact
+  recap strip of finished steps; below it (via the card's own secondary-action row): *Back* and
+  *Continue* (*See the summary* on the last step); further below: *Start over* and a collapsed
+  *"Advanced: connect to a test network"* disclosure holding the Mock/Live switch (moved out of
+  the always-visible provider card) and the Blockfrost preprod project-id field, now rendered with
+  `PasswordVisualTransformation` (previously plain text — the one existing behavior this block
+  changes for sensitivity, not for capability). The switch expresses intent only: until that
+  field is non-blank, `PlaygroundState.isLivePreprodActive` remains false, the provider factory
+  continues to use Mock, and the panel explicitly reports that live configuration is incomplete.
+- **`PlaygroundDemoFlow.kt`** (new, `playground/mvi`): a pure, non-suspend, `commonTest`-covered
+  object holding every derived-state rule the UI needs — `outcome(state, step): StepOutcome`
+  (`NOT_STARTED` / `WORKING` / `DONE` / `INFO` / `ERROR`), `canContinue(state)` (gates
+  `ContinueDemo`), `completedSteps(state)`, `friendlyReason(step, message)` (maps a documented
+  subset of existing `PlaygroundPresenter` messages to a plain sentence, falling back to `null` so
+  the raw message still shows under Technical details), and `shortenAddress`/`shortenId` (bech32
+  address / hex id truncation for headline text). No composable computes this itself.
+- **The honest mock-stop, made legible.** The mock Submit step still returns exactly the same
+  `SubmitTransactionPresentation.Failure` it always has (`InMemoryTxSubmitProvider` never fakes an
+  accepted id, per ADR-0017) — this block does not touch that. What changes is only how it is
+  *presented*: `PlaygroundDemoFlow.outcome` classifies that one specific, expected combination
+  (the effective provider is Mock **and** the mock's own not-supported message) as a new
+  `StepOutcome.INFO` — a neutral "stopped on purpose" state, backed by a new `StepTone.INFO` chip
+  tone (mapped to the existing `chipInfoBg`/`chipInfoFg` brand tokens, no new colors) — rather
+  than the same red `ERROR` a real failure gets. Effective provider state requires both the live
+  switch and a non-blank project id, matching `PlaygroundProviderFactory`'s existing fallback
+  behavior. To key off the result message reliably instead of restating it,
+  `PlaygroundPresenter.presentSubmitError`'s literal for `SubmitError.SubmissionNotSupported` was
+  extracted, byte-identical, into a new `internal const val MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE`.
+  Any other Submit failure — including that same combination under live mode, which should not
+  happen — still classifies as `ERROR`.
+- **`DemoCopy.kt`** (new, `playground/ui`): every primary-facing string for Welcome, the Demo
+  chrome, all five steps, and Summary, gathered into one reviewable, data-driven table instead of
+  scattered across composables. Its `Chrome.Advanced` group and the Summary's "What this demo is
+  not" scope list are the two documented, narrower exceptions allowed to name a live-mode-only
+  term ("Blockfrost", "mainnet"); every other string is asserted jargon-free
+  (no "UTxO"/"CBOR"/"witness"/"lovelace"/"Bech32"/"mainnet"/"Blockfrost") and banned-word-free by
+  `DemoCopyTest`.
+- **ADA, not raw lovelace, in the main narrative.** A new `playground/LovelaceDisplay.kt`
+  (`fun ada(lovelace: Long): String`, e.g. `2_000_000L -> "2 ADA"`, `1_500_000L -> "1.5 ADA"`)
+  backs four new, purely additive `LabeledRow`s in `PlaygroundPresenter.kt` — `Test ADA` on the
+  balance result, and `Payment` / `Network cost` / `Change back` on the draft result — used by the
+  Demo screen's plain-language headlines. No existing `LabeledRow` label or value changed; the raw
+  lovelace rows (`Balance`, `Fee`, `Change`) are still there, under Technical details.
+- **Diagnostics moved, not changed.** `DiagnosticsSection.kt` (Address Parser, Hex Decoder, CBOR
+  Decoder, Provider explorer) is content-unchanged; it now lives under the About screen's
+  "Developer tools" heading (still collapsed by default) instead of beneath the old Try SDK tab,
+  since it is unrelated to the guided demo's fixture wallet and was crowding the main story.
+- **Summary.** A new `SummarySection.kt` recaps what the SDK did in five plain sentences (the
+  fifth honestly branching on whether Submit ran in mock or live mode), an explicit "What this
+  demo is not" scope list (test money only, one built-in wallet, ADA-only, test networks only,
+  Phase 1/experimental/pre-alpha), and *Run the demo again* (which reuses the existing
+  `ResetFlow` intent, extended to also reset `demoStep`/`section` back to the start of the Demo
+  screen — the same intent now serves both a mid-demo "Start over" and this "run again").
+- **Not changed.** The 1.12-pre-a MVI split (reducer vs. ViewModel), every `RestoreWallet` /
+  `QueryFunds` / `BuildDraft` / `SignTransaction` / `SubmitTransaction` call and its provider
+  wiring, `TestWalletFixture`, `PlaygroundMockSampleData`'s seeded UTxOs (1.12-pre-c-3),
+  `PlaygroundProviderFactory`, the Block 1.12-pre-d brand mark/theme, and every existing
+  `*Presentation` display rule (no mnemonic, seed, private key, or untruncated signed CBOR
+  anywhere) — this block is additive/relocating UI and copy only.
 
 ### Test Wallet & Address Generation section (Block 1.6d, extended by Block 1.7b)
 
