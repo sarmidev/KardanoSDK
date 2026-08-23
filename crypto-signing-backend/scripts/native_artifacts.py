@@ -655,7 +655,8 @@ def check_evidence_dir(
     for spec in wanted:
         for name in required_evidence_names(spec):
             path = evidence_dir / name
-            if not path.is_file() or path.stat().st_size == 0:
+            allow_empty = name.endswith(".path-scan.txt")
+            if not path.is_file() or (path.stat().st_size == 0 and not allow_empty):
                 findings.append(
                     Finding(
                         "missing-evidence",

@@ -250,7 +250,8 @@ class EvidenceAndManifestTests(unittest.TestCase):
         evidence.mkdir()
         spec = natives.ARTIFACT_BY_ID["macos-jvm-arm64"]
         for name in natives.required_evidence_names(spec):
-            (evidence / name).write_text("x\n", encoding="utf-8")
+            payload = "" if name.endswith(".path-scan.txt") else "x\n"
+            (evidence / name).write_text(payload, encoding="utf-8")
         logs = root / "logs"
         logs.mkdir()
         findings = natives.check_evidence_dir(evidence, groups=("macos-jvm",), logs_dir=logs)

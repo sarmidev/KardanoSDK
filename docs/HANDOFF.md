@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | `6e4a51d` + Phase A/B commits | Gate 1 **NO-GO** until 8/8 candidate hashes match a clean `macos-26` runner. Full remediation; no host-bound exception. Linux/Windows JVM not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Phase B candidates | Gate 1 **NO-GO** until a clean `macos-26` runner matches all 8 local candidate hashes. CHECKSUMS/`src/` unchanged. Linux/Windows JVM not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
