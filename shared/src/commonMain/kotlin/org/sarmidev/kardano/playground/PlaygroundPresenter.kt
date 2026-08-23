@@ -495,6 +495,8 @@ internal object PlaygroundPresenter {
 
     /** Maps a [CryptoError] to a human-readable single-line message. */
     internal fun presentCryptoError(error: CryptoError): String = when (error) {
+        is CryptoError.InputTooLong ->
+            "Hash input too long: max ${error.max}B, got ${error.actual}B"
         is CryptoError.HashingFailed -> "Hashing failed: ${error.message}"
         is CryptoError.InvalidDigestLength ->
             "Invalid digest length: expected ${error.expected}B, got ${error.actual}B"

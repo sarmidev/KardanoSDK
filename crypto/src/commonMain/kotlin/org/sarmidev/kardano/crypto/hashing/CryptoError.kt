@@ -11,6 +11,16 @@ package org.sarmidev.kardano.crypto.hashing
 public sealed interface CryptoError {
 
     /**
+     * The candidate input exceeded [Hashing.MAX_INPUT_BYTES]. The limit is checked before the
+     * input is defensively copied, so an oversized caller-built array does not force a second
+     * large allocation before hashing even starts.
+     *
+     * @property max the maximum number of input bytes allowed ([Hashing.MAX_INPUT_BYTES]).
+     * @property actual the number of input bytes that were provided.
+     */
+    public data class InputTooLong(public val max: Int, public val actual: Int) : CryptoError
+
+    /**
      * The backend failed while computing a digest.
      *
      * @property message a short, human-readable description of the failure. It carries no

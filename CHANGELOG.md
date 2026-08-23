@@ -36,6 +36,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   exceed `Cbor.CBOR_MAX_INPUT_BYTES` — closing a gap where a within-per-element-limits tree (for
   example a flat array of many near-64KiB byte strings) could otherwise assemble into an output
   far larger than any single limit (W6-2).
+- `CryptoError.InputTooLong` and `Hashing.MAX_INPUT_BYTES` (1 MiB): `Hashing.blake2b224`/
+  `blake2b256` now reject an oversized `input` before the defensive copy that previously ran
+  unconditionally, closing a gap where the SDK's other parser primitives (`Cbor`, `Bech32`, `Hex`)
+  already enforced a named input bound but hashing did not (W6-1).
 
 ### Changed
 

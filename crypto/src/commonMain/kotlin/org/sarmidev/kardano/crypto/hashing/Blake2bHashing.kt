@@ -21,20 +21,26 @@ internal class Blake2bHashing : Hashing {
     /**
      * Computes a Blake2b digest and wraps it in a size-validated [HashDigest].
      *
-     * The [input] is defensively copied before it reaches the backend, and every backend
-     * failure is mapped to a [CryptoError.HashingFailed] rather than thrown, so this operation
-     * honors the [Hashing] contract of never throwing.
+     * [input]'s length is checked against [Hashing.MAX_INPUT_BYTES] before anything else, so
+     * an oversized array is rejected before the defensive copy below allocates a second
+     * buffer of the same (oversized) size. The [input] is defensively copied before it reaches
+     * the backend, and every backend failure is mapped to a [CryptoError.HashingFailed] rather
+     * than thrown, so this operation honors the [Hashing] contract of never throwing.
      */
     private fun hash(
         bitStrength: Int,
         expectedSize: Int,
         input: ByteArray,
-    ): KardanoResult<HashDigest, CryptoError> =
-        try {
+    ): KardanoResult<HashDigest, CryptoError> {
+        if (input.size > Hashing.MAX_INPUT_BYTES) {
+            return KardanoResult.Err(CryptoError.InputTooLong(Hashing.MAX_INPUT_BYTES, input.size))
+        }
+        return try {
             val digest = BLAKE2b(bitStrength).digest(input.copyOf())
             HashDigest.of(digest, expectedSize)
         } catch (t: Throwable) {
             val detail = t.message ?: t::class.simpleName ?: "hashing failed"
             KardanoResult.Err(CryptoError.HashingFailed(detail))
         }
+    }
 }
