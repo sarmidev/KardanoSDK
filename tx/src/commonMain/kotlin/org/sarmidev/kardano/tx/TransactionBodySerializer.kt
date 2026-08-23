@@ -32,7 +32,9 @@ public object TransactionBodySerializer {
 
     /**
      * Serializes [request] into a [TransactionDraft] carrying the canonical
-     * `transaction_body` CBOR bytes.
+     * `transaction_body` CBOR bytes, stamped with [TransactionBodyRequest.network] and
+     * [TransactionDraftScope.Phase1AdaOnlySinglePayment] (ADR-0019). Mainnet requests are
+     * accepted here; signing, not this serializer, rejects a mainnet draft.
      *
      * @param request the already-decided inputs, outputs, fee, and optional ttl.
      * @return [KardanoResult.Ok] with the [TransactionDraft], or [KardanoResult.Err] with a
@@ -79,6 +81,8 @@ public object TransactionBodySerializer {
                 fee = request.fee,
                 ttl = request.ttl,
                 bodyCborBytes = bodyBytes,
+                network = request.network,
+                scope = TransactionDraftScope.Phase1AdaOnlySinglePayment,
             ),
         )
     }

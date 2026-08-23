@@ -21,7 +21,12 @@ import org.sarmidev.kardano.provider.Utxo
  * revisited once real signing lands (Phase 1 Block 1.10).
  *
  * **Non-goals** (ADR-0014 §2, restated): no signing, no witness construction, no transaction
- * id hashing, no submission. [TransactionDraft] is a structural artifact only.
+ * id hashing, no submission. [TransactionDraft] is a structural artifact only. The returned
+ * draft's [TransactionDraft.network] and [TransactionDraft.scope] are stamped by
+ * [TransactionBodySerializer.serialize] from [TransactionBuildRequest.network] and
+ * [TransactionDraftScope.Phase1AdaOnlySinglePayment] (ADR-0019); this builder does not
+ * re-stamp them. Mainnet construction remains available; signing, not this builder, rejects
+ * a mainnet draft.
  */
 public object TransactionBuilder {
 

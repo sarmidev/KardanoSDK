@@ -231,6 +231,79 @@ class TransactionBodySerializerTest {
     }
 
     @Test
+    fun serialize_testnetDraft_carriesTestnetNetworkAndPhase1Scope() {
+        val request = TransactionBodyRequest(
+            network = Network.TESTNET,
+            inputs = listOf(utxoRef(1, 0L)),
+            outputs = listOf(paymentOutput()),
+            fee = lovelace(DEFAULT_FEE),
+        )
+
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBodySerializer.serialize(request),
+        ).value
+
+        assertEquals(Network.TESTNET, draft.network)
+        assertEquals(TransactionDraftScope.Phase1AdaOnlySinglePayment, draft.scope)
+    }
+
+    @Test
+    fun serialize_mainnetDraft_carriesMainnetNetworkAndPhase1Scope() {
+        val mainnetOutput = TransactionOutput(address(MAINNET_TYPE_00), lovelace(2_000_000L))
+        val request = TransactionBodyRequest(
+            network = Network.MAINNET,
+            inputs = listOf(utxoRef(1, 0L)),
+            outputs = listOf(mainnetOutput),
+            fee = lovelace(DEFAULT_FEE),
+        )
+
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBodySerializer.serialize(request),
+        ).value
+
+        assertEquals(Network.MAINNET, draft.network)
+        assertEquals(TransactionDraftScope.Phase1AdaOnlySinglePayment, draft.scope)
+    }
+
+    @Test
+    fun draftEqualsAndHashCode_includeNetworkAndScope() {
+        val testnetRequest = TransactionBodyRequest(
+            network = Network.TESTNET,
+            inputs = listOf(utxoRef(1, 0L)),
+            outputs = listOf(paymentOutput()),
+            fee = lovelace(DEFAULT_FEE),
+        )
+        val first = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBodySerializer.serialize(testnetRequest),
+        ).value
+        val second = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBodySerializer.serialize(testnetRequest),
+        ).value
+        val mainnetDraft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBodySerializer.serialize(
+                TransactionBodyRequest(
+                    network = Network.MAINNET,
+                    inputs = listOf(utxoRef(1, 0L)),
+                    outputs = listOf(TransactionOutput(address(MAINNET_TYPE_00), lovelace(2_000_000L))),
+                    fee = lovelace(DEFAULT_FEE),
+                ),
+            ),
+        ).value
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+        assertTrue(first != mainnetDraft, "drafts built for different networks must not be equal")
+        assertTrue(
+            first.toString().contains("network=TESTNET"),
+            "toString should name the bound network, got: $first",
+        )
+        assertTrue(
+            first.toString().contains("scope="),
+            "toString should name the bound scope, got: $first",
+        )
+    }
+
+    @Test
     fun negativeTtlIsRejectedAsSerializationError() {
         val request = TransactionBodyRequest(
             network = Network.TESTNET,

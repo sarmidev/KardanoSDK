@@ -470,6 +470,41 @@ class TransactionBuilderTest {
     }
 
     @Test
+    fun build_testnetDraft_carriesTestnetNetworkAndPhase1Scope() {
+        val payment = paymentOutput()
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBuilder.build(
+                request(
+                    candidateInputs = listOf(fakeUtxo(1, 0L, payment.amount.value + 20_000_000L)),
+                    payment = payment,
+                ),
+            ),
+        ).value
+
+        assertEquals(Network.TESTNET, draft.network)
+        assertEquals(TransactionDraftScope.Phase1AdaOnlySinglePayment, draft.scope)
+    }
+
+    @Test
+    fun build_mainnetDraft_carriesMainnetNetworkAndPhase1Scope() {
+        val mainnetPayment = TransactionOutput(address(MAINNET_TYPE_00), lovelace(DEFAULT_PAYMENT_AMOUNT))
+        val mainnetChange = address(MAINNET_TYPE_00)
+        val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
+            TransactionBuilder.build(
+                request(
+                    candidateInputs = listOf(fakeUtxo(1, 0L, DEFAULT_PAYMENT_AMOUNT + 20_000_000L)),
+                    payment = mainnetPayment,
+                    changeAddress = mainnetChange,
+                    network = Network.MAINNET,
+                ),
+            ),
+        ).value
+
+        assertEquals(Network.MAINNET, draft.network)
+        assertEquals(TransactionDraftScope.Phase1AdaOnlySinglePayment, draft.scope)
+    }
+
+    @Test
     fun finalDraftBodyDecodesStructurallyThroughCoreDecode() {
         val payment = paymentOutput()
         val draft = assertIs<KardanoResult.Ok<TransactionDraft>>(
