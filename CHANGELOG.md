@@ -59,8 +59,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `loader.h` is now parsed fail-closed (not only `LC_LOAD_DYLIB`);
   Verify runs `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`
   and `:androidApp:assembleDebug`/`assembleRelease` in addition to the
-  eight iOS compiles and Android lint. Gate 2 Linux starts only after
-  Verify and native rebuild are green on the current tip.
+  eight iOS compiles and Android lint. Gate 1 is GO at `d09db44`. Gate 2
+  Linux x86-64 JVM rebuilds on native `ubuntu-24.04` only (JNA prefix
+  `linux-x86-64/`, ELF64 fail-closed verifier, two independent candidate
+  jobs). The ninth CHECKSUMS row is added only after those hashes match.
+  Linux ARM and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

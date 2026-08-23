@@ -1,0 +1,195 @@
+name: Linux JVM rebuild evidence
+
+# Two independent native Ubuntu x86-64 rebuilds of the Linux JVM signing
+# cdylib, then a comparison job that requires byte-identical SHA-256 and
+# matching ELF reports before running Linux JVM KATs against the candidate.
+# This workflow never copies into committed src/ and never rewrites
+# CHECKSUMS.sha256. Linux ARM is out of scope.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "fix/**"
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_IMAGE_OS: ubuntu24
+  EXPECTED_RUSTC: "1.97.0"
+  EXPECTED_LINUX_TARGET: x86_64-unknown-linux-gnu
+
+jobs:
+  linux-jvm-build-a:
+    name: Linux JVM candidate A
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require native x86_64 Ubuntu
+        run: |
+          echo "ImageOS=${ImageOS:-}"
+          echo "RUNNER_OS=${RUNNER_OS:-}"
+          uname -m
+          if [ "${ImageOS:-}" != "$EXPECTED_IMAGE_OS" ]; then
+            echo "ImageOS ${ImageOS:-unset} != $EXPECTED_IMAGE_OS"
+            exit 1
+          fi
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "host $(uname -m) is not x86_64"
+            exit 1
+          fi
+      - name: Install rustup 1.29.0 and rustc 1.97.0
+        run: >-
+          python3 crypto-signing-backend/scripts/install_rustup.py
+          --skip-if-present
+          --dest "$RUNNER_TEMP/rustup-init"
+          --cargo-home "$HOME/.cargo"
+          --channel 1.97.0
+      - name: Put rustup on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Require rustc 1.97.0 and host triple
+        run: |
+          rustc --version --verbose
+          RELEASE=$(rustc --version | awk '{print $2}')
+          if [ "$RELEASE" != "$EXPECTED_RUSTC" ]; then
+            echo "rustc $RELEASE != $EXPECTED_RUSTC"
+            exit 1
+          fi
+          HOST=$(rustc -vV | awk '/^host:/{print $2}')
+          if [ "$HOST" != "$EXPECTED_LINUX_TARGET" ]; then
+            echo "rustc host $HOST != $EXPECTED_LINUX_TARGET"
+            exit 1
+          fi
+          rustup component add llvm-tools-preview
+      - name: Rebuild Linux JVM into staging A
+        run: >-
+          python3 crypto-signing-backend/scripts/rebuild_into_staging.py
+          --staging "$RUNNER_TEMP/linux-jvm-a"
+          --groups linux-jvm
+      - name: Upload Linux JVM candidate A
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-jvm-candidate-a
+          path: ${{ runner.temp }}/linux-jvm-a
+          if-no-files-found: error
+          retention-days: 14
+
+  linux-jvm-build-b:
+    name: Linux JVM candidate B
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require native x86_64 Ubuntu
+        run: |
+          echo "ImageOS=${ImageOS:-}"
+          uname -m
+          if [ "${ImageOS:-}" != "$EXPECTED_IMAGE_OS" ]; then
+            echo "ImageOS ${ImageOS:-unset} != $EXPECTED_IMAGE_OS"
+            exit 1
+          fi
+          if [ "$(uname -m)" != "x86_64" ]; then
+            echo "host $(uname -m) is not x86_64"
+            exit 1
+          fi
+      - name: Install rustup 1.29.0 and rustc 1.97.0
+        run: >-
+          python3 crypto-signing-backend/scripts/install_rustup.py
+          --skip-if-present
+          --dest "$RUNNER_TEMP/rustup-init"
+          --cargo-home "$HOME/.cargo"
+          --channel 1.97.0
+      - name: Put rustup on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Require rustc 1.97.0 and host triple
+        run: |
+          rustc --version --verbose
+          RELEASE=$(rustc --version | awk '{print $2}')
+          if [ "$RELEASE" != "$EXPECTED_RUSTC" ]; then
+            echo "rustc $RELEASE != $EXPECTED_RUSTC"
+            exit 1
+          fi
+          HOST=$(rustc -vV | awk '/^host:/{print $2}')
+          if [ "$HOST" != "$EXPECTED_LINUX_TARGET" ]; then
+            echo "rustc host $HOST != $EXPECTED_LINUX_TARGET"
+            exit 1
+          fi
+          rustup component add llvm-tools-preview
+      - name: Rebuild Linux JVM into staging B
+        run: >-
+          python3 crypto-signing-backend/scripts/rebuild_into_staging.py
+          --staging "$RUNNER_TEMP/linux-jvm-b"
+          --groups linux-jvm
+      - name: Upload Linux JVM candidate B
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-jvm-candidate-b
+          path: ${{ runner.temp }}/linux-jvm-b
+          if-no-files-found: error
+          retention-days: 14
+
+  linux-jvm-compare-kat:
+    name: Compare Linux candidates and run JVM KAT
+    runs-on: ubuntu-24.04
+    needs: [linux-jvm-build-a, linux-jvm-build-b]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download candidate A
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux-jvm-candidate-a
+          path: ${{ runner.temp }}/linux-jvm-a
+      - name: Download candidate B
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux-jvm-candidate-b
+          path: ${{ runner.temp }}/linux-jvm-b
+      - name: Require byte-identical Linux candidates
+        run: >-
+          python3 crypto-signing-backend/scripts/compare_linux_candidates.py
+          --left "$RUNNER_TEMP/linux-jvm-a"
+          --right "$RUNNER_TEMP/linux-jvm-b"
+          --report "$RUNNER_TEMP/linux-jvm-compare/compare-report.json"
+      - name: Place candidate on JNA resource path
+        run: |
+          DEST="crypto-signing-backend/src/jvmMain/resources/linux-x86-64"
+          mkdir -p "$DEST"
+          SRC="$RUNNER_TEMP/linux-jvm-a/artifacts/src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so"
+          if [ ! -f "$SRC" ]; then
+            echo "candidate A .so missing at $SRC"
+            ls -laR "$RUNNER_TEMP/linux-jvm-a" || true
+            exit 1
+          fi
+          cp "$SRC" "$DEST/libkardano_ed25519_bip32_signing.so"
+          sha256sum "$DEST/libkardano_ed25519_bip32_signing.so"
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          cache-disabled: false
+          cache-read-only: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}
+          cache-write-only: false
+          cache-cleanup: on-success
+      - name: Run Linux JVM KAT and signing-path tests
+        run: >-
+          ./gradlew --no-daemon
+          :crypto-signing-backend:jvmTest
+          :crypto:jvmTest
+          :wallet:jvmTest
+          :shared:jvmTest
+      - name: Upload Linux compare report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-jvm-compare-report
+          path: ${{ runner.temp }}/linux-jvm-compare
+          if-no-files-found: error
+          retention-days: 14

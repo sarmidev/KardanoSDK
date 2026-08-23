@@ -168,6 +168,24 @@ ACTION_PINS: tuple[ActionPin, ...] = (
             "natives."
         ),
     ),
+    ActionPin(
+        action="actions/download-artifact",
+        sha="3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+        release="v8.0.1",
+        resolved_on="2026-08-23",
+        source="https://github.com/actions/download-artifact/releases/tag/v8.0.1",
+        runtime="node24",
+        kind="javascript",
+        note=(
+            "First-party pin for linux-jvm-rebuild-evidence.yml candidate "
+            "compare. Resolved live from releases/latest (v8.0.1, published "
+            "2026-03-11T15:44:25Z). The tag object is a commit "
+            "(3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c). action.yml is "
+            "javascript (runs.using: node24) with no nested uses:. Used "
+            "only to download same-run upload-artifact outputs with "
+            "contents: read."
+        ),
+    ),
 )
 
 REVIEW_DOC = "docs/DEPENDENCY_REVIEW.md"

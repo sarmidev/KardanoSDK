@@ -184,8 +184,10 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
 - Android is the runtime validation surface for the Playground.
 - iOS simulator/device execution requires a local macOS/Xcode environment; compile/link checks are
   run where that environment is unavailable.
-- JVM signing runtime coverage currently requires the committed macOS native artifacts. Linux and
-  Windows JVM signing artifacts are not included.
+- JVM signing runtime coverage uses the committed macOS natives on Darwin. Linux x86-64
+  uses JNA prefix `linux-x86-64/` and is rebuilt only on native Ubuntu; the `.so` is not
+  in CHECKSUMS until two independent candidates match. Linux ARM and Windows are out of
+  scope.
 
 Native rebuild comparison (does not overwrite committed binaries):
 
@@ -198,6 +200,13 @@ python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
   --mode candidate \
   --compare
 ```
+
+`linux-jvm-rebuild-evidence.yml` rebuilds `x86_64-unknown-linux-gnu` twice on
+native `ubuntu-24.04` (ImageOS `ubuntu24`), compares SHA-256 + ELF reports,
+then runs `:crypto-signing-backend:jvmTest` `:crypto:jvmTest` `:wallet:jvmTest`
+`:shared:jvmTest` against the candidate at `linux-x86-64/`. Permissions stay
+`contents: read`. Uploads use `if-no-files-found: error`. The job does not
+write CHECKSUMS or committed `src/`.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

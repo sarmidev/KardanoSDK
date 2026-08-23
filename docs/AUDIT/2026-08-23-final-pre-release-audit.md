@@ -302,6 +302,8 @@ On `fix/native-build-and-platform-evidence`:
   `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` and
   `:androidApp:assembleDebug`/`assembleRelease` in addition to the
   existing iOS compiles and Android lint. Device runtime remains an
-  open owner/manual gate bound to W5-2 checksums. Gate 2 Linux starts
-  only after Verify and native rebuild are green on the current tip
-  and after Gate 1 re-review is GO.
+  open owner/manual gate bound to W5-2 checksums. Gate 1 is GO at
+  `d09db44`. Gate 2 Linux x86-64 JVM is a native Ubuntu candidate path
+  (`linux-x86-64/libkardano_ed25519_bip32_signing.so`) with a fail-closed
+  ELF64 verifier and two-build identity; it is not in CHECKSUMS until
+  promotion. Linux ARM and Windows remain out of scope.

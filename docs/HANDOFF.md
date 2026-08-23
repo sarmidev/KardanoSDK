@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 1 re-review | Tip `7ac9633` plus follow-up: parse every Apple dylib dependency command fail-closed; Verify runs iOS simulator link and Android assemble. Current 8 binaries unchanged. Linux not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Tip `d09db44` plus Linux x86-64 JVM candidate rebuild (native Ubuntu only). Not in CHECKSUMS until two independent hashes match. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -104,18 +104,13 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence` (continue
-  from `7ac9633`).** Gate 1 re-review found a parser regression (alternate
-  dylib dependency commands were ignored) and a CI gap (claimed iOS
-  simulator link / Android assemble were local-only). The follow-up
-  parses `LC_LOAD_DYLIB` / `LC_LOAD_WEAK_DYLIB` / `LC_REEXPORT_DYLIB` /
-  `LC_LOAD_UPWARD_DYLIB` / `LC_LAZY_LOAD_DYLIB` at the exact Xcode 26.6
-  `loader.h` encodings, feeds every name through the libSystem allowlist,
-  and rejects unexpected forms and malformed `LC_REQ_DYLD` variants.
-  Verify macOS now runs `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`
-  with the eight `compileKotlinIosArm64` tasks. Verify Ubuntu `android-lint`
-  keeps lint Debug/Release and adds `assembleDebug` / `assembleRelease`.
-  Device `connectedAndroidDeviceTest` remains historical (W5-2 `40ab80c`
-  checksums); no post-replacement device runtime. Do not start Linux or
+  from `d09db44`).** Gate 1 is GO. Gate 2 Linux x86-64 JVM uses JNA prefix
+  `linux-x86-64/` and a fail-closed ELF64 verifier (ET_DYN, EM_X86_64,
+  allowlisted `DT_NEEDED`, exact SONAME, no RPATH/RUNPATH, no build-id,
+  no `.debug_*`). Rebuilds run only on native `ubuntu-24.04` with rustc
+  1.97.0 / `x86_64-unknown-linux-gnu`. Two independent jobs must match
+  before promotion. CHECKSUMS still has the eight committed artifacts.
+  Device runtime remains historical (W5-2). Do not start Windows or
   merge/tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
@@ -233,13 +228,13 @@ Do not use:
 
 ## Next Recommended Task
 
-Prompt 7 is on `fix/native-build-and-platform-evidence`. Independent Gate 1
-re-review of the dependency-command parser and Verify link/assemble
-tasks is the next gate. Do not start Gate 2 Linux until that re-review
-is GO. Residual owner work: authenticated GitHub secret-scanning /
-Dependabot, the manual accessibility walkthrough, and a post-replacement
-Android device `connectedAndroidDeviceTest` (still a manual gate). Do
-not merge from an automated session.
+Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
+`d09db44`. Gate 2 Linux re-review is the next gate (promotion only after
+two independent Ubuntu hashes match). Do not start Windows until that
+re-review is GO. Residual owner work: authenticated GitHub secret-scanning
+/ Dependabot, the manual accessibility walkthrough, and a post-replacement
+Android device `connectedAndroidDeviceTest`. Do not merge from an
+automated session.
 
 ## Prompt For Cursor Business/Product Work
 
