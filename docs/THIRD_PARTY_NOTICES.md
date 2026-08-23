@@ -31,6 +31,7 @@ libsodium rows below); that is noted per row rather than forcing one label.
 | UniFFI Rust crate | Source | Generated signing backend bindings | MPL-2.0 |
 | Gobley UniFFI bindgen | Source (build-time only) | Offline generation tool only | Apache-2.0 OR MIT |
 | JUnit | Test-only | JVM test framework | Eclipse Public License 2.0 |
+| Gitleaks CLI `v8.30.1` | CI-only (not redistributed) | Full-history credential scan. Installed by `scripts/install_gitleaks.py` after verifying the official release checksums file. Not a GitHub Action wrapper. | MIT |
 | `androidx.test:runner` | Test-only | Android instrumented test runner | Apache-2.0 |
 
 The signing-backend module records its pinned versions and a more detailed inventory in
@@ -64,6 +65,8 @@ Before publishing a binary, Maven artifact, app bundle, or other distribution:
    attribution and licence compatible with its use.
 5. Add required attribution text to the release package or a `NOTICE` file.
 6. Record the review date, release tag, and reviewer in the release notes.
+7. Re-run `python3 scripts/check_gitleaks.py` on the tagged commit (full history,
+   redacted output) and keep allowlists match-level only.
 
 Do not treat this initial inventory as legal advice. Consult qualified counsel when distributing a
 commercial product or when licence obligations are unclear.

@@ -8,7 +8,9 @@ tag plus release notes that identify the source revision, verified targets, and 
 1. Confirm the copyright owner named in `LICENSE`.
 2. Complete the third-party notice review in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 3. Verify repository history contains no API keys, real mnemonics, private keys, or live-fund
-   addresses.
+   addresses. Run `python3 scripts/check_gitleaks.py` after
+   `python3 scripts/install_gitleaks.py`. This does not replace an owner-authenticated
+   GitHub secret-scanning pass.
 4. Confirm the public README, quickstart, roadmap, and security-reporting path match delivered
    behavior.
 5. Run the CI-equivalent test matrix and record platform limitations.
@@ -36,9 +38,12 @@ promise and they do not keep exhaustive `when` expressions compiling without edi
 3. Run `git diff --check` and `python3 scripts/check_restricted_claims.py`.
    The script classifies each phrase match on its own and prints
    `path:line:column`. It is not a credential scanner.
-4. Review public API changes and update KDoc/module READMEs.
-5. Create an annotated Git tag from the verified commit.
-6. Publish release notes containing:
+4. Run the full-history credential scan: `python3 scripts/install_gitleaks.py`
+   then `python3 scripts/check_gitleaks.py`. Confirm zero non-allowlisted
+   findings. Output is redacted; do not paste raw matches into notes.
+5. Review public API changes and update KDoc/module READMEs.
+6. Create an annotated Git tag from the verified commit.
+7. Publish release notes containing:
    - scope and non-goals;
    - verification commands and environment;
    - known target limitations;
@@ -70,6 +75,24 @@ Policy:
    so the snapshot can be restored and hashed.
 5. Run `python3 scripts/check_handoff_archive.py` before declaring the curation
    done.
+
+## CI tool review — Gitleaks
+
+Credential scanning uses the **Gitleaks CLI** (`gitleaks/gitleaks`), not a
+third-party GitHub Action wrapper.
+
+| Item | Value |
+|---|---|
+| Selected release | `v8.30.1` (GitHub `releases/latest` on 2026-08-23; published 2026-03-21T02:17:58Z) |
+| Checksums file | `https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt` |
+| Checksums file SHA-256 | `061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae` |
+| Licence | MIT (upstream `gitleaks/gitleaks`) |
+| Installer | `scripts/install_gitleaks.py` — verifies the checksums file, then the selected archive, then extracts. The binary is never committed. |
+| Why not an Action wrapper | This repo pins Actions by commit SHA already; a wrapper would add a second, unverified tool chain. Installing the CLI lets CI and a local checkout run the same pinned binary. |
+| Scan scope | Full git history (`fetch-depth: 0`, `git fetch --prune --tags origin`, `gitleaks detect --log-opts=--all`). Output is redacted. |
+| Allowlist | Match-level only in `.gitleaks.toml`: the cited CIP-19 payment-credential hex **and** the exact test path that `generic-api-key` flags. No directory, rule, or commit exclusions. |
+
+This tool is CI-only. It is not redistributed in an SDK artifact.
 
 ## Publishing artifacts later
 

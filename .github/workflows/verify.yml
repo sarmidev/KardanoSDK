@@ -22,6 +22,26 @@ jobs:
         # path exclusions live in scripts/check_restricted_claims.py.
         run: python3 scripts/check_restricted_claims.py
 
+  credential-scan:
+    name: Full-history credential scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Fetch every ref the checkout can see
+        run: git fetch --prune --tags origin
+      - name: Install pinned Gitleaks CLI
+        # CLI only — not a third-party Action wrapper. Version and SHA-256 are
+        # pinned in scripts/install_gitleaks.py (resolved live from the
+        # official GitHub release checksums file).
+        run: python3 scripts/install_gitleaks.py --dest "$RUNNER_TEMP/gitleaks"
+      - name: Scan git history with redacted output
+        run: >-
+          python3 scripts/check_gitleaks.py
+          --binary "$RUNNER_TEMP/gitleaks"
+
   portable-jvm-and-android-host:
     name: Portable JVM and Android host tests
     runs-on: ubuntu-latest

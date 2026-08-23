@@ -255,3 +255,4 @@ original evidence or reopen resolved-as-of-Prompt-1 items.
 | W8-3 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — explicit Ktor `HttpTimeout` bounds and no Ktor request retry. |
 | W1-2 | **Resolved** — historical HANDOFF content is preserved verbatim under `docs/archive/handoff/`; the living `docs/HANDOFF.md` is the current resume. Coverage is checked by `scripts/check_handoff_archive.py`. |
 | NF-5 | **Further remediated** — the inline whole-line grep is replaced by `scripts/check_restricted_claims.py` (match-by-match, `path:line:column`, longest phrase first). Same-line permitted+prohibited fixtures are unit-tested. |
+| W9-3 (secret-scan half) | **Resolved** — Gitleaks CLI `v8.30.1` is installed from the official checksums file and scans full history with redacted output. Allowlists are match-level CIP-19 test-path entries only. |

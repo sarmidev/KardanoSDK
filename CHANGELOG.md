@@ -163,6 +163,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   longest phrase. Exclusions are exact paths or frozen-record prefixes, each with a
   rationale in the script. This is a claim-language scan only, not credential scanning
   (W9-3 / NF-5).
+- `verify.yml` gained a `credential-scan` job that installs the Gitleaks CLI
+  (`v8.30.1`, checksum-verified from the official GitHub release checksums file) and
+  scans complete git history with redacted output. Allowlists are match-level only
+  for the cited CIP-19 payment-credential hex on the exact test paths that
+  `generic-api-key` flags (W9-3).
 - The Playground demo is now a linear, guided story (Welcome → five-step Demo → Summary) with
   plain-language copy, one primary action per step, and technical detail (hashes, fees, CBOR,
   UTxOs, witnesses) collapsed behind an optional "Technical details" toggle, replacing the earlier

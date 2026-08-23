@@ -74,9 +74,8 @@ Read these first:
   included (W9-4).
 - Still-open hygiene items outside this stacked batch: CI `androidApp:lint` (W3-3),
   tag-triggered release CI (W4-5), pre-1.0 pinned dependencies (W5-4, by design).
-- Restricted-claim and full-history credential scanning are the next commits on this
-  branch; they are not a substitute for an owner-authenticated GitHub secret-scanning
-  pass.
+- Restricted-claim and full-history Gitleaks scans now run in CI. They are not a
+  substitute for an owner-authenticated GitHub secret-scanning pass.
 
 ## Branch-Stack Status
 
@@ -112,7 +111,9 @@ Date: 2026-08-23
     replaces the inline `verify.yml` grep. Classification is per match; output is
     `path:line:column`; longest phrase wins. Unit tests cover same-line mixed
     hits, exclusion boundaries, and near-miss words.
-  - **Next on this branch:** full-history Gitleaks.
+  - **Commit 4 — full-history Gitleaks.** Checksum-verified CLI installer
+    (`v8.30.1`, official GitHub release checksums file). CI checkout uses
+    `fetch-depth: 0`. Allowlists are match-level CIP-19 test-path entries only.
 
 ### Session Summary (Provider boundaries and timeouts)
 
@@ -181,11 +182,9 @@ Do not use:
 
 ## Next Recommended Task
 
-Finish Prompt 5 on this branch: replace the inline restricted-claim grep with
-`scripts/check_restricted_claims.py`, then add checksum-verified Gitleaks
-full-history scanning. After that, residual owner work is an authenticated GitHub
-secret-scanning / Dependabot pass, the manual accessibility walkthrough, and a
-human review of the stacked PRs. Do not merge from an automated session.
+Prompt 5 on this branch is implemented. Residual owner work: an authenticated
+GitHub secret-scanning / Dependabot pass, the manual accessibility walkthrough,
+and a human review of the stacked PRs. Do not merge from an automated session.
 
 ## Prompt For Cursor Business/Product Work
 

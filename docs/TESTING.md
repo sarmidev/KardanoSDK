@@ -188,3 +188,17 @@ python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.tes
 match on its own (never a whole-line exclusion), reports `path:line:column`,
 and prefers the longest phrase. It is the CI `restricted-claim-scan` job. It
 does not scan credentials.
+
+Full-history credential scan (Gitleaks CLI, not a third-party Action wrapper):
+
+```bash
+python3 scripts/install_gitleaks.py
+python3 scripts/check_gitleaks.py
+python3 -m unittest scripts.tests.test_gitleaks_allowlist
+```
+
+The installer verifies the official `gitleaks_*_checksums.txt` digest and the
+selected archive digest before extracting. The binary is written to
+`.gitleaks-bin/` (gitignored) and is never committed. Output is redacted.
+Allowlists are match-level only (cited CIP-19 payment-credential hex + exact
+test path). See `.gitleaks.toml` and `docs/RELEASING.md`.
