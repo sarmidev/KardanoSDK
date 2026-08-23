@@ -84,7 +84,7 @@ jobs:
           --channel 1.97.0
       - name: Put rustup on PATH
         run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      - name: Require rustc 1.97.0
+      - name: Require rustc 1.97.0 and llvm-tools
         run: |
           rustc --version --verbose
           RELEASE=$(rustc --version | awk '{print $2}')
@@ -92,6 +92,11 @@ jobs:
             echo "rustc $RELEASE != $EXPECTED_RUSTC"
             exit 1
           fi
+          rustup component add llvm-tools-preview
+          HOST=$(rustc -vV | awk '/^host:/{print $2}')
+          LLVM_NM="$(rustc --print sysroot)/lib/rustlib/${HOST}/bin/llvm-nm"
+          test -x "$LLVM_NM"
+          echo "llvm-nm=$LLVM_NM"
       - name: Install cargo-ndk 4.1.2
         run: cargo install cargo-ndk --version 4.1.2 --locked
       - name: Enable Rosetta for NDK darwin-x86_64 clang

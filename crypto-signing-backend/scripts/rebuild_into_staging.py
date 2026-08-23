@@ -238,6 +238,20 @@ def copy_fresh_output(
     return dest
 
 
+def _ensure_llvm_tools(
+    *,
+    module_root: Path,
+    env: dict[str, str],
+    recorder: CommandRecorder,
+) -> None:
+    recorder.run(
+        ["rustup", "component", "add", "llvm-tools-preview"],
+        cwd=module_root,
+        env=env,
+        name="rustup-component-llvm-tools-preview",
+    )
+
+
 def _ensure_target(
     rust_target: str,
     *,
@@ -536,6 +550,7 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
         recorder = CommandRecorder(staging / "logs")
+        _ensure_llvm_tools(module_root=module_root, env=env, recorder=recorder)
         print(
             f"ANDROID_NDK_HOME={env.get('ANDROID_NDK_HOME', '')} "
             f"CARGO_TARGET_DIR={env.get('CARGO_TARGET_DIR', '')}",

@@ -40,6 +40,7 @@ class ScriptedHooks(natives.InspectHooks):
         self.results = results
         self.which = self._which
         self.run = self._run
+        self.llvm_nm = which_map.get("llvm-nm")
 
     def _which(self, name: str) -> str | None:
         if name in self.which_map:
@@ -63,6 +64,7 @@ def _dylib_hooks(*, nm_rc: int = 0, nm_out: str | None = None, arch: str = "arm6
             "lipo": "/usr/bin/lipo",
             "otool": "/usr/bin/otool",
             "nm": "/usr/bin/nm",
+            "llvm-nm": None,
         },
         {
             "file": _Proc(0, f"Mach-O 64-bit dynamically linked shared library {arch}\n"),

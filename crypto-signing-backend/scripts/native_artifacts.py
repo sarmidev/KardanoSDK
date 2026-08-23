@@ -204,6 +204,9 @@ class ArtifactRecord:
     inspection_errors: list[str] = field(default_factory=list)
 
 
+_UNSET = object()
+
+
 @dataclass
 class InspectHooks:
     """Injectable process/path helpers so tests can fail closed without host tools."""
@@ -211,11 +214,17 @@ class InspectHooks:
     which: Callable[[str], str | None] = shutil.which
     run: Callable[..., subprocess.CompletedProcess[str]] | None = None
     ndk_home: Path | None = None
+    llvm_nm: str | None | object = _UNSET
 
     def run_command(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         if self.run is not None:
             return self.run(command)
         return _run(command)
+
+    def llvm_nm_path(self) -> str | None:
+        if self.llvm_nm is not _UNSET:
+            return self.llvm_nm  # type: ignore[return-value]
+        return _rustc_llvm_nm() or self.which("llvm-nm")
 
 
 def sha256_file(path: Path) -> str:
@@ -293,10 +302,16 @@ def _ndk_llvm_nm(ndk_home: Path | None) -> str | None:
 
 
 def _rustc_llvm_nm() -> str | None:
+    rustup = shutil.which("rustup")
+    if rustup:
+        completed = _run([rustup, "which", "llvm-nm"], cwd=MODULE_ROOT)
+        path = (completed.stdout or "").strip()
+        if completed.returncode == 0 and path and Path(path).is_file():
+            return path
     rustc = shutil.which("rustc")
     if rustc is None:
         return None
-    completed = _run([rustc, "--print", "sysroot"])
+    completed = _run([rustc, "--print", "sysroot"], cwd=MODULE_ROOT)
     sysroot = (completed.stdout or "").strip()
     if not sysroot:
         return None
@@ -317,14 +332,19 @@ def _nm_command(
         llvm_nm = _ndk_llvm_nm(hooks.ndk_home) or hooks.which("llvm-nm")
         if llvm_nm:
             return [llvm_nm, "-D", str(path)]
-    rust_nm = _rustc_llvm_nm()
-    if spec.kind == "archive" and rust_nm:
-        return [rust_nm, "-g", str(path)]
-    nm = hooks.which("nm") or hooks.which("llvm-nm")
-    if nm is None:
+    rust_nm = hooks.llvm_nm_path()
+    if spec.kind == "archive":
+        if rust_nm:
+            return [rust_nm, "-g", str(path)]
         return None
     if spec.kind == "so":
-        return [nm, "-D", str(path)]
+        llvm_nm = _ndk_llvm_nm(hooks.ndk_home) or rust_nm
+        if llvm_nm:
+            return [llvm_nm, "-D", str(path)]
+        return None
+    nm = rust_nm or hooks.which("nm")
+    if nm is None:
+        return None
     return [nm, "-gU", str(path)]
 
 
