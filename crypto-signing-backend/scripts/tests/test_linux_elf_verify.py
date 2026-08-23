@@ -88,6 +88,7 @@ def build_elf(
     versym_entries: list[int] | None = None,
     undefined_symbol: str | None = None,
     undefined_versym: int = 2,
+    undefined_bind: int = elf.STB_GLOBAL,
     vna_others: tuple[int, ...] | None = None,
     vd_ndx: int = 4,
     versym_entsize: int | None = None,
@@ -171,7 +172,7 @@ def build_elf(
     if extra_off is not None:
         symbols.append(pack_sym(extra_off, elf.STB_GLOBAL, elf.STT_FUNC, elf.STV_DEFAULT, 1, 0x1010))
     if undefined_off is not None:
-        symbols.append(pack_sym(undefined_off, elf.STB_GLOBAL, elf.STT_FUNC, elf.STV_DEFAULT, 0, 0))
+        symbols.append(pack_sym(undefined_off, undefined_bind, elf.STT_NOTYPE, elf.STV_DEFAULT, 0, 0))
     dynsym = b"".join(symbols)
 
     aux_names = list(version_offs)
@@ -1035,10 +1036,20 @@ class LinuxElfVerifyTests(unittest.TestCase):
             build_elf(undefined_symbol="memcpy", undefined_versym=2)
         )
         self.assertEqual(needed.versym_values[2], 2)
+        gmon = elf.parse_elf64_le_x86_64_dso(
+            build_elf(
+                undefined_symbol="__gmon_start__",
+                undefined_versym=elf.VER_NDX_LOCAL,
+                undefined_bind=elf.STB_WEAK,
+            )
+        )
+        self.assertEqual(gmon.versym_values[2], elf.VER_NDX_LOCAL)
         defined = elf.parse_elf64_le_x86_64_dso(build_elf(include_verdef=True, sign_versym=4))
         self.assertEqual(defined.versym_values[1], 4)
         self.assertEqual(defined.verdef_indices, {4: SONAME})
 
+        with self.assertRaisesRegex(elf.ElfError, "defined non-local"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(sign_versym=elf.VER_NDX_LOCAL))
         with self.assertRaisesRegex(elf.ElfError, "unresolved versym 0x7fff"):
             elf.parse_elf64_le_x86_64_dso(build_elf(sign_versym=elf.VER_NDX_UNSPECIFIED))
         with self.assertRaisesRegex(elf.ElfError, "versym is hidden"):

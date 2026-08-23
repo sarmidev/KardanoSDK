@@ -1455,8 +1455,10 @@ def _resolve_versym(
                 raise ElfError("dynsym 0 versym is not VER_NDX_LOCAL")
             continue
         if base == VER_NDX_LOCAL:
-            if symbol.bind != STB_LOCAL:
-                raise ElfError(f"versym local index on non-local symbol {symbol.name or index}")
+            if defined and symbol.bind != STB_LOCAL:
+                raise ElfError(
+                    f"versym local index on defined non-local symbol {symbol.name or index}"
+                )
             continue
         if base == VER_NDX_GLOBAL:
             if symbol.bind == STB_LOCAL:
