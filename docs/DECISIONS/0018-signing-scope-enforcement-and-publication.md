@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                 |
 |---------|------------------------------------------------------------------------|
-| Status  | **Accepted (decision only) — implementation not authorized by this ADR.** This ADR resolves *which direction* to build in; the chosen option is its own separate, future implementation task, mirroring how ADR-0015 §1 recorded the signing decision ahead of Block 1.10b's implementation. |
+| Status  | **Accepted; §4 items 1-2 implemented 2026-08-23 — see §6 result note.** Option 3 (the `TransactionDraft` network-binding redesign) remains a separately-scheduled future ADR, not implemented here. |
 | Scope   | Reassessing W7-1 from the 2026-08-22 pre-release audit (`docs/AUDIT/2026-08-22-pre-release-audit.md` §4.6): whether `ReadOnlyWallet.signTransaction`'s unenforced scope is a defect, an API-contract problem, a publication-policy problem, or a combination; comparing focused remediation options; recommending one. |
 | Phase   | Pre-release hardening (post-Phase 1, pre-first-public-release)         |
 | Updated | 2026-08-23                                                            |
@@ -201,9 +201,48 @@ scheduled per §4.
 - W7-1 remains an accurately-documented, dual-rated finding (by-design for internal development,
   a real gap for public reachability) — this ADR does not reclassify it, it decides what to do
   about the public-reachability half.
-- No code changes are authorized by this ADR. A future, separately-reviewed implementation PR
-  covers items 1-2 of §4; a further future ADR covers Option 3.
+- No code changes were authorized by this ADR **at the time it was written**. §6 records that
+  items 1-2 of §4 were subsequently implemented as their own separately-reviewed task; Option 3
+  is still not implemented and remains a future ADR.
 - `docs/RELEASING.md`'s existing framing (no Maven publication yet; a tag is the current release
   vehicle) is unchanged and is not re-litigated by this ADR.
 - This ADR does not authorize widening `:wallet`'s dependency graph, does not add a `:wallet →
   :shared` edge, and does not weaken any existing guardrail.
+
+---
+
+## §6 Result note (2026-08-23): §4 items 1-2 implemented
+
+The immediate API-signaling half of §4's recommendation has been implemented, as its own focused
+task, separate from this ADR's own authorship:
+
+- **Renamed** `ReadOnlyWallet.signTransaction` to
+  `ReadOnlyWallet.signTestnetFixtureTransaction` (§4 item 1's exact suggested name — code
+  inspection did not surface a more precise one: the function's actual scope is exactly
+  "testnet" + "the Phase 1 fixture", which the name now states directly).
+- **Added** a new, dedicated `ExperimentalKardanoSigningScope` annotation
+  (`wallet/src/commonMain/kotlin/org/sarmidev/kardano/wallet/ExperimentalKardanoSigningScope.kt`),
+  `@RequiresOptIn(level = RequiresOptIn.Level.ERROR)`, applied only to
+  `signTestnetFixtureTransaction`. Per this task's explicit scope, it was **not** applied to
+  `Network.MAINNET`/`BlockfrostNetwork.MAINNET` (§4 item 2's "for symmetry" suggestion was not
+  carried out) — those remain ordinary, unguarded, general-purpose SDK constants, unchanged.
+- **Updated every in-repository call site** (`PlaygroundPresenter.presentSignedTransaction`,
+  `PlaygroundPresenter.presentSubmitTransaction`, and both `:wallet` test files, one of which was
+  renamed to `ReadOnlyWalletSignTestnetFixtureTransactionDesktopTest.kt` and the other to
+  `ReadOnlyWalletSignTestnetFixtureTransactionMnemonicTest.kt` for naming consistency) with an
+  explicit `@OptIn(ExperimentalKardanoSigningScope::class)`.
+- **No compatibility typealias or deprecated wrapper** was added under the old `signTransaction`
+  name, consistent with this pre-alpha repository's convention of not preserving old names across
+  a rename (per the workspace guardrails).
+- **No runtime network check, fixture recognition, `TransactionDraft` binding, or restriction on
+  `Network.MAINNET`/`BlockfrostNetwork.MAINNET` was added** — this implementation is exactly and
+  only §4 items 1-2 (the signal), not §1's exploit fix (Option 3), which remains future work.
+- **Verified:** `:wallet:jvmTest`, `:wallet:testAndroidHostTest`, `:shared:jvmTest`,
+  `:shared:testAndroidHostTest` pass; `:core`/`:crypto`/`:crypto-signing-backend`/`:provider`/
+  `:provider-blockfrost`/`:tx`/`:wallet`/`:shared` all compile clean for `iosArm64`;
+  `:androidApp:assembleDebug` and `:desktopApp:compileKotlin` (or equivalent) succeed; a
+  repository-wide search confirms no remaining reference to the old `signTransaction` name
+  outside this ADR's own historical §Context/§Decision prose (which is left as an accurate
+  record of what the finding originally described) and the unrelated Playground-internal
+  `SignTransactionUseCase`/`signTransaction` naming in `PlaygroundViewModel.kt` (an app-level
+  "guided-demo step" concept, not this SDK entry point, and out of this task's scope).

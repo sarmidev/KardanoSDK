@@ -32,9 +32,10 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   Balance" below), and, from Block 1.9c, on `:tx` for the unsigned transaction-draft checkpoint
   (`TransactionBuilder`, `TransactionBuildRequest`, `TransactionDraft`, `TxBuildError` — see
   "Transaction Draft" below). Block 1.10c (signing) and Block 1.11c (submission) reuse these
-  same `:wallet`/`:tx`/`:provider` dependencies — `ReadOnlyWallet.signTransaction`,
-  `WalletSignedTransaction`, and `TxSubmitProvider.submit` — with no new Gradle module added
-  (see "Signed Transaction" and "Submit Transaction" below).
+  same `:wallet`/`:tx`/`:provider` dependencies — `ReadOnlyWallet.signTestnetFixtureTransaction`
+  (renamed from `signTransaction`, 2026-08-23, ADR-0018), `WalletSignedTransaction`, and
+  `TxSubmitProvider.submit` — with no new Gradle module added (see "Signed Transaction" and
+  "Submit Transaction" below).
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
   `iosApp` via `MainViewControllerKt.MainViewController()`.
 
@@ -505,10 +506,12 @@ native-asset UTxO is never selected as an input.
 The "Signed Transaction (not submitted)" section builds the same unsigned draft as the
 Transaction Draft section above — through a shared `PlaygroundPresenter.buildTransactionDraft`
 helper extracted from that checkpoint so both sections build the identical draft — then signs it
-by calling `:wallet`'s `ReadOnlyWallet.signTransaction(TestWalletFixture.words, Network.TESTNET,
-draft)`, always passing the cited test-only fixture words and `Network.TESTNET` explicitly:
-`:wallet` itself is not fixture-aware and enforces neither (ADR-0015 §2a), so this call site is
-what keeps this checkpoint on the fixture/testnet-only path. `:shared` performs no hashing,
+by calling `:wallet`'s `ReadOnlyWallet.signTestnetFixtureTransaction(TestWalletFixture.words,
+Network.TESTNET, draft)`, always passing the cited test-only fixture words and `Network.TESTNET`
+explicitly: `:wallet` itself is not fixture-aware and enforces neither (ADR-0015 §2a) — the
+function's scope-explicit name and its required `ExperimentalKardanoSigningScope` opt-in
+(ADR-0018) are a compiler/IDE-visible intent signal only, not a runtime check — so this call site
+is what keeps this checkpoint on the fixture/testnet-only path. `:shared` performs no hashing,
 signing, or witness/CBOR assembly itself — all of that belongs to `:wallet` (which itself
 delegates to `:crypto`'s `Signing` and `:tx`'s `TransactionAssembler`) — and
 `PlaygroundPresenter.presentSignedTransaction` only calls it and formats the result. On success
@@ -517,8 +520,9 @@ single-key checkpoint), a truncated hex preview of the full signed `transaction`
 explicit `signed, not submitted — testnet-only, test fixture, no real funds` label — never the
 mnemonic, seed, private/root key bytes, or the full (untruncated) signed CBOR. On failure the
 screen shows a message distinguishing the cause, covering both the same draft-building failures
-the Transaction Draft section can report and every `WalletError` `ReadOnlyWallet.signTransaction`
-itself can return (a signing failure or a witness/transaction-assembly failure). Under the
+the Transaction Draft section can report and every `WalletError`
+`ReadOnlyWallet.signTestnetFixtureTransaction` itself can return (a signing failure or a
+witness/transaction-assembly failure). Under the
 default `InMemoryChainQueryProvider`, the restored wallet's address has no fake UTxOs seeded for
 it — same honest-empty behavior as the sections above — so this section normally reports "no
 UTxOs" as the expected mock result, not a failure; a live Blockfrost preprod provider can sign a
@@ -530,8 +534,8 @@ submission anywhere in this checkpoint** — submitting a transaction is Block 1
 
 The "Submit Transaction (preprod)" section builds and signs the same fixture transaction as
 the Signed Transaction section above — through `PlaygroundPresenter.presentSubmitTransaction`,
-which reuses the exact same `buildTransactionDraft` + `ReadOnlyWallet.signTransaction` sequence
-— then calls `:provider`'s `TxSubmitProvider.submit(signed.signedTransaction.cbor())` directly
+which reuses the exact same `buildTransactionDraft` + `ReadOnlyWallet.signTestnetFixtureTransaction`
+sequence — then calls `:provider`'s `TxSubmitProvider.submit(signed.signedTransaction.cbor())` directly
 on the resulting `WalletSignedTransaction`. **No new `:wallet` orchestration method was added
 for this** (ADR-0017 "Non-goals"): the presenter sequences build → sign → submit itself, and
 the accepted-id/local-id comparison lives in the presenter, not in `:wallet` or `:provider`.
@@ -620,8 +624,8 @@ transaction checkpoint (Block 1.10c) follows the same split:
 `WalletError` values (`Signing`, `TransactionAssembly`) into `mapSignedTransactionResult`/
 `presentSigningError`/`presentWalletError` directly (no mnemonic, no native call);
 `PlaygroundSignedTransactionDesktopTest` (`jvmTest`-only) is the only place
-`presentSignedTransaction` and `ReadOnlyWallet.signTransaction` run end to end together,
-asserting the honest "no UTxOs" result under the default mock, and — once the mock is seeded
+`presentSignedTransaction` and `ReadOnlyWallet.signTestnetFixtureTransaction` run end to end
+together, asserting the honest "no UTxOs" result under the default mock, and — once the mock is seeded
 with a UTxO for the restored wallet's own address — a successful signed transaction whose rows
 carry a well-formed 32-byte hex transaction id, exactly one witness, a truncated CBOR preview,
 the exact not-submitted/testnet/fixture label, and none of the fixture's mnemonic words. The
@@ -633,7 +637,7 @@ constructible from any 32 bytes, no native call needed), not a `:wallet`-interna
 both the accepted/local-id match-and-mismatch cases and every `SubmitError` variant
 (`presentSubmitError`) are exercised directly; `PlaygroundSubmitTransactionDesktopTest`
 (`jvmTest`-only) is the only place `presentSubmitTransaction` runs end to end (it reaches
-`ReadOnlyWallet.signTransaction`'s native backend), asserting the honest "no UTxOs" result
+`ReadOnlyWallet.signTestnetFixtureTransaction`'s native backend), asserting the honest "no UTxOs" result
 under the default mock and, once the mock query provider is seeded with a UTxO for the
 restored wallet's own address, that the mock submit provider still reports its honest
 not-supported failure rather than a fake accepted id — there is no automated end-to-end

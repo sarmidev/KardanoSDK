@@ -21,8 +21,8 @@ import kotlin.test.assertTrue
  * JVM/desktop-only end-to-end test for the signed-transaction checkpoint (Block 1.10c).
  *
  * This is the **only** place [PlaygroundPresenter.presentSignedTransaction] is exercised end to
- * end: it calls `:wallet`'s [ReadOnlyWallet.restore]/`ReadOnlyWallet.signTransaction`, which
- * reach `:crypto`'s native derivation/signing backend and cannot load under
+ * end: it calls `:wallet`'s [ReadOnlyWallet.restore]/`ReadOnlyWallet.signTestnetFixtureTransaction`,
+ * which reach `:crypto`'s native derivation/signing backend and cannot load under
  * `:shared:testAndroidHostTest` (host JVM, Android target) — see
  * [PlaygroundSignedTransactionPresenterTest] for the native-free error-mapping coverage that
  * does run there, and [PlaygroundTransactionDraftDesktopTest]'s KDoc for the same split applied

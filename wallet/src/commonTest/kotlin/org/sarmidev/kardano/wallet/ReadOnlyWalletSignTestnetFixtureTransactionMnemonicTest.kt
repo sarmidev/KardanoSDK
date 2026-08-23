@@ -17,21 +17,27 @@ import kotlin.test.assertIs
 import kotlin.test.fail
 
 /**
- * Native-free tests for [ReadOnlyWallet.signTransaction]'s mnemonic-rejection paths.
+ * Native-free tests for [ReadOnlyWallet.signTestnetFixtureTransaction]'s mnemonic-rejection
+ * paths.
  *
  * [org.sarmidev.kardano.crypto.mnemonic.Mnemonic.parse] rejects invalid input before
- * [ReadOnlyWallet.signTransaction] ever calls into `:crypto`'s native derivation/signing
- * backends, so these cases run under both `:wallet:jvmTest` and
+ * [ReadOnlyWallet.signTestnetFixtureTransaction] ever calls into `:crypto`'s native derivation/
+ * signing backends, so these cases run under both `:wallet:jvmTest` and
  * `:wallet:testAndroidHostTest`, mirroring [ReadOnlyWalletRestoreMnemonicTest]. See
- * [ReadOnlyWalletSignTransactionDesktopTest] for the JVM-only end-to-end success path that does
- * reach native code.
+ * [ReadOnlyWalletSignTestnetFixtureTransactionDesktopTest] for the JVM-only end-to-end success
+ * path that does reach native code.
  *
  * The [TransactionDraft] fixture reuses the CIP-19 "Test vectors" testnet base (type-00)
  * address already cited verbatim in `:core`'s `AddressTest`, mirroring
  * `TransactionBodySerializerTest`. Building it needs no native cryptography (`:tx` is
  * crypto-free).
+ *
+ * Class-level [OptIn] for [ExperimentalKardanoSigningScope] (ADR-0018): every call here already
+ * declares [Network.TESTNET] explicitly, per the Phase 1 call-site discipline the entry point's
+ * own KDoc requires.
  */
-class ReadOnlyWalletSignTransactionMnemonicTest {
+@OptIn(ExperimentalKardanoSigningScope::class)
+class ReadOnlyWalletSignTestnetFixtureTransactionMnemonicTest {
 
     private companion object {
         const val TESTNET_TYPE_00 =
@@ -57,8 +63,8 @@ class ReadOnlyWalletSignTransactionMnemonicTest {
     }
 
     @Test
-    fun signTransaction_withInvalidWordCount_returnsMnemonicErrorWithoutReachingNativeCode() {
-        val result = ReadOnlyWallet.signTransaction(
+    fun signTestnetFixtureTransaction_withInvalidWordCount_returnsMnemonicErrorWithoutReachingNativeCode() {
+        val result = ReadOnlyWallet.signTestnetFixtureTransaction(
             listOf("test", "walk", "nut", "penalty"),
             Network.TESTNET,
             fixtureDraft(),
@@ -70,13 +76,13 @@ class ReadOnlyWalletSignTransactionMnemonicTest {
     }
 
     @Test
-    fun signTransaction_withWordNotInWordlist_returnsMnemonicErrorWithoutReachingNativeCode() {
+    fun signTestnetFixtureTransaction_withWordNotInWordlist_returnsMnemonicErrorWithoutReachingNativeCode() {
         val words = listOf(
             "test", "walk", "nut", "penalty", "hip", "pave",
             "soap", "entry", "language", "right", "filter", "notaword",
         )
 
-        val result = ReadOnlyWallet.signTransaction(words, Network.TESTNET, fixtureDraft())
+        val result = ReadOnlyWallet.signTestnetFixtureTransaction(words, Network.TESTNET, fixtureDraft())
 
         val err = assertIs<KardanoResult.Err<WalletError>>(result)
         val mnemonicError = assertIs<WalletError.Mnemonic>(err.error)

@@ -57,6 +57,18 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   representable at all (W9-7, 2026-08-22 pre-release audit). No caller passed a raw negative value
   before this change; this closes the gap at the type level instead of leaving it as an untested
   assumption.
+- **Breaking:** `ReadOnlyWallet.signTransaction` is renamed to
+  `ReadOnlyWallet.signTestnetFixtureTransaction` and now requires an explicit
+  `@OptIn(ExperimentalKardanoSigningScope::class)` at every call site (W7-1, ADR-0018). The name
+  and the opt-in are a compiler/IDE-visible **intent signal that this entry point is scoped to
+  the Phase 1 testnet/test-fixture demonstration flow, not general-purpose wallet signing** — see
+  the new `ExperimentalKardanoSigningScope` annotation's own KDoc for exactly what this does and
+  does not achieve. It is not a runtime check: it does not verify the mnemonic is the fixture,
+  that the network is testnet, or that the supplied `TransactionDraft` was built for the declared
+  network, and the opt-in requirement does not carry over as a Swift/iOS compile-time gate. No
+  compatibility typealias or deprecated wrapper is provided under the old name (pre-alpha). No
+  cryptographic, transaction-building, provider, or signing behavior changed; `Network.MAINNET`/
+  `BlockfrostNetwork.MAINNET` are unaffected.
 
 ### Known limits
 
