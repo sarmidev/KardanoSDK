@@ -84,6 +84,16 @@ class WalletErrorTest {
         assertEquals(TxBuildError.EmptyWitnessSet, error.error)
     }
 
+    // W-invariant-hardening remediation: this variant replaces two error(...) calls in
+    // ReadOnlyWallet (TxHash.of and Lovelace.of's defensive branches) that previously threw
+    // IllegalStateException instead of returning a typed error.
+    @Test
+    fun invariantViolationVariant_carriesDetail() {
+        val error = WalletError.InvariantViolation("blake2b256 body hash is unexpectedly not 32 bytes")
+
+        assertEquals("blake2b256 body hash is unexpectedly not 32 bytes", error.detail)
+    }
+
     @Test
     fun distinctVariants_areNotEqual() {
         val mnemonicError: WalletError = WalletError.Mnemonic(MnemonicError.ChecksumMismatch)

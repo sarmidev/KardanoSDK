@@ -86,4 +86,15 @@ public sealed interface WalletError {
      * @property error the underlying `:tx` build error.
      */
     public data class TransactionAssembly(public val error: TxBuildError) : WalletError
+
+    /**
+     * An internal invariant this module relies on did not hold, even though the operation
+     * that hit it (`Hashing.blake2b256` returning a digest of an unexpected length, or a
+     * lovelace total that failed [Lovelace]'s non-negative-range check) is not reachable by
+     * any current call path with valid input. Returned instead of throwing, so a defensive
+     * check that should never fire in practice still cannot crash a public wallet operation.
+     *
+     * @property detail a short, human-readable description of which invariant did not hold.
+     */
+    public data class InvariantViolation(public val detail: String) : WalletError
 }

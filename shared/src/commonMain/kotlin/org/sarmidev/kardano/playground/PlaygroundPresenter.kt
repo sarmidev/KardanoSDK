@@ -681,6 +681,7 @@ internal object PlaygroundPresenter {
         is WalletError.Signing -> "Signing failed: ${presentSigningError(error.error)}"
         is WalletError.TransactionAssembly ->
             "Transaction assembly failed: ${presentTxBuildError(error.error)}"
+        is WalletError.InvariantViolation -> "Internal error: ${error.detail}"
     }
 
     /**

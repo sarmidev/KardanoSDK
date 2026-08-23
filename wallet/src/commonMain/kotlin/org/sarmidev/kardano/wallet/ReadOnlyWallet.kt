@@ -9,6 +9,7 @@ import org.sarmidev.kardano.crypto.derivation.ExtendedPrivateKey
 import org.sarmidev.kardano.crypto.derivation.ExtendedPublicKey
 import org.sarmidev.kardano.crypto.derivation.IcarusMasterKey
 import org.sarmidev.kardano.crypto.derivation.KeyDerivation
+import org.sarmidev.kardano.crypto.derivation.KeyDerivationError
 import org.sarmidev.kardano.crypto.hashing.Hashing
 import org.sarmidev.kardano.crypto.mnemonic.Mnemonic
 import org.sarmidev.kardano.crypto.signing.Signing
@@ -90,16 +91,28 @@ public class ReadOnlyWallet private constructor(
 
     public companion object {
 
-        /** The fixed payment CIP-1852 path every restored wallet uses: `m/1852'/1815'/0'/0/0`. */
-        private val PAYMENT_PATH: Cip1852Path = fixedPath(Cip1852Role.EXTERNAL)
-
-        /** The fixed stake CIP-1852 path every restored wallet uses: `m/1852'/1815'/0'/2/0`. */
-        private val STAKE_PATH: Cip1852Path = fixedPath(Cip1852Role.STAKING)
+        /**
+         * The fixed payment CIP-1852 path every restored wallet uses: `m/1852'/1815'/0'/0/0`.
+         *
+         * Used only by [of]'s test-support defaults. [restore] and
+         * [signTestnetFixtureTransaction] compute their own copy via [fixedPath] inline instead
+         * of referencing this constant, so that a (not reachable with valid input) validation
+         * failure surfaces as a typed [WalletError] returned from those public functions,
+         * rather than a throw at this property's first-access class-init time.
+         */
+        private val PAYMENT_PATH: Cip1852Path = fixedPathOrThrow(Cip1852Role.EXTERNAL)
 
         /**
-         * Restores [words] as a BIP-39 mnemonic, derives its account-0 payment ([PAYMENT_PATH])
-         * and stake ([STAKE_PATH]) keys, hashes each derived public key to a 28-byte credential,
-         * and builds a base [Address] for [network].
+         * The fixed stake CIP-1852 path every restored wallet uses: `m/1852'/1815'/0'/2/0`.
+         *
+         * See [PAYMENT_PATH]'s KDoc: used only by [of]'s test-support defaults.
+         */
+        private val STAKE_PATH: Cip1852Path = fixedPathOrThrow(Cip1852Role.STAKING)
+
+        /**
+         * Restores [words] as a BIP-39 mnemonic, derives its account-0 payment and stake keys
+         * (both fixed CIP-1852 paths, computed via [fixedPath]), hashes each derived public key
+         * to a 28-byte credential, and builds a base [Address] for [network].
          *
          * Delegates entirely to `:crypto` ([Mnemonic], [IcarusMasterKey], [KeyDerivation],
          * [Hashing]) and `:core` ([AddressCredential], [Address]); this module does not
@@ -139,13 +152,25 @@ public class ReadOnlyWallet private constructor(
             var stakePrivateKey: ExtendedPrivateKey? = null
             var stakePublicKey: ExtendedPublicKey? = null
             try {
+                // Not reachable with valid input: EXTERNAL/STAKING at account 0, index 0 are
+                // always in Cip1852Path.of's valid range. Computed via KardanoResult rather
+                // than a shared throwing constant, so this can never crash restore().
+                val paymentPath = when (val result = fixedPath(Cip1852Role.EXTERNAL)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
+                }
+                val stakePath = when (val result = fixedPath(Cip1852Role.STAKING)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
+                }
+
                 master = when (val result = IcarusMasterKey.fromMnemonic(mnemonic)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
                 }
                 val derivation = KeyDerivation.default()
 
-                paymentPrivateKey = when (val result = derivation.derivePrivate(master, PAYMENT_PATH)) {
+                paymentPrivateKey = when (val result = derivation.derivePrivate(master, paymentPath)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
                 }
@@ -166,7 +191,7 @@ public class ReadOnlyWallet private constructor(
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.AddressBuild(result.error))
                 }
 
-                stakePrivateKey = when (val result = derivation.derivePrivate(master, STAKE_PATH)) {
+                stakePrivateKey = when (val result = derivation.derivePrivate(master, stakePath)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
                 }
@@ -194,7 +219,7 @@ public class ReadOnlyWallet private constructor(
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.AddressBuild(result.error))
                 }
 
-                return KardanoResult.Ok(ReadOnlyWallet(network, address, PAYMENT_PATH, STAKE_PATH))
+                return KardanoResult.Ok(ReadOnlyWallet(network, address, paymentPath, stakePath))
             } finally {
                 mnemonic.clear()
                 master?.clear()
@@ -272,13 +297,20 @@ public class ReadOnlyWallet private constructor(
             var paymentPrivateKey: ExtendedPrivateKey? = null
             var paymentPublicKey: ExtendedPublicKey? = null
             try {
+                // Not reachable with valid input: EXTERNAL at account 0, index 0 is always in
+                // Cip1852Path.of's valid range. See restore()'s identical comment.
+                val paymentPath = when (val result = fixedPath(Cip1852Role.EXTERNAL)) {
+                    is KardanoResult.Ok -> result.value
+                    is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
+                }
+
                 master = when (val result = IcarusMasterKey.fromMnemonic(mnemonic)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
                 }
                 val derivation = KeyDerivation.default()
 
-                paymentPrivateKey = when (val result = derivation.derivePrivate(master, PAYMENT_PATH)) {
+                paymentPrivateKey = when (val result = derivation.derivePrivate(master, paymentPath)) {
                     is KardanoResult.Ok -> result.value
                     is KardanoResult.Err -> return KardanoResult.Err(WalletError.Derivation(result.error))
                 }
@@ -314,9 +346,12 @@ public class ReadOnlyWallet private constructor(
 
                 val transactionId = when (val result = TxHash.of(bodyHash)) {
                     is KardanoResult.Ok -> result.value
-                    // Unreachable: Hashing.blake2b256 always returns a 32-byte HashDigest, and
-                    // TxHash.SIZE is 32.
-                    is KardanoResult.Err -> error("blake2b256 body hash is unexpectedly not 32 bytes")
+                    // Not reachable with valid input: Hashing.blake2b256 always returns a
+                    // 32-byte HashDigest, and TxHash.SIZE is 32. Returned as a typed error
+                    // rather than thrown, so this defensive check cannot crash the caller.
+                    is KardanoResult.Err -> return KardanoResult.Err(
+                        WalletError.InvariantViolation("blake2b256 body hash is unexpectedly not 32 bytes"),
+                    )
                 }
 
                 return KardanoResult.Ok(WalletSignedTransaction(signedTransaction, transactionId))
@@ -351,11 +386,25 @@ public class ReadOnlyWallet private constructor(
             stakePath: Cip1852Path = STAKE_PATH,
         ): ReadOnlyWallet = ReadOnlyWallet(network, address, paymentPath, stakePath)
 
-        private fun fixedPath(role: Cip1852Role): Cip1852Path =
-            when (val result = Cip1852Path.of(account = 0, role = role, index = 0)) {
+        /**
+         * Builds the fixed CIP-1852 path `m/1852'/1815'/0'/<role>/0` for [role], as a typed
+         * result rather than a throwing constant: [restore] and [signTestnetFixtureTransaction]
+         * call this directly and propagate a (not reachable with valid input) failure as
+         * [WalletError.Derivation], so no public wallet operation can crash on this check.
+         */
+        private fun fixedPath(role: Cip1852Role): KardanoResult<Cip1852Path, KeyDerivationError> =
+            Cip1852Path.of(account = 0, role = role, index = 0)
+
+        /**
+         * Unwraps [fixedPath], throwing only if `0/<role>/0` were somehow out of range — a
+         * programming error in this fixed constant, not a runtime condition. Used exclusively
+         * to initialize [PAYMENT_PATH]/[STAKE_PATH], which back only [of]'s test-support
+         * defaults (see their KDoc); never called from [restore] or
+         * [signTestnetFixtureTransaction], which use [fixedPath] directly instead.
+         */
+        private fun fixedPathOrThrow(role: Cip1852Role): Cip1852Path =
+            when (val result = fixedPath(role)) {
                 is KardanoResult.Ok -> result.value
-                // Unreachable: 0/<role>/0 is always in range. A hard failure here would be a
-                // programming error in this fixed constant, not a runtime condition.
                 is KardanoResult.Err -> error("ReadOnlyWallet's fixed path is invalid: ${result.error}")
             }
     }
@@ -379,9 +428,13 @@ private fun sumBalance(utxos: List<Utxo>): KardanoResult<WalletBalance, WalletEr
     }
     val coin = when (val result = Lovelace.of(total)) {
         is KardanoResult.Ok -> result.value
-        // Unreachable: `total` only ever accumulates non-negative Lovelace.value amounts and
-        // overflow is rejected above, so it can never be negative here.
-        is KardanoResult.Err -> error("wallet balance total is unexpectedly negative: $total")
+        // Not reachable with valid input: `total` only ever accumulates non-negative
+        // Lovelace.value amounts and overflow is rejected above, so it can never be negative
+        // here. Returned as a typed error rather than thrown, so this defensive check cannot
+        // crash the caller.
+        is KardanoResult.Err -> return KardanoResult.Err(
+            WalletError.InvariantViolation("wallet balance total is unexpectedly negative: $total"),
+        )
     }
     return KardanoResult.Ok(WalletBalance(coin = coin, utxoCount = utxos.size))
 }

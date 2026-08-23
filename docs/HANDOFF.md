@@ -605,6 +605,77 @@ Date: 2026-08-23
 
 Summary:
 
+- **Pre-release remediation batch on `fix/pre-release-core-contracts` (five commits) — DONE.**
+  Precondition: started from a clean `origin/main` at `f43ad944` (tree `adf25bd`), one commit
+  ahead of the release-hygiene batch below. Reconciled all 32 findings from
+  `docs/AUDIT/2026-08-22-pre-release-audit.md` against everything that has landed since (19
+  resolved — 3 with no code change needed because the underlying diff was never committed, 12
+  still open by explicit design/platform constraint or out of this batch's scope), and recorded
+  the reconciliation plus new findings in `docs/AUDIT/2026-08-23-final-pre-release-audit.md`.
+  - **Commit 1 — audit baseline.** Added the final pre-release audit document above.
+  - **Commit 2 — CBOR cumulative output bound (W6-2).** `Cbor.encode` now sums its assembled
+    output size with `Long` arithmetic and rejects with the new `CborError.OutputTooLong`
+    before the final buffer is allocated or concatenated, once the total would exceed
+    `CBOR_MAX_INPUT_BYTES` — closing a gap where a within-per-element-limits tree (e.g. a flat
+    array of many near-64KiB byte strings) could otherwise assemble into a far larger output.
+    Added an encode-output-over-limit test using 17×64 KiB byte strings (~1.09 MiB, not a
+    multi-gigabyte fixture), an at-limit success test, and the previously-missing decode
+    `InputTooLong` test. `core/README.md` and ADR-0001 updated with a dated addendum.
+  - **Commit 3 — hash input bound (W6-1).** New `Hashing.MAX_INPUT_BYTES` (1 MiB) and
+    `CryptoError.InputTooLong`; `Blake2bHashing` now rejects an oversized input before the
+    defensive copy that previously ran unconditionally. Tests cover both Blake2b variants at
+    the limit (success) and limit+1 (rejection). `PlaygroundPresenter.presentCryptoError`
+    updated for the new variant.
+  - **Commit 4 — Bech32 and Hex bounds (W6-3 plus a new Hex encode bound).**
+    `Bech32.convertBits`'s 8→5 direction is now bounded by `MAX_DATA_VALUES`, mirroring its
+    5→8 direction's existing `MAX_DATA_BYTES` bound. **Breaking (pre-alpha):** `Hex.encode` now
+    returns `KardanoResult<String, HexError>` (new `HexError.EncodeInputTooLong`, bounded by
+    the new `Hex.MAX_ENCODE_INPUT_BYTES` = half of `Hex.MAX_INPUT_CHARS`, so encoded output
+    always stays within what `Hex.decode` accepts as input) instead of a bare, unbounded
+    `String` — every call site in `:core` tests, `:wallet`, `:provider-blockfrost` tests, and
+    `:shared`'s `PlaygroundPresenter` updated in the same commit; recorded in `CHANGELOG.md`.
+  - **Commit 5 — wallet never-throw invariant.** Removed the two `error(...)` calls reachable
+    from `ReadOnlyWallet`'s public operations (the balance-summation Lovelace check inside
+    `sumBalance`, and `signTestnetFixtureTransaction`'s `TxHash.of` body-hash-length check),
+    replacing both with the new `WalletError.InvariantViolation` variant. `restore` and
+    `signTestnetFixtureTransaction` now compute their fixed CIP-1852 path via a typed
+    `KardanoResult` (`fixedPath`) instead of referencing a throwing companion constant; the one
+    remaining `error(...)` in the file (`fixedPathOrThrow`) backs only the `internal`,
+    test-support `ReadOnlyWallet.of` factory's default parameters, not reachable from any public
+    wallet operation.
+  - **A self-caught wording slip (NF-5).** While drafting this batch's own CHANGELOG/KDoc, the
+    repository's own restricted-claim scan script (run locally, verbatim from `verify.yml`)
+    caught two occurrences of the banned word "safe" in draft text (`Bech32.kt` KDoc,
+    `CHANGELOG.md`) before they were committed; both reworded to factual language. Recorded as
+    finding NF-5 in the audit doc, since the exercise also surfaced two structural gaps in the
+    scan itself (no pre-commit hook wired to the same script; a fixed word list cannot catch a
+    rephrased claim that avoids the literal banned words).
+  - **Verification.** Freshly forced (not cached) on this host: `:core`/`:crypto`/`:wallet`/
+    `:tx`/`:shared`/`:provider`/`:provider-blockfrost`/`:crypto-signing-backend` `jvmTest` —
+    661 tests, 0 failures; the same seven modules' `testAndroidHostTest` — 611 tests, 0
+    failures; all 8 modules (`core`, `crypto`, `crypto-signing-backend`, `provider`,
+    `provider-blockfrost`, `wallet`, `tx`, `shared`) compile clean for `iosArm64`; Android
+    debug and Desktop both build; `androidApp:lintDebug` — 0 errors, 36 warnings (all
+    pre-existing dependency-freshness/launcher-icon hygiene items, none touching this batch's
+    files); all 8 committed native signing-backend binaries' SHA-256 still match
+    `crypto-signing-backend/CHECKSUMS.sha256`; `git diff --check` clean; the restricted-claim
+    scan passes on the corrected text (241 files scanned).
+  - **Docs updated in the same batch:** `docs/AUDIT/2026-08-23-final-pre-release-audit.md` (new),
+    `docs/DECISIONS/0001-cbor-and-parser-policy.md`, `core/README.md`, `CHANGELOG.md`, and this
+    file.
+  - **Still open, not addressed this batch:** everything §2 of the new audit document lists as
+    "Open" (W1-2, W3-3, W4-3, W4-4, W4-5, W5-4, W5-5, W6-4, W8-3, W8-4, W9-4 — all by explicit
+    design/platform constraint or genuinely out of this batch's five-commit scope); the manual
+    Android/Desktop accessibility walkthrough (NF-2, unchanged from the prior audit); W7-1's
+    underlying scope-enforcement gap, which ADR-0018 already frames as accepted for the
+    project's current phase (NF-6).
+
+### Session Summary (Release-Hygiene Batch)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Five release-hygiene audit findings resolved on `feat/signing-scope-opt-in`, split into
   five separate commits — DONE.** Precondition: this branch's ADR-0018 signing-scope work (see
   the session below) had already been merged into `main` via PR #9 before these commits were

@@ -48,6 +48,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   before allocating its output buffer, mirroring the bound its 5-bit-to-8-bit direction already
   enforced (`Bech32.MAX_DATA_BYTES`), so both directions enforce this bound structurally instead
   of relying on every current caller happening to pre-bound its own input (W6-3).
+- `WalletError.InvariantViolation`: replaces two `error(...)` calls inside `ReadOnlyWallet`
+  (`TxHash.of`'s and the balance summation's defensive "this cannot happen with valid input"
+  branches) that previously threw `IllegalStateException` from a public wallet operation. Neither
+  branch is reachable with valid input today; they now return a typed error instead of throwing,
+  closing the gap between that guarantee and this module's own never-throw policy.
 
 ### Changed
 
