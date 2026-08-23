@@ -109,6 +109,10 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
 - Core (JVM) tests: `./gradlew :core:jvmTest`
 - Core Android host (JVM-hosted) tests: `./gradlew :core:testAndroidHostTest`
 - Core iOS test sources compile: `./gradlew :core:compileTestKotlinIosSimulatorArm64`
+- Crypto/native pin review: after a Bouncy Castle or JNA catalog change, re-run
+  `:crypto:jvmTest`, `:crypto-signing-backend:jvmTest`, and `:wallet:jvmTest`.
+  Remaining 0.x pins and replacement criteria are in
+  `docs/DECISIONS/0020-pre-1-dependency-risk-acceptance.md`.
 - Crypto, wallet, shared, and signing-backend JVM tests: run on macOS because the committed JVM
   signing artifacts target macOS hosts:
   `./gradlew :crypto:jvmTest :crypto-signing-backend:jvmTest :wallet:jvmTest :shared:jvmTest`

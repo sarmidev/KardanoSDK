@@ -169,8 +169,9 @@ Removed unused catalog entries rather than upgrading them:
 `androidx-espresso` / `androidx-espresso-core`, `junit`,
 `kotlin-testJunit`. No call site referenced them.
 
-Crypto / native-support pins (KotlinCrypto, IonSpin, Bouncy Castle, JNA,
-atomicfu, bip32, LazySodium) are unchanged in this commit.
+Crypto / native-support pins as of commit 3: see ADR-0020. Bouncy Castle
+1.85.2 and JNA 5.19.1 were upgraded; the 0.x pins were retained with
+dated acceptance.
 
 AGP 9.3 requires Gradle >= 9.5.0 (documented on
 https://developer.android.com/build/releases/about-agp). The installed

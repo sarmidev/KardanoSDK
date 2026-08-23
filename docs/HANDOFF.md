@@ -73,7 +73,7 @@ Read these first:
   (compile/link only on this host). Linux/Windows JVM signing artifacts are not
   included (W9-4).
 - Still-open hygiene items outside this stacked batch: CI `androidApp:lint` (W3-3),
-  tag-triggered release CI (W4-5), pre-1.0 pinned dependencies (W5-4, by design).
+  tag-triggered release CI (W4-5). Pre-1.0 pins are accepted in ADR-0020 (W5-4).
 - `gradle/actions` v6.3.0 is not adopted (proprietary cache component / Terms of
   Use). setup-gradle stays on v5.0.2. See `docs/DEPENDENCY_REVIEW.md`.
 - Restricted-claim and full-history Gitleaks scans now run in CI. They are not a
@@ -105,7 +105,9 @@ Date: 2026-08-23
   the pin checker. Commit 2 upgrades Gradle 9.7.1 / AGP 9.3.1 / Kotlin 2.4.10
   / compile+target SDK 37.0 / lifecycle 2.11.0 / Ktor 3.5.2, removes unused
   catalog entries, and keeps Compose 1.11.1 + Material3 1.11.0-alpha07 as
-  one group. Remaining commits: crypto review, lockfiles, Android lint CI.
+  one group. Commit 3 reviews crypto/native pins (Castle 1.85.2, JNA
+  5.19.1; ADR-0020 for remaining 0.x). Remaining commits: lockfiles,
+  Android lint CI.
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
   `3936047`) — four original commits complete, plus review-fix commits.**
   - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now

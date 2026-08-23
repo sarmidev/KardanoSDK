@@ -72,7 +72,7 @@ compile+link), matching the repo's iOS posture.
 | Rust toolchain (`rustc`/`cargo`) | `1.97.0` | MIT OR Apache-2.0 |
 | `cargo-ndk` (offline Android cross-build only) | `4.1.2` | MIT |
 | Android NDK (offline Android cross-build only) | `27.2.12479018` | Android NDK license (Apache-2.0) |
-| `net.java.dev.jna:jna` (jvm jar / android `@aar`) | `5.17.0` (`gradle/libs.versions.toml`) | Apache-2.0 OR LGPL-2.1 |
+| `net.java.dev.jna:jna` (jvm jar / android `@aar`) | `5.19.1` (`gradle/libs.versions.toml`) | Apache-2.0 OR LGPL-2.1 |
 | `org.jetbrains.kotlinx:atomicfu` (bindings' handle-map counter) | `0.26.1` (`gradle/libs.versions.toml`) | Apache-2.0 |
 | Kotlin / Gradle / AGP | `2.4.10` / `9.7.1` / `9.3.1` (repo-pinned) | — |
 

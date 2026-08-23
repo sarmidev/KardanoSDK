@@ -17,14 +17,14 @@ kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 kotlincrypto-blake2 = "0.8.0"
 kotlincrypto-sha2 = "0.8.0"
-bouncycastle-bcprov = "1.84"
+bouncycastle-bcprov = "1.85.2"
 bip32-ed25519 = "1.8.8"
 androidx-test-runner = "1.7.0"
 ionspin-libsodium = "0.9.5"
 # 1.6c-follow-up-2 gate result (ADR-0010): Android public-key-projection backend, verified by
 # on-device execution on API 24/35/36. See ADR-0010 for the full evidence.
 lazysodium-android = "5.2.0"
-jna = "5.17.0"
+jna = "5.19.1"
 ktor = "3.5.2"
 # Latest Compose Multiplatform 1.11.x Material3 artifact. 1.12.0-alpha03 tracks
 # Compose 1.12.0-rc01 and is outside this compatibility group.

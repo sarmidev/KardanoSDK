@@ -100,6 +100,15 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- Crypto/native support review (2026-08-23, ADR-0020): Bouncy Castle
+  `bcprov-jdk18on` 1.84 → 1.85.2 and JNA 5.17.0 → 5.19.1 after changelog
+  review. `:crypto:jvmTest` (78) after the Castle bump;
+  `:crypto-signing-backend:jvmTest` (4), `:crypto:jvmTest` (78), and
+  `:wallet:jvmTest` (30) after the JNA bump. KotlinCrypto 0.8.0, IonSpin
+  0.9.5, atomicfu 0.26.1, `ed25519-bip32` 0.4.2, UniFFI 0.29.x, and
+  Material3 1.11.0-alpha07 stay pinned; ADR-0020 records why, the KAT
+  evidence, and replacement criteria. No signing/hashing backend was
+  replaced.
 - Build-platform compatibility group (2026-08-23): Gradle wrapper 9.1.0 → 9.7.1
   (distribution SHA-256 `acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a`
   from `services.gradle.org`), AGP 9.0.1 → 9.3.1, Kotlin 2.4.0 → 2.4.10,
