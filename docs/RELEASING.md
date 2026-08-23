@@ -43,6 +43,32 @@ promise and they do not keep exhaustive `when` expressions compiling without edi
    - upgrade notes;
    - linked demo/quickstart material.
 
+## HANDOFF curation
+
+`docs/HANDOFF.md` is the living resume document. It should hold current project
+context, recent sessions, active risks and gates, branch-stack status, and the next
+task.
+
+Older implementation notes and session logs are **not deleted**. They live under
+[archive/handoff/](archive/handoff/README.md):
+
+- [archive/handoff/2026-08-23-pre-curation.md](archive/handoff/2026-08-23-pre-curation.md)
+  is a verbatim snapshot of `docs/HANDOFF.md` immediately before the 2026-08-23
+  curation (from `3936047`), with only the six `DECISIONS/` Markdown links rewritten
+  so they resolve from the archive directory.
+
+Policy:
+
+1. Append a short session summary to the living handoff at the end of each session.
+2. When the living file is no longer reviewable, move older sections into a new
+   dated file under `docs/archive/handoff/` without editing the prose.
+3. After a move, adjust only repo-relative Markdown links that would otherwise
+   break. Do not rewrite historical meaning.
+4. Record the original UTF-8 SHA-256 and extend `scripts/check_handoff_archive.py`
+   so the snapshot can be restored and hashed.
+5. Run `python3 scripts/check_handoff_archive.py` before declaring the curation
+   done.
+
 ## Publishing artifacts later
 
 Maven publication requires a separate decision covering group ownership, coordinates, versioning,

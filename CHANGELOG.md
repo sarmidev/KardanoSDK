@@ -150,6 +150,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - Module README status lines now use the same factual wording as the root README /
   `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`: "Not independently reviewed" (W4-4). Provider
   READMEs keep the testnet/preprod qualifier. The word `audited` is not used.
+- `docs/HANDOFF.md` is now the living resume (current context, recent sessions, active
+  risks, branch-stack status). The previous full handoff is preserved verbatim at
+  `docs/archive/handoff/2026-08-23-pre-curation.md` and checked by
+  `scripts/check_handoff_archive.py` (W1-2).
 - CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
   full commit SHA with a version comment instead of a floating major-version tag, so a
   compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).

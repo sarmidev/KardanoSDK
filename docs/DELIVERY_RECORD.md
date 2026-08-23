@@ -19,7 +19,8 @@ Phase 1 plan.
   decisions.
 - [Testing guide](TESTING.md) — current verification commands, target matrix, fixture policy, and
   environment limits.
-- [Handoff](HANDOFF.md) — detailed session context for maintainers and future work sessions.
+- [Handoff](HANDOFF.md) — current session context for maintainers. Historical
+  implementation and session logs are in [archive/handoff/](archive/handoff/README.md).
 
 ## Phase 0 — Core Foundation
 
