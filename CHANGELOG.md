@@ -56,6 +56,21 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- **Breaking:** `TransactionDraft` now carries `network: Network` and
+  `scope: TransactionDraftScope` (ADR-0019). Both are stamped internally by
+  `TransactionBodySerializer` / `TransactionBuilder` and participate in equality, hash code,
+  and `toString`. Mainnet draft construction remains available.
+- **Breaking:** `ReadOnlyWallet.signTestnetFixtureTransaction` reads the bound draft and the
+  declared `network` argument. It rejects a non-testnet draft, a declared-network mismatch, an
+  unsupported scope, or an incompatible Phase 1 shape *before* parsing the mnemonic, and
+  rejects any mnemonic that does not derive to `Phase1FixtureIdentity`'s cited payment-
+  credential fingerprint *before* `Signing.sign`. Failures are
+  `WalletError.SigningScopeViolation` with a typed `SigningScopeViolationReason`. The unused-
+  parameter suppression is gone. The ADR-0018 `@ExperimentalKardanoSigningScope` opt-in is
+  retained as a Kotlin-compiler signal; it still does not appear as a Swift compile-time
+  gate. The new runtime checks do run for Swift callers of the compiled framework.
+- **Breaking:** `:crypto` `Signing` requires `@OptIn(ExperimentalKardanoRawSigning::class)`.
+  It remains a raw byte-signing primitive and cannot authorize transaction scope.
 - The public landing page's skip-link target (`<main id="main-content">`) now has
   `tabindex="-1"`, so activating "Skip to main content" moves keyboard focus there in every
   browser, not just ones that already move focus to non-interactive scroll targets (W9-6,
@@ -108,7 +123,9 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   the new `ExperimentalKardanoSigningScope` annotation's own KDoc for exactly what this does and
   does not achieve. It is not a runtime check: it does not verify the mnemonic is the fixture,
   that the network is testnet, or that the supplied `TransactionDraft` was built for the declared
-  network, and the opt-in requirement does not carry over as a Swift/iOS compile-time gate. No
+  network, and the opt-in requirement does not carry over as a Swift/iOS compile-time gate.
+  ADR-0019 (same Unreleased window; see the `TransactionDraft` binding bullets above) later
+  added those runtime checks without removing the opt-in. No
   compatibility typealias or deprecated wrapper is provided under the old name (pre-alpha). No
   cryptographic, transaction-building, provider, or signing behavior changed; `Network.MAINNET`/
   `BlockfrostNetwork.MAINNET` are unaffected.

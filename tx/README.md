@@ -19,8 +19,10 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   fee, optional `3` ttl) into canonical CBOR bytes. Useful directly when a caller has already
   done its own coin selection.
 - Defines the transaction model: `TransactionOutput`, `TransactionBuildRequest`,
-  `TransactionBodyRequest`, `TransactionDraft` (carries `bodyCbor()`), and the sealed
-  `TxBuildError`.
+  `TransactionBodyRequest`, `TransactionDraft` (carries `bodyCbor()`, plus the bound
+  `network` and `scope` stamped by `TransactionBodySerializer` / `TransactionBuilder`,
+  ADR-0019), `TransactionDraftScope`, and the sealed `TxBuildError`. Mainnet draft
+  construction remains available; signing, not this module, rejects a mainnet draft.
 - Orders inputs by the ledger `(transaction_id, index)` rule and rejects duplicates; encodes
   outputs in the legacy/Alonzo `[address, coin]` array form.
 - **(Block 1.11d, narrowed in 1.11d-2: ADA-only filtering)** `TransactionBuilder.build` drops

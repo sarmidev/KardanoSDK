@@ -6,6 +6,9 @@ import org.sarmidev.kardano.getOrNull
 import org.sarmidev.kardano.primitives.TxHash
 import org.sarmidev.kardano.primitives.UtxoRef
 import org.sarmidev.kardano.tx.TxBuildError
+import org.sarmidev.kardano.primitives.Network
+import org.sarmidev.kardano.tx.TransactionDraftScope
+import org.sarmidev.kardano.wallet.SigningScopeViolationReason
 import org.sarmidev.kardano.wallet.WalletError
 import org.sarmidev.kardano.wallet.WalletSignedTransaction
 import kotlin.test.Test
@@ -99,5 +102,62 @@ class PlaygroundSignedTransactionPresenterTest {
             WalletError.TransactionAssembly(TxBuildError.DuplicateInput(ref)),
         )
         assertTrue(msg.contains("Duplicate", ignoreCase = true), "got: $msg")
+    }
+
+    @Test
+    fun presentWalletError_signingScopeViolation_unsupportedDraftNetwork_namesNetwork() {
+        val msg = PlaygroundPresenter.presentWalletError(
+            WalletError.SigningScopeViolation(
+                SigningScopeViolationReason.UnsupportedDraftNetwork(Network.MAINNET),
+            ),
+        )
+        assertTrue(msg.contains("MAINNET"), "got: $msg")
+        assertTrue(msg.contains("testnet", ignoreCase = true), "got: $msg")
+    }
+
+    @Test
+    fun presentWalletError_signingScopeViolation_declaredNetworkMismatch_namesBoth() {
+        val msg = PlaygroundPresenter.presentWalletError(
+            WalletError.SigningScopeViolation(
+                SigningScopeViolationReason.DeclaredNetworkMismatch(
+                    declared = Network.MAINNET,
+                    draftNetwork = Network.TESTNET,
+                ),
+            ),
+        )
+        assertTrue(msg.contains("MAINNET"), "got: $msg")
+        assertTrue(msg.contains("TESTNET"), "got: $msg")
+    }
+
+    @Test
+    fun presentWalletError_signingScopeViolation_unsupportedScope_mentionsPhase1() {
+        val msg = PlaygroundPresenter.presentWalletError(
+            WalletError.SigningScopeViolation(
+                SigningScopeViolationReason.UnsupportedDraftScope(
+                    TransactionDraftScope.Phase1AdaOnlySinglePayment,
+                ),
+            ),
+        )
+        assertTrue(msg.contains("Phase 1"), "got: $msg")
+    }
+
+    @Test
+    fun presentWalletError_signingScopeViolation_unsupportedShape_includesDetail() {
+        val msg = PlaygroundPresenter.presentWalletError(
+            WalletError.SigningScopeViolation(
+                SigningScopeViolationReason.UnsupportedDraftShape("inputs=0 outputs=3"),
+            ),
+        )
+        assertTrue(msg.contains("inputs=0 outputs=3"), "got: $msg")
+    }
+
+    @Test
+    fun presentWalletError_signingScopeViolation_unrecognizedFixture_mentionsFixture() {
+        val msg = PlaygroundPresenter.presentWalletError(
+            WalletError.SigningScopeViolation(
+                SigningScopeViolationReason.UnrecognizedFixtureIdentity,
+            ),
+        )
+        assertTrue(msg.contains("fixture", ignoreCase = true), "got: $msg")
     }
 }

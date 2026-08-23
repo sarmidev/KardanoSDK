@@ -103,7 +103,11 @@ now work on JVM, real Android runtime, and iOS compile/link.**
   `ExtendedPrivateKey`, returning the raw 64-byte signature. Never signs the raw body bytes or
   an arbitrary-length message. Ships one implementation, `Signing.default()`, an internal
   adapter delegating to `:crypto-signing-backend`; the temporary `xprv` copy is cleared in a
-  `finally` block.
+  `finally` block. This layer signs bytes and cannot authorize transaction network, draft
+  scope, or fixture identity (ADR-0019). Direct use requires
+  `@OptIn(ExperimentalKardanoRawSigning::class)` — a Kotlin-compiler signal, not a Swift
+  compile-time gate. Phase 1 transaction signing goes through
+  `ReadOnlyWallet.signTestnetFixtureTransaction`.
 - Defines the sealed, backend-neutral `SigningError` (`InvalidBodyHashLength`,
   `InvalidKeyMaterial`, `BackendFailed`, `SigningUnavailable`).
 

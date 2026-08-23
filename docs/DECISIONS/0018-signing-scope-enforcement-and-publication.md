@@ -2,7 +2,7 @@
 
 | Field   | Value                                                                 |
 |---------|------------------------------------------------------------------------|
-| Status  | **Accepted; §4 items 1-2 implemented 2026-08-23 — see §6 result note.** Option 3 (the `TransactionDraft` network-binding redesign) remains a separately-scheduled future ADR, not implemented here. |
+| Status  | **Accepted; §4 items 1-2 implemented 2026-08-23 — see §6. Option 3 implemented 2026-08-23 via ADR-0019 — see §7.** |
 | Scope   | Reassessing W7-1 from the 2026-08-22 pre-release audit (`docs/AUDIT/2026-08-22-pre-release-audit.md` §4.6): whether `ReadOnlyWallet.signTransaction`'s unenforced scope is a defect, an API-contract problem, a publication-policy problem, or a combination; comparing focused remediation options; recommending one. |
 | Phase   | Pre-release hardening (post-Phase 1, pre-first-public-release)         |
 | Updated | 2026-08-23                                                            |
@@ -246,3 +246,18 @@ task, separate from this ADR's own authorship:
   record of what the finding originally described) and the unrelated Playground-internal
   `SignTransactionUseCase`/`signTransaction` naming in `PlaygroundViewModel.kt` (an app-level
   "guided-demo step" concept, not this SDK entry point, and out of this task's scope).
+
+---
+
+## §7 Result note (2026-08-23): Option 3 implemented as ADR-0019
+
+The `TransactionDraft` network/scope-binding redesign scheduled in §4 is implemented in
+[ADR-0019](0019-transaction-draft-scope-binding.md). This ADR's items 1-2 (rename + opt-in)
+remain in force as the Kotlin-compiler intent signal. They are no longer the only control:
+signing now rejects a mainnet-bound draft, a declared-network mismatch, an unsupported
+scope, an incompatible shape, and a mnemonic that does not derive to the cited Phase 1
+payment-credential fingerprint.
+
+What this ADR's original §6 still correctly records: `@RequiresOptIn` does not carry over
+as a Swift compile-time gate. ADR-0019 adds that the **runtime** `SigningScopeViolation`
+checks do execute for Swift callers of the compiled framework.

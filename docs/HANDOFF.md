@@ -605,6 +605,43 @@ Date: 2026-08-23
 
 Summary:
 
+- **Signing-scope enforcement on `fix/signing-scope-enforcement` (five commits) — DONE.**
+  Closes the compiled-artifact signing gap (ADR-0018 Option 3 / W7-1), not merely the
+  rename/opt-in signal. Started from clean `origin/main` at `43a30e0` (Prompt 1 already
+  merged).
+  - **Commit 1 — ADR-0019 + `TransactionDraft` binding.** New
+    `docs/DECISIONS/0019-transaction-draft-scope-binding.md`. `TransactionDraft` gained
+    `network` and `scope` (`TransactionDraftScope.Phase1AdaOnlySinglePayment`), stamped by
+    `TransactionBodySerializer` / `TransactionBuilder`, included in equals/hashCode/KDoc/tests.
+    Mainnet draft construction remains available.
+  - **Commit 2 — wallet signing policy.** New `SigningScopeViolationReason` /
+    `WalletError.SigningScopeViolation`. `signTestnetFixtureTransaction` validates supported
+    scope, `draft.network == TESTNET`, declared network == draft network, and Phase 1 shape
+    *before* `Mnemonic.parse`. Unused-parameter suppression removed.
+  - **Commit 3 — fixture identity.** `Phase1FixtureIdentity` holds the cited IntersectMBO
+    `cardano-addresses` / CIP-19 payment-credential fingerprint
+    (`9493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e`). Exact fixture words pass;
+    a different valid BIP-39 mnemonic (Trezor `abandon … about`) fails with
+    `UnrecognizedFixtureIdentity` before `Signing.sign`. The mnemonic phrase is not stored in
+    production code; no `:wallet → :shared` edge.
+  - **Commit 4 — raw `Signing` opt-in.** New `ExperimentalKardanoRawSigning` on `:crypto`
+    `Signing`. Documents that this layer signs bytes and cannot authorize transaction scope.
+    No cyclic module dependency. Swift/Kotlin distinction recorded in ADR-0019 §5/§6:
+    `@RequiresOptIn` is Kotlin-only; runtime `SigningScopeViolation` checks execute for Swift.
+  - **Commit 5 — Playground and docs.** All new errors mapped in `PlaygroundPresenter`;
+    technical-details rows show draft network/scope; ADR-0015/0018, wallet/tx/shared/crypto
+    READMEs, CHANGELOG, this file, QUICKSTART, and Swift/KMP export notes updated.
+  - **Residual limitations.** A consumer who builds from a patched copy of the source can
+    delete these checks. `Network.MAINNET` remains a public, unguarded constant for address
+    parsing and provider configuration. Preview vs preprod are both `Network.TESTNET`.
+    `@RequiresOptIn` still does not appear as a Swift compile-time gate.
+
+### Session Summary (Pre-release Core Contracts)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Pre-release remediation batch on `fix/pre-release-core-contracts` (five commits) — DONE.**
   Precondition: started from a clean `origin/main` at `f43ad944` (tree `adf25bd`), one commit
   ahead of the release-hygiene batch below. Reconciled all 32 findings from

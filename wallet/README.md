@@ -24,19 +24,21 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   single-witness signed `transaction` (via `:tx`'s `TransactionAssembler`). Returns a
   `WalletSignedTransaction` pairing the `:tx` `SignedTransaction` with the computed transaction
   id. It takes the same explicit `(words, network)` inputs `restore` already takes, plus a
-  `TransactionDraft` — `network` is not read by the implementation (payment-key derivation and
-  signing are network-independent, and this function builds no address); it is kept purely so
-  the signature mirrors `restore`'s shape and every call site still declares the network it
-  intends to sign for (ADR-0015 §1/§2a). It is **not** a general-purpose wallet signing API —
-  see "Boundaries" below for the exact scope. The mnemonic and both derived payment key handles
-  are cleared in a `finally` block on every path.
-- **(2026-08-23, ADR-0018)** `signTestnetFixtureTransaction` requires an explicit
-  `@OptIn(ExperimentalKardanoSigningScope::class)` at every call site. This is a
-  **compiler/IDE-visible intent signal, not a runtime enforcement check**: opting in does not
-  verify the mnemonic is the fixture, the network is testnet, or that the draft was built for
-  the declared network — see `ExperimentalKardanoSigningScope`'s own KDoc. The opt-in requirement
-  is Kotlin-compiler-only and does not carry over to Swift/iOS consumers of the compiled
-  `:shared` framework.
+  `TransactionDraft`. Before `Mnemonic.parse` it rejects a draft whose bound `scope` is not
+  `Phase1AdaOnlySinglePayment`, whose bound `network` is not `Network.TESTNET`, whose
+  declared `network` disagrees with the draft, or whose input/output shape is not the
+  Phase 1 ADA-only single-payment flow (ADR-0019). After derivation it compares the payment
+  credential to `Phase1FixtureIdentity`'s cited public fingerprint and rejects any other
+  valid BIP-39 mnemonic before `Signing.sign`. The fixture mnemonic is not stored in this
+  module. It is **not** a general-purpose wallet signing API — see "Boundaries" below.
+  The mnemonic and both derived payment key handles are cleared in a `finally` block on
+  every path.
+- **(2026-08-23, ADR-0018 + ADR-0019)** `signTestnetFixtureTransaction` still requires
+  `@OptIn(ExperimentalKardanoSigningScope::class)` at every Kotlin call site. That opt-in is
+  a compiler/IDE-visible intent signal and is Kotlin-compiler-only: it does not appear as a
+  Swift compile-time gate. The ADR-0019 runtime `WalletError.SigningScopeViolation` checks
+  **do** run for Swift callers of the compiled framework, because they execute in shared
+  Kotlin code. `Network.MAINNET` remains an ordinary, unguarded constant.
 - Introduces no persistence or submission — see
   [docs/DECISIONS/0013-wallet-boundary-and-read-only-state.md](../docs/DECISIONS/0013-wallet-boundary-and-read-only-state.md)
   for the read-only decision record and
@@ -56,16 +58,16 @@ compatible with Swift/ObjC interop.
   `ChainQueryProvider` as a parameter (dependency inversion); the caller (today, `:shared`)
   chooses whether to inject the in-memory mock or the live Blockfrost provider. `:wallet`
   itself stays provider-neutral and gains no HTTP-client dependency.
-- **Still does not depend on `:shared`** (ADR-0011 §3, reaffirmed by ADR-0015 §2a): `:wallet`
-  cannot recognize `:shared`'s `TestWalletFixture`, so `signTestnetFixtureTransaction` accepts
-  whatever `words`/`network`/`draft` it is given. **Block 1.10 signing is scoped to
-  testnet/preprod, the existing Phase 1 test fixture, and ADA-only single-payment
-  `TransactionBuilder` drafts** by Phase 1 call-site/checkpoint/test discipline, not by a
-  `:wallet`-internal check — the function's name and its `ExperimentalKardanoSigningScope`
-  opt-in requirement (ADR-0018) say this explicitly, but neither is a runtime check; do not
-  treat `signTestnetFixtureTransaction` as a general-purpose or public wallet signing API.
-  Widening that scope requires its own later, explicit block/ADR (a `TransactionDraft`
-  network-binding redesign is already scheduled per ADR-0018 §4, not yet implemented).
+- **Still does not depend on `:shared`** (ADR-0011 §3, reaffirmed by ADR-0015 §2a /
+  ADR-0019): `:wallet` cannot import `:shared`'s `TestWalletFixture`. It recognizes the
+  Phase 1 fixture through `Phase1FixtureIdentity`'s cited public payment-credential
+  fingerprint instead. **Block 1.10 signing remains scoped to testnet/preprod, that
+  fixture, and ADA-only single-payment `TransactionBuilder` drafts**, now as a runtime
+  `SigningScopeViolation` check on the bound `TransactionDraft` plus the fingerprint
+  comparison (ADR-0019). The function's name and `ExperimentalKardanoSigningScope` opt-in
+  (ADR-0018) remain Kotlin-compiler intent signals. Do not treat
+  `signTestnetFixtureTransaction` as a general-purpose wallet signing API. Widening that
+  scope requires its own later, explicit block/ADR.
 - `ReadOnlyWallet.restore` and `ReadOnlyWallet.signTestnetFixtureTransaction` are the entry
   points that reach native cryptography (`:crypto`'s mnemonic/derivation/hashing/signing
   backends); `ReadOnlyWallet.balance` reaches no native code, only the injected provider.

@@ -5,7 +5,7 @@
 | Status  | **Accepted**; Block 1.10b (`:crypto` `Signing`, `:tx` witness/transaction assembly, `:wallet` signing orchestration) **implemented and verified** — see §9 result note. Block 1.10c (Playground checkpoint) remains open. |
 | Scope   | Block 1.10a — signing ownership/module boundary, exact signing scope, fixture-only enforcement boundary, signing message, signing artifact, crypto-backend gate, error model, test/vector policy, Playground checkpoint, guardrail reconciliation, sub-block split |
 | Phase   | Phase 1 (Block 1.10a/1.10b)                                            |
-| Updated | 2026-07-13                                                            |
+| Updated | 2026-08-23 — §2a enforcement amended by ADR-0019; original §2a text left as the Block 1.10 decision. |
 
 ---
 
@@ -492,3 +492,23 @@ are adjusted rather than shipping handwritten crypto.
 - ADR-0004 (crypto strategy), ADR-0009/ADR-0010 (derivation/projection + key-material rules),
   ADR-0013 (`:wallet`), and ADR-0014 (`:tx` / unsigned body) remain the governing decisions this
   ADR builds on; this ADR does not supersede them.
+
+---
+
+## Addendum (2026-08-23): §2a enforcement is now a `:wallet` runtime check (ADR-0019)
+
+§2a's original "call-site discipline only" wording was correct for Block 1.10: `:wallet`
+could not import `:shared`'s `TestWalletFixture`, and `TransactionDraft` carried no network.
+ADR-0019 implements the scheduled binding without reversing that module rule:
+
+- `TransactionDraft` now carries `network` and `TransactionDraftScope.Phase1AdaOnlySinglePayment`.
+- `ReadOnlyWallet.signTestnetFixtureTransaction` rejects a non-testnet draft, a declared-network
+  mismatch, an unsupported scope, or an incompatible shape **before** `Mnemonic.parse`.
+- Fixture recognition uses `Phase1FixtureIdentity`'s cited public payment-credential
+  fingerprint, not a stored mnemonic and not a `:wallet → :shared` dependency.
+- The ADR-0018 `@ExperimentalKardanoSigningScope` opt-in is retained as a Kotlin-compiler
+  signal. `@RequiresOptIn` still does not carry over to Swift; the new runtime
+  `WalletError.SigningScopeViolation` checks do.
+
+The original §2a prose above is left as the Block 1.10 decision record. Current enforcement
+is ADR-0019.

@@ -39,9 +39,11 @@ than imitating a network acceptance. The closing **Summary** screen recaps what 
 and offers **Run the demo again**.
 
 The wallet behind this demo is a cited public test fixture. The UI does not display its mnemonic,
-seed, or raw private-key material. Every step also has an optional "Technical details" toggle
-(collapsed by default) showing the underlying hashes, fees, and raw values for anyone who wants
-them.
+seed, or raw private-key material. Signing accepts only that fixture (recognized by its published
+payment-credential fingerprint) and only a testnet ADA-only draft; a different valid mnemonic or
+a mainnet-built draft is rejected. Every step also has an optional "Technical details" toggle
+(collapsed by default) showing the underlying hashes, fees, draft network/scope, and raw values
+for anyone who wants them.
 
 ## Run Android
 

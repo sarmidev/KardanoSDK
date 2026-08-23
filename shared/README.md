@@ -37,7 +37,11 @@ Phase 1 — pre-alpha, experimental. Not for real funds.
   `TxSubmitProvider.submit` — with no new Gradle module added (see "Signed Transaction" and
   "Submit Transaction" below).
 - Builds the static iOS framework named `Shared` (`baseName = "Shared"`), consumed by
-  `iosApp` via `MainViewControllerKt.MainViewController()`.
+  `iosApp` via `MainViewControllerKt.MainViewController()`. Swift sees ordinary Kotlin
+  functions: `@RequiresOptIn` (`ExperimentalKardanoSigningScope`,
+  `ExperimentalKardanoRawSigning`) does not appear as a Swift compile-time gate. Exported
+  `TransactionDraft.network` / `scope` properties and runtime
+  `WalletError.SigningScopeViolation` cases do cross that boundary (ADR-0019).
 
 ## Playground architecture (Block 1.12-pre-a)
 
@@ -508,10 +512,13 @@ Transaction Draft section above — through a shared `PlaygroundPresenter.buildT
 helper extracted from that checkpoint so both sections build the identical draft — then signs it
 by calling `:wallet`'s `ReadOnlyWallet.signTestnetFixtureTransaction(TestWalletFixture.words,
 Network.TESTNET, draft)`, always passing the cited test-only fixture words and `Network.TESTNET`
-explicitly: `:wallet` itself is not fixture-aware and enforces neither (ADR-0015 §2a) — the
-function's scope-explicit name and its required `ExperimentalKardanoSigningScope` opt-in
-(ADR-0018) are a compiler/IDE-visible intent signal only, not a runtime check — so this call site
-is what keeps this checkpoint on the fixture/testnet-only path. `:shared` performs no hashing,
+explicitly. ADR-0019 now also binds `TransactionDraft.network` / `scope` and rejects a
+mismatched or mainnet draft, plus any mnemonic that does not derive to
+`Phase1FixtureIdentity`, at signing time. The function's scope-explicit name and its required
+`ExperimentalKardanoSigningScope` opt-in (ADR-0018) remain a Kotlin-compiler intent signal;
+that opt-in does **not** appear as a Swift compile-time gate on the compiled `Shared`
+framework. The runtime `WalletError.SigningScopeViolation` checks **do** run for Swift
+callers. `:shared` performs no hashing,
 signing, or witness/CBOR assembly itself — all of that belongs to `:wallet` (which itself
 delegates to `:crypto`'s `Signing` and `:tx`'s `TransactionAssembler`) — and
 `PlaygroundPresenter.presentSignedTransaction` only calls it and formats the result. On success

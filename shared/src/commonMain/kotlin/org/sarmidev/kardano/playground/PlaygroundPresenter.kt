@@ -667,7 +667,8 @@ internal object PlaygroundPresenter {
      * existing per-error-type presenters ([presentMnemonicError], [presentKeyDerivationError],
      * [presentCryptoError], [presentAddressError], [presentProviderError], [presentSigningError],
      * [presentTxBuildError]) for every wrapped variant, so no formatting logic is duplicated.
-     * [WalletError.BalanceOverflow] is the one variant `:wallet` owns itself.
+     * [WalletError.BalanceOverflow] and [WalletError.SigningScopeViolation] are the variants
+     * `:wallet` owns itself.
      *
      * Internal so tests can exercise all variants by constructing them directly.
      */
@@ -830,6 +831,8 @@ internal object PlaygroundPresenter {
         return buildList {
             add(LabeledRow("Selected inputs", draft.selectedInputs.size.toString()))
             add(LabeledRow("Outputs", draft.outputs.size.toString()))
+            add(LabeledRow("Draft network", draft.network.name))
+            add(LabeledRow("Draft scope", draft.scope.toString()))
             add(LabeledRow("Fee", "${draft.fee.value} lovelace"))
             changeOutput?.let { add(LabeledRow("Change", "${it.amount.value} lovelace")) }
             add(LabeledRow("Body size", "${bodyBytes.size} bytes"))
@@ -917,12 +920,12 @@ internal object PlaygroundPresenter {
      * Builds the same unsigned minimal-ADA draft as [presentTransactionDraft] (Block 1.9c) via
      * [buildTransactionDraft], then signs it through
      * [ReadOnlyWallet.signTestnetFixtureTransaction] using [TestWalletFixture]'s cited
-     * test-only mnemonic and [Network.TESTNET] explicitly — the same fixture-only/testnet-only
-     * call-site discipline [presentTransactionDraft] and [presentWalletBalance] already follow
-     * (ADR-0015 §2a: `:wallet` itself is not fixture-aware, so this call site supplies both
-     * explicitly). The [OptIn] below is this call site's explicit acknowledgment of
-     * [ExperimentalKardanoSigningScope] (ADR-0018) — see that annotation's KDoc for exactly
-     * what it does and does not mean.
+     * test-only mnemonic and [Network.TESTNET] explicitly. ADR-0019 additionally rejects a
+     * draft whose bound network/scope is outside the Phase 1 path, and a mnemonic that does
+     * not match [org.sarmidev.kardano.wallet.Phase1FixtureIdentity], inside `:wallet`. The
+     * [OptIn] below is this call site's explicit acknowledgment of
+     * [ExperimentalKardanoSigningScope] (ADR-0018) — a Kotlin-compiler signal; runtime
+     * checks are separate (ADR-0019).
      *
      * Delegates entirely to `:tx` ([TransactionBuilder]) for the draft and `:wallet`
      * ([ReadOnlyWallet.signTestnetFixtureTransaction], which itself delegates to `:crypto`'s

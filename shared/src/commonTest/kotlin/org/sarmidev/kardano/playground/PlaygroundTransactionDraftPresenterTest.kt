@@ -92,6 +92,8 @@ class PlaygroundTransactionDraftPresenterTest {
         val rowByLabel = success.rows.associate { it.label to it.value }
         assertEquals(draft.selectedInputs.size.toString(), rowByLabel["Selected inputs"])
         assertEquals(draft.outputs.size.toString(), rowByLabel["Outputs"])
+        assertEquals(draft.network.name, rowByLabel["Draft network"])
+        assertEquals(draft.scope.toString(), rowByLabel["Draft scope"])
         assertEquals("${draft.fee.value} lovelace", rowByLabel["Fee"])
         assertEquals("${draft.bodyCbor().size} bytes", rowByLabel["Body size"])
         assertTrue(rowByLabel.containsKey("Body CBOR (preview)"), "expected a body CBOR preview row")
