@@ -246,7 +246,8 @@ because versions are locked and SHA-256 verified):
 
 `verify.yml` job `android-lint` runs both variants. Reports should read
 `No issues found.` Unsuppressed findings fail CI. Owner should still
-glance at pre-API-26 launcher tiles after the 1-pixel transparent inset.
+glance at pre-API-26 launcher tiles after regenerating the rounded-rect
+legacy silhouette (`scripts/generate_legacy_launcher_icons.py`).
 
 `scripts/check_handoff_archive.py` restores the six documented archive link
 rewrites at the byte level (no newline normalization) and hashes the result

@@ -262,7 +262,7 @@ Asset disposition after Debug+Release lint (`No issues found.`):
 | Freshness / OldTargetApi / AGP / Kotlin | Resolved by commits 2–4 or disabled as online freshness |
 | `MonochromeLauncherIcon` | Added `drawable-nodpi/ic_launcher_monochrome.png` (white silhouette from `drawable-xxxhdpi/ic_launcher_foreground.png` alpha) to both adaptive XMLs |
 | `IconLocation` | Moved splash PNGs to `drawable-nodpi/` and `drawable-night-nodpi/` |
-| `IconLauncherShape` on 10 legacy `ic_launcher.png` squares | 1-pixel transparent inset so the asset is not a filled square. Mark and brand fill are unchanged. Owner visual check remains for pre-API-26 tiles. Round mipmaps were already not filled squares. |
+| `IconLauncherShape` on 10 legacy `ic_launcher.png` squares | Regenerated from `kardano_mark_{light,dark}.png` via `scripts/generate_legacy_launcher_icons.py`: 12.5% transparent margin and a rounded-rect brand-fill silhouette. Adaptive XML, monochrome, splash, and round mipmaps were not changed. Owner visual check remains for pre-API-26 tiles. |
 
 `verify.yml` job `android-lint` runs both variants. Existing
 claim / archive / Gitleaks / action-pin jobs are unchanged.

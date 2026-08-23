@@ -101,16 +101,15 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
-  Prompt 5 `90fe0ee`).** Commit 1 re-resolved Action releases live and added
-  the pin checker. Commit 2 upgrades Gradle 9.7.1 / AGP 9.3.1 / Kotlin 2.4.10
-  / compile+target SDK 37.0 / lifecycle 2.11.0 / Ktor 3.5.2, removes unused
-  catalog entries, and keeps Compose 1.11.1 + Material3 1.11.0-alpha07 as
-  one group. Commit 3 reviews crypto/native pins (Castle 1.85.2, JNA
-  5.19.1; ADR-0020 for remaining 0.x). Commit 4 adds STRICT
-  Gradle lockfiles, SHA-256 verification metadata, `rust-toolchain.toml`
-  1.97.0, and Cargo `--locked` pins. Commit 5 makes Debug/Release lint
-  fail CI, adds the monochrome adaptive layer, moves splash assets to
-  nodpi, and insets legacy square launchers by 1px.
+  Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
+  commits move the toolchain to the official Kotlin 2.4.10 envelope
+  (Gradle 9.5.0 / AGP 9.1.0 / SDK 36 / lifecycle 2.10.0; API 37 deferred
+  in ADR-0021), lock every configuration, record publisher checksums,
+  scan merge-parent diffs, parse Action pins with Psych, and permanently
+  run Verify on `push` to `fix/**`. Legacy square launchers were
+  regenerated as a rounded-rect silhouette. Android lint Debug/Release
+  is a CI error (`warningsAsErrors`); that lint-CI finding is **closed**.
+  Ubuntu Verify evidence was still pending when this note was written.
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
   `3936047`) — four original commits complete, plus review-fix commits.**
   - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now

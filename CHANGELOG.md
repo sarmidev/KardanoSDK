@@ -106,9 +106,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `AndroidGradlePluginVersion`) are disabled because coordinates are
   catalog-pinned, lockfiled, and SHA-256 verified. Adaptive icons gained
   a monochrome layer from the first-party mark; splash PNGs moved to
-  `drawable-nodpi` / `drawable-night-nodpi`; legacy square launchers
-  received a 1-pixel transparent inset so they are not a filled square.
-  Owner should still glance at the pre-API-26 launcher tiles.
+  `drawable-nodpi` / `drawable-night-nodpi`. Legacy square launchers
+  were regenerated from the approved marks as a rounded-rect silhouette
+  with 12.5% transparent padding (`scripts/generate_legacy_launcher_icons.py`).
+  Adaptive icon layers were not changed. Owner should still glance at
+  the pre-API-26 launcher tiles.
 - Dependency locking and verification (2026-08-23): every lockable
   compile/runtime classpath uses `LockMode.STRICT` with per-project
   `gradle.lockfile`s; `gradle/verification-metadata.xml` records
