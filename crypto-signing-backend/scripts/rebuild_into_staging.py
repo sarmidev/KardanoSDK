@@ -29,10 +29,88 @@ import native_artifacts as natives  # noqa: E402
 import native_toolchain as toolchain  # noqa: E402
 
 LIB = natives.LIB_STEM
+DESIGNATED_STAGING_DIR = ".rebuild-staging"
 
 
 class RebuildError(RuntimeError):
     pass
+
+
+def git_repo_root(module_root: Path) -> Path:
+    completed = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=module_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RebuildError(
+            "git rev-parse --show-toplevel failed: "
+            + ((completed.stderr or "") + (completed.stdout or "")).strip()
+        )
+    return Path(completed.stdout.strip())
+
+
+def collect_git_identity(repo_root: Path) -> dict[str, str]:
+    head = _capture(["git", "rev-parse", "HEAD"], cwd=repo_root)
+    tree = _capture(["git", "rev-parse", "HEAD^{tree}"], cwd=repo_root)
+    if not head or not tree:
+        raise RebuildError("unable to record git HEAD/tree SHA")
+    return {"head": head, "tree": tree}
+
+
+def require_clean_tracked_worktree(repo_root: Path) -> None:
+    unstaged = _capture(["git", "diff", "--name-only"], cwd=repo_root)
+    staged = _capture(["git", "diff", "--cached", "--name-only"], cwd=repo_root)
+    extra = _capture(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=repo_root,
+    )
+    dirty = [label for label, text in (("unstaged", unstaged), ("staged", staged), ("untracked", extra)) if text]
+    if dirty:
+        raise RebuildError(
+            "candidate generation requires a clean tracked worktree "
+            f"({', '.join(dirty)}); commit harness changes first. "
+            f"unstaged={unstaged!r} staged={staged!r} untracked={extra!r}"
+        )
+
+
+def path_is_designated_ignored(path: Path, *, module_root: Path, repo_root: Path) -> bool:
+    resolved = path.resolve()
+    designated = (module_root / DESIGNATED_STAGING_DIR).resolve()
+    try:
+        resolved.relative_to(designated)
+        return True
+    except ValueError:
+        pass
+    completed = subprocess.run(
+        ["git", "check-ignore", "-q", "--", str(resolved)],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+def require_staging_output_ignored(
+    staging: Path,
+    *,
+    module_root: Path,
+    repo_root: Path,
+) -> None:
+    resolved = staging.resolve()
+    try:
+        resolved.relative_to(repo_root.resolve())
+    except ValueError:
+        return
+    if path_is_designated_ignored(resolved, module_root=module_root, repo_root=repo_root):
+        return
+    raise RebuildError(
+        f"in-repo staging output must be under {module_root / DESIGNATED_STAGING_DIR} "
+        f"or another gitignored path; got {resolved}"
+    )
 
 
 def pin_ndk_env(env: dict[str, str], ndk_home: Path) -> None:
@@ -174,16 +252,18 @@ def resolve_cargo_target_dir(staging: Path, module_root: Path, override: Path | 
 
 def collect_provenance(module_root: Path, env: dict[str, str]) -> dict[str, object]:
     cargo_lock = module_root / "Cargo.lock"
-    commit = _capture(["git", "rev-parse", "HEAD"], cwd=module_root)
     ndk = env.get("ANDROID_NDK_HOME") or env.get("ANDROID_NDK_ROOT") or ""
     ndk_revision = ""
     if ndk:
         props = Path(ndk) / "source.properties"
         if props.is_file():
             ndk_revision = props.read_text(encoding="utf-8")
+    repo_root = git_repo_root(module_root)
+    identity = collect_git_identity(repo_root)
     return {
         "recorded_at": datetime.now(timezone.utc).isoformat(),
-        "source_commit": commit,
+        "source_commit": identity["head"],
+        "source_tree": identity["tree"],
         "cargo_lock_sha256": natives.sha256_file(cargo_lock) if cargo_lock.is_file() else None,
         "host": {
             "system": platform.system(),
@@ -493,7 +573,9 @@ def write_candidate_outputs(
         "provenance": provenance,
         "note": (
             "Candidate bytes only. CHECKSUMS.sha256 and src/ natives are unchanged. "
-            "Darwin LC_UUID is post-link normalized (hashlib.sha256 / RFC 9562 v8); "
+            "Darwin LC_UUID is derived from the documented canonical image "
+            "(hashlib.sha256 / RFC 9562 v8): LC_UUID zeroed and validated "
+            "LC_CODE_SIGNATURE command/blob/header/__LINKEDIT size fields excluded. "
             "arm64 is then ad-hoc signed with a stable identifier and no timestamp. "
             "Replace committed binaries only after a clean runner matches these hashes."
         ),
@@ -576,6 +658,12 @@ def main(argv: list[str] | None = None) -> int:
     module_root = args.module_root.resolve()
     staging = args.staging.resolve()
     try:
+        if args.write_candidates:
+            repo_root = git_repo_root(module_root)
+            require_clean_tracked_worktree(repo_root)
+            require_staging_output_ignored(
+                staging, module_root=module_root, repo_root=repo_root
+            )
         _require_empty_dir(staging, "staging")
         cargo_target_dir = resolve_cargo_target_dir(staging, module_root, args.cargo_target_dir)
         env, flags = base_env(module_root=module_root, cargo_target_dir=cargo_target_dir)

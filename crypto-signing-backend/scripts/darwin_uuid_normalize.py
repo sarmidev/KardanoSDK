@@ -9,13 +9,48 @@ It does not implement a hash algorithm. Canonical bytes are digested with
 Python's hashlib.sha256 (OpenSSL/system backend). The UUID is the first
 16 bytes of that digest with RFC 9562 version 8 and RFC 4122 variant bits.
 
+Canonical representation (the SHA-256 input), applied in memory to a
+private copy — never by trusting codesign --remove-signature as a hash
+inverse:
+
+1. Parse a thin little-endian 64-bit MH_DYLIB (arm64 ALL or x86_64 ALL).
+2. Zero the 16 LC_UUID payload bytes.
+3. If exactly one validated LC_CODE_SIGNATURE is present, also:
+   - require it is the last load command;
+   - require its blob is a non-overlapping suffix of __LINKEDIT that ends
+     at EOF;
+   - decrement ncmds and sizeofcmds by that command;
+   - zero the 16-byte LC_CODE_SIGNATURE command;
+   - set __LINKEDIT filesize to exclude the blob and vmsize to the
+     architecture page-aligned value of that filesize;
+   - truncate the image at the blob dataoff.
+4. Digest those bytes with hashlib.sha256.
+
+codesign --remove-signature is not a perfect inverse of ad-hoc signing
+(it leaves __LINKEDIT vmsize/filesize inconsistent). The representation
+above is therefore the only digest input. A valid ad-hoc signature with
+the exact stable identifier is never accepted unless LC_UUID equals the
+digest of this canonical image.
+
+Allowed mutation ranges (fail-closed outside them):
+
+- signature strip / unsigned materialize: Mach-O header ncmds and
+  sizeofcmds; the 16-byte LC_CODE_SIGNATURE command; __LINKEDIT
+  filesize and vmsize; truncation of the trailing signature blob.
+- UUID patch: the 16 LC_UUID payload bytes only.
+- re-sign: header ncmds/sizeofcmds; the added LC_CODE_SIGNATURE
+  command; __LINKEDIT filesize/vmsize; the appended blob. __TEXT /
+  __DATA / __DATA_CONST section payloads stay byte-identical.
+
 Scope is fail-closed and narrow:
+
 - thin little-endian 64-bit MH_DYLIB only (arm64 or x86_64);
 - reject fat, big-endian, truncated, unknown magic, or overlapping commands;
+- inspected commands match only their exact encodings (LC_REQ_DYLD is
+  not masked off LC_UUID / LC_ID_DYLIB / LC_LOAD_DYLIB / LC_CODE_SIGNATURE);
 - exactly one LC_UUID; at most one LC_CODE_SIGNATURE;
-- strip an existing ad-hoc signature with Apple codesign --remove-signature;
-- patch only the 16 UUID bytes; all other unsigned bytes must stay identical;
-- refuse unexpected architecture, LC_ID_DYLIB, dependents, or missing sign symbol.
+- refuse unexpected architecture, CPU subtype, LC_ID_DYLIB, dependents,
+  or missing sign symbol.
 
 Link determinism, UUID normalization, ad-hoc signature bytes, CHECKSUMS
 identity, and source provenance are separate facts. A matching checksum
@@ -26,9 +61,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import struct
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -51,25 +88,37 @@ FAT_CIGAM_64 = 0xEFBEBAFE
 MH_DYLIB = 0x6
 CPU_TYPE_X86_64 = 0x01000007
 CPU_TYPE_ARM64 = 0x0100000C
-CPU_ARCH_ABI64 = 0x01000000
 
-LC_REQ_DYLIB = 0x80000000
+# cpusubtype: low 24 bits are the subtype; high 8 are capability bits.
+CPU_SUBTYPE_MASK = 0xFF000000
+CPU_SUBTYPE_ARM64_ALL = 0x0
+CPU_SUBTYPE_ARM64_V8 = 0x1
+CPU_SUBTYPE_ARM64E = 0x2
+CPU_SUBTYPE_X86_64_ALL = 0x3
+CPU_SUBTYPE_LIB64 = 0x80000000
+
+LC_REQ_DYLD = 0x80000000
+LC_SEGMENT_64 = 0x19
 LC_UUID = 0x1B
 LC_CODE_SIGNATURE = 0x1D
 LC_ID_DYLIB = 0x0D
 LC_LOAD_DYLIB = 0x0C
-LC_LOAD_WEAK_DYLIB = 0x18
-LC_REEXPORT_DYLIB = 0x1F
-LC_LOAD_UPWARD_DYLIB = 0x23
-LC_LAZY_LOAD_DYLIB = 0x20
-LC_LOAD_DYLINKER = 0x0E
+LC_SYMTAB = 0x2
+LC_DYSYMTAB = 0xB
+LC_DYLD_INFO_ONLY = 0x80000022
+LC_FUNCTION_STARTS = 0x26
+LC_DATA_IN_CODE = 0x29
+LC_SOURCE_VERSION = 0x2A
+LC_BUILD_VERSION = 0x32
+LC_VERSION_MIN_MACOSX = 0x24
 
-DYLIB_COMMANDS = {
-    LC_LOAD_DYLIB,
-    LC_LOAD_WEAK_DYLIB,
-    LC_REEXPORT_DYLIB,
-    LC_LOAD_UPWARD_DYLIB,
-    LC_LAZY_LOAD_DYLIB,
+# Commands whose identity we enforce. LC_REQ_DYLD must not be combined
+# with these; match only the exact encoding.
+INSPECTED_COMMANDS = {
+    LC_UUID: "LC_UUID",
+    LC_CODE_SIGNATURE: "LC_CODE_SIGNATURE",
+    LC_ID_DYLIB: "LC_ID_DYLIB",
+    LC_LOAD_DYLIB: "LC_LOAD_DYLIB",
 }
 
 HEADER_SIZE = 32
@@ -78,6 +127,24 @@ ARCH_BY_CPU = {
     CPU_TYPE_X86_64: "x86_64",
 }
 CPU_BY_ARCH = {name: cpu for cpu, name in ARCH_BY_CPU.items()}
+CPU_SUBTYPE_BY_ARCH = {
+    "arm64": CPU_SUBTYPE_ARM64_ALL,
+    "x86_64": CPU_SUBTYPE_X86_64_ALL,
+}
+PAGE_SIZE_BY_ARCH = {
+    "arm64": 0x4000,
+    "x86_64": 0x1000,
+}
+
+CS_ADHOC = 0x2
+CODEDIRECTORY_FLAGS_RE = re.compile(
+    r"flags=0x([0-9a-fA-F]+)\(([^)]*)\)"
+)
+CANONICAL_DIGEST = "hashlib.sha256 first-16 RFC9562-v8"
+CANONICAL_REPRESENTATION = (
+    "zero LC_UUID; exclude validated LC_CODE_SIGNATURE command/blob "
+    "and restore ncmds/sizeofcmds/__LINKEDIT filesize/vmsize"
+)
 
 
 class NormalizeError(RuntimeError):
@@ -92,16 +159,56 @@ class LoadCommand:
 
 
 @dataclass
+class Section64:
+    name: str
+    segname: str
+    offset: int
+    size: int
+
+
+@dataclass
+class Segment64:
+    offset: int
+    name: str
+    vmaddr: int
+    vmsize: int
+    fileoff: int
+    filesize: int
+    nsects: int
+    vmsize_offset: int
+    filesize_offset: int
+    sections: list[Section64] = field(default_factory=list)
+
+
+@dataclass
+class CodeSignDisplay:
+    identifier: str
+    signature: str
+    team_identifier: str
+    flags: int
+    flags_names: str
+    authorities: tuple[str, ...]
+    timestamp: str | None
+    raw: str
+
+
+@dataclass
 class ThinDylib:
     data: bytes
     cputype: int
+    cpusubtype: int
+    cpu_capability: int
     arch: str
     ncmds: int
     sizeofcmds: int
     commands: list[LoadCommand] = field(default_factory=list)
+    segments: list[Segment64] = field(default_factory=list)
     uuid_offset: int | None = None
     uuid: bytes | None = None
     signature: LoadCommand | None = None
+    signature_dataoff: int | None = None
+    signature_datasize: int | None = None
+    linkedit: Segment64 | None = None
     install_name: str | None = None
     dependents: list[str] = field(default_factory=list)
 
@@ -112,10 +219,10 @@ def _u32(data: bytes, offset: int) -> int:
     return struct.unpack_from("<I", data, offset)[0]
 
 
-def _i32(data: bytes, offset: int) -> int:
-    if offset + 4 > len(data):
-        raise NormalizeError(f"truncated i32 at {offset}")
-    return struct.unpack_from("<i", data, offset)[0]
+def _u64(data: bytes, offset: int) -> int:
+    if offset + 8 > len(data):
+        raise NormalizeError(f"truncated u64 at {offset}")
+    return struct.unpack_from("<Q", data, offset)[0]
 
 
 def _cstring(data: bytes, start: int, end: int) -> str:
@@ -126,6 +233,38 @@ def _cstring(data: bytes, start: int, end: int) -> str:
     if nul < 0:
         raise NormalizeError("unterminated string field")
     return raw[:nul].decode("utf-8", errors="strict")
+
+
+def _fixed_name(data: bytes, start: int, length: int = 16) -> str:
+    """Mach-O segname/sectname are fixed-width and may omit a trailing NUL."""
+    if start < 0 or start + length > len(data):
+        raise NormalizeError("name field is out of bounds")
+    raw = data[start : start + length]
+    nul = raw.find(b"\x00")
+    if nul >= 0:
+        raw = raw[:nul]
+    return raw.decode("ascii", errors="strict")
+
+
+def _align_up(value: int, align: int) -> int:
+    if align <= 0 or align & (align - 1):
+        raise NormalizeError(f"invalid page size {align}")
+    return (value + align - 1) & ~(align - 1)
+
+
+def _ranges_overlap(a0: int, a1: int, b0: int, b1: int) -> bool:
+    return a0 < b1 and b0 < a1
+
+
+def _reject_illegal_inspected_encoding(cmd: int) -> None:
+    kind = cmd & ~LC_REQ_DYLD
+    name = INSPECTED_COMMANDS.get(kind)
+    if name is None:
+        return
+    if cmd != kind:
+        raise NormalizeError(
+            f"illegal flag combination for {name}: {cmd:#x}"
+        )
 
 
 def parse_thin_dylib(data: bytes) -> ThinDylib:
@@ -140,7 +279,8 @@ def parse_thin_dylib(data: bytes) -> ThinDylib:
         raise NormalizeError(f"unknown Mach-O magic {magic:#x}")
     if len(data) < HEADER_SIZE:
         raise NormalizeError("truncated Mach-O header")
-    cputype = _i32(data, 4)
+    cputype = _u32(data, 4)
+    cpusubtype_raw = _u32(data, 8)
     filetype = _u32(data, 12)
     ncmds = _u32(data, 16)
     sizeofcmds = _u32(data, 20)
@@ -149,6 +289,14 @@ def parse_thin_dylib(data: bytes) -> ThinDylib:
     arch = ARCH_BY_CPU.get(cputype)
     if arch is None:
         raise NormalizeError(f"unsupported cputype {cputype:#x}")
+    capability = cpusubtype_raw & CPU_SUBTYPE_MASK
+    subtype = cpusubtype_raw & ~CPU_SUBTYPE_MASK
+    expected_subtype = CPU_SUBTYPE_BY_ARCH[arch]
+    if capability != 0 or subtype != expected_subtype:
+        raise NormalizeError(
+            f"unsupported {arch} cpusubtype {cpusubtype_raw:#x} "
+            f"(require ordinary {expected_subtype:#x} with no capability bits)"
+        )
     if ncmds == 0:
         raise NormalizeError("ncmds is zero")
     if HEADER_SIZE + sizeofcmds > len(data):
@@ -156,6 +304,8 @@ def parse_thin_dylib(data: bytes) -> ThinDylib:
     parsed = ThinDylib(
         data=data,
         cputype=cputype,
+        cpusubtype=subtype,
+        cpu_capability=capability,
         arch=arch,
         ncmds=ncmds,
         sizeofcmds=sizeofcmds,
@@ -165,6 +315,7 @@ def parse_thin_dylib(data: bytes) -> ThinDylib:
     uuid_cmds: list[LoadCommand] = []
     signature_cmds: list[LoadCommand] = []
     id_names: list[str] = []
+    linkedits: list[Segment64] = []
     for _ in range(ncmds):
         if cursor + 8 > limit:
             raise NormalizeError("load command header exceeds sizeofcmds")
@@ -176,24 +327,28 @@ def parse_thin_dylib(data: bytes) -> ThinDylib:
             raise NormalizeError("load command exceeds sizeofcmds")
         record = LoadCommand(cmd=cmd, cmdsize=cmdsize, offset=cursor)
         parsed.commands.append(record)
-        cmd_kind = cmd & ~LC_REQ_DYLIB
-        if cmd_kind == LC_UUID:
+        _reject_illegal_inspected_encoding(cmd)
+        if cmd == LC_SEGMENT_64:
+            parsed.segments.append(_parse_segment64(data, record))
+            if parsed.segments[-1].name == "__LINKEDIT":
+                linkedits.append(parsed.segments[-1])
+        elif cmd == LC_UUID:
             if cmdsize != 24:
                 raise NormalizeError(f"LC_UUID cmdsize {cmdsize} != 24")
             uuid_cmds.append(record)
             parsed.uuid_offset = cursor + 8
             parsed.uuid = bytes(data[cursor + 8 : cursor + 24])
-        elif cmd_kind == LC_CODE_SIGNATURE:
+        elif cmd == LC_CODE_SIGNATURE:
             if cmdsize != 16:
                 raise NormalizeError(f"LC_CODE_SIGNATURE cmdsize {cmdsize} != 16")
             dataoff = _u32(data, cursor + 8)
             datasize = _u32(data, cursor + 12)
-            if dataoff < limit or datasize == 0 or dataoff + datasize > len(data):
-                raise NormalizeError("LC_CODE_SIGNATURE blob is out of bounds")
+            parsed.signature_dataoff = dataoff
+            parsed.signature_datasize = datasize
             signature_cmds.append(record)
-        elif cmd_kind == LC_ID_DYLIB:
+        elif cmd == LC_ID_DYLIB:
             id_names.append(_dylib_name(data, record))
-        elif cmd_kind in DYLIB_COMMANDS:
+        elif cmd == LC_LOAD_DYLIB:
             parsed.dependents.append(_dylib_name(data, record))
         cursor += cmdsize
     if cursor != limit:
@@ -206,10 +361,101 @@ def parse_thin_dylib(data: bytes) -> ThinDylib:
         raise NormalizeError("multiple LC_CODE_SIGNATURE commands")
     if signature_cmds:
         parsed.signature = signature_cmds[0]
+        _require_signature_range(parsed, linkedits)
+    elif len(linkedits) > 1:
+        raise NormalizeError("multiple __LINKEDIT segments")
+    elif linkedits:
+        parsed.linkedit = linkedits[0]
     if len(id_names) != 1:
         raise NormalizeError(f"expected exactly one LC_ID_DYLIB, found {len(id_names)}")
     parsed.install_name = id_names[0]
     return parsed
+
+
+def _parse_segment64(data: bytes, command: LoadCommand) -> Segment64:
+    if command.cmdsize < 72:
+        raise NormalizeError("LC_SEGMENT_64 is shorter than 72 bytes")
+    name = _fixed_name(data, command.offset + 8)
+    vmaddr = _u64(data, command.offset + 24)
+    vmsize = _u64(data, command.offset + 32)
+    fileoff = _u64(data, command.offset + 40)
+    filesize = _u64(data, command.offset + 48)
+    nsects = _u32(data, command.offset + 64)
+    expected = 72 + nsects * 80
+    if command.cmdsize != expected:
+        raise NormalizeError(
+            f"LC_SEGMENT_64 cmdsize {command.cmdsize} != {expected}"
+        )
+    if fileoff + filesize > len(data):
+        raise NormalizeError(f"segment {name} file range exceeds the file")
+    segment = Segment64(
+        offset=command.offset,
+        name=name,
+        vmaddr=vmaddr,
+        vmsize=vmsize,
+        fileoff=fileoff,
+        filesize=filesize,
+        nsects=nsects,
+        vmsize_offset=command.offset + 32,
+        filesize_offset=command.offset + 48,
+    )
+    for index in range(nsects):
+        sect_off = command.offset + 72 + index * 80
+        sect_name = _fixed_name(data, sect_off)
+        segname = _fixed_name(data, sect_off + 16)
+        size = _u64(data, sect_off + 40)
+        offset = _u32(data, sect_off + 48)
+        if size and offset + size > len(data):
+            raise NormalizeError(f"section {sect_name} exceeds the file")
+        segment.sections.append(
+            Section64(name=sect_name, segname=segname, offset=offset, size=size)
+        )
+    return segment
+
+
+def _require_signature_range(parsed: ThinDylib, linkedits: list[Segment64]) -> None:
+    assert parsed.signature is not None
+    assert parsed.signature_dataoff is not None
+    assert parsed.signature_datasize is not None
+    dataoff = parsed.signature_dataoff
+    datasize = parsed.signature_datasize
+    data = parsed.data
+    limit = HEADER_SIZE + parsed.sizeofcmds
+    if datasize == 0:
+        raise NormalizeError("LC_CODE_SIGNATURE datasize is zero")
+    if dataoff < limit:
+        raise NormalizeError("LC_CODE_SIGNATURE overlaps load commands")
+    if dataoff + datasize < dataoff:
+        raise NormalizeError("LC_CODE_SIGNATURE dataoff/datasize overflow")
+    if dataoff + datasize > len(data):
+        raise NormalizeError("LC_CODE_SIGNATURE blob is out of bounds")
+    if dataoff + datasize != len(data):
+        raise NormalizeError("LC_CODE_SIGNATURE blob must end exactly at EOF")
+    if parsed.signature.offset + parsed.signature.cmdsize != limit:
+        raise NormalizeError("LC_CODE_SIGNATURE is not the last load command")
+    if len(linkedits) == 0:
+        raise NormalizeError("LC_CODE_SIGNATURE requires exactly one __LINKEDIT")
+    if len(linkedits) != 1:
+        raise NormalizeError("multiple __LINKEDIT segments")
+    linkedit = linkedits[0]
+    parsed.linkedit = linkedit
+    link_end = linkedit.fileoff + linkedit.filesize
+    if link_end != len(data):
+        raise NormalizeError("__LINKEDIT file range must end exactly at EOF")
+    if not (linkedit.fileoff <= dataoff and dataoff + datasize <= link_end):
+        raise NormalizeError("LC_CODE_SIGNATURE blob is not inside __LINKEDIT")
+    for segment in parsed.segments:
+        if segment.name == "__LINKEDIT":
+            continue
+        if _ranges_overlap(
+            segment.fileoff,
+            segment.fileoff + segment.filesize,
+            dataoff,
+            dataoff + datasize,
+        ):
+            raise NormalizeError(
+                f"LC_CODE_SIGNATURE overlaps segment {segment.name}"
+            )
 
 
 def _dylib_name(data: bytes, command: LoadCommand) -> str:
@@ -238,12 +484,64 @@ def format_uuid(value: bytes) -> str:
     ).upper()
 
 
+def canonical_image(parsed: ThinDylib) -> bytes:
+    """Return the documented SHA-256 input for LC_UUID derivation."""
+    if parsed.uuid_offset is None or parsed.uuid is None:
+        raise NormalizeError("LC_UUID payload is missing")
+    out = bytearray(parsed.data)
+    out[parsed.uuid_offset : parsed.uuid_offset + 16] = b"\x00" * 16
+    if parsed.signature is None:
+        return bytes(out)
+    if (
+        parsed.signature_dataoff is None
+        or parsed.signature_datasize is None
+        or parsed.linkedit is None
+    ):
+        raise NormalizeError("LC_CODE_SIGNATURE layout is incomplete")
+    new_ncmds = parsed.ncmds - 1
+    new_sizeofcmds = parsed.sizeofcmds - parsed.signature.cmdsize
+    struct.pack_into("<I", out, 16, new_ncmds)
+    struct.pack_into("<I", out, 20, new_sizeofcmds)
+    sig = parsed.signature
+    out[sig.offset : sig.offset + sig.cmdsize] = b"\x00" * sig.cmdsize
+    new_filesize = parsed.signature_dataoff - parsed.linkedit.fileoff
+    if new_filesize < 0:
+        raise NormalizeError("LC_CODE_SIGNATURE dataoff precedes __LINKEDIT")
+    new_vmsize = _align_up(new_filesize, PAGE_SIZE_BY_ARCH[parsed.arch])
+    struct.pack_into("<Q", out, parsed.linkedit.vmsize_offset, new_vmsize)
+    struct.pack_into("<Q", out, parsed.linkedit.filesize_offset, new_filesize)
+    return bytes(out[: parsed.signature_dataoff])
+
+
+def unsigned_image(parsed: ThinDylib) -> bytes:
+    """Valid unsigned Mach-O with the original UUID restored."""
+    image = bytearray(canonical_image(parsed))
+    assert parsed.uuid_offset is not None and parsed.uuid is not None
+    if parsed.uuid_offset + 16 > len(image):
+        raise NormalizeError("LC_UUID payload is outside the unsigned image")
+    image[parsed.uuid_offset : parsed.uuid_offset + 16] = parsed.uuid
+    return bytes(image)
+
+
 def canonical_unsigned(data: bytes, uuid_offset: int) -> bytes:
-    if uuid_offset + 16 > len(data):
-        raise NormalizeError("LC_UUID payload is out of bounds")
-    out = bytearray(data)
-    out[uuid_offset : uuid_offset + 16] = b"\x00" * 16
-    return bytes(out)
+    """Unsigned-only helper used by tests: zero LC_UUID, keep the rest."""
+    parsed = parse_thin_dylib(data)
+    if parsed.signature is not None:
+        return canonical_image(parsed)
+    if parsed.uuid_offset != uuid_offset:
+        raise NormalizeError("uuid_offset does not match parsed LC_UUID")
+    return canonical_image(parsed)
+
+
+def changed_offsets(before: bytes, after: bytes) -> list[int]:
+    changed = [index for index, (left, right) in enumerate(zip(before, after)) if left != right]
+    if len(after) > len(before):
+        changed.extend(range(len(before), len(after)))
+    return changed
+
+
+def _offset_in_ranges(index: int, ranges: list[tuple[int, int]]) -> bool:
+    return any(start <= index < end for start, end in ranges)
 
 
 def assert_only_uuid_changed(before: bytes, after: bytes, uuid_offset: int) -> None:
@@ -260,24 +558,141 @@ def assert_only_uuid_changed(before: bytes, after: bytes, uuid_offset: int) -> N
             continue
 
 
-def _already_normalized(
-    path: Path,
-    parsed: ThinDylib,
-    *,
-    codesign: Path | None,
-) -> bool:
-    """True when this file already has our ad-hoc identifier and a UUID.
+def unsigned_mutation_ranges(signed: ThinDylib) -> list[tuple[int, int]]:
+    """Header / LC_CODE_SIGNATURE / __LINKEDIT fields plus the blob."""
+    if signed.signature is None or signed.linkedit is None:
+        return []
+    ranges = [
+        (16, 24),  # ncmds + sizeofcmds
+        (signed.signature.offset, signed.signature.offset + signed.signature.cmdsize),
+        (signed.linkedit.vmsize_offset, signed.linkedit.vmsize_offset + 8),
+        (signed.linkedit.filesize_offset, signed.linkedit.filesize_offset + 8),
+    ]
+    assert signed.signature_dataoff is not None
+    ranges.append((signed.signature_dataoff, len(signed.data)))
+    return ranges
 
-    codesign --remove-signature is not a perfect inverse of ad-hoc signing,
-    so a second pass would hash different unsigned bytes. Treat an already
-    verified signature with STABLE_IDENTIFIER as the normalized form.
-    """
-    text = display_signature(path, codesign=codesign)
-    return (
-        parsed.uuid is not None
-        and f"Identifier={STABLE_IDENTIFIER}" in text
-        and "Signature=adhoc" in text
+
+def assert_unsigned_mutations_documented(before: bytes, after: bytes, signed: ThinDylib) -> None:
+    if signed.signature is None:
+        if before != after:
+            raise NormalizeError("unsigned image changed a file with no signature")
+        return
+    allowed = unsigned_mutation_ranges(signed)
+    dataoff = signed.signature_dataoff
+    if dataoff is None:
+        raise NormalizeError("signed image is missing LC_CODE_SIGNATURE dataoff")
+    if len(after) != dataoff:
+        raise NormalizeError(
+            f"unsigned image size {len(after)} != signature dataoff {dataoff}"
+        )
+    if len(before) < dataoff:
+        raise NormalizeError("signed file is shorter than LC_CODE_SIGNATURE dataoff")
+    for index, (left, right) in enumerate(zip(before[:dataoff], after)):
+        if left != right and not _offset_in_ranges(index, allowed):
+            raise NormalizeError(f"unexpected unsigned mutation at {index}")
+
+
+def section_payload_ranges(parsed: ThinDylib) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    load_end = HEADER_SIZE + parsed.sizeofcmds
+    for segment in parsed.segments:
+        if segment.name == "__LINKEDIT":
+            continue
+        if segment.sections:
+            for section in segment.sections:
+                if section.size == 0:
+                    continue
+                if section.offset < load_end:
+                    continue
+                ranges.append((section.offset, section.offset + section.size))
+        else:
+            start = segment.fileoff
+            end = segment.fileoff + segment.filesize
+            if start < load_end:
+                start = load_end
+            if start < end:
+                ranges.append((start, end))
+    return ranges
+
+
+def assert_sign_mutations_documented(
+    before: bytes,
+    after: bytes,
+    unsigned: ThinDylib,
+    signed: ThinDylib,
+) -> None:
+    if signed.signature is None:
+        raise NormalizeError("re-sign did not produce LC_CODE_SIGNATURE")
+    allowed = unsigned_mutation_ranges(signed)
+    if len(after) < len(before):
+        raise NormalizeError("re-sign shrank the file")
+    for index, (left, right) in enumerate(zip(before, after)):
+        if left != right and not _offset_in_ranges(index, allowed):
+            raise NormalizeError(f"unexpected sign mutation at {index}")
+    before_sections = section_payload_ranges(unsigned)
+    after_parsed = signed
+    after_sections = section_payload_ranges(after_parsed)
+    if len(before_sections) != len(after_sections):
+        raise NormalizeError("re-sign changed section layout")
+    for (b0, b1), (a0, a1) in zip(before_sections, after_sections):
+        if (b0, b1) != (a0, a1) or before[b0:b1] != after[a0:a1]:
+            raise NormalizeError("re-sign changed a code/data/text section")
+
+
+def parse_codesign_display(text: str) -> CodeSignDisplay:
+    fields: dict[str, str] = {}
+    authorities: list[str] = []
+    flags = 0
+    flags_names = ""
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = CODEDIRECTORY_FLAGS_RE.search(line)
+        if match:
+            flags = int(match.group(1), 16)
+            flags_names = match.group(2)
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        if key == "Authority":
+            authorities.append(value)
+            continue
+        if key not in fields:
+            fields[key] = value
+    return CodeSignDisplay(
+        identifier=fields.get("Identifier", ""),
+        signature=fields.get("Signature", ""),
+        team_identifier=fields.get("TeamIdentifier", ""),
+        flags=flags,
+        flags_names=flags_names,
+        authorities=tuple(authorities),
+        timestamp=fields.get("Timestamp"),
+        raw=text,
     )
+
+
+def require_expected_ad_hoc(display: CodeSignDisplay) -> None:
+    if display.identifier != STABLE_IDENTIFIER:
+        raise NormalizeError(
+            f"codesign Identifier {display.identifier!r} != {STABLE_IDENTIFIER!r}"
+        )
+    if display.signature != "adhoc":
+        raise NormalizeError(f"codesign Signature {display.signature!r} is not adhoc")
+    if display.team_identifier != "not set":
+        raise NormalizeError(
+            f"codesign TeamIdentifier {display.team_identifier!r} is not 'not set'"
+        )
+    if display.flags & CS_ADHOC == 0 and "adhoc" not in display.flags_names.split(","):
+        raise NormalizeError(
+            f"codesign flags {display.flags:#x}({display.flags_names}) are not adhoc"
+        )
+    if display.timestamp not in {None, "", "none", "not set"}:
+        raise NormalizeError(f"codesign Timestamp {display.timestamp!r} is not allowed")
+    for authority in display.authorities:
+        if "timestamp" in authority.lower():
+            raise NormalizeError(f"codesign Authority includes timestamp: {authority!r}")
 
 
 def resolve_codesign() -> Path:
@@ -395,6 +810,37 @@ def _llvm_nm() -> str:
     return nm
 
 
+def _record(
+    *,
+    path: Path,
+    expected_arch: str,
+    new_uuid: bytes,
+    canonical: bytes,
+    removed_signature: bool,
+    signed: bool,
+    mutated: bool,
+    signature_text: str,
+    output: bytes,
+) -> dict[str, object]:
+    return {
+        "path": str(path),
+        "arch": expected_arch,
+        "removed_signature": removed_signature,
+        "signed": signed,
+        "mutated": mutated,
+        "identifier": STABLE_IDENTIFIER if signed else None,
+        "uuid": format_uuid(new_uuid),
+        "canonical_sha256": hashlib.sha256(canonical).hexdigest(),
+        "canonical_representation": CANONICAL_REPRESENTATION,
+        "output_sha256": hashlib.sha256(output).hexdigest(),
+        "unsigned_size": len(canonical) if not signed or mutated else None,
+        "output_size": len(output),
+        "install_name": STABLE_INSTALL_NAME,
+        "codesign_display": signature_text,
+        "digest": CANONICAL_DIGEST,
+    }
+
+
 def normalize_dylib(
     path: Path,
     *,
@@ -404,11 +850,13 @@ def normalize_dylib(
     codesign: Path | None = None,
     skip_codesign: bool = False,
 ) -> dict[str, object]:
-    """Normalize LC_UUID from unsigned canonical bytes; sign arm64 ad hoc.
+    """Normalize LC_UUID from the documented canonical image; sign arm64 ad hoc.
 
     ``sign`` defaults to True for arm64 and False for x86_64. Tests may
     inject ``nm`` or set ``skip_codesign`` to exercise the parser without
-    Apple tools.
+    Apple tools. A signed input with the exact stable identifier is
+    verified against the canonical digest on every pass; it is never
+    accepted solely because codesign --verify succeeds.
     """
     if expected_arch not in CPU_BY_ARCH:
         raise NormalizeError(f"unsupported expected arch {expected_arch}")
@@ -418,53 +866,55 @@ def normalize_dylib(
     if sign is None:
         sign = expected_arch == "arm64"
 
-    if (
-        sign
-        and not skip_codesign
-        and parsed.signature is not None
-        and _already_normalized(path, parsed, codesign=codesign)
-    ):
-        _require_symbol(path, nm)
-        run_codesign(["--verify", "--strict", str(path)], codesign=codesign)
-        assert parsed.uuid is not None
-        return {
-            "path": str(path),
-            "arch": expected_arch,
-            "removed_signature": False,
-            "signed": True,
-            "already_normalized": True,
-            "identifier": STABLE_IDENTIFIER,
-            "uuid": format_uuid(parsed.uuid),
-            "canonical_sha256": None,
-            "output_sha256": hashlib.sha256(original).hexdigest(),
-            "unsigned_size": None,
-            "output_size": len(original),
-            "install_name": STABLE_INSTALL_NAME,
-            "codesign_display": display_signature(path, codesign=codesign),
-            "digest": "hashlib.sha256 first-16 RFC9562-v8",
-        }
+    # Private copy: hash the in-memory canonical image, never the file
+    # after codesign --remove-signature, and never mutate ``path`` to
+    # compute the expected UUID.
+    canonical = canonical_image(parsed)
+    new_uuid = digest_uuid(canonical)
 
-    removed_signature = False
     if parsed.signature is not None:
         if skip_codesign:
             raise NormalizeError("LC_CODE_SIGNATURE present but codesign is disabled")
-        run_codesign(["--remove-signature", str(path)], codesign=codesign)
-        removed_signature = True
-        unsigned = path.read_bytes()
-        parsed = parse_thin_dylib(unsigned)
-        _require_expected_layout(parsed, expected_arch)
-        if parsed.signature is not None:
-            raise NormalizeError("codesign --remove-signature left LC_CODE_SIGNATURE")
-    else:
-        unsigned = original
+        # Verify the blob before classifying the identifier. A tampered
+        # signature must not be rewritten as if it were a linker signature.
+        run_codesign(["--verify", "--strict", str(path)], codesign=codesign)
+        display = parse_codesign_display(display_signature(path, codesign=codesign))
+        if display.identifier == STABLE_IDENTIFIER:
+            require_expected_ad_hoc(display)
+            run_codesign(["--verify", "--strict", str(path)], codesign=codesign)
+            if parsed.uuid != new_uuid:
+                raise NormalizeError(
+                    "LC_UUID does not match canonical digest; "
+                    "valid ad-hoc exact-identifier signature is not sufficient"
+                )
+            if not sign:
+                raise NormalizeError("signed input is not allowed when sign=False")
+            _require_symbol(path, nm)
+            return _record(
+                path=path,
+                expected_arch=expected_arch,
+                new_uuid=new_uuid,
+                canonical=canonical,
+                removed_signature=False,
+                signed=True,
+                mutated=False,
+                signature_text=display.raw,
+                output=original,
+            )
+        # Foreign / linker signature: materialize the unsigned image.
 
+    unsigned = unsigned_image(parsed)
+    if parsed.signature is not None:
+        assert_unsigned_mutations_documented(original, unsigned, parsed)
+        stripped = parse_thin_dylib(unsigned)
+        if stripped.signature is not None:
+            raise NormalizeError("canonical unsigned image still has LC_CODE_SIGNATURE")
+        _require_expected_layout(stripped, expected_arch)
     assert parsed.uuid_offset is not None
-    before = bytes(unsigned)
-    canonical = canonical_unsigned(before, parsed.uuid_offset)
-    new_uuid = digest_uuid(canonical)
-    patched = bytearray(before)
+    patched = bytearray(unsigned)
     patched[parsed.uuid_offset : parsed.uuid_offset + 16] = new_uuid
-    assert_only_uuid_changed(before, bytes(patched), parsed.uuid_offset)
+    assert_only_uuid_changed(unsigned, bytes(patched), parsed.uuid_offset)
+    mutated = bytes(patched) != original or bool(sign and parsed.signature is None)
     path.write_bytes(patched)
     _require_symbol(path, nm)
 
@@ -473,6 +923,8 @@ def normalize_dylib(
     if sign:
         if skip_codesign:
             raise NormalizeError("arm64 ad-hoc signing requires Apple codesign")
+        before_sign = bytes(patched)
+        unsigned_parsed = parse_thin_dylib(before_sign)
         run_codesign(
             [
                 "--force",
@@ -486,32 +938,70 @@ def normalize_dylib(
             codesign=codesign,
         )
         run_codesign(["--verify", "--strict", str(path)], codesign=codesign)
-        signature_text = display_signature(path, codesign=codesign)
-        signed = True
-        after = parse_thin_dylib(path.read_bytes())
+        after_bytes = path.read_bytes()
+        after = parse_thin_dylib(after_bytes)
+        assert_sign_mutations_documented(before_sign, after_bytes, unsigned_parsed, after)
         if after.uuid != new_uuid:
             raise NormalizeError("codesign changed LC_UUID")
         if after.install_name != STABLE_INSTALL_NAME:
             raise NormalizeError("codesign changed LC_ID_DYLIB")
         if after.arch != expected_arch:
             raise NormalizeError("codesign changed architecture")
+        display = parse_codesign_display(display_signature(path, codesign=codesign))
+        require_expected_ad_hoc(display)
+        if digest_uuid(canonical_image(after)) != new_uuid:
+            raise NormalizeError("re-sign changed the canonical unsigned representation")
+        signature_text = display.raw
+        signed = True
+        mutated = True
 
-    return {
-        "path": str(path),
-        "arch": expected_arch,
-        "removed_signature": removed_signature,
-        "signed": signed,
-        "already_normalized": False,
-        "identifier": STABLE_IDENTIFIER if signed else None,
-        "uuid": format_uuid(new_uuid),
-        "canonical_sha256": hashlib.sha256(canonical).hexdigest(),
-        "output_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "unsigned_size": len(patched),
-        "output_size": path.stat().st_size,
-        "install_name": STABLE_INSTALL_NAME,
-        "codesign_display": signature_text,
-        "digest": "hashlib.sha256 first-16 RFC9562-v8",
-    }
+    output = path.read_bytes()
+    return _record(
+        path=path,
+        expected_arch=expected_arch,
+        new_uuid=new_uuid,
+        canonical=canonical,
+        removed_signature=parsed.signature is not None,
+        signed=signed,
+        mutated=mutated,
+        signature_text=signature_text,
+        output=output,
+    )
+
+
+def verify_signed_canonical_uuid(
+    path: Path,
+    *,
+    expected_arch: str,
+    codesign: Path | None = None,
+) -> bytes:
+    """Temp-copy strip/canonicalize a signed input and require LC_UUID.
+
+    The original file is not written. Used by tests and as the signed-input
+    path inside ``normalize_dylib``.
+    """
+    original = path.read_bytes()
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / path.name
+        copy.write_bytes(original)
+        parsed = parse_thin_dylib(copy.read_bytes())
+        _require_expected_layout(parsed, expected_arch)
+        if parsed.signature is None:
+            raise NormalizeError("expected a signed input")
+        display = parse_codesign_display(display_signature(copy, codesign=codesign))
+        require_expected_ad_hoc(display)
+        run_codesign(["--verify", "--strict", str(copy)], codesign=codesign)
+        expected = digest_uuid(canonical_image(parsed))
+        if parsed.uuid != expected:
+            raise NormalizeError(
+                "LC_UUID does not match canonical digest; "
+                "valid ad-hoc exact-identifier signature is not sufficient"
+            )
+        if copy.read_bytes() != original:
+            raise NormalizeError("canonical verification mutated the temp copy unexpectedly")
+    if path.read_bytes() != original:
+        raise NormalizeError("canonical verification mutated the original file")
+    return expected
 
 
 def write_normalize_evidence(record: dict[str, object], dest: Path, artifact_id: str) -> Path:

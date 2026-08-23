@@ -85,6 +85,89 @@ def _dylib_hooks(*, nm_rc: int = 0, nm_out: str | None = None, arch: str = "arm6
     )
 
 
+def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    completed = subprocess.run(
+        ["git", "-c", "user.email=test@example.com", "-c", "user.name=test", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check and completed.returncode != 0:
+        raise AssertionError(
+            f"git {' '.join(args)} failed: {completed.stderr}{completed.stdout}"
+        )
+    return completed
+
+
+class GitProvenanceTests(unittest.TestCase):
+    def _repo(self) -> Path:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        _git(root, "init")
+        (root / ".gitignore").write_text(".rebuild-staging/\n", encoding="utf-8")
+        (root / "tracked.txt").write_text("ok\n", encoding="utf-8")
+        _git(root, "add", ".gitignore", "tracked.txt")
+        _git(root, "commit", "-m", "init")
+        return root
+
+    def test_dirty_unstaged_source_is_rejected(self) -> None:
+        repo = self._repo()
+        (repo / "tracked.txt").write_text("dirty\n", encoding="utf-8")
+        with self.assertRaises(rebuild.RebuildError) as raised:
+            rebuild.require_clean_tracked_worktree(repo)
+        self.assertIn("clean tracked worktree", str(raised.exception))
+        self.assertIn("unstaged", str(raised.exception))
+
+    def test_dirty_staged_source_is_rejected(self) -> None:
+        repo = self._repo()
+        (repo / "tracked.txt").write_text("staged\n", encoding="utf-8")
+        _git(repo, "add", "tracked.txt")
+        with self.assertRaises(rebuild.RebuildError) as raised:
+            rebuild.require_clean_tracked_worktree(repo)
+        self.assertIn("staged", str(raised.exception))
+
+    def test_untracked_nonignored_file_is_rejected(self) -> None:
+        repo = self._repo()
+        (repo / "extra.txt").write_text("nope\n", encoding="utf-8")
+        with self.assertRaises(rebuild.RebuildError) as raised:
+            rebuild.require_clean_tracked_worktree(repo)
+        self.assertIn("untracked", str(raised.exception))
+
+    def test_ignored_rebuild_staging_is_allowed(self) -> None:
+        repo = self._repo()
+        staging = repo / ".rebuild-staging" / "out"
+        staging.mkdir(parents=True)
+        (staging / "artifact.bin").write_bytes(b"x")
+        rebuild.require_clean_tracked_worktree(repo)
+        self.assertTrue(
+            rebuild.path_is_designated_ignored(
+                staging,
+                module_root=repo,
+                repo_root=repo,
+            )
+        )
+
+    def test_in_repo_nonignored_staging_is_rejected(self) -> None:
+        repo = self._repo()
+        staging = repo / "tmp-staging"
+        with self.assertRaises(rebuild.RebuildError) as raised:
+            rebuild.require_staging_output_ignored(
+                staging, module_root=repo, repo_root=repo
+            )
+        self.assertIn("gitignored", str(raised.exception))
+
+    def test_head_and_tree_sha_are_recorded(self) -> None:
+        repo = self._repo()
+        identity = rebuild.collect_git_identity(repo)
+        head = _git(repo, "rev-parse", "HEAD").stdout.strip()
+        tree = _git(repo, "rev-parse", "HEAD^{tree}").stdout.strip()
+        self.assertEqual(identity["head"], head)
+        self.assertEqual(identity["tree"], tree)
+        self.assertRegex(head, r"^[0-9a-f]{40}$")
+        self.assertRegex(tree, r"^[0-9a-f]{40}$")
+
+
 class StagingRulesTests(unittest.TestCase):
     def test_dirty_cargo_target_is_rejected(self) -> None:
         root = Path(tempfile.mkdtemp())

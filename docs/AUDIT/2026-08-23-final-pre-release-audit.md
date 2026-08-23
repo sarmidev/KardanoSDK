@@ -267,21 +267,31 @@ original evidence or reopen resolved-as-of-Prompt-1 items.
 
 ## 8. Prompt 7 native rematch (2026-08-23, stacked)
 
-W5-2's committed CHECKSUMS still describe the original eight host-path-tied
-binaries. That is a tamper check, not proof of cross-host rebuild identity or
-of source provenance. On `fix/native-build-and-platform-evidence`:
+**Historical (W5-2, commit `40ab80c`).** That CHECKSUMS file described the
+original eight host-path-tied binaries. It was a tamper check, not proof
+of cross-host rebuild identity or of source provenance.
+
+**Current (replacement commit `5582637`).** CHECKSUMS now describes the
+UUID-normalized eight-artifact set matched by clean `macos-26` run
+`32662613270` at `f62205e`. Those rows are not the W5-2 host-path hashes.
+
+On `fix/native-build-and-platform-evidence`:
 
 - Link remapping and a stable `@rpath` install name make Darwin *unsigned*
   code/data match across local `26.2` and `macos-26` `26.5.2`.
 - `ld`'s `LC_UUID` does not. Apple TN3178 states there is no Apple command
   that sets `LC_UUID` after link. `-no_uuid` matches hashes and is refused
   by macos-26 `dyld`.
-- The post-link normalizer writes an RFC 9562 version-8 UUID from
-  `hashlib.sha256` of unsigned canonical bytes, then ad-hoc signs arm64
-  with a stable identifier and no timestamp. Signature bytes are a
-  separate fact from the UUID and from CHECKSUMS.
+- The post-link normalizer derives an RFC 9562 version-8 UUID from
+  `hashlib.sha256` of a documented canonical image (zero `LC_UUID`; exclude
+  validated `LC_CODE_SIGNATURE` command/blob and restore
+  `ncmds`/`sizeofcmds`/`__LINKEDIT` filesize/vmsize). A verifying ad-hoc
+  signature with the exact identifier is not sufficient unless `LC_UUID`
+  equals that digest. Signature bytes are a separate fact from the UUID
+  and from CHECKSUMS.
 - Android and iOS candidates already matched a clean runner (6/8).
   Run `32662613270` then matched Darwin UUID + arm64 signature as well
-  (8/8). Those candidate bytes replaced `src/` and CHECKSUMS. Gate 2
-  Linux starts only after Verify and native rebuild are green on that
-  replacement tip.
+  (8/8). Those candidate bytes replaced `src/` and CHECKSUMS in `5582637`.
+  The follow-up harness still accepts those Darwin bytes, so they were
+  not rewritten. Gate 2 Linux starts only after Verify and native rebuild
+  are green on the current tip and after Gate 1 re-review is GO.

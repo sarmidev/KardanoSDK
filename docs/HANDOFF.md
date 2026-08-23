@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Phase C replace | Clean `macos-26` `32662613270` matched 8/8 UUID-normalized candidates. Those bytes plus CHECKSUMS replace `src/`. Linux starts only after this tip is green. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 1 harness | Tip stacked on `5582637` replacement. Canonical signed-arm64 verification, exact Mach-O encodings, signature-range checks, clean candidate provenance. Current 8 binaries unchanged. Linux not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -104,17 +104,23 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence` (continue
-  from `0c4661d`).** Clean `macos-26` run `32662613270` at `f62205e`
-  matched all eight UUID-normalized candidates (Android+iOS already
-  matched; Darwin UUID + arm64 ad-hoc signature now match). Phase C
-  copies those local bytes into `src/` and updates `CHECKSUMS.sha256` in
-  the same commit; the candidate manifest is removed so CHECKSUMS is the
-  only manifest. Apple TN3178 has no post-link UUID tool; the normalizer
-  uses `hashlib.sha256` and RFC 9562 v8, then arm64 ad-hoc sign with
-  `org.sarmidev.kardano.ed25519-bip32-signing` and `--timestamp=none`.
-  Link remapping, UUID normalize, signature bytes, checksum identity,
-  and source provenance stay separate. Next: Verify + native rebuild
-  green on the replacement tip, then Gate 2 Linux. Do not merge or tag.
+  from `5582637`).** Independent Gate 1 review was NO-GO. The follow-up
+  removes the `_already_normalized` substring shortcut: every signed
+  pass parses exact `codesign` fields, recomputes the UUID from the
+  documented canonical image (in-memory; `hashlib.sha256` only), and
+  rejects an otherwise-valid ad-hoc exact-identifier signature over an
+  arbitrary UUID. Inspected Mach-O commands match exact encodings;
+  `LC_REQ_DYLD` is not masked; CPU subtypes must be ordinary arm64 ALL /
+  x86_64 ALL. Signature blobs must sit in `__LINKEDIT` and end at EOF.
+  Candidate generation requires a clean tracked worktree and records
+  HEAD/tree SHA. Current `CHECKSUMS.sha256` rows (replacement `5582637`)
+  still match this verifier, so the eight binaries were not rewritten.
+  Post-replacement JVM KAT, eight `compileKotlinIosArm64`, iOS simulator
+  link, and Android assemble ran on 2026-08-23 against those hashes.
+  Device `connectedAndroidDeviceTest` remains bound to W5-2 `40ab80c`
+  checksums; no post-replacement device runtime. Next: Verify + native
+  rebuild green on this tip, then Gate 2 Linux only after re-review GO.
+  Do not merge or tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope
@@ -231,11 +237,13 @@ Do not use:
 
 ## Next Recommended Task
 
-Prompt 6 commits 1–5 are on this branch. Residual owner work from
-Prompt 5: an authenticated GitHub secret-scanning / Dependabot pass, the
-manual accessibility walkthrough, and a human review of the stacked PRs. Do
-not merge from an automated session. `gradle/actions` v6 needs an explicit
-license decision if it is ever adopted.
+Prompt 7 is on `fix/native-build-and-platform-evidence`. Independent Gate 1
+re-review of the canonical-verification harness is the next gate. Do not
+start Gate 2 Linux until that re-review is GO. Residual owner work from
+earlier prompts: authenticated GitHub secret-scanning / Dependabot, the
+manual accessibility walkthrough, and a post-replacement Android device
+`connectedAndroidDeviceTest` (still a manual gate). Do not merge from an
+automated session.
 
 ## Prompt For Cursor Business/Product Work
 

@@ -243,8 +243,13 @@ def apply_rustflags(
         "darwin_uuid_normalize": {
             "digest": "hashlib.sha256",
             "uuid": "RFC 9562 version 8 from first 16 digest bytes",
+            "canonical": (
+                "zero LC_UUID; exclude validated LC_CODE_SIGNATURE command/blob "
+                "and restore ncmds/sizeofcmds/__LINKEDIT filesize/vmsize"
+            ),
             "identifier": "org.sarmidev.kardano.ed25519-bip32-signing",
-            "arm64_codesign": "adhoc --timestamp=none",
+            "identifier_match": "exact",
+            "arm64_codesign": "adhoc --timestamp=none TeamIdentifier=not set",
             "x86_64_codesign": "unsigned after LC_UUID patch",
         },
     }

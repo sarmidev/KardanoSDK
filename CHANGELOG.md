@@ -43,10 +43,20 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   normalizer now writes an RFC 9562 v8 UUID from `hashlib.sha256` of
   unsigned canonical bytes and re-signs arm64 ad hoc with a stable
   identifier and no timestamp. Apple TN3178 has no tool that sets
-  `LC_UUID`.   Clean `macos-26` run `32662613270` matched all eight UUID-normalized
+  `LC_UUID`. Clean `macos-26` run `32662613270` matched all eight UUID-normalized
   candidates, including the arm64 ad-hoc signature; those bytes replaced
-  `src/` and `CHECKSUMS.sha256` in the same commit. Gate 2 Linux starts
-  only after Verify and native rebuild are green on that replacement tip.
+  `src/` and `CHECKSUMS.sha256` in the same commit (`5582637`). The
+  normalizer no longer treats a verifying ad-hoc signature as already
+  done: every signed pass recomputes the UUID from a documented
+  canonical image (zero `LC_UUID`; exclude validated `LC_CODE_SIGNATURE`
+  command/blob and restore header/`__LINKEDIT` size fields) and requires
+  an exact identifier plus ad-hoc / no-timestamp / team-not-set fields.
+  Inspected Mach-O commands match exact encodings; `LC_REQ_DYLD` is not
+  masked. Candidate generation requires a clean tracked worktree and
+  records HEAD/tree SHA. Current Darwin bytes still match that
+  verifier, so CHECKSUMS was not rewritten by the follow-up harness
+  commit. Gate 2 Linux starts only after Verify and native rebuild are
+  green on the current tip.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

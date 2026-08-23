@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import shutil
 import struct
 import subprocess
@@ -44,6 +43,21 @@ def _signature_cmd(dataoff: int, datasize: int) -> bytes:
     return struct.pack("<IIII", normalize.LC_CODE_SIGNATURE, 16, dataoff, datasize)
 
 
+def _segment64(
+    name: str,
+    fileoff: int,
+    filesize: int,
+    *,
+    vmsize: int | None = None,
+    vmaddr: int = 0,
+) -> bytes:
+    vmsize = filesize if vmsize is None else vmsize
+    padded = name.encode("utf-8") + b"\x00" * (16 - len(name))
+    return struct.pack("<II", normalize.LC_SEGMENT_64, 72) + padded + struct.pack(
+        "<QQQQIIII", vmaddr, vmsize, fileoff, filesize, 0, 0, 0, 0
+    )
+
+
 def build_thin_dylib(
     *,
     arch: str = "arm64",
@@ -57,9 +71,23 @@ def build_thin_dylib(
     ncmds_override: int | None = None,
     sizeofcmds_override: int | None = None,
     truncate: int | None = None,
+    cpusubtype: int | None = None,
+    trailing: bytes = b"",
+    signature_dataoff: int | None = None,
+    linkedit: bool | None = None,
+    text_filesize: int | None = None,
 ) -> bytes:
     cpu = normalize.CPU_BY_ARCH[arch]
-    commands = [_uuid_cmd(uuid), _dylib_cmd(normalize.LC_ID_DYLIB, install_name)]
+    subtype = (
+        normalize.CPU_SUBTYPE_BY_ARCH[arch] if cpusubtype is None else cpusubtype
+    )
+    include_linkedit = linkedit if linkedit is not None else signature is not None
+    commands: list[bytes] = []
+    if include_linkedit:
+        commands.append(_segment64("__TEXT", 0, 0))
+        commands.append(_segment64("__LINKEDIT", 0, 0))
+    commands.append(_uuid_cmd(uuid))
+    commands.append(_dylib_cmd(normalize.LC_ID_DYLIB, install_name))
     for dep in dependents:
         commands.append(_dylib_cmd(normalize.LC_LOAD_DYLIB, dep))
     commands.extend(extra_cmds or [])
@@ -68,24 +96,65 @@ def build_thin_dylib(
         commands.append(_signature_cmd(0, len(signature)))
         blob = signature
     load = b"".join(commands)
+    dataoff = normalize.HEADER_SIZE + len(load)
     if signature is not None:
-        dataoff = normalize.HEADER_SIZE + len(load)
+        if signature_dataoff is not None:
+            dataoff = signature_dataoff
         commands[-1] = _signature_cmd(dataoff, len(signature))
+        if include_linkedit:
+            text_size = text_filesize if text_filesize is not None else dataoff
+            link_off = text_size
+            link_size = max(0, dataoff + len(signature) - link_off)
+            commands[0] = _segment64("__TEXT", 0, text_size)
+            commands[1] = _segment64(
+                "__LINKEDIT",
+                link_off,
+                link_size,
+                vmsize=normalize._align_up(link_size, normalize.PAGE_SIZE_BY_ARCH[arch]),
+            )
         load = b"".join(commands)
+        if signature_dataoff is None:
+            dataoff = normalize.HEADER_SIZE + len(load)
+            commands[-1] = _signature_cmd(dataoff, len(signature))
+            if include_linkedit:
+                text_size = text_filesize if text_filesize is not None else dataoff
+                link_off = text_size
+                link_size = max(0, dataoff + len(signature) - link_off)
+                commands[0] = _segment64("__TEXT", 0, text_size)
+                commands[1] = _segment64(
+                    "__LINKEDIT",
+                    link_off,
+                    link_size,
+                    vmsize=normalize._align_up(
+                        link_size, normalize.PAGE_SIZE_BY_ARCH[arch]
+                    ),
+                )
+            load = b"".join(commands)
+            dataoff = normalize.HEADER_SIZE + len(load)
+            commands[-1] = _signature_cmd(dataoff, len(signature))
+            load = b"".join(commands)
+        padding = b"\x00" * max(0, dataoff - (normalize.HEADER_SIZE + len(load)))
+        blob = padding + signature
+    elif include_linkedit:
+        text_size = text_filesize if text_filesize is not None else normalize.HEADER_SIZE + len(load)
+        commands[0] = _segment64("__TEXT", 0, text_size)
+        commands[1] = _segment64("__LINKEDIT", text_size, 16, vmsize=normalize.PAGE_SIZE_BY_ARCH[arch])
+        load = b"".join(commands)
+        blob = b"\x00" * 16
     ncmds = ncmds_override if ncmds_override is not None else len(commands)
     sizeofcmds = sizeofcmds_override if sizeofcmds_override is not None else len(load)
     header = struct.pack(
-        "<IiiiIIII",
+        "<IIIIIIII",
         magic if magic is not None else normalize.MH_MAGIC_64,
         cpu,
-        0,
+        subtype,
         filetype,
         ncmds,
         sizeofcmds,
         0,
         0,
     )
-    data = header + load + blob
+    data = header + load + blob + trailing
     if truncate is not None:
         return data[:truncate]
     return data
@@ -128,6 +197,7 @@ class ParseAndNormalizeTests(unittest.TestCase):
         )
         self.assertEqual(first["uuid"], second["uuid"])
         self.assertEqual(first["output_sha256"], second["output_sha256"])
+        self.assertEqual(path.read_bytes(), path.read_bytes())
 
     def test_only_uuid_bytes_change(self) -> None:
         original = build_thin_dylib(uuid=b"\xcd" * 16)
@@ -164,13 +234,21 @@ class ParseAndNormalizeTests(unittest.TestCase):
             normalize.parse_thin_dylib(fat)
 
     def test_missing_and_duplicate_uuid_are_rejected(self) -> None:
-        missing = build_thin_dylib(extra_cmds=[])
-        # Drop the UUID command by rebuilding without it.
         cpu = normalize.CPU_TYPE_ARM64
         load = _dylib_cmd(normalize.LC_ID_DYLIB, INSTALL) + _dylib_cmd(
             normalize.LC_LOAD_DYLIB, LIBSYSTEM
         )
-        header = struct.pack("<IiiiIIII", normalize.MH_MAGIC_64, cpu, 0, normalize.MH_DYLIB, 2, len(load), 0, 0)
+        header = struct.pack(
+            "<IIIIIIII",
+            normalize.MH_MAGIC_64,
+            cpu,
+            normalize.CPU_SUBTYPE_ARM64_ALL,
+            normalize.MH_DYLIB,
+            2,
+            len(load),
+            0,
+            0,
+        )
         with self.assertRaisesRegex(normalize.NormalizeError, "LC_UUID is missing"):
             normalize.parse_thin_dylib(header + load)
         dup = build_thin_dylib(extra_cmds=[_uuid_cmd(b"\x44" * 16)])
@@ -228,10 +306,10 @@ class ParseAndNormalizeTests(unittest.TestCase):
             + _signature_cmd(8, 4)
         )
         header = struct.pack(
-            "<IiiiIIII",
+            "<IIIIIIII",
             normalize.MH_MAGIC_64,
             normalize.CPU_TYPE_ARM64,
-            0,
+            normalize.CPU_SUBTYPE_ARM64_ALL,
             normalize.MH_DYLIB,
             4,
             len(load),
@@ -251,9 +329,230 @@ class ParseAndNormalizeTests(unittest.TestCase):
         )
         parsed = normalize.parse_thin_dylib(path.read_bytes())
         self.assertEqual(parsed.arch, "x86_64")
+        self.assertEqual(parsed.cpusubtype, normalize.CPU_SUBTYPE_X86_64_ALL)
         self.assertEqual(parsed.install_name, INSTALL)
         self.assertIsNone(parsed.signature)
         self.assertFalse(record["signed"])
+
+    def test_uuid_req_dyld_flag_is_rejected(self) -> None:
+        data = build_thin_dylib()
+        parsed = normalize.parse_thin_dylib(data)
+        mutated = bytearray(data)
+        struct.pack_into(
+            "<I", mutated, parsed.commands[0].offset, normalize.LC_UUID | normalize.LC_REQ_DYLD
+        )
+        # UUID may not be command 0 when LINKEDIT is absent; find it.
+        for command in parsed.commands:
+            if command.cmd == normalize.LC_UUID:
+                struct.pack_into(
+                    "<I",
+                    mutated,
+                    command.offset,
+                    normalize.LC_UUID | normalize.LC_REQ_DYLD,
+                )
+                break
+        with self.assertRaisesRegex(normalize.NormalizeError, "illegal flag combination"):
+            normalize.parse_thin_dylib(bytes(mutated))
+
+    def test_code_signature_req_dyld_flag_is_rejected(self) -> None:
+        data = build_thin_dylib(signature=b"\xaa" * 32)
+        parsed = normalize.parse_thin_dylib(data)
+        assert parsed.signature is not None
+        mutated = bytearray(data)
+        struct.pack_into(
+            "<I",
+            mutated,
+            parsed.signature.offset,
+            normalize.LC_CODE_SIGNATURE | normalize.LC_REQ_DYLD,
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "illegal flag combination"):
+            normalize.parse_thin_dylib(bytes(mutated))
+
+    def test_id_dylib_req_dyld_flag_is_rejected(self) -> None:
+        data = build_thin_dylib()
+        parsed = normalize.parse_thin_dylib(data)
+        mutated = bytearray(data)
+        for command in parsed.commands:
+            if command.cmd == normalize.LC_ID_DYLIB:
+                struct.pack_into(
+                    "<I",
+                    mutated,
+                    command.offset,
+                    normalize.LC_ID_DYLIB | normalize.LC_REQ_DYLD,
+                )
+                break
+        with self.assertRaisesRegex(normalize.NormalizeError, "illegal flag combination"):
+            normalize.parse_thin_dylib(bytes(mutated))
+
+    def test_arm64e_subtype_is_rejected(self) -> None:
+        data = build_thin_dylib(cpusubtype=normalize.CPU_SUBTYPE_ARM64E)
+        with self.assertRaisesRegex(normalize.NormalizeError, "cpusubtype"):
+            normalize.parse_thin_dylib(data)
+
+    def test_x86_64_lib64_capability_is_rejected(self) -> None:
+        data = build_thin_dylib(
+            arch="x86_64",
+            cpusubtype=normalize.CPU_SUBTYPE_X86_64_ALL | normalize.CPU_SUBTYPE_LIB64,
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "cpusubtype"):
+            normalize.parse_thin_dylib(data)
+
+    def test_x86_64_all_zero_subtype_is_rejected(self) -> None:
+        data = build_thin_dylib(arch="x86_64", cpusubtype=0)
+        with self.assertRaisesRegex(normalize.NormalizeError, "cpusubtype"):
+            normalize.parse_thin_dylib(data)
+
+    def test_duplicate_id_dylib_is_rejected(self) -> None:
+        data = build_thin_dylib(extra_cmds=[_dylib_cmd(normalize.LC_ID_DYLIB, INSTALL)])
+        with self.assertRaisesRegex(normalize.NormalizeError, "exactly one LC_ID_DYLIB"):
+            normalize.parse_thin_dylib(data)
+
+    def test_duplicate_code_signature_is_rejected(self) -> None:
+        data = build_thin_dylib(
+            signature=b"\xab" * 16,
+            extra_cmds=[_signature_cmd(4096, 16)],
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "multiple LC_CODE_SIGNATURE"):
+            normalize.parse_thin_dylib(data)
+
+    def test_middle_of_file_signature_is_rejected(self) -> None:
+        data = build_thin_dylib(signature=b"\xcd" * 16, trailing=b"\xff" * 32)
+        with self.assertRaisesRegex(normalize.NormalizeError, "end exactly at EOF"):
+            normalize.parse_thin_dylib(data)
+
+    def test_trailing_bytes_after_linkedit_are_rejected(self) -> None:
+        data = build_thin_dylib(signature=b"\xef" * 24, trailing=b"\x00\x01")
+        with self.assertRaisesRegex(normalize.NormalizeError, "end exactly at EOF"):
+            normalize.parse_thin_dylib(data)
+
+    def test_signature_overlapping_text_is_rejected(self) -> None:
+        data = build_thin_dylib(
+            signature=b"\x11" * 16,
+            signature_dataoff=8,
+            text_filesize=64,
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "LC_CODE_SIGNATURE"):
+            normalize.parse_thin_dylib(data)
+
+    def test_invalid_dataoff_and_datasize_are_rejected(self) -> None:
+        load = (
+            _segment64("__TEXT", 0, 64)
+            + _segment64("__LINKEDIT", 64, 16)
+            + _uuid_cmd(b"\x11" * 16)
+            + _dylib_cmd(normalize.LC_ID_DYLIB, INSTALL)
+            + _dylib_cmd(normalize.LC_LOAD_DYLIB, LIBSYSTEM)
+            + _signature_cmd(10_000, 16)
+        )
+        header = struct.pack(
+            "<IIIIIIII",
+            normalize.MH_MAGIC_64,
+            normalize.CPU_TYPE_ARM64,
+            normalize.CPU_SUBTYPE_ARM64_ALL,
+            normalize.MH_DYLIB,
+            6,
+            len(load),
+            0,
+            0,
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "LC_CODE_SIGNATURE"):
+            normalize.parse_thin_dylib(header + load + b"\x00" * 16)
+
+    def test_zero_datasize_is_rejected(self) -> None:
+        load = (
+            _segment64("__TEXT", 0, 80)
+            + _segment64("__LINKEDIT", 80, 8)
+            + _uuid_cmd(b"\x11" * 16)
+            + _dylib_cmd(normalize.LC_ID_DYLIB, INSTALL)
+            + _dylib_cmd(normalize.LC_LOAD_DYLIB, LIBSYSTEM)
+            + _signature_cmd(80, 0)
+        )
+        header = struct.pack(
+            "<IIIIIIII",
+            normalize.MH_MAGIC_64,
+            normalize.CPU_TYPE_ARM64,
+            normalize.CPU_SUBTYPE_ARM64_ALL,
+            normalize.MH_DYLIB,
+            6,
+            len(load),
+            0,
+            0,
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "datasize"):
+            normalize.parse_thin_dylib(header + load)
+
+    def test_prefixed_and_suffixed_identifiers_are_rejected(self) -> None:
+        text = (
+            "Identifier=evil.org.sarmidev.kardano.ed25519-bip32-signing\n"
+            "Signature=adhoc\n"
+            "TeamIdentifier=not set\n"
+            "CodeDirectory v=20400 size=1 flags=0x2(adhoc) hashes=1+2 location=embedded\n"
+        )
+        display = normalize.parse_codesign_display(text)
+        with self.assertRaisesRegex(normalize.NormalizeError, "Identifier"):
+            normalize.require_expected_ad_hoc(display)
+        text = (
+            f"Identifier={normalize.STABLE_IDENTIFIER}.suffix\n"
+            "Signature=adhoc\n"
+            "TeamIdentifier=not set\n"
+            "CodeDirectory v=20400 size=1 flags=0x2(adhoc) hashes=1+2 location=embedded\n"
+        )
+        display = normalize.parse_codesign_display(text)
+        with self.assertRaisesRegex(normalize.NormalizeError, "Identifier"):
+            normalize.require_expected_ad_hoc(display)
+
+    def test_timestamped_and_non_adhoc_displays_are_rejected(self) -> None:
+        base = (
+            f"Identifier={normalize.STABLE_IDENTIFIER}\n"
+            "Signature=adhoc\n"
+            "TeamIdentifier=not set\n"
+            "CodeDirectory v=20400 size=1 flags=0x2(adhoc) hashes=1+2 location=embedded\n"
+        )
+        display = normalize.parse_codesign_display(base + "Timestamp=1 Jan 2026\n")
+        with self.assertRaisesRegex(normalize.NormalizeError, "Timestamp"):
+            normalize.require_expected_ad_hoc(display)
+        display = normalize.parse_codesign_display(
+            base + "Authority=Developer ID Application: Example\n"
+            "Authority=Timestamp Apple\n"
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "timestamp"):
+            normalize.require_expected_ad_hoc(display)
+        display = normalize.parse_codesign_display(
+            f"Identifier={normalize.STABLE_IDENTIFIER}\n"
+            "Signature=CMS\n"
+            "TeamIdentifier=ABCD123456\n"
+            "CodeDirectory v=20400 size=1 flags=0x0() hashes=1+2 location=embedded\n"
+        )
+        with self.assertRaisesRegex(normalize.NormalizeError, "adhoc"):
+            normalize.require_expected_ad_hoc(display)
+
+    def test_exact_identifier_display_is_accepted(self) -> None:
+        display = normalize.parse_codesign_display(
+            f"Identifier={normalize.STABLE_IDENTIFIER}\n"
+            "Signature=adhoc\n"
+            "TeamIdentifier=not set\n"
+            "CodeDirectory v=20400 size=1 flags=0x2(adhoc) hashes=1+2 location=embedded\n"
+        )
+        normalize.require_expected_ad_hoc(display)
+
+    def test_canonical_signed_image_zeros_only_documented_fields(self) -> None:
+        signed = build_thin_dylib(uuid=b"\x22" * 16, signature=b"\x33" * 64)
+        parsed = normalize.parse_thin_dylib(signed)
+        canonical = normalize.canonical_image(parsed)
+        unsigned = normalize.unsigned_image(parsed)
+        self.assertEqual(len(canonical), parsed.signature_dataoff)
+        self.assertIsNone(normalize.parse_thin_dylib(unsigned).signature)
+        self.assertEqual(unsigned[parsed.uuid_offset : parsed.uuid_offset + 16], b"\x22" * 16)
+        self.assertEqual(canonical[parsed.uuid_offset : parsed.uuid_offset + 16], b"\x00" * 16)
+        normalize.assert_unsigned_mutations_documented(signed, unsigned, parsed)
+
+    def test_unexpected_unsigned_mutation_is_rejected(self) -> None:
+        signed = build_thin_dylib(uuid=b"\x22" * 16, signature=b"\x33" * 64)
+        parsed = normalize.parse_thin_dylib(signed)
+        unsigned = bytearray(normalize.unsigned_image(parsed))
+        assert parsed.uuid_offset is not None
+        unsigned[parsed.uuid_offset] ^= 0xFF
+        with self.assertRaisesRegex(normalize.NormalizeError, "unexpected unsigned mutation"):
+            normalize.assert_unsigned_mutations_documented(signed, bytes(unsigned), parsed)
 
 
 @unittest.skipUnless(sys.platform == "darwin" and shutil.which("cc"), "Darwin cc required")
@@ -289,11 +588,15 @@ class LiveDarwinNormalizeTests(unittest.TestCase):
         path = root / "libkardano_ed25519_bip32_signing.dylib"
         self._compile("arm64", path)
         first = normalize.normalize_dylib(path, expected_arch="arm64")
+        first_bytes = path.read_bytes()
         second = normalize.normalize_dylib(path, expected_arch="arm64")
         self.assertEqual(first["uuid"], second["uuid"])
         self.assertEqual(first["output_sha256"], second["output_sha256"])
+        self.assertEqual(first_bytes, path.read_bytes())
         self.assertTrue(first["signed"])
-        self.assertTrue(second["already_normalized"])
+        self.assertTrue(second["signed"])
+        self.assertFalse(second["mutated"])
+        self.assertTrue(first["mutated"])
         verify = subprocess.run(
             ["codesign", "--verify", "--strict", str(path)],
             capture_output=True,
@@ -304,7 +607,10 @@ class LiveDarwinNormalizeTests(unittest.TestCase):
         ctypes.CDLL(str(path))
         parsed = normalize.parse_thin_dylib(path.read_bytes())
         self.assertEqual(parsed.arch, "arm64")
+        self.assertEqual(parsed.cpusubtype, normalize.CPU_SUBTYPE_ARM64_ALL)
         self.assertEqual(parsed.install_name, INSTALL)
+        expected = normalize.verify_signed_canonical_uuid(path, expected_arch="arm64")
+        self.assertEqual(parsed.uuid, expected)
 
     def test_x86_64_normalize_keeps_arch_symbol_and_install_name(self) -> None:
         root = Path(tempfile.mkdtemp())
@@ -314,6 +620,7 @@ class LiveDarwinNormalizeTests(unittest.TestCase):
         record = normalize.normalize_dylib(path, expected_arch="x86_64")
         parsed = normalize.parse_thin_dylib(path.read_bytes())
         self.assertEqual(parsed.arch, "x86_64")
+        self.assertEqual(parsed.cpusubtype, normalize.CPU_SUBTYPE_X86_64_ALL)
         self.assertEqual(parsed.install_name, INSTALL)
         self.assertIsNone(parsed.signature)
         self.assertFalse(record["signed"])
@@ -325,6 +632,157 @@ class LiveDarwinNormalizeTests(unittest.TestCase):
         )
         self.assertEqual(nm.returncode, 0, nm.stderr)
         self.assertIn(SYMBOL, nm.stdout)
+
+    def test_suffixed_identifier_is_rewritten_then_verified(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        path = root / "libkardano_ed25519_bip32_signing.dylib"
+        self._compile("arm64", path)
+        normalize.normalize_dylib(path, expected_arch="arm64")
+        completed = subprocess.run(
+            [
+                "codesign",
+                "--force",
+                "-s",
+                "-",
+                "--identifier",
+                f"{normalize.STABLE_IDENTIFIER}.suffix",
+                "--timestamp=none",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        with self.assertRaisesRegex(normalize.NormalizeError, "Identifier"):
+            normalize.verify_signed_canonical_uuid(path, expected_arch="arm64")
+        # Foreign identifier is stripped and re-signed, not accepted as done.
+        record = normalize.normalize_dylib(path, expected_arch="arm64")
+        self.assertTrue(record["mutated"])
+        display = normalize.parse_codesign_display(record["codesign_display"])
+        self.assertEqual(display.identifier, normalize.STABLE_IDENTIFIER)
+
+    def test_prefixed_identifier_is_not_accepted_as_normalized(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        path = root / "libkardano_ed25519_bip32_signing.dylib"
+        self._compile("arm64", path)
+        normalize.normalize_dylib(path, expected_arch="arm64")
+        completed = subprocess.run(
+            [
+                "codesign",
+                "--force",
+                "-s",
+                "-",
+                "--identifier",
+                f"evil.{normalize.STABLE_IDENTIFIER}",
+                "--timestamp=none",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        with self.assertRaisesRegex(normalize.NormalizeError, "Identifier"):
+            normalize.verify_signed_canonical_uuid(path, expected_arch="arm64")
+
+    def test_exact_identifier_with_arbitrary_uuid_is_rejected(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        path = root / "libkardano_ed25519_bip32_signing.dylib"
+        self._compile("arm64", path)
+        normalize.normalize_dylib(path, expected_arch="arm64")
+        parsed = normalize.parse_thin_dylib(path.read_bytes())
+        assert parsed.uuid_offset is not None
+        mutated = bytearray(path.read_bytes())
+        mutated[parsed.uuid_offset : parsed.uuid_offset + 16] = b"\x99" * 16
+        path.write_bytes(mutated)
+        completed = subprocess.run(
+            [
+                "codesign",
+                "--force",
+                "-s",
+                "-",
+                "--identifier",
+                normalize.STABLE_IDENTIFIER,
+                "--timestamp=none",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        verify = subprocess.run(
+            ["codesign", "--verify", "--strict", str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(verify.returncode, 0, verify.stderr)
+        with self.assertRaisesRegex(normalize.NormalizeError, "canonical digest"):
+            normalize.verify_signed_canonical_uuid(path, expected_arch="arm64")
+        with self.assertRaisesRegex(normalize.NormalizeError, "canonical digest"):
+            normalize.normalize_dylib(path, expected_arch="arm64")
+
+    def test_tampered_signature_is_rejected(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        path = root / "libkardano_ed25519_bip32_signing.dylib"
+        self._compile("arm64", path)
+        normalize.normalize_dylib(path, expected_arch="arm64")
+        parsed = normalize.parse_thin_dylib(path.read_bytes())
+        assert parsed.signature_dataoff is not None
+        mutated = bytearray(path.read_bytes())
+        mutated[parsed.signature_dataoff] ^= 0xFF
+        path.write_bytes(mutated)
+        verify = subprocess.run(
+            ["codesign", "--verify", "--strict", str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(verify.returncode, 0, verify.stderr)
+        with self.assertRaisesRegex(normalize.NormalizeError, "codesign"):
+            normalize.normalize_dylib(path, expected_arch="arm64")
+
+    def test_non_adhoc_team_display_is_rejected_if_constructible(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
+        path = root / "libkardano_ed25519_bip32_signing.dylib"
+        self._compile("arm64", path)
+        normalize.normalize_dylib(path, expected_arch="arm64")
+        # --timestamp requires Apple's timestamp service; treat failure as
+        # "not constructible" and keep the synthetic parser coverage.
+        completed = subprocess.run(
+            [
+                "codesign",
+                "--force",
+                "-s",
+                "-",
+                "--identifier",
+                normalize.STABLE_IDENTIFIER,
+                "--timestamp",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            self.skipTest(f"timestamped signature not constructible: {completed.stderr}")
+        display = normalize.parse_codesign_display(normalize.display_signature(path))
+        detectable = display.timestamp not in {None, "", "none", "not set"} or any(
+            "timestamp" in item.lower() for item in display.authorities
+        )
+        if not detectable:
+            self.skipTest(
+                "ad-hoc --timestamp left Signature=adhoc with no Timestamp field"
+            )
+        with self.assertRaisesRegex(normalize.NormalizeError, "Timestamp|timestamp|adhoc"):
+            normalize.verify_signed_canonical_uuid(path, expected_arch="arm64")
 
 
 if __name__ == "__main__":

@@ -47,14 +47,24 @@ committed:
   future work (ADR-0016 §9, Option R3). This module does not claim general cross-host JVM
   verification.
 
-## Verified (ADR-0016 §7d / §9f) — all four legs against this real module
+## Verified (ADR-0016 §7d / §9f) — legs against this real module
 
-| Leg | Command | Result |
-|---|---|---|
-| JVM KAT (through JNA bindings) | `./gradlew :crypto-signing-backend:jvmTest` | 4/4 pass (macOS arm64) |
-| Android real-runtime KAT (through packaged Kotlin/JNA bindings) | `./gradlew :crypto-signing-backend:connectedAndroidDeviceTest` | 4/4 on `SM-A356B` (Android 15, physical) + 4/4 on `kardano_api24` (API 24 emulator = SDK `minSdk`) |
-| iOS compile + link | `./gradlew :crypto-signing-backend:compileKotlinIosArm64` + `:linkDebugTestIosSimulatorArm64` | both `BUILD SUCCESSFUL`; the simulator test binary links the committed `.a` |
-| Symbol proof (per target) | `nm -gU` (macOS/iOS), `llvm-nm -D` (Android) | `kardano_ed25519_bip32_signing_fn_func_sign` exported on all 8 artifacts |
+Results below are date- and hash-bound. Current committed natives are the
+UUID-normalized set in `CHECKSUMS.sha256` (replacement commit `5582637`,
+2026-08-23). A passing compile or KAT is not a device-runtime claim.
+
+| Leg | Command | Result | Bound to |
+|---|---|---|---|
+| JVM KAT (through JNA bindings) | `./gradlew :crypto-signing-backend:jvmTest` | 4/4 pass (macOS arm64) on 2026-08-23 | current `CHECKSUMS.sha256` (`darwin-aarch64` `6462fe39…cc84`) |
+| iOS compile + simulator link | `./gradlew :crypto-signing-backend:compileKotlinIosArm64` + `:linkDebugTestIosSimulatorArm64` | both `BUILD SUCCESSFUL` on 2026-08-23 | current iOS rows (`a933ee42…6fb2`, `a894136b…2056`) |
+| Eight `compileKotlinIosArm64` modules | `:core` `:crypto` `:crypto-signing-backend` `:provider` `:provider-blockfrost` `:wallet` `:tx` `:shared` | all `BUILD SUCCESSFUL` on 2026-08-23 | current iOS `.a` rows above |
+| Android packaging | `./gradlew :androidApp:assembleDebug` + `:androidApp:assembleRelease` | both `BUILD SUCCESSFUL` on 2026-08-23 | current Android `.so` rows in `CHECKSUMS.sha256` |
+| Symbol proof (per target) | `nm -gU` (macOS/iOS), `llvm-nm -D` (Android) | `kardano_ed25519_bip32_signing_fn_func_sign` exported on all 8 artifacts | current `CHECKSUMS.sha256` |
+| Android real-runtime KAT | `./gradlew :crypto-signing-backend:connectedAndroidDeviceTest` | 4/4 on `SM-A356B` (Android 15) + 4/4 on `kardano_api24` (API 24) | **historical only** — W5-2 `40ab80c` CHECKSUMS (host-path-tied Android `.so` rows `fdc2a0e2…`, `6c80eb89…`, `e6194b64…`, `5bbe657d…`). No post-replacement device or emulator run has occurred. Owner/manual gate. |
+
+No GitHub Actions emulator/device runner is added: `scripts/action_pin_inventory.py`
+has no already-approved SHA-pinned Android emulator action, and adding one
+would need a separate pin review. That absence is not a pass.
 
 The KAT is ADR-0016 §3 `D1_H0`: extended scalar signs `"Hello World"` ⇒ `D1_H0_SIGNATURE`
 (reproduced exactly), plus sign-then-verify, tampered-signature rejection, and wrong-length-xprv
@@ -178,14 +188,25 @@ dylib install name other than `@rpath/libkardano_ed25519_bip32_signing.dylib` is
 failed compare. Darwin JVM links pass `-Wl,-reproducible` and keep `LC_UUID`
 (macos-26 `dyld` rejects `-no_uuid`). Apple TN3178 has no tool that sets
 `LC_UUID` after link, so the rebuild then runs a fail-closed post-link
-normalizer: strip any ad-hoc signature with `codesign --remove-signature`,
-zero the UUID, digest the unsigned bytes with Python `hashlib.sha256`,
-write an RFC 9562 version-8 UUID, and re-sign arm64 ad hoc with identifier
-`org.sarmidev.kardano.ed25519-bip32-signing` and `--timestamp=none`.
-x86_64 stays unsigned. These are separate facts: link remapping, UUID
-normalization, ad-hoc signature bytes, CHECKSUMS identity, and source
-provenance. A matching checksum does not prove the bytes came from the
-visible Rust sources.
+normalizer. The SHA-256 input is a documented canonical image computed
+in memory (Python `hashlib.sha256` only): zero the 16 `LC_UUID` bytes;
+if a validated `LC_CODE_SIGNATURE` is present, exclude that command and
+its trailing `__LINKEDIT` blob and restore `ncmds` / `sizeofcmds` /
+`__LINKEDIT` filesize and page-aligned vmsize. `codesign --remove-signature`
+is not used as a hash inverse. The UUID is RFC 9562 version 8 from the
+first 16 digest bytes. arm64 is then ad-hoc signed with identifier
+exactly `org.sarmidev.kardano.ed25519-bip32-signing`, `--timestamp=none`,
+and `TeamIdentifier=not set`. A valid signature with that identifier is
+never accepted unless `LC_UUID` equals the canonical digest. x86_64
+stays unsigned. Inspected Mach-O commands match only their exact
+encodings (`LC_REQ_DYLD` is not masked). Candidate generation
+(`--write-candidates`) requires a clean tracked worktree
+(`git diff` and `git diff --cached`), records HEAD and tree SHA, and
+allows in-repo staging output only under the gitignored
+`.rebuild-staging/` directory. These are separate facts: link remapping,
+UUID normalization, ad-hoc signature bytes, CHECKSUMS identity, and
+source provenance. A matching checksum does not prove the bytes came
+from the visible Rust sources.
 
 `.github/workflows/native-rebuild-evidence.yml` pins `macos-26` and Xcode `26.6`
 (`17F113`). The image default NDK is `27.3.13750724`; the workflow unsets
@@ -202,21 +223,25 @@ cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
 
 The first harness commit on this branch (`6cb6810`) is historical review debt: it
 defaulted to the module `target/` and treated missing inspection tools as optional.
-Those bytes are not rewritten. Clean `macos-26` run `32662613270` at
-`f62205e` matched all eight UUID-normalized candidates, including the
-arm64 ad-hoc signature. Those bytes are now `CHECKSUMS.sha256`. A
-matching checksum is identity of those committed bytes, not proof of
-source provenance. Gate 2 Linux starts only after Verify and native
-rebuild are green on the replacement tip.
+Those bytes are not rewritten. Historical W5-2 `CHECKSUMS.sha256`
+(`40ab80c`) described the original eight host-path-tied binaries.
+Clean `macos-26` run `32662613270` at `f62205e` matched all eight
+UUID-normalized candidates; commit `5582637` replaced `src/` and
+`CHECKSUMS.sha256` with those bytes. Current CHECKSUMS is that
+replacement set, not the W5-2 host-path rows. A matching checksum is
+identity of those committed bytes, not proof of source provenance.
+The current verifier accepts both committed Darwin dylibs (canonical
+UUID match; arm64 ad-hoc exact-identifier). Gate 2 Linux starts only
+after Verify and native rebuild are green on the current tip.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
-`target/`-directory rebuild matched all eight then-current CHECKSUMS rows. The same
-recipe on GitHub `macos-latest` (run `32658155802`) rebuilt the macOS JVM
-and iOS artifacts and then failed byte-compare (Mach-O `LC_ID_DYLIB` was
-the absolute cargo output path; iOS archives also differed). The Android
-`cargo ndk` step on that runner failed before a compare. Those committed
-bytes are host-path-tied. Full remediation is in progress; a host-bound
-exception is not accepted.
+`target/`-directory rebuild matched all eight then-current (W5-2)
+CHECKSUMS rows. The same recipe on GitHub `macos-latest` (run
+`32658155802`) rebuilt the macOS JVM and iOS artifacts and then failed
+byte-compare (Mach-O `LC_ID_DYLIB` was the absolute cargo output path;
+iOS archives also differed). The Android `cargo ndk` step on that
+runner failed before a compare. Those *historical* bytes were
+host-path-tied. They are not the current CHECKSUMS rows.
 
 **Regeneration rule:** this manifest must be regenerated in the *same commit* as any change to one
 or more of the 8 binaries above (step 6 in the regeneration recipe), never as a separate follow-up
