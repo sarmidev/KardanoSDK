@@ -14,7 +14,9 @@ and/or `action.yaml`. Nested local uses are followed; cycles, missing
 metadata, path escape, and unreviewed external nested uses are findings.
 Local metadata with `runs.using: docker` is rejected (any image) until
 a digest/inventory policy exists. Direct `uses: docker://...` is also
-rejected.
+rejected. YAML aliases/anchors and non-string `uses` / `runs` /
+`runs.using` / `runs.image` values are extractor errors, never treated
+as absent fields.
 """
 
 from __future__ import annotations
@@ -66,6 +68,8 @@ def classify_use(path: str, line: int, raw: str | None) -> UseRef:
     if raw is None:
         return UseRef(path, line, "", None, None, "invalid")
     value = raw.strip()
+    if not value:
+        return UseRef(path, line, raw, None, None, "invalid")
     if LOCAL_REF_RE.match(value):
         return UseRef(path, line, value, None, None, "local")
     if DOCKER_REF_RE.match(value):
@@ -83,11 +87,14 @@ def classify_use(path: str, line: int, raw: str | None) -> UseRef:
     )
 
 
-def parse_yaml_document(text: str) -> dict:
+def parse_yaml_document(text: str, *, source_path: str = "") -> dict:
     if not HELPER.is_file():
         raise FileNotFoundError(f"missing YAML helper: {HELPER}")
+    command = [RUBY, str(HELPER)]
+    if Path(source_path).name in ACTION_METADATA_NAMES:
+        command.append("--action-metadata")
     completed = subprocess.run(
-        [RUBY, str(HELPER)],
+        command,
         input=text,
         capture_output=True,
         text=True,
@@ -109,11 +116,21 @@ def parse_yaml_document(text: str) -> dict:
         runs = {}
     if not isinstance(runs, dict):
         raise ValueError("YAML helper returned invalid runs")
-    return {"uses": uses, "top_level_keys": keys or [], "runs": runs}
+    errors = payload.get("errors")
+    if errors is None:
+        errors = []
+    if not isinstance(errors, list):
+        raise ValueError("YAML helper returned invalid errors")
+    return {
+        "uses": uses,
+        "top_level_keys": keys or [],
+        "runs": runs,
+        "errors": errors,
+    }
 
 
-def extract_uses_from_text(text: str) -> list[dict]:
-    return parse_yaml_document(text)["uses"]
+def extract_uses_from_text(text: str, *, source_path: str = "") -> list[dict]:
+    return parse_yaml_document(text, source_path=source_path)["uses"]
 
 
 def parse_use_line(path: str, line_no: int, line: str) -> UseRef | None:
@@ -154,7 +171,7 @@ def read_use_refs(root: Path, relative: str) -> tuple[list[UseRef], list[Finding
     text = (root / relative).read_text(encoding="utf-8")
     findings: list[Finding] = []
     try:
-        entries = extract_uses_from_text(text)
+        entries = extract_uses_from_text(text, source_path=relative)
     except ValueError as exc:
         return [], [Finding(relative, 1, f"YAML parse failed: {exc}")]
     refs: list[UseRef] = []
@@ -163,7 +180,13 @@ def read_use_refs(root: Path, relative: str) -> tuple[list[UseRef], list[Finding
         if entry.get("error"):
             findings.append(Finding(relative, line, str(entry["error"])))
             continue
-        refs.append(classify_use(relative, line, entry.get("value")))
+        value = entry.get("value")
+        if not isinstance(value, str) or not value.strip():
+            findings.append(
+                Finding(relative, line, "uses value is empty or not a string")
+            )
+            continue
+        refs.append(classify_use(relative, line, value))
     return refs, findings
 
 
@@ -174,9 +197,9 @@ def check_workflow_structure(root: Path, relative: str) -> list[Finding]:
     if "\t" in text:
         findings.append(Finding(relative, 1, "workflow uses tab indentation"))
     try:
-        document = parse_yaml_document(text)
-    except ValueError:
-        return [Finding(relative, 1, "workflow YAML is not parseable")]
+        document = parse_yaml_document(text, source_path=relative)
+    except ValueError as exc:
+        return [Finding(relative, 1, f"workflow YAML is not parseable: {exc}")]
     keys = {str(key) for key in document["top_level_keys"]}
     if "on" not in keys:
         findings.append(Finding(relative, 1, "workflow is missing a top-level on: key"))
@@ -198,7 +221,7 @@ def check_use_ref(ref: UseRef) -> list[Finding]:
             )
         ]
     if ref.kind == "invalid":
-        return [Finding(ref.path, ref.line, "uses value is not a scalar")]
+        return [Finding(ref.path, ref.line, "uses value is empty or not a string")]
     if ref.kind != "pinned" or ref.action is None or ref.sha is None:
         return [
             Finding(
@@ -273,27 +296,88 @@ def resolve_local_action(root: Path, raw: str, from_path: str, line: int) -> Pat
     return dest
 
 
+def _document_errors(relative: str, document: dict) -> list[Finding]:
+    findings: list[Finding] = []
+    for item in document.get("errors") or []:
+        if not isinstance(item, dict) or not item.get("message"):
+            findings.append(
+                Finding(relative, 1, "YAML helper returned a non-scalar error marker")
+            )
+            continue
+        findings.append(
+            Finding(relative, int(item.get("line") or 1), str(item["message"]))
+        )
+    return findings
+
+
 def check_local_action_runtime(relative: str, document: dict) -> list[Finding]:
     """Fail closed: this repo has no approved local Docker actions."""
-    runs = document.get("runs") or {}
-    using_entry = runs.get("using") if isinstance(runs.get("using"), dict) else {}
-    image_entry = runs.get("image") if isinstance(runs.get("image"), dict) else {}
+    findings = _document_errors(relative, document)
+    runs = document.get("runs")
+    if not isinstance(runs, dict):
+        findings.append(Finding(relative, 1, "runs is not a mapping"))
+        return findings
+    if runs.get("error"):
+        findings.append(
+            Finding(relative, int(runs.get("line") or 1), str(runs["error"]))
+        )
+        return findings
+    using_entry = runs.get("using") if isinstance(runs.get("using"), dict) else None
+    if using_entry is None:
+        findings.append(Finding(relative, 1, "runs.using is missing or not a string"))
+        return findings
+    if using_entry.get("error"):
+        findings.append(
+            Finding(
+                relative,
+                int(using_entry.get("line") or 1),
+                str(using_entry["error"]),
+            )
+        )
+        return findings
     using = using_entry.get("value")
-    if using is None:
-        return []
-    if str(using).strip().lower() != "docker":
-        return []
-    image = image_entry.get("value")
-    image_text = image if image else "(no image)"
-    line = int(using_entry.get("line") or image_entry.get("line") or 1)
-    return [
+    if not isinstance(using, str) or not using.strip():
+        findings.append(
+            Finding(
+                relative,
+                int(using_entry.get("line") or 1),
+                "runs.using is missing or not a string",
+            )
+        )
+        return findings
+    image_entry = runs.get("image") if isinstance(runs.get("image"), dict) else None
+    if image_entry and image_entry.get("error"):
+        findings.append(
+            Finding(
+                relative,
+                int(image_entry.get("line") or 1),
+                str(image_entry["error"]),
+            )
+        )
+    if using.strip().lower() != "docker":
+        return findings
+    image = image_entry.get("value") if image_entry else None
+    if not isinstance(image, str) or not image.strip():
+        findings.append(
+            Finding(
+                relative,
+                int((image_entry or {}).get("line") or using_entry.get("line") or 1),
+                "runs.image is missing or not a string",
+            )
+        )
+        image_text = "(no image)"
+    else:
+        image_text = image
+    line = int(using_entry.get("line") or (image_entry or {}).get("line") or 1)
+    findings.append(
         Finding(
             relative,
             line,
             f"local Docker action is not approved: {relative} "
             f"image={image_text!r}",
         )
-    ]
+    )
+    return findings
 
 
 def inspect_local_action(
@@ -317,7 +401,10 @@ def inspect_local_action(
             continue
         relative = meta.relative_to(root).as_posix()
         try:
-            document = parse_yaml_document(meta.read_text(encoding="utf-8"))
+            document = parse_yaml_document(
+                meta.read_text(encoding="utf-8"),
+                source_path=relative,
+            )
         except ValueError as exc:
             findings.append(Finding(relative, 1, f"YAML parse failed: {exc}"))
             continue

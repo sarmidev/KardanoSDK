@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Optional
 
 import sys
 
@@ -353,6 +354,28 @@ class StructuralYamlTests(unittest.TestCase):
             )
 
 
+def _sample_tree(
+    action_path: str,
+    action_text: str,
+    workflow_extra_step: str = "",
+    cleanup: Optional[unittest.TestCase] = None,
+) -> Path:
+    root = Path(tempfile.mkdtemp())
+    if cleanup is not None:
+        cleanup.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+    _write(
+        root,
+        ".github/workflows/verify.yml",
+        "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        f"      - uses: actions/checkout@{CHECKOUT.sha}\n"
+        f"{workflow_extra_step}",
+    )
+    _write(root, action_path, action_text)
+    _write(root, inventory.REVIEW_DOC, _review_text())
+    return root
+
+
 class LocalDockerActionTests(unittest.TestCase):
     def _tree(
         self,
@@ -360,19 +383,7 @@ class LocalDockerActionTests(unittest.TestCase):
         action_text: str,
         workflow_extra_step: str = "",
     ) -> Path:
-        root = Path(tempfile.mkdtemp())
-        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
-        _write(
-            root,
-            ".github/workflows/verify.yml",
-            "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
-            "    steps:\n"
-            f"      - uses: actions/checkout@{CHECKOUT.sha}\n"
-            f"{workflow_extra_step}",
-        )
-        _write(root, action_path, action_text)
-        _write(root, inventory.REVIEW_DOC, _review_text())
-        return root
+        return _sample_tree(action_path, action_text, workflow_extra_step, cleanup=self)
 
     def test_local_docker_floating_image_is_rejected(self) -> None:
         root = self._tree(
@@ -457,6 +468,129 @@ class LocalDockerActionTests(unittest.TestCase):
         root = self._tree(
             "tools/js/action.yml",
             "name: js\nruns:\n  using: node20\n  main: index.js\n",
+        )
+        _write(
+            root,
+            "tools/composite/action.yml",
+            "name: composite\nruns:\n  using: composite\n  steps:\n"
+            "    - run: echo ok\n      shell: bash\n",
+        )
+        findings = pins.collect_findings(root)
+        self.assertEqual(
+            findings,
+            [],
+            "\n".join(item.format() for item in findings),
+        )
+
+
+class AliasAndNonScalarRuntimeTests(unittest.TestCase):
+    def _messages(
+        self,
+        action_text: str,
+        action_path: str = "tools/shape/action.yml",
+        workflow_extra_step: str = "",
+    ) -> list[str]:
+        root = _sample_tree(
+            action_path,
+            action_text,
+            workflow_extra_step,
+            cleanup=self,
+        )
+        return [item.message for item in pins.collect_findings(root)]
+
+    def _assert_mentions(self, messages: list[str], *needles: str) -> None:
+        blob = "\n".join(messages)
+        self.assertTrue(
+            any(all(needle in item for needle in needles) for item in messages)
+            or all(needle in blob for needle in needles),
+            blob,
+        )
+
+    def test_anchor_alias_to_docker_runtime_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: sneak\nruntime: &runtime docker\nruns:\n"
+            "  using: *runtime\n  image: docker://alpine:latest\n"
+        )
+        self._assert_mentions(messages, "alias")
+
+    def test_alias_to_javascript_runtime_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: js\nruntime: &rt node20\nruns:\n  using: *rt\n  main: index.js\n"
+        )
+        self._assert_mentions(messages, "alias")
+
+    def test_alias_to_composite_runtime_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: composite\nruntime: &rt composite\nruns:\n"
+            "  using: *rt\n  steps:\n    - run: echo ok\n      shell: bash\n"
+        )
+        self._assert_mentions(messages, "alias")
+
+    def test_runs_as_list_is_rejected(self) -> None:
+        messages = self._messages("name: x\nruns:\n  - using: node20\n")
+        self._assert_mentions(messages, "not a mapping")
+
+    def test_runs_as_string_is_rejected(self) -> None:
+        messages = self._messages("name: x\nruns: docker\n")
+        self._assert_mentions(messages, "not a mapping")
+
+    def test_runs_as_null_is_rejected(self) -> None:
+        messages = self._messages("name: x\nruns:\n")
+        self._assert_mentions(messages, "not a mapping")
+
+    def test_using_as_mapping_is_rejected(self) -> None:
+        messages = self._messages("name: x\nruns:\n  using:\n    foo: docker\n")
+        self._assert_mentions(messages, "runs.using", "not a string")
+
+    def test_using_as_list_is_rejected(self) -> None:
+        messages = self._messages("name: x\nruns:\n  using: [docker]\n")
+        self._assert_mentions(messages, "runs.using", "not a string")
+
+    def test_using_as_null_is_rejected(self) -> None:
+        messages = self._messages("name: x\nruns:\n  using:\n  main: index.js\n")
+        self._assert_mentions(messages, "runs.using")
+
+    def test_using_as_empty_is_rejected(self) -> None:
+        messages = self._messages('name: x\nruns:\n  using: ""\n  main: index.js\n')
+        self._assert_mentions(messages, "runs.using")
+
+    def test_image_as_mapping_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: x\nruns:\n  using: docker\n  image:\n    foo: bar\n"
+        )
+        self._assert_mentions(messages, "runs.image", "not a string")
+
+    def test_image_as_list_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: x\nruns:\n  using: docker\n  image: [Dockerfile]\n"
+        )
+        self._assert_mentions(messages, "runs.image", "not a string")
+
+    def test_image_as_alias_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: x\nimg: &img Dockerfile\nruns:\n  using: docker\n  image: *img\n"
+        )
+        self._assert_mentions(messages, "alias")
+
+    def test_non_scalar_uses_block_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: js\nruns:\n  using: node20\n  main: index.js\n",
+            workflow_extra_step="      - uses:\n          name: actions/checkout\n",
+        )
+        self._assert_mentions(messages, "uses value")
+
+    def test_non_scalar_uses_flow_is_rejected(self) -> None:
+        messages = self._messages(
+            "name: js\nruns:\n  using: node20\n  main: index.js\n",
+            workflow_extra_step="      - {uses: {foo: bar}}\n",
+        )
+        self._assert_mentions(messages, "uses value")
+
+    def test_valid_javascript_and_composite_actions_still_pass(self) -> None:
+        root = _sample_tree(
+            "tools/js/action.yml",
+            "name: js\nruns:\n  using: node20\n  main: index.js\n",
+            cleanup=self,
         )
         _write(
             root,

@@ -147,7 +147,10 @@ and SHA. Local `./path` values are resolved from the repository root
 against `action.yml` and `action.yaml`; missing metadata, `..` escape,
 cycles, and unreviewed nested external uses are findings. The walker
 also inspects every `action.yml` / `action.yaml` in the tree, including
-top-level `runs.using` and `runs.image`. This repository has no
+top-level `runs.using` and `runs.image`. YAML aliases and anchors are
+rejected in every scanned workflow and action metadata file; non-string
+or empty `uses`, `runs`, `runs.using`, and `runs.image` values are
+extractor errors (never treated as absent). This repository has no
 approved Docker actions: `runs.using: docker` is a finding that names
 the metadata path and image (floating tag, digest, or Dockerfile).
 Direct workflow `uses: docker://...` is rejected the same way until a
