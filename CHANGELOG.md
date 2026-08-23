@@ -18,6 +18,12 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - A dependency-free public landing page under `site/`, deployed to GitHub Pages from `main` via
   a dedicated `deploy-site` workflow (independent from `Verify`). The page links back to the
   repository documentation rather than duplicating it; see `site/README.md`.
+- A SHA-256 checksum manifest (`crypto-signing-backend/CHECKSUMS.sha256`) for the 8 committed
+  native signing-backend binaries, plus a "Verifying the committed binaries" section in
+  `crypto-signing-backend/README.md` explaining what it does and does not prove (W5-2). It is a
+  tamper/transfer-integrity check tied to a specific commit, not proof that the binaries were
+  built from the visible Rust source; independent reproducible-build verification remains an open
+  residual risk.
 
 ### Changed
 
@@ -39,9 +45,6 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   mock Playground and share feedback, and the Phase 2 loyalty/ticketing direction as three
   distinct steps, with concrete links to the Quickstart, the technical roadmap, GitHub issues,
   and the Phase 2 plan.
-
-### Changed
-
 - `LovelaceDisplay.ada` (Playground-only display helper) now takes a `Lovelace` instead of a raw
   `Long`, so a negative amount is rejected at `Lovelace.of` construction time rather than being
   representable at all (W9-7, 2026-08-22 pre-release audit). No caller passed a raw negative value

@@ -116,4 +116,41 @@ cp target/aarch64-apple-ios-sim/release/$LIB.a     src/nativeInterop/libs/iosSim
 nm -gU src/jvmMain/resources/darwin-aarch64/$LIB.dylib | grep _fn_func_sign
 "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-nm" -D \
   src/androidMain/jniLibs/arm64-v8a/$LIB.so | grep _fn_func_sign
+
+# 6. Regenerate the checksum manifest (see "Verifying the committed binaries" below)
+shasum -a 256 \
+  src/nativeInterop/libs/iosArm64/$LIB.a \
+  src/nativeInterop/libs/iosSimulatorArm64/$LIB.a \
+  src/androidMain/jniLibs/arm64-v8a/$LIB.so \
+  src/androidMain/jniLibs/armeabi-v7a/$LIB.so \
+  src/androidMain/jniLibs/x86/$LIB.so \
+  src/androidMain/jniLibs/x86_64/$LIB.so \
+  src/jvmMain/resources/darwin-aarch64/$LIB.dylib \
+  src/jvmMain/resources/darwin-x86-64/$LIB.dylib \
+  > CHECKSUMS.sha256
 ```
+
+## Verifying the committed binaries (checksum manifest, W5-2)
+
+[`CHECKSUMS.sha256`](CHECKSUMS.sha256) records the SHA-256 of all 8 committed native binaries
+(the two iOS `.a`, the four Android `.so`, the two macOS JVM `.dylib`), so a consumer can confirm
+which exact bytes they are trusting without cloning the repository at every historical commit to
+diff them by hand. Verify from this module's directory:
+
+```bash
+shasum -a 256 -c CHECKSUMS.sha256
+```
+
+**What this manifest does and does not prove.** A passing check confirms only that the binaries in
+your working tree are byte-identical to the ones this manifest was generated against — it is a
+tamper/corruption/transfer-integrity check, tied to a specific commit. **It does not prove, and
+this project does not claim, that these binaries were actually built from the visible Rust source**
+(`src/commonMain/rust/lib.rs` and the pinned `Cargo.lock`) — that would require an independent
+reproducible-build verification (rebuilding with the exact pinned toolchain in step 1 above and
+diffing the result against the committed binaries), which this project has not performed and which
+remains an open residual risk (see `docs/AUDIT/2026-08-22-pre-release-audit.md` §6 item 7).
+
+**Regeneration rule:** this manifest must be regenerated in the *same commit* as any change to one
+or more of the 8 binaries above (step 6 in the regeneration recipe), never as a separate follow-up
+commit — a stale manifest that doesn't match the binaries it ships alongside is worse than no
+manifest, since it would falsely suggest the pair was checked together.
