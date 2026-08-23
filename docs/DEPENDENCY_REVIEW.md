@@ -303,6 +303,16 @@ Linux-resolved evidence for any artifact this record still misses.
 Do not invent checksums to hide a miss. No Windows classifiers until
 Prompt 7.
 
+Verify run `32654915900` (head `0786237`) failed on Ubuntu and
+macOS-arm64 at root `classpath` verification for four Maven Central
+metadata files that the cold CI cache requested and the local
+generation did not hash: `guava-parent-33.3.1-jre.pom`,
+`junit-bom-5.10.2.module`, `junit-bom-5.11.0-M2.module`, and
+`kotlinx-coroutines-bom-1.8.0.pom`. Those rows were added only after
+publisher sidecar / hash-of-download comparison
+([DEPENDENCY_PROVENANCE.md](DEPENDENCY_PROVENANCE.md)). They are not
+copied from CI log text. Lockfiles were not rewritten for this miss.
+
 ## Cargo lock and Rust toolchain (2026-08-23)
 
 | Item | Value |
