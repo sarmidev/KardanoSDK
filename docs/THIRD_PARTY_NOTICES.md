@@ -6,23 +6,46 @@ not a replacement for a release-time dependency and notice review.
 
 ## Directly documented components
 
-| Component | Use in Kardano SDK | Documented licence |
-|---|---|---|
-| Kotlin and Kotlin Multiplatform | Language, build plugins, standard libraries | Apache-2.0 |
-| Ktor | Blockfrost HTTP client | Apache-2.0 |
-| kotlinx.serialization / coroutines / atomicfu | Serialization, concurrency, generated binding support | Apache-2.0 |
-| Compose Multiplatform and AndroidX | Sample Playground UI | Apache-2.0 |
-| Bouncy Castle | JVM/Android PBKDF2 platform seam | MIT-style Bouncy Castle licence |
-| `bip32-ed25519` | Android key derivation backend | Verify release artefact notice before distribution |
-| IonSpin libsodium bindings | JVM/iOS public-key projection | Verify release artefact notice before distribution |
-| LazySodium Android | Android public-key projection | Verify release artefact notice before distribution |
-| JNA | JVM/native signing backend loading | Apache-2.0 OR LGPL-2.1 |
-| `ed25519-bip32` Rust crate | Project-owned signing wrapper | MIT OR Apache-2.0 |
-| UniFFI Rust crate | Generated signing backend bindings | MPL-2.0 |
-| Gobley UniFFI bindgen | Offline generation tool only | Apache-2.0 OR MIT |
+Each row's "Kind" marks whether the component is a **source** dependency (compiled from/against
+its own source into our modules), a **test-only** dependency (never in a shipped artifact), or a
+component that **redistributes a native binary** (a compiled shared library bundled inside the
+Gradle artifact itself, not built by this project). A component can be both a source dependency
+and a redistributed-native-binary carrier at the same time (see `bip32-ed25519` and the two
+libsodium rows below); that is noted per row rather than forcing one label.
+
+| Component | Kind | Use in Kardano SDK | Documented licence |
+|---|---|---|---|
+| Kotlin and Kotlin Multiplatform | Source | Language, build plugins, standard libraries | Apache-2.0 |
+| Ktor | Source | Blockfrost HTTP client | Apache-2.0 |
+| kotlinx.serialization / coroutines / atomicfu | Source | Serialization, concurrency, generated binding support | Apache-2.0 |
+| Compose Multiplatform and AndroidX | Source | Sample Playground UI | Apache-2.0 |
+| Bouncy Castle | Source | JVM/Android PBKDF2 platform seam | MIT-style Bouncy Castle licence |
+| `org.kotlincrypto.hash:blake2` | Source | Blake2b-224/256 hashing backend (`:crypto`) | Apache-2.0 |
+| `org.kotlincrypto.hash:sha2` | Source | SHA-256 hashing backend (`:crypto`) | Apache-2.0 |
+| `org.hyperledger.identus:bip32-ed25519` (`dev.allain`/`bip32-ed25519`, part of the `hyperledger-identus/apollo` monorepo) | Source + redistributed native binary | Android/iOS/JVM key derivation backend | **Apache-2.0** (confirmed 2026-08-23 by fetching the published `LICENSE` at `github.com/hyperledger-identus/apollo`, copyright 2024 Input Output Global — matches the artifact's own declared licence). Its Android `.aar` bundles a compiled Rust native library per ABI (`libuniffi_ed25519_bip32_wrapper.so`, confirmed by inspecting the actual distributed artifact — see below); that native library's own transitive Rust dependencies (`cryptoxide`, `anyhow`, `bytes`, `uniffi_core`) are MIT/Apache-2.0/MPL-2.0-licensed *dependencies of that upstream project*, not of Kardano SDK — Kardano SDK consumes only the compiled binary and does not fork or modify its source, so no separate source-form obligation attaches to Kardano SDK itself. |
+| IonSpin libsodium bindings (`com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings`) | Source + redistributed native binary | JVM/iOS public-key projection | **Apache-2.0** (confirmed 2026-08-23 by fetching the published `LICENSE` at `github.com/ionspin/kotlin-multiplatform-libsodium`, copyright 2019 Ugljesa Jovanovic). Its JVM artifact bundles compiled `libsodium` (the upstream C library) binaries directly for macOS/Linux/Windows (confirmed by inspecting the actual `.jar`: `libdynamic-macos.dylib`, `libdynamic-linux-{arm64,x86-64}-libsodium.so`, `libdynamic-msvc-x86-64-libsodium.dll`) — see the separate `libsodium` row below for that binary's own licence. |
+| LazySodium Android (`com.goterl:lazysodium-android`) | Source + redistributed native binary | Android public-key projection | **Mozilla Public License 2.0 (MPL-2.0)** (confirmed 2026-08-23 via the GitHub API's `license` metadata and the published `LICENSE.md` at `github.com/terl/lazysodium-android`, matching the artifact's own Maven Central POM `<licenses>` block). MPL-2.0 is **file-level, not whole-program, copyleft**: §3.2 requires that the covered *source form* remain available under MPL-2.0 terms and that recipients be told how to obtain it — since Kardano SDK does not modify `lazysodium-android`'s own source, this is satisfied by directing recipients to the upstream repository above; it does **not** require Kardano SDK's own source to be released under MPL-2.0. Its Android `.aar` also bundles a compiled `libsodium.so` per ABI (confirmed by inspecting the actual artifact) — see the `libsodium` row below. |
+| `libsodium` (C library; not a direct Gradle dependency) | Redistributed native binary only | Bundled, compiled, inside both the IonSpin JVM artifact and the LazySodium Android artifact above (confirmed by inspecting both artifacts' contents: symbol names and embedded strings match the upstream `jedisct1/libsodium` project) | **ISC License** (confirmed 2026-08-23 by fetching the published `LICENSE` at `github.com/jedisct1/libsodium`, copyright 2013-2026 Frank Denis) — a short, permissive, MIT-equivalent licence. |
+| JNA | Source | JVM/native signing backend loading | Apache-2.0 OR LGPL-2.1 |
+| `ed25519-bip32` Rust crate | Source | Project-owned signing wrapper | MIT OR Apache-2.0 |
+| UniFFI Rust crate | Source | Generated signing backend bindings | MPL-2.0 |
+| Gobley UniFFI bindgen | Source (build-time only) | Offline generation tool only | Apache-2.0 OR MIT |
+| JUnit | Test-only | JVM test framework | Eclipse Public License 2.0 |
+| `androidx.test:runner` | Test-only | Android instrumented test runner | Apache-2.0 |
 
 The signing-backend module records its pinned versions and a more detailed inventory in
 [crypto-signing-backend/README.md](../crypto-signing-backend/README.md).
+
+**Evidence method (2026-08-23, W5-1/W5-3):** the three previously-unresolved rows above were
+resolved by downloading and inspecting the actual distributed artifacts from the local Gradle
+cache (the `.aar`/`.jar` files themselves — `unzip -l`, `find` for `META-INF`/`LICENSE`/`NOTICE`
+entries, and `strings` on the bundled native libraries), then cross-checking against each
+upstream project's own published `LICENSE` file (not just the Maven Central listing page). None
+of the three artifacts embeds a `LICENSE`/`NOTICE` file inside the `.aar`/`.jar` itself — that
+absence is itself a confirmed fact, not an unresolved question — so the licence text above is
+sourced from each project's canonical GitHub repository instead. This is not a substitute for
+legal counsel review (see the disclaimer below); it is the best evidence obtainable through direct
+artifact/repository inspection.
 
 ## First-party assets
 
