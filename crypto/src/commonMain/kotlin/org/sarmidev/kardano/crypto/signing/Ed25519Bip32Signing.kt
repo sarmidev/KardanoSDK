@@ -15,6 +15,7 @@ import org.sarmidev.kardano.crypto.signing.backend.internal.sign as backendSign
  * no additional `expect`/`actual` seam needed here, mirroring how [Signing.default] over the
  * `bip32-ed25519:1.8.8` derivation wrapper needs none either (ADR-0009 §4).
  */
+@OptIn(ExperimentalKardanoRawSigning::class)
 internal class Ed25519Bip32Signing : Signing {
 
     override fun sign(

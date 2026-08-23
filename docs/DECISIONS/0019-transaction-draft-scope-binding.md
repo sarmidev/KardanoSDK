@@ -179,6 +179,18 @@ exported `TransactionDraft.network` / `TransactionDraft.scope` properties, and t
   variant and an explicit signing-policy decision for it.
 - General-purpose / mainnet wallet signing remains out of scope until its own ADR.
 
+## §6 Result note (2026-08-23)
+
+- `TransactionDraft.network` / `TransactionDraft.scope` are stamped by
+  `TransactionBodySerializer` / `TransactionBuilder`.
+- `ReadOnlyWallet.signTestnetFixtureTransaction` validates scope, draft network, declared
+  network, and Phase 1 shape before `Mnemonic.parse`, then recognizes the fixture by
+  `Phase1FixtureIdentity`'s cited payment-credential fingerprint before `Signing.sign`.
+- `:crypto` `Signing` is annotated `@ExperimentalKardanoRawSigning`. That annotation, like
+  `@ExperimentalKardanoSigningScope`, is Kotlin-compiler-only and does not appear as a Swift
+  compile-time gate. The wallet runtime `SigningScopeViolation` checks **do** execute for
+  Swift callers. `:crypto` gained no dependency on `:wallet` or `:tx`.
+
 ## Relation to prior ADRs
 
 - Implements ADR-0018 Option 3.

@@ -28,6 +28,7 @@ import kotlin.test.fail
  * Vector source (D1_H0 reproduction): `ed25519-bip32` crate 0.4.2, `src/tests.rs`, `xprv_sign`
  * (cited by CIP-3, pinned in ADR-0016 §3). Copied verbatim, not invented.
  */
+@OptIn(ExperimentalKardanoRawSigning::class)
 class Ed25519Bip32SigningKatTest {
 
     // D1_H0, copied verbatim from ADR-0016 §3 (see class doc for source).

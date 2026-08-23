@@ -21,11 +21,20 @@ import org.sarmidev.kardano.crypto.derivation.ExtendedPrivateKey
  * `:crypto-signing-backend` module (ADR-0016 §9i), which wraps the reference `ed25519-bip32`
  * Rust crate's `XPrv::sign` — no handwritten signing algorithm (ADR-0004 §3.1).
  *
+ * **This layer signs bytes and cannot authorize transaction scope** (ADR-0019 §4). It does
+ * not inspect a `TransactionDraft`, a [org.sarmidev.kardano.primitives.Network], or a fixture
+ * identity. Phase 1 transaction signing goes through
+ * `ReadOnlyWallet.signTestnetFixtureTransaction`, which performs those checks before calling
+ * here. The [ExperimentalKardanoRawSigning] opt-in marks this surface as a primitive, not
+ * ordinary integration API. That opt-in is Kotlin-compiler-only; it does not appear as a
+ * Swift compile-time gate (ADR-0019).
+ *
  * Operations return [KardanoResult] and never throw, which keeps the API compatible with
  * Swift/ObjC interop (a thrown exception would crash iOS consumers).
  *
  * @see <a href="https://github.com/cardano-foundation/CIPs/tree/master/CIP-1852">CIP-1852</a>
  */
+@ExperimentalKardanoRawSigning
 public interface Signing {
 
     /**
@@ -46,6 +55,7 @@ public interface Signing {
      * @return [KardanoResult.Ok] with the raw 64-byte signature, or [KardanoResult.Err] with a
      *   [SigningError] describing the failure. Never throws.
      */
+    @ExperimentalKardanoRawSigning
     public fun sign(bodyHash: ByteArray, key: ExtendedPrivateKey): KardanoResult<ByteArray, SigningError>
 
     public companion object {
@@ -64,6 +74,7 @@ public interface Signing {
          *
          * @return a ready-to-use [Signing] instance.
          */
+        @ExperimentalKardanoRawSigning
         public fun default(): Signing = Ed25519Bip32Signing()
     }
 }

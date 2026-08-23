@@ -16,6 +16,7 @@ import kotlin.test.fail
  * mnemonic-rejection pattern. See `Ed25519Bip32SigningKatTest` for the JVM-only tests that do
  * reach the real backend with a correctly-sized 32-byte hash.
  */
+@OptIn(ExperimentalKardanoRawSigning::class)
 class SigningLengthValidationTest {
 
     // Synthetic fixture bytes only; not derived from any mnemonic or real key material. This

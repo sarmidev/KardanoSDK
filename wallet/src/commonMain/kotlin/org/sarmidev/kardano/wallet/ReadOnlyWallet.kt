@@ -12,6 +12,7 @@ import org.sarmidev.kardano.crypto.derivation.KeyDerivation
 import org.sarmidev.kardano.crypto.derivation.KeyDerivationError
 import org.sarmidev.kardano.crypto.hashing.Hashing
 import org.sarmidev.kardano.crypto.mnemonic.Mnemonic
+import org.sarmidev.kardano.crypto.signing.ExperimentalKardanoRawSigning
 import org.sarmidev.kardano.crypto.signing.Signing
 import org.sarmidev.kardano.primitives.Lovelace
 import org.sarmidev.kardano.primitives.Network
@@ -288,6 +289,7 @@ public class ReadOnlyWallet private constructor(
          *   [WalletError.TransactionAssembly]). Never throws.
          */
         @ExperimentalKardanoSigningScope
+        @OptIn(ExperimentalKardanoRawSigning::class)
         public fun signTestnetFixtureTransaction(
             words: List<String>,
             network: Network,
