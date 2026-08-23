@@ -312,5 +312,7 @@ On `fix/native-build-and-platform-evidence`:
   forbidden root or an unapproved absolute-looking path; `/proc` is a
   runtime prefix) and two-build identity; it is not
   in CHECKSUMS until Phase A/B re-review is GO and a promotion commit
-  lands. Runs `32672020909` and `32672881083` are superseded.
+  lands. Fresh Phase B at `c6f19d0` is run `32673275963` (success;
+  artifacts expire 2026-09-06; not downloaded). Runs `32672020909`
+  and `32672881083` are superseded.
   Linux ARM, musl, older glibc, and Windows remain out of scope.

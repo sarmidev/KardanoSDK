@@ -257,9 +257,14 @@ when they contain a forbidden root or look like an unapproved
 absolute path; `/letter` plus non-ASCII continuation without a later
 slash is not treated as a path. `/proc` is a runtime prefix
 (rustc/libstd `/proc/self/exe`). `/tmp/untracked-host` and
-`/usr/local/private-build` are rejected. Runs `32672020909` and
-`32672881083` are superseded; a fresh Phase B at this verifier tip
-is required before any CHECKSUMS row.
+`/usr/local/private-build` are rejected. Fresh Phase B at `c6f19d0` is
+run `32673275963` (A/B + compare + JVM KAT success on `ubuntu-22.04`).
+Artifacts `linux-jvm-candidate-a` (id `9501964027`, expires
+2026-09-06T23:20:21Z), `linux-jvm-candidate-b` (id `9501965715`,
+expires 2026-09-06T23:20:28Z), and `linux-jvm-compare-report` (id
+`9502002631`, expires 2026-09-06T23:23:26Z) are not downloaded and
+not promoted. Runs `32672020909` and `32672881083` are superseded.
+Independent re-review is still required before any CHECKSUMS row.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

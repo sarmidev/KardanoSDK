@@ -220,7 +220,11 @@ when it contains a forbidden root or looks like an unapproved
 absolute path; `/proc` is a runtime prefix). Permissions stay
 `contents: read`. Uploads use `if-no-files-found: error`. The job does
 not write CHECKSUMS or committed `src/`. ubuntu-24.04 artifacts and
-Linux runs `32672020909` and `32672881083` are superseded.
+Linux runs `32672020909` and `32672881083` are superseded. Fresh
+Phase B at `c6f19d0` is run `32673275963` (success; artifacts
+`linux-jvm-candidate-a` `9501964027`, `linux-jvm-candidate-b`
+`9501965715`, `linux-jvm-compare-report` `9502002631`, expire
+2026-09-06; not downloaded, not promoted).
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare
