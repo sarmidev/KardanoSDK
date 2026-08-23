@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Darwin UUID normalize | Post-link RFC 9562 v8 UUID + arm64 ad-hoc sign. Android+iOS still the matched 6/8. CHECKSUMS/`src/` unchanged until clean-runner 8/8. Linux not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Phase C replace | Clean `macos-26` `32662613270` matched 8/8 UUID-normalized candidates. Those bytes plus CHECKSUMS replace `src/`. Linux starts only after this tip is green. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -104,19 +104,17 @@ Stacked remediations, each additive (no amend / no force-push):
 Date: 2026-08-23
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence` (continue
-  from `0c4661d`).** Gate 1 is still **NO-GO** until a clean `macos-26`
-  runner matches all eight candidate hashes. Apple TN3178 has no command
-  that sets `LC_UUID`; `-no_uuid` is refused by dyld. The rebuild now
-  post-link normalizes Darwin JVM dylibs: `codesign --remove-signature`,
-  zero UUID, `hashlib.sha256` of that unsigned sequence, RFC 9562 v8
-  UUID, arm64 ad-hoc sign with
+  from `0c4661d`).** Clean `macos-26` run `32662613270` at `f62205e`
+  matched all eight UUID-normalized candidates (Android+iOS already
+  matched; Darwin UUID + arm64 ad-hoc signature now match). Phase C
+  copies those local bytes into `src/` and updates `CHECKSUMS.sha256` in
+  the same commit; the candidate manifest is removed so CHECKSUMS is the
+  only manifest. Apple TN3178 has no post-link UUID tool; the normalizer
+  uses `hashlib.sha256` and RFC 9562 v8, then arm64 ad-hoc sign with
   `org.sarmidev.kardano.ed25519-bip32-signing` and `--timestamp=none`.
-  x86_64 is left unsigned. Android+iOS hashes are unchanged from the
-  already-matched 6/8. `src/` and CHECKSUMS are not replaced in this
-  step. Link remapping, UUID normalize, signature bytes, checksum
-  identity, and source provenance are separate. Next: clean-runner 8/8
-  including arm64 signature bytes; only then Phase C. Do not start
-  Linux/Windows/legal. Do not merge or tag.
+  Link remapping, UUID normalize, signature bytes, checksum identity,
+  and source provenance stay separate. Next: Verify + native rebuild
+  green on the replacement tip, then Gate 2 Linux. Do not merge or tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope

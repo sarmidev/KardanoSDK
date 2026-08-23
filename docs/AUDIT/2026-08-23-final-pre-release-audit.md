@@ -281,6 +281,7 @@ of source provenance. On `fix/native-build-and-platform-evidence`:
   with a stable identifier and no timestamp. Signature bytes are a
   separate fact from the UUID and from CHECKSUMS.
 - Android and iOS candidates already matched a clean runner (6/8).
-  `src/` and CHECKSUMS stay unchanged until all eight candidate hashes,
-  including the arm64 signature, match that runner. Gate 1 remains
-  **NO-GO** until then. Gate 2 Linux is not started.
+  Run `32662613270` then matched Darwin UUID + arm64 signature as well
+  (8/8). Those candidate bytes replaced `src/` and CHECKSUMS. Gate 2
+  Linux starts only after Verify and native rebuild are green on that
+  replacement tip.

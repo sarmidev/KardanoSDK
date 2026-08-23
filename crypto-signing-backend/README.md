@@ -192,8 +192,8 @@ visible Rust sources.
 `ANDROID_NDK*` and installs revision `27.2.12479018` under a required-empty dest.
 A clean runner rebuilds into a fresh staging target and compares hashes,
 architectures, symbols, install names, and evidence against
-`rebuild-candidates/CANDIDATE_MANIFEST.sha256` when that file exists,
-otherwise `CHECKSUMS.sha256`. Uploads use `if-no-files-found: error`. The
+`CHECKSUMS.sha256` (or `rebuild-candidates/CANDIDATE_MANIFEST.sha256` if
+that rematch file is present). Uploads use `if-no-files-found: error`. The
 workflow does not replace committed natives. Ubuntu runs the harness tests
 and `cargo metadata --locked` only.
 
@@ -202,13 +202,12 @@ cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
 
 The first harness commit on this branch (`6cb6810`) is historical review debt: it
 defaulted to the module `target/` and treated missing inspection tools as optional.
-Those bytes are not rewritten. Android and iOS candidates already matched
-clean `macos-26` runs `32660838357` and `32661414105`. Darwin `LC_UUID`
-remained host-OS-bound under `-Wl,-reproducible` (local `26.2` vs runner
-`26.5.2`). The post-link normalizer is the rematch under test; `src/` and
-`CHECKSUMS.sha256` stay unchanged until a clean runner matches all eight
-candidate hashes, including the arm64 signature bytes. Gate 2 Linux is
-not started.
+Those bytes are not rewritten. Clean `macos-26` run `32662613270` at
+`f62205e` matched all eight UUID-normalized candidates, including the
+arm64 ad-hoc signature. Those bytes are now `CHECKSUMS.sha256`. A
+matching checksum is identity of those committed bytes, not proof of
+source provenance. Gate 2 Linux starts only after Verify and native
+rebuild are green on the replacement tip.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current CHECKSUMS rows. The same

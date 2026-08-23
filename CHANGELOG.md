@@ -43,8 +43,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   normalizer now writes an RFC 9562 v8 UUID from `hashlib.sha256` of
   unsigned canonical bytes and re-signs arm64 ad hoc with a stable
   identifier and no timestamp. Apple TN3178 has no tool that sets
-  `LC_UUID`. `src/` and CHECKSUMS stay unchanged until a clean runner
-  matches all eight candidate hashes. Gate 2 Linux is not started.
+  `LC_UUID`.   Clean `macos-26` run `32662613270` matched all eight UUID-normalized
+  candidates, including the arm64 ad-hoc signature; those bytes replaced
+  `src/` and `CHECKSUMS.sha256` in the same commit. Gate 2 Linux starts
+  only after Verify and native rebuild are green on that replacement tip.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
