@@ -353,6 +353,125 @@ class StructuralYamlTests(unittest.TestCase):
             )
 
 
+class LocalDockerActionTests(unittest.TestCase):
+    def _tree(
+        self,
+        action_path: str,
+        action_text: str,
+        workflow_extra_step: str = "",
+    ) -> Path:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        _write(
+            root,
+            ".github/workflows/verify.yml",
+            "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+            "    steps:\n"
+            f"      - uses: actions/checkout@{CHECKOUT.sha}\n"
+            f"{workflow_extra_step}",
+        )
+        _write(root, action_path, action_text)
+        _write(root, inventory.REVIEW_DOC, _review_text())
+        return root
+
+    def test_local_docker_floating_image_is_rejected(self) -> None:
+        root = self._tree(
+            "tools/docker-float/action.yml",
+            "name: float\nruns:\n  using: docker\n  image: docker://alpine:latest\n",
+        )
+        findings = pins.collect_findings(root)
+        self.assertTrue(
+            any(
+                "local Docker action is not approved" in item.message
+                and "tools/docker-float/action.yml" in item.message
+                and "docker://alpine:latest" in item.message
+                for item in findings
+            ),
+            "\n".join(item.format() for item in findings),
+        )
+
+    def test_local_docker_digest_image_is_rejected(self) -> None:
+        digest = "0" * 64
+        image = f"docker://alpine@sha256:{digest}"
+        root = self._tree(
+            "tools/docker-digest/action.yml",
+            f"name: digest\nruns:\n  using: docker\n  image: {image}\n",
+        )
+        findings = pins.collect_findings(root)
+        self.assertTrue(
+            any(
+                "local Docker action is not approved" in item.message
+                and image in item.message
+                for item in findings
+            ),
+            "\n".join(item.format() for item in findings),
+        )
+
+    def test_local_docker_dockerfile_image_is_rejected(self) -> None:
+        root = self._tree(
+            "tools/docker-file/action.yml",
+            "name: file\nruns:\n  using: docker\n  image: Dockerfile\n",
+        )
+        findings = pins.collect_findings(root)
+        self.assertTrue(
+            any(
+                "local Docker action is not approved" in item.message
+                and "Dockerfile" in item.message
+                for item in findings
+            ),
+            "\n".join(item.format() for item in findings),
+        )
+
+    def test_local_docker_action_yaml_is_rejected(self) -> None:
+        root = self._tree(
+            "tools/docker-yaml/action.yaml",
+            "name: yaml\nruns:\n  using: docker\n  image: docker://alpine:3\n",
+        )
+        findings = pins.collect_findings(root)
+        self.assertTrue(
+            any(
+                "local Docker action is not approved" in item.message
+                and "tools/docker-yaml/action.yaml" in item.message
+                and "docker://alpine:3" in item.message
+                for item in findings
+            ),
+            "\n".join(item.format() for item in findings),
+        )
+
+    def test_direct_docker_workflow_use_is_rejected(self) -> None:
+        root = self._tree(
+            "tools/js/action.yml",
+            "name: js\nruns:\n  using: node20\n  main: index.js\n",
+            workflow_extra_step="      - uses: docker://alpine:latest\n",
+        )
+        findings = pins.collect_findings(root)
+        self.assertTrue(
+            any(
+                "docker://" in item.message and "alpine:latest" in item.message
+                for item in findings
+            ),
+            "\n".join(item.format() for item in findings),
+        )
+
+    def test_local_javascript_and_composite_actions_still_pass(self) -> None:
+        root = self._tree(
+            "tools/js/action.yml",
+            "name: js\nruns:\n  using: node20\n  main: index.js\n",
+        )
+        _write(
+            root,
+            "tools/composite/action.yml",
+            "name: composite\nruns:\n  using: composite\n  steps:\n"
+            "    - run: echo ok\n      shell: bash\n",
+        )
+        findings = pins.collect_findings(root)
+        self.assertEqual(
+            findings,
+            [],
+            "\n".join(item.format() for item in findings),
+        )
+
+
 class CurrentTreeTests(unittest.TestCase):
     def test_current_tree_passes(self) -> None:
         findings = pins.collect_findings(REPO_ROOT)

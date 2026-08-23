@@ -72,8 +72,10 @@ Read these first:
 - iOS runtime execution of CIP-3 / signing vectors is still future verification
   (compile/link only on this host). Linux/Windows JVM signing artifacts are not
   included (W9-4).
-- Still-open hygiene items outside this stacked batch: CI `androidApp:lint` (W3-3),
-  tag-triggered release CI (W4-5). Pre-1.0 pins are accepted in ADR-0020 (W5-4).
+- Still-open hygiene items outside this stacked batch: tag-triggered
+  release CI (W4-5). Android lint Debug/Release is a CI error (W3-3
+  closed). Owner should still glance at pre-API-26 launcher tiles.
+  Pre-1.0 pins are accepted in ADR-0020 (W5-4).
 - `gradle/actions` v6.3.0 is not adopted (proprietary cache component / Terms of
   Use). setup-gradle stays on v5.0.2. See `docs/DEPENDENCY_REVIEW.md`.
 - Restricted-claim and full-history Gitleaks scans now run in CI. They are not a

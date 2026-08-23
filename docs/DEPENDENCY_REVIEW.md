@@ -146,7 +146,12 @@ External actions and reusable workflows must be
 and SHA. Local `./path` values are resolved from the repository root
 against `action.yml` and `action.yaml`; missing metadata, `..` escape,
 cycles, and unreviewed nested external uses are findings. The walker
-also inspects every `action.yml` / `action.yaml` in the tree.
+also inspects every `action.yml` / `action.yaml` in the tree, including
+top-level `runs.using` and `runs.image`. This repository has no
+approved Docker actions: `runs.using: docker` is a finding that names
+the metadata path and image (floating tag, digest, or Dockerfile).
+Direct workflow `uses: docker://...` is rejected the same way until a
+digest/inventory policy exists.
 
 ## Build platform and UI/network pins (2026-08-23)
 

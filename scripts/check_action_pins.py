@@ -12,6 +12,9 @@ for that owner/repo. Local `./path` references are resolved from the
 repository root, must stay inside the tree, and must have `action.yml`
 and/or `action.yaml`. Nested local uses are followed; cycles, missing
 metadata, path escape, and unreviewed external nested uses are findings.
+Local metadata with `runs.using: docker` is rejected (any image) until
+a digest/inventory policy exists. Direct `uses: docker://...` is also
+rejected.
 """
 
 from __future__ import annotations
@@ -101,7 +104,12 @@ def parse_yaml_document(text: str) -> dict:
     keys = payload.get("top_level_keys")
     if keys is not None and not isinstance(keys, list):
         raise ValueError("YAML helper returned invalid top_level_keys")
-    return {"uses": uses, "top_level_keys": keys or []}
+    runs = payload.get("runs")
+    if runs is None:
+        runs = {}
+    if not isinstance(runs, dict):
+        raise ValueError("YAML helper returned invalid runs")
+    return {"uses": uses, "top_level_keys": keys or [], "runs": runs}
 
 
 def extract_uses_from_text(text: str) -> list[dict]:
@@ -185,7 +193,8 @@ def check_use_ref(ref: UseRef) -> list[Finding]:
             Finding(
                 ref.path,
                 ref.line,
-                f"docker uses: is not in the reviewed Action inventory ({ref.raw})",
+                "docker:// uses are rejected until a digest/inventory "
+                f"policy exists (found {ref.raw})",
             )
         ]
     if ref.kind == "invalid":
@@ -264,6 +273,29 @@ def resolve_local_action(root: Path, raw: str, from_path: str, line: int) -> Pat
     return dest
 
 
+def check_local_action_runtime(relative: str, document: dict) -> list[Finding]:
+    """Fail closed: this repo has no approved local Docker actions."""
+    runs = document.get("runs") or {}
+    using_entry = runs.get("using") if isinstance(runs.get("using"), dict) else {}
+    image_entry = runs.get("image") if isinstance(runs.get("image"), dict) else {}
+    using = using_entry.get("value")
+    if using is None:
+        return []
+    if str(using).strip().lower() != "docker":
+        return []
+    image = image_entry.get("value")
+    image_text = image if image else "(no image)"
+    line = int(using_entry.get("line") or image_entry.get("line") or 1)
+    return [
+        Finding(
+            relative,
+            line,
+            f"local Docker action is not approved: {relative} "
+            f"image={image_text!r}",
+        )
+    ]
+
+
 def inspect_local_action(
     root: Path,
     dest: Path,
@@ -284,6 +316,12 @@ def inspect_local_action(
         if not meta.is_file():
             continue
         relative = meta.relative_to(root).as_posix()
+        try:
+            document = parse_yaml_document(meta.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            findings.append(Finding(relative, 1, f"YAML parse failed: {exc}"))
+            continue
+        findings.extend(check_local_action_runtime(relative, document))
         refs, parse_findings = read_use_refs(root, relative)
         findings.extend(parse_findings)
         for ref in refs:
