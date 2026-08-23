@@ -141,17 +141,42 @@ def rustflags_common(pairs: list[tuple[str, str]]) -> list[str]:
     return flags
 
 
-def rustflags_darwin_jvm(pairs: list[tuple[str, str]]) -> list[str]:
-    return [
-        *rustflags_common(pairs),
-        f"-C link-arg=-Wl,-install_name,{STABLE_INSTALL_NAME}",
-    ]
+DARWIN_CC_WRAPPER_NAME = "kardano-darwin-cc"
+
+
+def darwin_cc_wrapper_script() -> str:
+    return (
+        "#!/bin/sh\n"
+        "# Link-time override: rustc appends its own -install_name after RUSTFLAGS.\n"
+        "# Appending after \"$@\" makes this the last -install_name the linker sees.\n"
+        "exec cc \"$@\" "
+        f"-Wl,-install_name,{STABLE_INSTALL_NAME}\n"
+    )
+
+
+def write_darwin_cc_wrapper(dest: Path) -> Path:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(darwin_cc_wrapper_script(), encoding="utf-8")
+    dest.chmod(0o755)
+    return dest
+
+
+def rustflags_darwin_jvm(
+    pairs: list[tuple[str, str]],
+    *,
+    linker: Path | None = None,
+) -> list[str]:
+    flags = rustflags_common(pairs)
+    if linker is not None:
+        flags.append(f"-Clinker={linker}")
+    flags.append(f"-Clink-arg=-Wl,-install_name,{STABLE_INSTALL_NAME}")
+    return flags
 
 
 def rustflags_android(pairs: list[tuple[str, str]]) -> list[str]:
     return [
         *rustflags_common(pairs),
-        "-C link-arg=-Wl,--build-id=none",
+        "-Clink-arg=-Wl,--build-id=none",
     ]
 
 
@@ -159,14 +184,19 @@ def encode_rustflags(flags: list[str]) -> str:
     return "\x1f".join(flags)
 
 
-def apply_rustflags(env: dict[str, str], pairs: list[tuple[str, str]]) -> dict[str, str]:
+def apply_rustflags(
+    env: dict[str, str],
+    pairs: list[tuple[str, str]],
+    *,
+    darwin_linker: Path | None = None,
+) -> dict[str, object]:
     """Write RUSTFLAGS and per-target CARGO_TARGET_*_RUSTFLAGS.
 
     Target-specific vars replace RUSTFLAGS for that triple, so each list
     includes the common remap prefixes.
     """
     common = rustflags_common(pairs)
-    darwin = rustflags_darwin_jvm(pairs)
+    darwin = rustflags_darwin_jvm(pairs, linker=darwin_linker)
     android = rustflags_android(pairs)
     env["RUSTFLAGS"] = " ".join(common)
     env["CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS"] = " ".join(darwin)
@@ -183,6 +213,7 @@ def apply_rustflags(env: dict[str, str], pairs: list[tuple[str, str]]) -> dict[s
         "android_rustflags": android,
         "ios_rustflags": common,
         "stable_install_name": STABLE_INSTALL_NAME,
+        "darwin_linker": str(darwin_linker) if darwin_linker else None,
         "source_date_epoch": SOURCE_DATE_EPOCH,
         "zero_ar_date": ZERO_AR_DATE,
         "cargo_incremental": "0",

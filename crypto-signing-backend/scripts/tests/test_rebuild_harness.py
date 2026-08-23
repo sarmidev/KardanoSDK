@@ -286,6 +286,11 @@ class ToolchainFlagTests(unittest.TestCase):
         self.assertTrue(any(toolchain.STABLE_INSTALL_NAME in item for item in flags))
         self.assertTrue(any(item.startswith("--remap-path-prefix=") for item in flags))
 
+    def test_darwin_wrapper_appends_install_name(self) -> None:
+        script = toolchain.darwin_cc_wrapper_script()
+        self.assertIn(f"-Wl,-install_name,{toolchain.STABLE_INSTALL_NAME}", script)
+        self.assertIn('exec cc "$@"', script)
+
     def test_xcode_pin_parser(self) -> None:
         version, build = toolchain.parse_xcodebuild("Xcode 26.6\nBuild version 17F113\n")
         self.assertEqual(version, "26.6")

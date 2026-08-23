@@ -204,7 +204,11 @@ def base_env(
         ndk_home=ndk_home,
         env=env,
     )
-    flags = toolchain.apply_rustflags(env, pairs)
+    darwin_linker = toolchain.write_darwin_cc_wrapper(
+        cargo_target_dir.parent / "bin" / toolchain.DARWIN_CC_WRAPPER_NAME
+    )
+    env["KARDANO_DARWIN_CC"] = str(darwin_linker)
+    flags = toolchain.apply_rustflags(env, pairs, darwin_linker=darwin_linker)
     return env, flags
 
 
@@ -266,16 +270,19 @@ def rebuild_macos_jvm(
         recorder.run(
             [
                 "cargo",
-                "build",
+                "rustc",
                 "--locked",
                 "--release",
                 "--lib",
                 "--target",
                 rust_target,
+                "--",
+                f"-Clinker={env['KARDANO_DARWIN_CC']}",
+                f"-Clink-arg=-Wl,-install_name,{toolchain.STABLE_INSTALL_NAME}",
             ],
             cwd=module_root,
             env=env,
-            name=f"cargo-build-{rust_target}",
+            name=f"cargo-rustc-{rust_target}",
             outputs=[output],
         )
         dest = copy_fresh_output(output, staging, spec.relative_path, started_monotonic=started)
