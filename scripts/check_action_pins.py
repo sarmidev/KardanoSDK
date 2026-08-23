@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""Require SHA-pinned GitHub Actions and reviewed composite transitives.
+"""Require SHA-pinned GitHub Actions via a structural YAML walk.
 
-Every external `uses:` in `.github/workflows/*` and local composite
-`action.yml` files must contain exactly one 40-character lowercase SHA.
-Pinned composite metadata lives in scripts/action_pin_inventory.py and
-must be copied into docs/DEPENDENCY_REVIEW.md. A recorded floating
-transitive `uses:` is a finding.
+Workflows and local action metadata are parsed with
+`scripts/yaml_uses_extract.rb` (Ruby stdlib Psych → JSON). Line-oriented
+regex is not used to discover `uses`. Every mapping/list `uses` value is
+inspected, including flow mappings and `uses :` whitespace.
+
+External actions and reusable workflows must be `owner/repo@` plus a
+40-character lowercase SHA that matches `scripts/action_pin_inventory.py`
+for that owner/repo. Local `./path` references are resolved from the
+repository root, must stay inside the tree, and must have `action.yml`
+and/or `action.yaml`. Nested local uses are followed; cycles, missing
+metadata, path escape, and unreviewed external nested uses are findings.
 """
 
 from __future__ import annotations
 
 import argparse
-import re
+import json
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,17 +28,15 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import action_pin_inventory as inventory  # noqa: E402
 
-WORKFLOW_GLOB = ".github/workflows/*.{yml,yaml}"
-LOCAL_ACTION_GLOB = ".github/actions/**/action.yml"
+HELPER = REPO_ROOT / "scripts" / "yaml_uses_extract.rb"
+RUBY = "ruby"
 
-USES_RE = re.compile(
-    r"^(?P<indent>\s*)(?:-\s*)?uses:\s*(?P<quote>['\"]?)(?P<ref>.+?)(?P=quote)\s*(?:#.*)?$"
-)
-SHA_REF_RE = re.compile(
+SHA_REF_RE = __import__("re").compile(
     r"^(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)@(?P<sha>[0-9a-f]{40})$"
 )
-LOCAL_REF_RE = re.compile(r"^\./")
-DOCKER_REF_RE = re.compile(r"^docker://")
+LOCAL_REF_RE = __import__("re").compile(r"^\./")
+DOCKER_REF_RE = __import__("re").compile(r"^docker://")
+ACTION_METADATA_NAMES = ("action.yml", "action.yaml")
 
 
 @dataclass(frozen=True)
@@ -54,26 +59,65 @@ class Finding:
         return f"{self.path}:{self.line}: {self.message}"
 
 
-def parse_use_line(path: str, line_no: int, line: str) -> UseRef | None:
-    match = USES_RE.match(line.rstrip("\n"))
-    if match is None:
-        return None
-    raw = match.group("ref").strip()
-    if LOCAL_REF_RE.match(raw):
-        return UseRef(path, line_no, raw, None, None, "local")
-    if DOCKER_REF_RE.match(raw):
-        return UseRef(path, line_no, raw, None, None, "docker")
-    sha_match = SHA_REF_RE.match(raw)
+def classify_use(path: str, line: int, raw: str | None) -> UseRef:
+    if raw is None:
+        return UseRef(path, line, "", None, None, "invalid")
+    value = raw.strip()
+    if LOCAL_REF_RE.match(value):
+        return UseRef(path, line, value, None, None, "local")
+    if DOCKER_REF_RE.match(value):
+        return UseRef(path, line, value, None, None, "docker")
+    sha_match = SHA_REF_RE.match(value)
     if sha_match is None:
-        return UseRef(path, line_no, raw, None, None, "unpinned")
+        return UseRef(path, line, value, None, None, "unpinned")
     return UseRef(
         path,
-        line_no,
-        raw,
+        line,
+        value,
         sha_match.group("action"),
         sha_match.group("sha"),
         "pinned",
     )
+
+
+def parse_yaml_document(text: str) -> dict:
+    if not HELPER.is_file():
+        raise FileNotFoundError(f"missing YAML helper: {HELPER}")
+    completed = subprocess.run(
+        [RUBY, str(HELPER)],
+        input=text,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ValueError(completed.stderr.strip() or "YAML parse failed")
+    payload = json.loads(completed.stdout or "{}")
+    if not isinstance(payload, dict):
+        raise ValueError("YAML helper returned a non-object")
+    uses = payload.get("uses")
+    if not isinstance(uses, list):
+        raise ValueError("YAML helper returned no uses list")
+    keys = payload.get("top_level_keys")
+    if keys is not None and not isinstance(keys, list):
+        raise ValueError("YAML helper returned invalid top_level_keys")
+    return {"uses": uses, "top_level_keys": keys or []}
+
+
+def extract_uses_from_text(text: str) -> list[dict]:
+    return parse_yaml_document(text)["uses"]
+
+
+def parse_use_line(path: str, line_no: int, line: str) -> UseRef | None:
+    """Classify one physical line by parsing it as YAML (not a regex hunt)."""
+    try:
+        entries = extract_uses_from_text(line)
+    except ValueError:
+        return None
+    if not entries:
+        return None
+    first = entries[0]
+    return classify_use(path, line_no, first.get("value"))
 
 
 def list_workflow_paths(root: Path) -> list[Path]:
@@ -87,33 +131,48 @@ def list_workflow_paths(root: Path) -> list[Path]:
     )
 
 
-def list_local_action_paths(root: Path) -> list[Path]:
-    actions = root / ".github" / "actions"
-    if not actions.is_dir():
-        return []
-    return sorted(actions.glob("**/action.yml"))
+def list_action_metadata_paths(root: Path) -> list[Path]:
+    found: list[Path] = []
+    for name in ACTION_METADATA_NAMES:
+        found.extend(root.rglob(name))
+    return sorted(
+        path
+        for path in found
+        if path.is_file() and ".git" not in path.parts
+    )
 
 
-def read_use_refs(root: Path, relative: str) -> list[UseRef]:
+def read_use_refs(root: Path, relative: str) -> tuple[list[UseRef], list[Finding]]:
     text = (root / relative).read_text(encoding="utf-8")
-    refs: list[UseRef] = []
-    for line_no, line in enumerate(text.splitlines(), start=1):
-        parsed = parse_use_line(relative, line_no, line)
-        if parsed is not None:
-            refs.append(parsed)
-    return refs
-
-
-def check_workflow_syntax(root: Path, relative: str) -> list[Finding]:
-    """Stdlib-only workflow structure checks. Not a full YAML parser."""
     findings: list[Finding] = []
+    try:
+        entries = extract_uses_from_text(text)
+    except ValueError as exc:
+        return [], [Finding(relative, 1, f"YAML parse failed: {exc}")]
+    refs: list[UseRef] = []
+    for entry in entries:
+        line = int(entry.get("line") or 1)
+        if entry.get("error"):
+            findings.append(Finding(relative, line, str(entry["error"])))
+            continue
+        refs.append(classify_use(relative, line, entry.get("value")))
+    return refs, findings
+
+
+def check_workflow_structure(root: Path, relative: str) -> list[Finding]:
     path = root / relative
     text = path.read_text(encoding="utf-8")
+    findings: list[Finding] = []
     if "\t" in text:
         findings.append(Finding(relative, 1, "workflow uses tab indentation"))
-    if not re.search(r"(?m)^on:\s", text) and not re.search(r"(?m)^on:\s*$", text):
+    try:
+        document = parse_yaml_document(text)
+    except ValueError:
+        return [Finding(relative, 1, "workflow YAML is not parseable")]
+    keys = {str(key) for key in document["top_level_keys"]}
+    if "on" not in keys:
         findings.append(Finding(relative, 1, "workflow is missing a top-level on: key"))
-    if not re.search(r"(?m)^jobs:\s*$", text):
+    if "jobs" not in keys:
         findings.append(Finding(relative, 1, "workflow is missing a top-level jobs: key"))
     return findings
 
@@ -129,6 +188,8 @@ def check_use_ref(ref: UseRef) -> list[Finding]:
                 f"docker uses: is not in the reviewed Action inventory ({ref.raw})",
             )
         ]
+    if ref.kind == "invalid":
+        return [Finding(ref.path, ref.line, "uses value is not a scalar")]
     if ref.kind != "pinned" or ref.action is None or ref.sha is None:
         return [
             Finding(
@@ -148,6 +209,19 @@ def check_use_ref(ref: UseRef) -> list[Finding]:
         ]
     recorded = inventory.PIN_BY_ACTION.get(ref.action)
     if recorded is None:
+        sha_owner = next(
+            (pin.action for pin in inventory.ACTION_PINS if pin.sha == ref.sha),
+            None,
+        )
+        if sha_owner is not None:
+            return [
+                Finding(
+                    ref.path,
+                    ref.line,
+                    f"owner/repo mismatch: {ref.action} is not {sha_owner} "
+                    f"for SHA {ref.sha}",
+                )
+            ]
         return [
             Finding(
                 ref.path,
@@ -165,6 +239,69 @@ def check_use_ref(ref: UseRef) -> list[Finding]:
             )
         ]
     return []
+
+
+def resolve_local_action(root: Path, raw: str, from_path: str, line: int) -> Path | Finding:
+    if not raw.startswith("./"):
+        return Finding(from_path, line, f"local uses: must start with ./ ({raw!r})")
+    rel = Path(raw[2:])
+    if rel.is_absolute() or ".." in rel.parts:
+        return Finding(from_path, line, f"local uses: path escapes the repository ({raw})")
+    dest = (root / rel).resolve()
+    try:
+        dest.relative_to(root.resolve())
+    except ValueError:
+        return Finding(from_path, line, f"local uses: path escapes the repository ({raw})")
+    if not dest.is_dir():
+        return Finding(from_path, line, f"local action path is missing ({raw})")
+    metadata = [dest / name for name in ACTION_METADATA_NAMES if (dest / name).is_file()]
+    if not metadata:
+        return Finding(
+            from_path,
+            line,
+            f"local action is missing action.yml or action.yaml ({raw})",
+        )
+    return dest
+
+
+def inspect_local_action(
+    root: Path,
+    dest: Path,
+    stack: tuple[str, ...],
+    seen: set[str],
+) -> list[Finding]:
+    dest = dest.resolve()
+    relative_dir = dest.relative_to(root.resolve()).as_posix()
+    if relative_dir in stack:
+        cycle = " -> ".join((*stack, relative_dir))
+        return [Finding(relative_dir, 1, f"local action cycle: {cycle}")]
+    if relative_dir in seen:
+        return []
+    seen.add(relative_dir)
+    findings: list[Finding] = []
+    for name in ACTION_METADATA_NAMES:
+        meta = dest / name
+        if not meta.is_file():
+            continue
+        relative = meta.relative_to(root).as_posix()
+        refs, parse_findings = read_use_refs(root, relative)
+        findings.extend(parse_findings)
+        for ref in refs:
+            findings.extend(check_use_ref(ref))
+            if ref.kind == "local":
+                resolved = resolve_local_action(root, ref.raw, ref.path, ref.line)
+                if isinstance(resolved, Finding):
+                    findings.append(resolved)
+                else:
+                    findings.extend(
+                        inspect_local_action(
+                            root,
+                            resolved,
+                            (*stack, relative_dir),
+                            seen,
+                        )
+                    )
+    return findings
 
 
 def check_inventory_transitives() -> list[Finding]:
@@ -210,21 +347,29 @@ def check_review_doc(root: Path) -> list[Finding]:
 
 
 def collect_findings(root: Path) -> list[Finding]:
+    root = root.resolve()
     findings: list[Finding] = []
     findings.extend(check_inventory_transitives())
     findings.extend(check_review_doc(root))
     scanned: list[str] = []
+    seen_local: set[str] = set()
     for path in list_workflow_paths(root):
         relative = path.relative_to(root).as_posix()
         scanned.append(relative)
-        findings.extend(check_workflow_syntax(root, relative))
-        for ref in read_use_refs(root, relative):
+        findings.extend(check_workflow_structure(root, relative))
+        refs, parse_findings = read_use_refs(root, relative)
+        findings.extend(parse_findings)
+        for ref in refs:
             findings.extend(check_use_ref(ref))
-    for path in list_local_action_paths(root):
-        relative = path.relative_to(root).as_posix()
-        scanned.append(relative)
-        for ref in read_use_refs(root, relative):
-            findings.extend(check_use_ref(ref))
+            if ref.kind == "local":
+                resolved = resolve_local_action(root, ref.raw, ref.path, ref.line)
+                if isinstance(resolved, Finding):
+                    findings.append(resolved)
+                else:
+                    findings.extend(inspect_local_action(root, resolved, (), seen_local))
+    for path in list_action_metadata_paths(root):
+        dest = path.parent
+        findings.extend(inspect_local_action(root, dest.resolve(), (), seen_local))
     if not scanned:
         findings.append(Finding(".github/workflows", 1, "no workflow files found"))
     return findings

@@ -100,7 +100,7 @@ third-party GitHub Action wrapper.
 | Licence | MIT (upstream `gitleaks/gitleaks`) |
 | Installer | `scripts/install_gitleaks.py` — verifies the checksums file, then the selected archive, reads the member into memory, writes every byte to an exclusive temp sibling, `fchmod`s `0755` on that descriptor, and atomically replaces a non-symlink destination. The binary is never committed. |
 | Why not an Action wrapper | This repo pins Actions by commit SHA already; a wrapper would add a second, unverified tool chain. Installing the CLI lets CI and a local checkout run the same pinned binary. |
-| Scan scope | Full git history (`fetch-depth: 0`, `git fetch --prune --tags origin`, `gitleaks detect --log-opts=--all`). Output is redacted. |
+| Scan scope | After `fetch-depth: 0` and `git fetch --prune --tags origin`, reachable commits are `git rev-list --all`. Gitleaks (v8.30.1 `--log-opts` string) scans `git log --full-history --all -m`: every ref, no history simplification, one diff per merge parent. A credential introduced only in a merge resolution is therefore visible. Output is redacted (`--redact`). |
 | Allowlist | Match-level only in `.gitleaks.toml`: the cited CIP-19 payment-credential hex **and** an exact repo-root path (`^…$`). Paths are the cited test files plus `scripts/gitleaks_allowlist.py` (the helper historically embedded the same vector). No directory, rule, or commit exclusions. |
 
 This tool is CI-only. It is not redistributed in an SDK artifact.

@@ -134,12 +134,13 @@ class InventoryTests(unittest.TestCase):
 
 class CheckUseRefTests(unittest.TestCase):
     def test_unknown_action_is_a_finding(self) -> None:
+        other_sha = "0" * 40
         ref = pins.UseRef(
             "w.yml",
             3,
-            f"octo/example@{CHECKOUT.sha}",
+            f"octo/example@{other_sha}",
             "octo/example",
-            CHECKOUT.sha,
+            other_sha,
             "pinned",
         )
         findings = pins.check_use_ref(ref)
@@ -206,6 +207,149 @@ class FakeTreeTests(unittest.TestCase):
             findings = pins.collect_findings(root)
             self.assertTrue(
                 any("40-char lowercase SHA" in item.message for item in findings)
+            )
+
+
+class StructuralYamlTests(unittest.TestCase):
+    def test_flow_mapping_uses_is_found(self) -> None:
+        text = (
+            "name: Flow\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+            f"    steps:\n      - {{uses: actions/checkout@{CHECKOUT.sha}}}\n"
+        )
+        entries = pins.extract_uses_from_text(text)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["value"], f"actions/checkout@{CHECKOUT.sha}")
+
+    def test_uses_with_space_before_colon_is_found(self) -> None:
+        text = f"uses : actions/checkout@{CHECKOUT.sha}\n"
+        entries = pins.extract_uses_from_text(text)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["value"], f"actions/checkout@{CHECKOUT.sha}")
+
+    def test_flow_mapping_unpinned_workflow_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root,
+                ".github/workflows/verify.yml",
+                "name: Flow\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+                "    steps:\n      - {uses: actions/checkout@v7}\n",
+            )
+            _write(root, inventory.REVIEW_DOC, _review_text())
+            findings = pins.collect_findings(root)
+            self.assertTrue(
+                any("40-char lowercase SHA" in item.message for item in findings)
+            )
+
+    def test_local_action_outside_github_actions_is_inspected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root,
+                ".github/workflows/verify.yml",
+                "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+                "    steps:\n      - uses: ./tools/sample-action\n",
+            )
+            _write(
+                root,
+                "tools/sample-action/action.yml",
+                "name: sample\nruns:\n  using: composite\n  steps:\n"
+                "    - uses: actions/upload-artifact@v4\n",
+            )
+            _write(root, inventory.REVIEW_DOC, _review_text())
+            findings = pins.collect_findings(root)
+            self.assertTrue(
+                any("40-char lowercase SHA" in item.message for item in findings)
+            )
+
+    def test_action_yaml_filename_is_inspected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root,
+                ".github/workflows/verify.yml",
+                "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+                "    steps:\n      - uses: ./tools/yaml-action\n",
+            )
+            _write(
+                root,
+                "tools/yaml-action/action.yaml",
+                "name: sample\nruns:\n  using: composite\n  steps:\n"
+                "    - uses: actions/upload-artifact@v4\n",
+            )
+            _write(root, inventory.REVIEW_DOC, _review_text())
+            findings = pins.collect_findings(root)
+            self.assertTrue(
+                any("40-char lowercase SHA" in item.message for item in findings)
+            )
+
+    def test_reusable_workflow_must_be_recorded(self) -> None:
+        sha = "a" * 40
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root,
+                ".github/workflows/verify.yml",
+                "name: Sample\non:\n  push:\njobs:\n  x:\n"
+                f"    uses: octo/tools/.github/workflows/ci.yml@{sha}\n",
+            )
+            _write(root, inventory.REVIEW_DOC, _review_text())
+            findings = pins.collect_findings(root)
+            self.assertTrue(
+                any("not recorded" in item.message for item in findings)
+            )
+
+    def test_local_action_cycle_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root,
+                ".github/workflows/verify.yml",
+                "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+                "    steps:\n      - uses: ./tools/a\n",
+            )
+            _write(
+                root,
+                "tools/a/action.yml",
+                "name: a\nruns:\n  using: composite\n  steps:\n    - uses: ./tools/b\n",
+            )
+            _write(
+                root,
+                "tools/b/action.yml",
+                "name: b\nruns:\n  using: composite\n  steps:\n    - uses: ./tools/a\n",
+            )
+            _write(root, inventory.REVIEW_DOC, _review_text())
+            findings = pins.collect_findings(root)
+            self.assertTrue(any("cycle" in item.message for item in findings))
+
+    def test_missing_local_path_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root,
+                ".github/workflows/verify.yml",
+                "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+                "    steps:\n      - uses: ./tools/missing\n",
+            )
+            _write(root, inventory.REVIEW_DOC, _review_text())
+            findings = pins.collect_findings(root)
+            self.assertTrue(
+                any("missing" in item.message for item in findings)
+            )
+
+    def test_owner_repo_mismatch_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root,
+                ".github/workflows/verify.yml",
+                "name: Sample\non:\n  push:\njobs:\n  x:\n    runs-on: ubuntu-latest\n"
+                f"    steps:\n      - uses: octocat/checkout@{CHECKOUT.sha}\n",
+            )
+            _write(root, inventory.REVIEW_DOC, _review_text())
+            findings = pins.collect_findings(root)
+            self.assertTrue(
+                any("owner/repo mismatch" in item.message for item in findings)
             )
 
 

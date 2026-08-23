@@ -273,3 +273,12 @@ CI runs the helper/installer/allowlist tests before install and scan. Output
 is redacted. Allowlists are match-level only (cited CIP-19 payment-credential
 hex **and** an exact repo-root path, including the helper). See
 `.gitleaks.toml` and `docs/RELEASING.md`.
+
+Reachable commits after a complete fetch are `git rev-list --all`. The
+scan is not that list: Gitleaks v8.30.1 is invoked with
+`--log-opts=--full-history --all -m`, which is `git log` over every ref,
+without history simplification, with one diff per merge parent. A
+credential that exists only in a merge resolution (absent from both
+parents) is therefore in the scanned diffs. An integration test builds
+that merge and requires the check command to find it while still
+redacting the value.

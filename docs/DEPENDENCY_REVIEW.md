@@ -136,10 +136,17 @@ python3 -m unittest scripts.tests.test_check_action_pins
 python3 scripts/check_action_pins.py
 ```
 
-The checker walks `.github/workflows/*.{yml,yaml}` and
-`.github/actions/**/action.yml`. Local `./` composites are allowed; their
-own external `uses:` still need a recorded SHA. A recorded composite
-with a non-SHA transitive entry is a finding.
+`scripts/yaml_uses_extract.rb` walks each document with Ruby stdlib
+Psych (no gems) and emits JSON. The Python checker does not discover
+`uses` with a line regex. It recursively inspects every mapping/list
+`uses` value, including flow mappings and `uses :` whitespace.
+
+External actions and reusable workflows must be
+`owner/repo@<40-char lowercase SHA>` and match the inventory owner/repo
+and SHA. Local `./path` values are resolved from the repository root
+against `action.yml` and `action.yaml`; missing metadata, `..` escape,
+cycles, and unreviewed nested external uses are findings. The walker
+also inspects every `action.yml` / `action.yaml` in the tree.
 
 ## Build platform and UI/network pins (2026-08-23)
 
