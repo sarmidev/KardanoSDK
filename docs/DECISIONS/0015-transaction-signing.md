@@ -380,7 +380,8 @@ rule; any edit there is a Block 1.10b concern if the API text needs it).
   >   `:wallet:compileKotlinIosArm64`, `:crypto-signing-backend:compileKotlinIosArm64`, and
   >   `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` all pass.
   > - No submission, mainnet path, or general-purpose wallet signing API was introduced. Block
-  >   1.10c (the `:shared` Playground checkpoint, §7) remains open.
+  >   1.10c (the `:shared` Playground checkpoint, §7) is complete, including the manual Android
+  >   runtime checkpoint — see `docs/PHASE_1_PLAN.md`'s 1.10c entry for the full record.
 - **1.10c** — the `:shared` Android Playground "Signed Transaction (not submitted)" checkpoint
   (§7) plus Android runtime verification.
 

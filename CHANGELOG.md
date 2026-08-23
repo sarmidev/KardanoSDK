@@ -34,6 +34,27 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- The public landing page's skip-link target (`<main id="main-content">`) now has
+  `tabindex="-1"`, so activating "Skip to main content" moves keyboard focus there in every
+  browser, not just ones that already move focus to non-interactive scroll targets (W9-6,
+  2026-08-22 pre-release audit).
+- `README.md` and `site/README.md` no longer describe the GitHub Pages URL as "expected once
+  enabled" — it was already live, confirmed via a direct fetch, so the wording now states the
+  site is live and points readers who want certainty at Settings → Pages (W9-5).
+- `docs/DECISIONS/0015-transaction-signing.md` §9's own result note no longer says Block 1.10c
+  "remains open"; it now points at `docs/PHASE_1_PLAN.md`'s 1.10c entry, which every other
+  document already described as complete (W4-1). `docs/DECISIONS/0017-transaction-submission-boundary.md`
+  gained a dated result note recording that its deferred Blockfrost-submission/`:shared`-checkpoint
+  work has since shipped, mirroring ADR-0015 §9's own pattern (W4-2). Both ADRs' original
+  at-the-time-of-writing text is otherwise left unchanged.
+- CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
+  full commit SHA with a version comment instead of a floating major-version tag, so a
+  compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).
+- `verify.yml` gained a `restricted-claim-scan` job: a plain grep/bash step (no new Action or
+  dependency) that fails the build if a tracked doc/markdown/source file contains a banned word
+  outside a short, individually-justified exclusion list (frozen historical records, the policy
+  definitions themselves, and four narrow non-claim occurrences). This is a claim-language scan
+  only, not secret/credential scanning (W9-3).
 - The Playground demo is now a linear, guided story (Welcome → five-step Demo → Summary) with
   plain-language copy, one primary action per step, and technical detail (hashes, fees, CBOR,
   UTxOs, witnesses) collapsed behind an optional "Technical details" toggle, replacing the earlier

@@ -605,6 +605,60 @@ Date: 2026-08-23
 
 Summary:
 
+- **Five release-hygiene audit findings resolved on `feat/signing-scope-opt-in`, split into
+  five separate commits — DONE.** Precondition: this branch's ADR-0018 signing-scope work (see
+  the session below) had already been merged into `main` via PR #9 before these commits were
+  added, so this batch needs its own new PR — it is not covered by any existing one. Every
+  action-version SHA cited below was resolved by a live GitHub API call at commit time, not
+  guessed; `actions/checkout`'s pin was specifically re-verified twice after an initial resolution
+  turned out to be stale (the tag had moved to backport a security fix), illustrating exactly the
+  risk this fix closes.
+  - **W9-6 (landing skip-link focus).** Added `tabindex="-1"` to `site/index.html`'s
+    `<main id="main-content">` so "Skip to main content" moves keyboard focus there in every
+    browser, not just ones that already move focus to non-interactive scroll targets.
+  - **W9-5 (landing URL wording).** Verified live via a direct fetch of
+    `https://sarmidev.github.io/KardanoSDK/` that the Pages site is already serving current
+    content. Updated `README.md` and `site/README.md` from "expected once enabled" to "is live
+    at", pointing readers who want certainty at Settings → Pages rather than repeating a stale
+    hedge.
+  - **W4-1/W4-2 (stale ADR status claims).** ADR-0015 §9's own result note said Block 1.10c
+    "remains open" though every other doc already called it complete — updated that one sentence
+    to point at `docs/PHASE_1_PLAN.md`'s 1.10c record, leaving the rest of the ADR untouched.
+    ADR-0017's header/§7 still described Blockfrost submission as deferred though
+    `BlockfrostTxSubmitProvider` has shipped — appended a dated result note mirroring ADR-0015
+    §9's own pattern rather than rewriting the original at-the-time-of-writing text.
+  - **W9-2 (CI Action SHA pinning).** All 10 `uses:` lines across `verify.yml`/`deploy-site.yml`
+    (6 distinct action+version pairs) now pin a full commit SHA with a version comment, each
+    resolved from the GitHub API (`gradle/actions/setup-gradle`'s tag required resolving through
+    an annotated-tag/GPG-signature indirection).
+  - **W9-3 (CI banned-word scan).** New `restricted-claim-scan` job in `verify.yml`: a plain
+    grep/bash step (no new Action/dependency) scanning tracked `md`/`mdc`/`html`/`kt`/`kts` files
+    for the guardrails' exact banned-word list, excluding frozen historical records
+    (`docs/AUDIT/`, `docs/DECISIONS/`, `docs/HANDOFF.md`, `docs/PHASE_1_PLAN.md`), the
+    policy-definition documents themselves, `docs/TESTING.md`, and four individually-justified
+    non-claim occurrences (a BIP-39 wordlist entry, a test fixture defining the same word list as
+    data, and two hedged/technical code comments). This is a claim-language scan only, not
+    secret/credential scanning — that remains a separate, larger tool-selection decision.
+  - **Verification.** Full test suite re-run fresh: 1,250 tests, 0 failures (unchanged from
+    baseline, since none of these five changes touch Kotlin/Rust source). Both workflow YAML
+    files parse; every `uses:` line matches a 40-char hex SHA; the new banned-word scan passes
+    locally (240 files scanned) and was confirmed to actually fail on an injected violation. Both
+    touched ADRs re-read end-to-end to confirm nothing else was altered. `git diff --check` clean.
+  - **Docs updated in the same session:** `README.md`, `site/README.md`,
+    `docs/DECISIONS/0015-transaction-signing.md`, `docs/DECISIONS/0017-transaction-submission-boundary.md`,
+    `CHANGELOG.md`, and this file. `docs/TESTING.md` was deliberately left untouched — it does not
+    yet document the new CI scan step; that is a follow-up.
+  - **Still open, not addressed this session:** the manual Android/Desktop device walkthrough
+    this file's Playground-redesign entry (below) already flags as owner-required; the remaining
+    Low/Informational audit findings (W3-3, W4-3, W4-4, W5-4, W5-5, W6-1 through W6-4, W8-3, W8-4,
+    W9-4); and opening the new PR for this branch's un-PR'd commits.
+
+### Session Summary (Signing-Scope Opt-In Signal)
+
+Date: 2026-08-23
+
+Summary:
+
 - **ADR-0018 §4 items 1-2 implemented: signing-scope opt-in signal — DONE.** Precondition:
   ADR-0018 (signing scope enforcement and publication, W7-1) was already accepted as a
   decision-only ADR in the prior session. This session implemented only the immediate
