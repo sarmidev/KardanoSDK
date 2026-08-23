@@ -98,8 +98,8 @@ a defect this pass found* — it is the same disclosed residual risk carried for
 recorded under its own finding ID so it is tracked independently of W9-1 (which is otherwise
 fully resolved).
 
-**NF-3 (Low) — The landing page's accessibility semantics were spot-checked, not re-audited in
-full.** This batch re-confirmed the specific W9-6 fix (`tabindex="-1"` on `#main-content`, still
+**NF-3 (Low) — The landing page's accessibility semantics were spot-checked, not repeated as a
+full accessibility pass.** This batch re-confirmed the specific W9-6 fix (`tabindex="-1"` on `#main-content`, still
 present) but did not repeat the prior audit's full `aria-labelledby`/heading-order/alt-text pass
 across `site/index.html`. No regression was found in the spots checked; a full re-audit was out
 of this batch's scope (no `site/**` files were touched by any of this batch's five commits).
@@ -118,7 +118,7 @@ supply chain is pinned." Recorded so the distinction is explicit rather than ass
 
 **NF-5 (Low) — The restricted-claim (banned-word) scanner has real, reproducible false
 negatives at word-boundary edges, discovered by this batch's own writing.** While drafting this
-batch's CHANGELOG/KDoc, two banned-word occurrences of "safe" were caught only by manually
+batch's CHANGELOG/KDoc, two restricted-claim occurrences were caught only by manually
 re-running the exact scan script from `verify.yml` locally (§5, Verification) — the scanner
 itself is sound (it did fire and both occurrences were fixed before this commit), but this
 exercise surfaced two structural gaps in the scan's design, not in its execution:
@@ -128,7 +128,7 @@ exercise surfaced two structural gaps in the scan's design, not in its execution
    wired to this same script today.
 2. The `NEGATION_QUALIFIER`/`HYPHEN_QUALIFIER` exemptions are narrow enough that a
    grammatically valid but still-restricted claim (e.g. "keeps X reliably free of the class of
-   bug Y" rephrasing a "safe" claim without the literal word) would not be caught at all — this
+   bug Y" rephrasing a restricted claim without the literal word) would not be caught at all — this
    is a fundamental limitation of a fixed word-list scan, not a bug in this instance's pattern,
    but it means the scan is a floor, not a ceiling, on claim-language discipline.
 
@@ -171,7 +171,7 @@ it were fresh evidence (the same discipline the prior audit's W3-2 finding estab
 | V6 | `./gradlew --no-daemon :androidApp:lintDebug` | `BUILD SUCCESSFUL`. **0 errors, 36 warnings** (`androidApp/build/reports/lint-results-debug.txt`) — all 36 are pre-existing hygiene items (dependency-version-freshness notices, launcher-icon shape/monochrome-tag suggestions, one densityless-drawable note), none touch this batch's changed files. |
 | V7 | `cd crypto-signing-backend && shasum -a 256 -c CHECKSUMS.sha256` | **8/8 OK** — every committed native signing-backend binary's SHA-256 matches the manifest from W5-2's remediation, unchanged by this batch. |
 | V8 | `git diff --check` | Exit `0`, no output — no whitespace errors in this batch's diff. |
-| V9 | Restricted-claim (banned-word) scan — the exact script from `.github/workflows/verify.yml`'s `restricted-claim-scan` job, run locally against this batch's changed tracked files | Initially **caught 2 real occurrences of "safe"** in this batch's own draft `Bech32.kt` KDoc and `CHANGELOG.md` wording (see NF-5); both reworded to factual language ("enforce this bound structurally" instead of "safe by construction") and the scan passes clean on the corrected text. |
+| V9 | Restricted-claim (banned-word) scan — the exact script from `.github/workflows/verify.yml`'s `restricted-claim-scan` job, run locally against this batch's changed tracked files | Initially **caught 2 real restricted-claim occurrences** in this batch's own draft `Bech32.kt` KDoc and `CHANGELOG.md` wording (see NF-5); both reworded to factual language ("enforce this bound structurally" instead of a construction-time restricted claim) and the scan passes clean on the corrected text. |
 
 **Not exercised by this batch** (unchanged residual risk from the prior audit's §6, restated
 here rather than re-derived): a live GitHub Actions run of `Verify`/`deploy-site` (this
@@ -250,7 +250,7 @@ original evidence or reopen resolved-as-of-Prompt-1 items.
 | W4-1 | **Further reconciled** — ADR-0015's header now matches the completed 1.10c §9 result note (the Prompt 1-era `f5289d8` note had updated §9; the header still said 1.10c remained open). |
 | W4-2 | **Further reconciled** — ADR-0017's header and Non-goals now point at the shipped 1.11b/1.11c result note; the original 1.11a-only decision text is unchanged. |
 | W4-3 | **Resolved** — `docs/PROJECT_BRIEF.md` now links the full delivery record to `docs/DELIVERY_RECORD.md`. `docs/ROADMAP.md` remains the overview. |
-| W4-4 | **Resolved** — module README status lines now use the accepted factual wording ("Not independently reviewed") already used by the root README / `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`. Provider READMEs keep the testnet/preprod qualifier. The word `audited` is not used. |
+| W4-4 | **Resolved** — module README status lines now use the accepted factual wording ("Not independently reviewed") already used by the root README / `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`. Provider READMEs keep the testnet/preprod qualifier. |
 | W5-5 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — `BlockfrostConfig` is no longer a `data class`; equality is referential and `toString` stays redacted. |
 | W8-3 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — explicit Ktor `HttpTimeout` bounds and no Ktor request retry. |
 | W1-2 | **Resolved** — historical HANDOFF content is preserved verbatim under `docs/archive/handoff/`; the living `docs/HANDOFF.md` is the current resume. Coverage is checked by `scripts/check_handoff_archive.py`. |

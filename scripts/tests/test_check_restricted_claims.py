@@ -35,30 +35,69 @@ class SameLineClassificationTests(unittest.TestCase):
         )
         self.assertEqual([h.phrase for h in _prohibited(line)], ["safe"])
 
-    def test_markdown_emphasis_negation_then_second_hit(self) -> None:
-        line = "**not** safe, but later guaranteed."
+    def test_display_safe_then_plain_safe_on_one_line(self) -> None:
+        line = "display-safe metadata, later safe"
         hits = _hits(line)
         self.assertEqual(hits[0].phrase, "safe")
         self.assertTrue(hits[0].permitted)
-        self.assertEqual(hits[0].reason, "negation")
-        self.assertEqual(hits[1].phrase, "guaranteed")
+        self.assertEqual(hits[0].reason, "permitted-compound")
+        self.assertEqual(hits[1].phrase, "safe")
         self.assertFalse(hits[1].permitted)
 
 
 class QualifierAndBoundaryTests(unittest.TestCase):
-    def test_hyphen_compound_is_permitted(self) -> None:
-        hits = _hits("Use a type-safe wrapper.")
+    def test_reviewed_display_safe_compound_is_permitted(self) -> None:
+        hits = _hits("already carry only public, display-safe metadata")
         self.assertEqual(len(hits), 1)
         self.assertTrue(hits[0].permitted)
-        self.assertEqual(hits[0].reason, "hyphen-compound")
+        self.assertEqual(hits[0].reason, "permitted-compound")
+
+    def test_funds_safe_is_prohibited(self) -> None:
+        hits = _prohibited("Not a funds-safe issue.")
+        self.assertEqual([h.phrase for h in hits], ["safe"])
+
+    def test_crypto_safe_is_prohibited(self) -> None:
+        hits = _prohibited("Use the crypto-safe backend.")
+        self.assertEqual([h.phrase for h in hits], ["safe"])
+
+    def test_type_safe_is_not_a_reviewed_compound(self) -> None:
+        hits = _prohibited("Use a type-safe wrapper.")
+        self.assertEqual([h.phrase for h in hits], ["safe"])
+
+    def test_sentence_boundary_negation_does_not_qualify(self) -> None:
+        hits = _prohibited("This does not. This is safe.")
+        self.assertEqual([h.phrase for h in hits], ["safe"])
+        self.assertEqual(hits[0].column, 24)
+
+    def test_negation_does_not_cross_period_on_same_line(self) -> None:
+        hits = _prohibited("This does not. safe")
+        self.assertEqual([h.phrase for h in hits], ["safe"])
+
+    def test_markdown_emphasis_negation_still_qualifies(self) -> None:
+        hits = _hits("**not** safe, but later guaranteed.")
+        self.assertTrue(hits[0].permitted)
+        self.assertEqual(hits[0].reason, "negation")
+        self.assertFalse(hits[1].permitted)
+        self.assertEqual(hits[1].phrase, "guaranteed")
+
+    def test_markdown_split_safe_is_detected(self) -> None:
+        hits = _prohibited("This is s**afe**.")
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].phrase, "safe")
+        self.assertEqual(hits[0].column, 9)
+
+    def test_markdown_split_long_phrase_is_one_hit(self) -> None:
+        hits = _prohibited("It is crypto**graphically** safe.")
+        self.assertEqual([h.phrase for h in hits], ["cryptographically safe"])
+        self.assertEqual(hits[0].column, 7)
 
     def test_plain_safe_is_prohibited(self) -> None:
         hits = _prohibited("This is safe.")
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].column, 9)
 
-    def test_case_insensitive(self) -> None:
-        hits = _prohibited("SAFE and Secure.")
+    def test_case_and_punctuation(self) -> None:
+        hits = _prohibited("SAFE! Secure.")
         self.assertEqual([h.phrase for h in hits], ["safe", "secure"])
 
     def test_markdown_wrapped_phrase_is_still_found(self) -> None:
@@ -69,13 +108,6 @@ class QualifierAndBoundaryTests(unittest.TestCase):
         hits = _prohibited("It is cryptographically safe.")
         self.assertEqual([h.phrase for h in hits], ["cryptographically safe"])
         self.assertEqual(hits[0].column, 7)
-
-    def test_second_safe_after_long_phrase_is_separate(self) -> None:
-        hits = _prohibited("cryptographically safe and later safe")
-        self.assertEqual(
-            [h.phrase for h in hits],
-            ["cryptographically safe", "safe"],
-        )
 
 
 class NearMissTests(unittest.TestCase):
@@ -108,35 +140,50 @@ class ExclusionBoundaryTests(unittest.TestCase):
             findings = scanner.scan_paths(root, [excluded])
             self.assertEqual(findings, [])
 
-    def test_same_filename_outside_excluded_path_still_fails(self) -> None:
-        excluded = "shared/src/commonTest/kotlin/org/sarmidev/kardano/playground/ui/DemoCopyTest.kt"
-        other = "other/DemoCopyTest.kt"
-        self.assertTrue(scanner.is_excluded(excluded))
-        self.assertFalse(scanner.is_excluded(other))
+    def test_new_adr_with_positive_claim_is_detected(self) -> None:
+        relative = "docs/DECISIONS/9999-new-decision.md"
+        self.assertFalse(scanner.is_excluded(relative))
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for relative in (excluded, other):
-                path = root / relative
-                path.parent.mkdir(parents=True)
-                path.write_text("This is safe.\n", encoding="utf-8")
-            findings = scanner.prohibited_findings(scanner.scan_paths(root, [excluded, other]))
-            self.assertEqual([f.path for f in findings], [other])
+            path = root / relative
+            path.parent.mkdir(parents=True)
+            path.write_text("This module is safe.\n", encoding="utf-8")
+            findings = scanner.prohibited_findings(scanner.scan_paths(root, [relative]))
+            self.assertEqual([f.path for f in findings], [relative])
 
-    def test_prefix_exclusion_does_not_cover_sibling_directory(self) -> None:
-        inside = "docs/AUDIT/note.md"
-        sibling = "docs/AUDIT-EXTRA/note.md"
-        self.assertTrue(scanner.is_excluded(inside))
-        self.assertFalse(scanner.is_excluded(sibling))
+    def test_new_audit_with_positive_claim_is_detected(self) -> None:
+        relative = "docs/AUDIT/2099-future-audit.md"
+        self.assertFalse(scanner.is_excluded(relative))
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for relative in (inside, sibling):
-                path = root / relative
-                path.parent.mkdir(parents=True)
-                path.write_text("This is safe.\n", encoding="utf-8")
-            findings = scanner.prohibited_findings(
-                scanner.scan_paths(root, [inside, sibling])
-            )
-            self.assertEqual([f.path for f in findings], [sibling])
+            path = root / relative
+            path.parent.mkdir(parents=True)
+            path.write_text("The SDK is production-ready.\n", encoding="utf-8")
+            findings = scanner.prohibited_findings(scanner.scan_paths(root, [relative]))
+            self.assertEqual([f.phrase for f in findings], ["production-ready"])
+
+    def test_directory_name_is_not_an_exclusion(self) -> None:
+        self.assertFalse(scanner.is_excluded("docs/DECISIONS/"))
+        self.assertFalse(scanner.is_excluded("docs/AUDIT/"))
+
+
+class FilenameAndExtensionTests(unittest.TestCase):
+    def test_nul_separated_listing_keeps_newline_filename(self) -> None:
+        raw = b"README.md\0docs/weird\nname.md\0"
+        self.assertEqual(
+            scanner.parse_ls_files_z(raw),
+            ["README.md", "docs/weird\nname.md"],
+        )
+
+    def test_newly_included_swift_extension_is_scanned(self) -> None:
+        self.assertTrue(scanner.is_scan_path("iosApp/iosApp/ContentView.swift"))
+        hits = _prohibited("This is safe.", path="iosApp/iosApp/ContentView.swift")
+        self.assertEqual(hits[0].path, "iosApp/iosApp/ContentView.swift")
+
+    def test_newly_included_yaml_and_json_extensions_are_scanned(self) -> None:
+        self.assertTrue(scanner.is_scan_path(".github/workflows/verify.yml"))
+        self.assertTrue(scanner.is_scan_path("package.json"))
+        self.assertTrue(scanner.is_scan_path("gradle.properties"))
 
 
 class CurrentTreeTests(unittest.TestCase):

@@ -94,20 +94,62 @@ def download(url: str) -> bytes:
         return response.read()
 
 
-def extract_binary(archive_path: Path, archive_name: str, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if archive_name.endswith(".zip"):
-        with zipfile.ZipFile(archive_path) as archive:
-            with archive.open("gitleaks") as src, dest.open("wb") as out:
-                out.write(src.read())
-    else:
-        with tarfile.open(archive_path, "r:gz") as archive:
+def _read_tar_member(archive_path: Path) -> bytes:
+    with tarfile.open(archive_path, "r:gz") as archive:
+        try:
             member = archive.getmember("gitleaks")
-            src = archive.extractfile(member)
-            if src is None:
-                raise InstallError("archive member gitleaks is missing")
-            dest.write_bytes(src.read())
-    dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        except KeyError as error:
+            raise InstallError("archive member gitleaks is missing") from error
+        if member.mode & 0o002:
+            raise InstallError("archive member gitleaks is world-writable")
+        src = archive.extractfile(member)
+        if src is None:
+            raise InstallError("archive member gitleaks is missing")
+        return src.read()
+
+
+def _read_zip_member(archive_path: Path) -> bytes:
+    with zipfile.ZipFile(archive_path) as archive:
+        info = archive.getinfo("gitleaks")
+        # Zip external attributes: UNIX mode is in the high 16 bits when present.
+        unix_mode = (info.external_attr >> 16) & 0o7777
+        if unix_mode and unix_mode & 0o002:
+            raise InstallError("archive member gitleaks is world-writable")
+        return archive.read("gitleaks")
+
+
+def _write_atomic_binary(dest: Path, payload: bytes) -> None:
+    if dest.is_symlink():
+        raise InstallError("refusing to write through a destination symlink")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f".{dest.name}.{os.urandom(8).hex()}.tmp")
+    fd = None
+    try:
+        fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o755)
+        os.write(fd, payload)
+        os.fchmod(fd, 0o755)
+        os.close(fd)
+        fd = None
+        if dest.is_symlink():
+            raise InstallError("refusing to write through a destination symlink")
+        os.replace(str(tmp), str(dest))
+        os.chmod(dest, 0o755)
+    except Exception:
+        if fd is not None:
+            os.close(fd)
+        if tmp.exists() or tmp.is_symlink():
+            tmp.unlink()
+        raise
+
+
+def extract_binary(archive_path: Path, archive_name: str, dest: Path) -> None:
+    if dest.is_symlink():
+        raise InstallError("refusing to write through a destination symlink")
+    if archive_name.endswith(".zip"):
+        payload = _read_zip_member(archive_path)
+    else:
+        payload = _read_tar_member(archive_path)
+    _write_atomic_binary(dest, payload)
 
 
 def install(

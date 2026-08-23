@@ -5,7 +5,8 @@ Classifies each match on its own. A permitted occurrence on a line never
 suppresses a second, prohibited occurrence on the same line.
 
 Phrases are matched longest-first so "cryptographically safe" is one hit,
-not a nested "safe". Output is path:line:column (1-based).
+not a nested "safe". Markdown emphasis inside a phrase is ignored for
+matching; reported columns refer to the original line.
 """
 
 from __future__ import annotations
@@ -29,10 +30,24 @@ BANNED_PHRASES: tuple[str, ...] = (
     "safe",
 )
 
-SCAN_SUFFIXES: tuple[str, ...] = (".md", ".mdc", ".html", ".kt", ".kts")
+SCAN_SUFFIXES: tuple[str, ...] = (
+    ".md",
+    ".mdc",
+    ".html",
+    ".kt",
+    ".kts",
+    ".swift",
+    ".xml",
+    ".properties",
+    ".toml",
+    ".yaml",
+    ".yml",
+    ".json",
+)
 
 # Exact path exclusions — one file each, each with a stated rationale.
-# Directory-wide exclusions are listed separately and kept to frozen records.
+# No directory-wide exclusions. Active ADR result notes and the current
+# final audit are scanned.
 EXACT_PATH_EXCLUSIONS: dict[str, str] = {
     "docs/AI_WORKING_AGREEMENT.md": (
         "Defines the restricted-claim policy; scanning the definition for its "
@@ -41,6 +56,32 @@ EXACT_PATH_EXCLUSIONS: dict[str, str] = {
     "docs/PHASE_1_PLAN.md": (
         "Dated Phase 1 implementation log that is appended, not rewritten; "
         "historical session wording is not a living product claim."
+    ),
+    "docs/AUDIT/2026-08-22-pre-release-audit.md": (
+        "Immutable prior-audit record. Quotes the restricted-claim list and "
+        "historical module disclaimers; not a living product claim."
+    ),
+    "docs/DECISIONS/0001-cbor-and-parser-policy.md": (
+        "Frozen evaluation question ('Is it audited…') from the original "
+        "library-selection table. Historical ADR text is not rewritten."
+    ),
+    "docs/DECISIONS/0012-address-encoding-and-roundtrip.md": (
+        "Frozen Block 1.7a wording ('safe direction') describing the "
+        "decode(encode(x)) test-vector rule. Historical ADR text."
+    ),
+    "docs/DECISIONS/0018-signing-scope-enforcement-and-publication.md": (
+        "Frozen ADR sentence forbidding release notes from using the "
+        "restricted adjective. Historical decision text."
+    ),
+    "docs/archive/handoff/2026-08-23-pre-curation.md": (
+        "Verbatim historical HANDOFF snapshot. Prose is not edited."
+    ),
+    ".cursor/rules/kardano-sdk-guardrails.mdc": (
+        "Defines the restricted-claim policy list; scanning it is circular."
+    ),
+    ".cursor/rules/kotlin-tests-and-docs.mdc": (
+        "Policy example ('decode(encode(x)) == x is safe to test'); scanning "
+        "the rule text is circular."
     ),
     "crypto/src/commonMain/kotlin/org/sarmidev/kardano/crypto/mnemonic/"
     "Bip39EnglishWordlist.kt": (
@@ -64,26 +105,20 @@ EXACT_PATH_EXCLUSIONS: dict[str, str] = {
     ),
 }
 
-# Prefix exclusions — frozen historical records only, not living product docs.
-PREFIX_EXCLUSIONS: dict[str, str] = {
-    "docs/AUDIT/": (
-        "Audit reports quote and discuss this exact policy; analyzing the "
-        "rule is not itself a restricted claim."
-    ),
-    "docs/DECISIONS/": (
-        "Frozen historical ADRs. This repo appends a dated result note rather "
-        "than rewriting the original decision text."
-    ),
-    "docs/archive/": (
-        "Verbatim historical HANDOFF/session snapshots. Prose is not edited."
-    ),
-    ".cursor/rules/": (
-        "Cursor rules define the restricted-claim policy; scanning them is circular."
+# Explicit reviewed technical compounds only. Arbitrary hyphen prefixes
+# (funds-safe, crypto-safe, type-safe) are prohibited.
+PERMITTED_COMPOUNDS: dict[str, str] = {
+    "display-safe": (
+        "shared/README.md: Playground presentation types hold public metadata "
+        "only. Technical compound, not a product-wide claim."
     ),
 }
 
-# "not" plus up to this many non-letters may precede a phrase (covers **not**).
+# "not" plus up to this many non-letters may precede a phrase, and only if
+# the gap does not include sentence-ending punctuation.
 NEGATION_GAP_MAX = 6
+SENTENCE_ENDERS = frozenset(".!?;")
+EMPHASIS_CHARS = frozenset("*_`")
 
 
 @dataclass(frozen=True)
@@ -99,27 +134,37 @@ class Finding:
         return f"{self.path}:{self.line}:{self.column}: {self.phrase} ({self.reason})"
 
 
-def posix_relpath(path: Path, root: Path) -> str:
-    return path.resolve().relative_to(root.resolve()).as_posix()
+def parse_ls_files_z(raw: bytes) -> list[str]:
+    """Split `git ls-files -z` output. Filenames may contain spaces or newlines."""
+    return [part.decode("utf-8") for part in raw.split(b"\0") if part]
+
+
+def is_scan_path(relative_path: str) -> bool:
+    return any(relative_path.endswith(suffix) for suffix in SCAN_SUFFIXES)
 
 
 def is_excluded(relative_path: str) -> bool:
-    if relative_path in EXACT_PATH_EXCLUSIONS:
-        return True
-    return any(relative_path.startswith(prefix) for prefix in PREFIX_EXCLUSIONS)
+    return relative_path in EXACT_PATH_EXCLUSIONS
 
 
 def exclusion_rationale(relative_path: str) -> str | None:
-    if relative_path in EXACT_PATH_EXCLUSIONS:
-        return EXACT_PATH_EXCLUSIONS[relative_path]
-    for prefix, rationale in PREFIX_EXCLUSIONS.items():
-        if relative_path.startswith(prefix):
-            return rationale
-    return None
+    return EXACT_PATH_EXCLUSIONS.get(relative_path)
 
 
 def _is_word_char(ch: str) -> bool:
     return ch.isalnum() or ch == "_"
+
+
+def _normalize_emphasis(text: str) -> tuple[str, list[int]]:
+    """Drop Markdown emphasis markers; map each kept char to its original index."""
+    kept: list[str] = []
+    mapping: list[int] = []
+    for index, char in enumerate(text):
+        if char in EMPHASIS_CHARS:
+            continue
+        kept.append(char)
+        mapping.append(index)
+    return "".join(kept), mapping
 
 
 def _has_word_boundaries(text: str, start: int, end: int) -> bool:
@@ -130,73 +175,79 @@ def _has_word_boundaries(text: str, start: int, end: int) -> bool:
     return True
 
 
-def _preceded_by_hyphen_compound(text: str, start: int) -> bool:
-    if start < 2:
+def _preceded_by_permitted_compound(text: str, start: int, phrase: str) -> bool:
+    if start < 2 or text[start - 1] != "-":
         return False
-    return text[start - 1] == "-" and text[start - 2].isalpha()
+    left_end = start - 1
+    left_start = left_end - 1
+    if left_start < 0 or not text[left_start].isalpha():
+        return False
+    while left_start > 0 and text[left_start - 1].isalpha():
+        left_start -= 1
+    compound = f"{text[left_start:left_end]}-{phrase}"
+    return compound.lower() in PERMITTED_COMPOUNDS
 
 
 def _preceded_by_negation(text: str, start: int) -> bool:
     prefix = text[:start]
-    # Allow up to NEGATION_GAP_MAX non-letters between "not" and the phrase.
     gap = 0
-    i = len(prefix) - 1
-    while i >= 0 and gap < NEGATION_GAP_MAX and not prefix[i].isalpha():
-        i -= 1
+    index = len(prefix) - 1
+    while index >= 0 and gap < NEGATION_GAP_MAX and not prefix[index].isalpha():
+        if prefix[index] in SENTENCE_ENDERS:
+            return False
+        index -= 1
         gap += 1
-    if i < 2:
+    if index < 2:
         return False
-    # The three letters ending at i should be "not" as a whole word.
-    candidate = prefix[i - 2 : i + 1]
+    candidate = prefix[index - 2 : index + 1]
     if candidate.lower() != "not":
         return False
-    before = i - 3
+    before = index - 3
     if before >= 0 and _is_word_char(prefix[before]):
         return False
     return True
 
 
-def classify_match(text: str, start: int) -> tuple[bool, str]:
-    if _preceded_by_hyphen_compound(text, start):
-        return True, "hyphen-compound"
+def classify_match(text: str, start: int, phrase: str) -> tuple[bool, str]:
+    if _preceded_by_permitted_compound(text, start, phrase):
+        return True, "permitted-compound"
     if _preceded_by_negation(text, start):
         return True, "negation"
     return False, "restricted-claim"
 
 
 def find_matches_in_text(text: str) -> list[tuple[int, int, str, bool, str]]:
-    """Return (start, end, phrase, permitted, reason) for each match."""
-    occupied = [False] * len(text)
+    """Return (orig_start, orig_end, phrase, permitted, reason) for each match."""
+    normalized, mapping = _normalize_emphasis(text)
+    occupied = [False] * len(normalized)
     found: list[tuple[int, int, str, bool, str]] = []
-    lower = text.lower()
+    lower = normalized.lower()
     for phrase in BANNED_PHRASES:
         needle = phrase.lower()
-        start = 0
+        cursor = 0
         while True:
-            index = lower.find(needle, start)
+            index = lower.find(needle, cursor)
             if index < 0:
                 break
             end = index + len(needle)
-            start = index + 1
-            if not _has_word_boundaries(text, index, end):
+            cursor = index + 1
+            if not _has_word_boundaries(normalized, index, end):
                 continue
             if any(occupied[index:end]):
                 continue
             for pos in range(index, end):
                 occupied[pos] = True
-            permitted, reason = classify_match(text, index)
-            found.append((index, end, phrase, permitted, reason))
+            orig_start = mapping[index]
+            orig_end = mapping[end - 1] + 1
+            permitted, reason = classify_match(text, orig_start, phrase)
+            found.append((orig_start, orig_end, phrase, permitted, reason))
     found.sort(key=lambda item: item[0])
     return found
 
 
 def scan_text(relative_path: str, text: str) -> list[Finding]:
     findings: list[Finding] = []
-    # splitlines() drops a trailing empty line; keep line numbers 1-based
-    # against the original text including a final newline.
-    lines = text.splitlines()
-    offset = 0
-    for line_no, line in enumerate(lines, start=1):
+    for line_no, line in enumerate(text.splitlines(), start=1):
         for start, _end, phrase, permitted, reason in find_matches_in_text(line):
             findings.append(
                 Finding(
@@ -208,22 +259,18 @@ def scan_text(relative_path: str, text: str) -> list[Finding]:
                     reason=reason,
                 )
             )
-        offset += len(line)
-        if offset < len(text) and text[offset] == "\n":
-            offset += 1
     return findings
 
 
 def list_tracked_scan_paths(root: Path) -> list[str]:
     result = subprocess.run(
-        ["git", "ls-files", "--", *[f"*{suffix}" for suffix in SCAN_SUFFIXES]],
+        ["git", "ls-files", "-z"],
         cwd=root,
         check=True,
         capture_output=True,
-        text=True,
     )
-    paths = [line for line in result.stdout.splitlines() if line]
-    return [path for path in paths if not is_excluded(path)]
+    paths = parse_ls_files_z(result.stdout)
+    return [path for path in paths if is_scan_path(path) and not is_excluded(path)]
 
 
 def scan_paths(root: Path, relative_paths: list[str]) -> list[Finding]:
