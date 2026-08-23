@@ -157,6 +157,24 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
   full commit SHA with a version comment instead of a floating major-version tag, so a
   compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).
+- CI Action pins were re-resolved live on 2026-08-23 and upgraded from the previous exact
+  patch pins (checkout `v4.3.1`, setup-java `v4.9.1`, setup-gradle `v4.4.3`, configure-pages
+  `v5.0.0`, upload-pages-artifact `v3.0.1`, deploy-pages `v4.0.5`) to maintained Node 24
+  releases: checkout `v7.0.1`, setup-java `v5.7.0`, setup-gradle `v5.0.2`, configure-pages
+  `v6.0.0`, upload-pages-artifact `v5.0.0`, deploy-pages `v5.0.0`. The previous pins were
+  those patch releases, not the moving `v4` major tags named in the 2026-08-22 audit
+  (`actions/checkout@v4` is `v4.4.0` as of this resolution). `gradle/actions` v6.3.0 is
+  not adopted: v6 defaults to a separate commercial cache component and a Terms of Use
+  gate that this commit does not accept. setup-gradle cache inputs are set explicitly to
+  the v4.4.3/v5.0.2 defaults. upload-pages-artifact v3.0.1's floating
+  `actions/upload-artifact@v4` transitive use is gone; v5.0.0 pins
+  `actions/upload-artifact` to `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f` (v7.0.0)
+  (W9-2 / NF-4).
+- `scripts/check_action_pins.py` (and `scripts.tests.test_check_action_pins`) require every
+  external workflow `uses:` to be `owner/name@<40-char lowercase SHA>` matching
+  `scripts/action_pin_inventory.py`, and require recorded composite transitives plus those
+  SHAs to appear in `docs/DEPENDENCY_REVIEW.md`. `verify.yml` runs the tests and the
+  check in a dedicated `action-pin-scan` job.
 - `verify.yml` gained a `restricted-claim-scan` job that runs the restricted-claim
   and archive unit tests, the HANDOFF archive byte check, then
   `scripts/check_restricted_claims.py`. The script classifies each phrase match on its

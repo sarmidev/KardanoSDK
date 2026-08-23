@@ -180,9 +180,10 @@ Documentation and claim-language checks:
 
 ```bash
 rg -n "TESTING|fixtures|test vector|commonTest|jvmTest|iosSimulatorArm64Test|testAndroidHostTest" README.md docs/ core/README.md shared/README.md
-python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive
+python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive scripts.tests.test_check_action_pins
 python3 scripts/check_handoff_archive.py
 python3 scripts/check_restricted_claims.py
+python3 scripts/check_action_pins.py
 ```
 
 `scripts/check_restricted_claims.py` classifies each restricted-claim phrase
@@ -198,6 +199,17 @@ phrase + 1-based occurrence on that line). Duplicating an allowlisted line
 elsewhere, or inserting a line before it, is a finding until the allowlist is
 re-reviewed (fail-closed). Hyphen compounds are not exempt. CI runs the unit
 tests and the archive byte check before the scan. It does not scan credentials.
+
+`scripts/check_action_pins.py` requires every external `uses:` in
+`.github/workflows/*` and local `.github/actions/**/action.yml` to contain
+exactly a 40-character lowercase SHA that matches
+`scripts/action_pin_inventory.py`. Composite Action metadata recorded in
+that inventory (and copied in `docs/DEPENDENCY_REVIEW.md`) must itself be
+SHA-pinned; a floating transitive `uses:` is a finding. CI runs
+`scripts.tests.test_check_action_pins` before the check. The inventory was
+resolved live on 2026-08-23; do not reuse SHAs from older audit notes.
+The previous pins were exact patch releases (`checkout` `v4.3.1`, not the
+moving `v4` tag).
 
 `scripts/check_handoff_archive.py` restores the six documented archive link
 rewrites at the byte level (no newline normalization) and hashes the result

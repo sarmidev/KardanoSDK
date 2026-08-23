@@ -74,6 +74,8 @@ Read these first:
   included (W9-4).
 - Still-open hygiene items outside this stacked batch: CI `androidApp:lint` (W3-3),
   tag-triggered release CI (W4-5), pre-1.0 pinned dependencies (W5-4, by design).
+- `gradle/actions` v6.3.0 is not adopted (proprietary cache component / Terms of
+  Use). setup-gradle stays on v5.0.2. See `docs/DEPENDENCY_REVIEW.md`.
 - Restricted-claim and full-history Gitleaks scans now run in CI. They are not a
   substitute for an owner-authenticated GitHub secret-scanning pass.
 
@@ -87,7 +89,8 @@ Stacked remediations, each additive (no amend / no force-push):
 | 2 | `fix/signing-scope-enforcement` | `a632b7d` | ADR-0019 draft binding and fixture-identity checks |
 | 3 | `fix/playground-operation-lifecycle` | `a34afdc` | Generation/token lifecycle and accessibility semantics |
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
-| 5 | `fix/release-docs-and-scanners` | four original + review-fix commits, stacked on `3936047` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Review-fix commits tighten scanners, archive bytes, and CI. |
+| 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
+| 6 | `fix/build-and-ci-reproducibility` | in progress, stacked on `90fe0ee` | Action SHA upgrades + pin checker (commit 1). Gradle/crypto/lock/lint commits follow. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -97,6 +100,14 @@ Stacked remediations, each additive (no amend / no force-push):
 
 Date: 2026-08-23
 
+- **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
+  Prompt 5 `90fe0ee`).** Commit 1 re-resolved Action releases live (not from
+  older audit notes), upgraded checkout/setup-java/setup-gradle/Pages Actions
+  to Node 24 runtimes, recorded composite metadata (Pages upload no longer
+  uses floating `upload-artifact@v4`), set setup-gradle cache inputs
+  explicitly, and added `scripts/check_action_pins.py`. `gradle/actions` v6
+  is not adopted. Remaining commits: build-platform upgrades, crypto review,
+  lockfiles, Android lint CI.
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
   `3936047`) — four original commits complete, plus review-fix commits.**
   - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now
@@ -199,10 +210,13 @@ Do not use:
 
 ## Next Recommended Task
 
-Prompt 5 on this branch is complete (four original commits plus review-fix
-commits). Residual owner work: an authenticated GitHub secret-scanning /
-Dependabot pass, the manual accessibility walkthrough, and a human review of
-the stacked PRs. Do not merge from an automated session.
+Prompt 6 commit 1 (Action pins + checker) is on this branch. Remaining Prompt 6
+commits: Gradle/AGP/Kotlin/SDK/UI dependency upgrades, crypto/native review,
+dependency locking/verification, Android lint CI. Residual owner work from
+Prompt 5: an authenticated GitHub secret-scanning / Dependabot pass, the
+manual accessibility walkthrough, and a human review of the stacked PRs. Do
+not merge from an automated session. `gradle/actions` v6 needs an explicit
+license decision if it is ever adopted.
 
 ## Prompt For Cursor Business/Product Work
 

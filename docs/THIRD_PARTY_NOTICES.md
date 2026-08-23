@@ -32,6 +32,7 @@ libsodium rows below); that is noted per row rather than forcing one label.
 | Gobley UniFFI bindgen | Source (build-time only) | Offline generation tool only | Apache-2.0 OR MIT |
 | JUnit | Test-only | JVM test framework | Eclipse Public License 2.0 |
 | Gitleaks CLI `v8.30.1` | CI-only (not redistributed) | Full-history credential scan. Installed by `scripts/install_gitleaks.py` after verifying the official release checksums file. Not a GitHub Action wrapper. | MIT |
+| GitHub Actions used by `verify.yml` / `deploy-site.yml` | CI-only (not redistributed) | SHA-pinned javascript/composite Actions. Versions and peeled commit SHAs, plus the Pages upload composite's transitive `actions/upload-artifact` pin, are recorded in [DEPENDENCY_REVIEW.md](DEPENDENCY_REVIEW.md). | Each Action's own upstream licence (typically MIT) |
 | `androidx.test:runner` | Test-only | Android instrumented test runner | Apache-2.0 |
 
 The signing-backend module records its pinned versions and a more detailed inventory in

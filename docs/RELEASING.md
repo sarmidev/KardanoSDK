@@ -35,9 +35,13 @@ promise and they do not keep exhaustive `when` expressions compiling without edi
 
 1. Choose a semantic version and create a release branch if the change needs stabilisation.
 2. Run the JVM, Android-host, and iOS compile checks documented in `TESTING.md`.
-3. Run `git diff --check` and `python3 scripts/check_restricted_claims.py`.
-   The script classifies each phrase match on its own and prints
-   `path:line:column`. It is not a credential scanner.
+3. Run `git diff --check`, `python3 scripts/check_restricted_claims.py`,
+   and `python3 scripts/check_action_pins.py`.
+   The claim script classifies each phrase match on its own and prints
+   `path:line:column`. It is not a credential scanner. The pin script
+   requires every external workflow `uses:` to be a 40-character lowercase
+   SHA recorded in `scripts/action_pin_inventory.py` and
+   `docs/DEPENDENCY_REVIEW.md`.
 4. Run the full-history credential scan: `python3 scripts/install_gitleaks.py`
    then `python3 scripts/check_gitleaks.py`. Confirm zero non-allowlisted
    findings. Output is redacted; do not paste raw matches into notes.
@@ -96,6 +100,30 @@ third-party GitHub Action wrapper.
 | Allowlist | Match-level only in `.gitleaks.toml`: the cited CIP-19 payment-credential hex **and** an exact repo-root path (`^…$`). Paths are the cited test files plus `scripts/gitleaks_allowlist.py` (the helper historically embedded the same vector). No directory, rule, or commit exclusions. |
 
 This tool is CI-only. It is not redistributed in an SDK artifact.
+
+## CI tool review — GitHub Action pins
+
+Third-party Actions are pinned by commit SHA, not by a moving major tag.
+`docs/DEPENDENCY_REVIEW.md` records the live 2026-08-23 resolution,
+including the v4 versus `v4.3.1` correction (the previous pins were exact
+patch releases, not `@v4`) and the Pages upload composite's transitive
+`actions/upload-artifact` SHA.
+
+| Item | Value |
+|---|---|
+| Checker | `scripts/check_action_pins.py` |
+| Inventory | `scripts/action_pin_inventory.py` |
+| Human review | `docs/DEPENDENCY_REVIEW.md` |
+| Checkout | `v7.0.1` `3d3c42e5aac5ba805825da76410c181273ba90b1` |
+| setup-java | `v5.7.0` `b6effb05e454b25005698d916606bdc6ffcbf961` |
+| setup-gradle | `v5.0.2` `0723195856401067f7a2779048b490ace7a47d7c` (v6 not adopted) |
+| configure-pages | `v6.0.0` `45bfe0192ca1faeb007ade9deae92b16b8254a0d` |
+| upload-pages-artifact | `v5.0.0` `fc324d3547104276b827a68afc52ff2a11cc49c9` |
+| deploy-pages | `v5.0.0` `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128` |
+| Transitive Pages upload | `actions/upload-artifact` `v7.0.0` `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f` |
+
+`gradle/actions` v6.3.0 remains unused because its default cache provider
+is a separate commercial component with a Terms of Use gate.
 
 ## Publishing artifacts later
 

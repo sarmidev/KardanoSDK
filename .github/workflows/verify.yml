@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run restricted-claim and archive regression tests
         run: >-
           python3 -m unittest
@@ -29,12 +29,23 @@ jobs:
         # path exclusions live in scripts/check_restricted_claims.py.
         run: python3 scripts/check_restricted_claims.py
 
+  action-pin-scan:
+    name: Action SHA-pin scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Run action-pin regression tests
+        run: python3 -m unittest scripts.tests.test_check_action_pins
+      - name: Verify workflow Action pins and composite metadata
+        run: python3 scripts/check_action_pins.py
+
   credential-scan:
     name: Full-history credential scan
     runs-on: ubuntu-latest
     steps:
       - name: Check out complete history
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Fetch every ref the checkout can see
@@ -56,14 +67,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up JDK
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          # Explicit v4.4.3/v5.0.2 defaults. v6 is not adopted (see
+          # docs/DEPENDENCY_REVIEW.md).
+          cache-disabled: false
+          cache-read-only: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}
+          cache-write-only: false
+          cache-cleanup: on-success
       - name: Run portable JVM tests
         run: >-
           ./gradlew --no-daemon
@@ -86,14 +104,21 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up JDK
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "17"
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          # Explicit v4.4.3/v5.0.2 defaults. v6 is not adopted (see
+          # docs/DEPENDENCY_REVIEW.md).
+          cache-disabled: false
+          cache-read-only: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}
+          cache-write-only: false
+          cache-cleanup: on-success
       - name: Run macOS signing-path JVM tests
         run: >-
           ./gradlew --no-daemon
