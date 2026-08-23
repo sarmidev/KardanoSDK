@@ -167,6 +167,16 @@ def remap_pairs(
             if sdk_path and not sdk_path.startswith("xcrun:"):
                 pairs.append((Path(sdk_path.splitlines()[0]), f"/sdk/{sdk}"))
     pairs.append((Path.home(), "/home/rebuild"))
+    # GitHub-hosted Ubuntu roots that are not always the repo or cargo-target.
+    runner_temp = os.environ.get("RUNNER_TEMP")
+    if runner_temp:
+        pairs.append((Path(runner_temp), "/runner-temp"))
+    runner_workspace = os.environ.get("RUNNER_WORKSPACE")
+    if runner_workspace:
+        pairs.append((Path(runner_workspace), "/runner-workspace"))
+    github_workspace = os.environ.get("GITHUB_WORKSPACE")
+    if github_workspace:
+        pairs.append((Path(github_workspace), "/kardano"))
 
     resolved: list[tuple[str, str]] = []
     seen: set[str] = set()
@@ -235,6 +245,7 @@ def rustflags_linux_jvm(pairs: list[tuple[str, str]]) -> list[str]:
     """Native x86_64-unknown-linux-gnu flags. No macOS cross-link, no rpath."""
     return [
         *rustflags_common(pairs),
+        "--remap-cwd-prefix=/kardano/crypto-signing-backend",
         "-Cdebuginfo=0",
         "-Cstrip=symbols",
         f"-Clink-arg=-Wl,-soname,{STABLE_LINUX_SONAME}",

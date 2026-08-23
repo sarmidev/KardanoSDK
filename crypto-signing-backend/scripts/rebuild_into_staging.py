@@ -834,9 +834,11 @@ def main(argv: list[str] | None = None) -> int:
             return rc
     except FileNotFoundError as error:
         print(f"rebuild failed: missing host tool: {error}", file=sys.stderr)
+        print(f"::error::rebuild failed: missing host tool: {error}", file=sys.stderr)
         return 1
     except (RebuildError, toolchain.ToolchainError) as error:
         print(f"rebuild failed: {error}", file=sys.stderr)
+        print(f"::error::rebuild failed: {error}", file=sys.stderr)
         return 1
     print(f"rebuilt {', '.join(groups)} into {staging / 'artifacts'}")
     return 0

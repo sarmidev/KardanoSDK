@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parents[1]
@@ -528,7 +529,29 @@ class ToolchainFlagTests(unittest.TestCase):
         self.assertTrue(any(toolchain.STABLE_LINUX_SONAME in item for item in flags))
         self.assertTrue(any("--build-id=none" in item for item in flags))
         self.assertTrue(any(item == "-Cdebuginfo=0" for item in flags))
+        self.assertTrue(any(item == "--remap-cwd-prefix=/kardano/crypto-signing-backend" for item in flags))
         self.assertFalse(any("rpath" in item.lower() for item in flags))
+
+    def test_remap_pairs_include_github_temp_roots(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        module = root / "crypto-signing-backend"
+        module.mkdir()
+        env = {
+            "RUNNER_TEMP": "/home/runner/work/_temp",
+            "RUNNER_WORKSPACE": "/home/runner/work/KardanoSDK",
+            "GITHUB_WORKSPACE": "/home/runner/work/KardanoSDK/KardanoSDK",
+        }
+        with mock.patch.dict("os.environ", env, clear=False):
+            pairs = toolchain.remap_pairs(
+                module_root=module,
+                cargo_target_dir=root / "cargo-target",
+                ndk_home=None,
+            )
+        dests = {dest for _src, dest in pairs}
+        self.assertIn("/runner-temp", dests)
+        self.assertIn("/runner-workspace", dests)
+        self.assertIn("/kardano", dests)
 
     def test_capture_missing_host_tool_is_empty(self) -> None:
         self.assertEqual(toolchain._capture(["__kardano_missing_xcrun__"]), "")

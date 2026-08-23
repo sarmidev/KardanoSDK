@@ -174,6 +174,8 @@ ALLOWED_REMAP_PREFIXES = (
     "/rustup",  # RUSTUP_HOME
     "/cargo",  # CARGO_HOME
     "/home/rebuild",  # $HOME
+    "/runner-temp",  # GHA RUNNER_TEMP (not always under the repo)
+    "/runner-workspace",  # GHA RUNNER_WORKSPACE
 )
 
 NM_DEFINED_FUNC_TYPES = frozenset({"T", "W"})

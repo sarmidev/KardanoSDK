@@ -245,7 +245,8 @@ and section file ranges, duplicate singleton dynamic tags, and
 `.debug_*` / `.zdebug_*` / `.gnu_debuglink` material. `nm` corroboration
 uses `--defined-only --format=posix` exact records, not substring
 search. Remapped prefixes that may appear are `/cargo-target`,
-`/kardano`, `/rustc`, `/rustup`, `/cargo`, and `/home/rebuild` only.
+`/kardano`, `/rustc`, `/rustup`, `/cargo`, `/home/rebuild`,
+`/runner-temp`, and `/runner-workspace` only.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)
