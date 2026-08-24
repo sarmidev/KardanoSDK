@@ -322,3 +322,25 @@ On `fix/native-build-and-platform-evidence`:
   Linux ARM, musl, and older glibc remain out of scope. Windows x86-64
   JVM is candidate-only (`win32-x86-64/`, `windows-2022`) and is not a
   CHECKSUMS row.
+
+## 8. Addendum — 2026-08-24, legal-evidence packet (non-counsel scope)
+
+Prompt 7's legal-evidence work landed on `fix/native-build-and-platform-evidence`
+at `c65a20a` and after: root `NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`,
+and generated inventories under `docs/evidence/`
+(`scripts/generate_legal_evidence.py`, checked by
+`scripts/check_release_evidence.py`). This addendum **does not** change any
+finding above, does not certify anything, and does not mark this audit,
+Prompt 7, or any release as GO.
+
+- The 9-row `crypto-signing-backend/CHECKSUMS.sha256` state described in §7
+  above is unchanged by this addendum; the legal-evidence packet cross-checks
+  that exact 9-row set (not 8, not 10) and fails closed on any drift.
+- The Windows x86-64 JVM candidate remains exactly as described in §7:
+  candidate-only, not a CHECKSUMS row, not distributed. This addendum adds an
+  explicit statement of that fact to `docs/THIRD_PARTY_NOTICES.md` and
+  `docs/LEGAL_REVIEW.md` §9; it does not change the gate.
+- Upstream `hyperledger-identus/apollo` issue #226 (no published
+  `win32-x86-64` build) remains open and unresolved by this addendum.
+- Owner/counsel review of `docs/LEGAL_REVIEW.md` has not occurred; that field
+  is recorded as an explicit open gate, not a passed check.

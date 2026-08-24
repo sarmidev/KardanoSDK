@@ -6,7 +6,13 @@ tag plus release notes that identify the source revision, verified targets, and 
 ## Before the first public release
 
 1. Confirm the copyright owner named in `LICENSE`.
-2. Complete the third-party notice review in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+2. Complete the third-party notice review in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+   the root `NOTICE` and `LICENSES/` texts, and the evidence checklist in
+   [LEGAL_REVIEW.md](LEGAL_REVIEW.md). Regenerate `docs/evidence/` with
+   `python3 scripts/generate_legal_evidence.py` and confirm
+   `python3 scripts/check_release_evidence.py` passes. None of these is legal
+   advice or counsel approval; `LEGAL_REVIEW.md` records the counsel gate as
+   open until an actual reviewer signs off.
 3. Verify repository history contains no API keys, real mnemonics, private keys, or live-fund
    addresses. Run `python3 scripts/check_gitleaks.py` after
    `python3 scripts/install_gitleaks.py`. This does not replace an owner-authenticated
@@ -143,6 +149,25 @@ Before a release that changes a catalog version, regenerate lock
 state and verification metadata, review the generated diff, and keep
 `Cargo.lock` matched to the exact `Cargo.toml` pins. Do not rewrite
 generated checksums by hand.
+
+## Legal-evidence packet (Prompt 7)
+
+`docs/LEGAL_REVIEW.md` is a distribution-evidence checklist and template for
+owner/counsel review — never a legal opinion, never a release approval.
+Regenerate and check it before any release-candidate review:
+
+```bash
+python3 scripts/generate_legal_evidence.py   # writes docs/evidence/*
+python3 scripts/check_release_evidence.py     # fails closed on drift/placeholders
+python3 -m unittest discover -s scripts/tests -p "test_*.py"
+```
+
+The checker fails if: a `NOTICE`/`LICENSES/` reference is broken; the native
+inventory does not exactly match `crypto-signing-backend/CHECKSUMS.sha256`
+(9 rows); any `docs/evidence/*.json` file is stale relative to the current
+tracked tree; or `docs/LEGAL_REVIEW.md` contains a generic placeholder
+instead of a named, falsifiable open-gate marker. A passing run is evidence
+hygiene, not a release decision.
 
 ## Publishing artifacts later
 

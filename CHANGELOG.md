@@ -191,6 +191,25 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - Public landing page hash targets (`#approach`, `#try-the-playground`, and the other section
   ids) reserve space under the sticky header via one `scroll-padding-top` offset
   (`--anchor-scroll-offset`), raised at the 860px and 560px breakpoints when header/nav wrap.
+- A distribution legal-evidence packet (Prompt 7, non-counsel scope): root `NOTICE`,
+  `LICENSES/` (verbatim Apache-2.0, MPL-2.0, ISC, and Bouncy Castle license texts fetched
+  2026-08-24 from each project's own canonical URL; see `LICENSES/README.md` for source/
+  checksum), `docs/LEGAL_REVIEW.md` (an owner/counsel evidence checklist and template — not
+  legal advice, not approval), and deterministic generated inventories under `docs/evidence/`
+  (`scripts/generate_legal_evidence.py`): per-module Gradle source/runtime/test-only
+  classification from `*/gradle.lockfile`, `cargo metadata --locked` for the signing backend,
+  the committed UniFFI-generated binding files, an exact 9-artifact
+  `crypto-signing-backend/CHECKSUMS.sha256` cross-check, and a static Maven-native-carrier
+  catalog (Identus/IonSpin/LazySodium/libsodium). `scripts/check_release_evidence.py` fails
+  closed on a broken `NOTICE`/`LICENSES/` reference, a native-inventory mismatch, stale
+  generated evidence, or a generic placeholder in `docs/LEGAL_REVIEW.md`. `docs/
+  THIRD_PARTY_NOTICES.md` is reconciled with the locked graph (JNA and the `ed25519-bip32`/
+  `cryptoxide` dual licenses now record an explicit Apache-2.0 election; the `uniffi` crate's
+  MPL-2.0 file-level obligation is reviewed the same way as `lazysodium-android`) and states
+  explicitly that the Windows signing-backend candidate DLL and the Identus `apollo`
+  derivation-backend Windows native library are **not** distributed. This packet does not
+  mark Prompt 7, the Windows candidate, or any release as GO; both the counsel review and
+  upstream `hyperledger-identus/apollo` issue #226 remain open gates.
 
 ### Changed
 

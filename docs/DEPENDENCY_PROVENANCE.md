@@ -11,6 +11,16 @@ test is recorded only as enforcement evidence.
 Windows-classified artifacts are not in this record. Prompt 7 owns
 Windows runner support.
 
+**2026-08-24 addendum.** Prompt 7's legal-evidence packet
+(`docs/LEGAL_REVIEW.md`, `docs/evidence/`) generates a deterministic,
+regenerable Gradle/Cargo dependency inventory from the same lockfiles/
+`Cargo.lock` this page cites — see
+`docs/evidence/gradle_dependency_inventory.json` and
+`docs/evidence/cargo_dependency_inventory.json`. That inventory classifies
+coordinates into source/runtime/test-only/build-tooling buckets; it does not
+re-verify publisher checksums (that remains this page's job) and it is not
+legal advice.
+
 ## Method
 
 1. Read the SHA-256 value from `gradle/verification-metadata.xml`.

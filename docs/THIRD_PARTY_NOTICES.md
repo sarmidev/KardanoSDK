@@ -4,6 +4,34 @@ Kardano SDK source files are licensed under Apache-2.0. Dependencies, generated 
 prebuilt native artifacts remain subject to their own licences. This page is an initial inventory,
 not a replacement for a release-time dependency and notice review.
 
+**2026-08-24 reconciliation (Prompt 7 legal-evidence packet).** This page is
+now cross-referenced against generated, deterministic inventories rather than
+narrative-only claims:
+
+- Root [`NOTICE`](../NOTICE) and [`LICENSES/`](../LICENSES/README.md) hold the
+  verbatim license texts and per-component attribution for every license
+  actually used below.
+- [`docs/LEGAL_REVIEW.md`](LEGAL_REVIEW.md) is the owner/counsel evidence
+  checklist (not legal advice, not approval).
+- [`docs/evidence/`](evidence/) holds the generated Gradle/Cargo/UniFFI/
+  native-artifact/Maven-native-carrier inventories
+  (`scripts/generate_legal_evidence.py`), checked for internal consistency by
+  `scripts/check_release_evidence.py`.
+- JNA 5.19.1 (`Apache-2.0 OR LGPL-2.1`) and the `ed25519-bip32`/`cryptoxide`
+  Rust crates (`MIT OR Apache-2.0`, compiled into all 9 committed
+  `crypto-signing-backend` native artifacts) are **dual-licensed**; Kardano
+  SDK elects **Apache-2.0** for this distribution for all three (see
+  `docs/LEGAL_REVIEW.md` §5).
+- The `uniffi` Rust crate (`=0.29.5`, single-license MPL-2.0, not dual) is
+  also compiled into all 9 committed native artifacts, alongside the
+  first-party `ed25519-bip32` wrapper code. Its MPL-2.0 file-level obligation
+  is reviewed in `docs/LEGAL_REVIEW.md` §6, same as `lazysodium-android`.
+- **Not distributed, stated explicitly:** the Windows x86-64 JVM
+  signing-backend candidate DLL and the Identus `apollo` derivation-backend
+  Windows native library are both **not** part of any Kardano SDK release
+  artifact. See "Windows candidate and Identus derivation DLL are not
+  distributed" below.
+
 ## Directly documented components
 
 Each row's "Kind" marks whether the component is a **source** dependency (compiled from/against
@@ -26,9 +54,9 @@ libsodium rows below); that is noted per row rather than forcing one label.
 | IonSpin libsodium bindings (`com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings`) | Source + redistributed native binary | JVM/iOS public-key projection | **Apache-2.0** (confirmed 2026-08-23 by fetching the published `LICENSE` at `github.com/ionspin/kotlin-multiplatform-libsodium`, copyright 2019 Ugljesa Jovanovic). Its JVM artifact bundles compiled `libsodium` (the upstream C library) binaries directly for macOS/Linux/Windows (confirmed by inspecting the actual `.jar`: `libdynamic-macos.dylib`, `libdynamic-linux-{arm64,x86-64}-libsodium.so`, `libdynamic-msvc-x86-64-libsodium.dll`) — see the separate `libsodium` row below for that binary's own licence. |
 | LazySodium Android (`com.goterl:lazysodium-android`) | Source + redistributed native binary | Android public-key projection | **Mozilla Public License 2.0 (MPL-2.0)** (confirmed 2026-08-23 via the GitHub API's `license` metadata and the published `LICENSE.md` at `github.com/terl/lazysodium-android`, matching the artifact's own Maven Central POM `<licenses>` block). MPL-2.0 is **file-level, not whole-program, copyleft**: §3.2 requires that the covered *source form* remain available under MPL-2.0 terms and that recipients be told how to obtain it — since Kardano SDK does not modify `lazysodium-android`'s own source, this is satisfied by directing recipients to the upstream repository above; it does **not** require Kardano SDK's own source to be released under MPL-2.0. Its Android `.aar` also bundles a compiled `libsodium.so` per ABI (confirmed by inspecting the actual artifact) — see the `libsodium` row below. |
 | `libsodium` (C library; not a direct Gradle dependency) | Redistributed native binary only | Bundled, compiled, inside both the IonSpin JVM artifact and the LazySodium Android artifact above (confirmed by inspecting both artifacts' contents: symbol names and embedded strings match the upstream `jedisct1/libsodium` project) | **ISC License** (confirmed 2026-08-23 by fetching the published `LICENSE` at `github.com/jedisct1/libsodium`, copyright 2013-2026 Frank Denis) — a short, permissive, MIT-equivalent licence. |
-| JNA 5.19.1 | Source | JVM/native signing backend loading | Apache-2.0 OR LGPL-2.1 |
-| `ed25519-bip32` Rust crate | Source | Project-owned signing wrapper | MIT OR Apache-2.0 |
-| UniFFI Rust crate | Source | Generated signing backend bindings | MPL-2.0 |
+| JNA 5.19.1 | Source | JVM/native signing backend loading | Apache-2.0 OR LGPL-2.1 (Kardano SDK elects **Apache-2.0**; see `docs/LEGAL_REVIEW.md` §5) |
+| `ed25519-bip32` Rust crate (0.4.2) and its transitive `cryptoxide` dependency (0.5.3) | Source + compiled into all 9 committed native artifacts | Project-owned signing wrapper's cryptographic primitive | MIT OR Apache-2.0 (Kardano SDK elects **Apache-2.0** for this distribution) |
+| `uniffi` Rust crate (`=0.29.5`) | Source + compiled into all 9 committed native artifacts | Generated signing backend bindings; single-license (no OR clause) | **MPL-2.0** (file-level copyleft; see `docs/LEGAL_REVIEW.md` §6 — same obligation review as `lazysodium-android` above) |
 | Gobley UniFFI bindgen | Source (build-time only) | Offline generation tool only | Apache-2.0 OR MIT |
 | JUnit | Test-only | JVM test framework | Eclipse Public License 2.0 |
 | Gitleaks CLI `v8.30.1` | CI-only (not redistributed) | Full-history credential scan. Installed by `scripts/install_gitleaks.py` after verifying the official release checksums file. Not a GitHub Action wrapper. | MIT |
@@ -58,19 +86,50 @@ artifact/repository inspection.
 | Kardano SDK icon mark (light/dark variants, low/medium/high resolution PNGs) | Sarmidev (project owner) | First-party artwork, not a third-party component. Derived files — the Android adaptive-icon/legacy launcher PNGs (including the monochrome adaptive layer traced from the adaptive foreground alpha), the iOS `AppIcon` PNGs, the Desktop `.icns`/`.ico`/`.png` icons, the Compose header mark (`kardano_mark_light.png`/`kardano_mark_dark.png`), and the `site/assets/brand/` web derivatives (`kardano-mark-light.png`/`kardano-mark-dark.png` copies, plus `favicon-32.png`/`favicon-64.png`/`apple-touch-icon.png`/`og-image.png` resize/pad-only derivatives, added for the public landing page) — are resized/padded/composited copies of these two source PNGs, added in Block 1.12-pre-d and extended for the landing page. It is not the Kotlin or Cardano logo. |
 | Linux x86-64 signing cdylib (`linux-x86-64/libkardano_ed25519_bip32_signing.so`) | First-party (in-tree `crypto-signing-backend` crate) | Committed JNA resource promoted from `ubuntu-22.04` run `32678079715` (SHA-256 `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`). Not a third-party redistributed binary. Scope is Linux x86-64 / glibc >= 2.35. |
 
+## Windows candidate and Identus derivation DLL are not distributed
+
+Two Windows-related native artifacts are explicitly **not** part of any
+Kardano SDK release artifact, and neither is in
+`crypto-signing-backend/CHECKSUMS.sha256`:
+
+1. **Kardano's own Windows x86-64 JVM signing-backend candidate**
+   (`win32-x86-64/kardano_ed25519_bip32_signing.dll`). It has a technical GO
+   on native-artifact (PE-structure) evidence in
+   `.github/workflows/windows-jvm-rebuild-evidence.yml`, but promotion is
+   withheld pending independent PE re-review and upstream issue #226 below.
+   See `crypto-signing-backend/README.md` "Windows x86-64 — candidate-only".
+2. **The Identus `apollo` derivation-backend native library's Windows
+   build.** `org.hyperledger.identus:bip32-ed25519` 1.8.8 ships Android `.so`
+   natives per ABI but has not published a `win32-x86-64` build upstream
+   (tracked as `hyperledger-identus/apollo` issue #226). Kardano SDK cannot
+   distribute what upstream has not built; `:crypto`/`:wallet` JVM tests that
+   would exercise this backend on Windows remain blocked by that upstream gap,
+   not by a Kardano SDK decision.
+
+Both gates are cross-referenced, not restated with different wording, in
+`docs/LEGAL_REVIEW.md` §9/§11 and `docs/HANDOFF.md`.
+
 ## Release-time checklist
 
 Before publishing a binary, Maven artifact, app bundle, or other distribution:
 
-1. Generate or obtain a dependency licence report for all Gradle runtime artifacts.
-2. Review the `Cargo.lock` dependency graph for the Rust signing backend.
-3. Preserve notices required by redistributed native artifacts and generated bindings.
+1. Generate or obtain a dependency licence report for all Gradle runtime artifacts — see
+   `docs/evidence/gradle_dependency_inventory.json` for the deterministic, locked-graph
+   starting point (source/runtime/test-only per module).
+2. Review the `Cargo.lock` dependency graph for the Rust signing backend — see
+   `docs/evidence/cargo_dependency_inventory.json` (`cargo metadata --locked`).
+3. Preserve notices required by redistributed native artifacts and generated bindings — see
+   root `NOTICE`, `LICENSES/`, and `docs/evidence/uniffi_bindings_inventory.json`.
 4. Verify that every copied test vector, code fragment, image, or documentation extract has an
    attribution and licence compatible with its use.
-5. Add required attribution text to the release package or a `NOTICE` file.
-6. Record the review date, release tag, and reviewer in the release notes.
+5. Add required attribution text to the release package or a `NOTICE` file — already present at
+   the repository root; re-run `python3 scripts/generate_legal_evidence.py` and
+   `python3 scripts/check_release_evidence.py` if the dependency graph changed.
+6. Record the review date, release tag, and reviewer in the release notes and in
+   `docs/LEGAL_REVIEW.md`.
 7. Re-run `python3 scripts/check_gitleaks.py` on the tagged commit (full history,
    redacted output) and keep allowlists match-level only.
 
-Do not treat this initial inventory as legal advice. Consult qualified counsel when distributing a
-commercial product or when licence obligations are unclear.
+Do not treat this initial inventory, `NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, or
+`docs/evidence/` as legal advice or as counsel approval. Consult qualified counsel when
+distributing a commercial product or when licence obligations are unclear.

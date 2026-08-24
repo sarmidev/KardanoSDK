@@ -309,6 +309,28 @@ resolved live on 2026-08-23; do not reuse SHAs from older audit notes.
 The previous pins were exact patch releases (`checkout` `v4.3.1`, not the
 moving `v4` tag).
 
+Legal-evidence packet checks (Prompt 7; not legal advice, not approval):
+
+```bash
+python3 scripts/generate_legal_evidence.py
+python3 scripts/generate_legal_evidence.py   # run twice; expect zero diff
+git diff --quiet docs/evidence
+python3 scripts/check_release_evidence.py
+python3 -m unittest scripts.tests.test_generate_legal_evidence scripts.tests.test_check_release_evidence
+```
+
+`scripts/generate_legal_evidence.py` reads only already-locked/committed
+state (`*/gradle.lockfile`, `cargo metadata --locked` against
+`crypto-signing-backend/Cargo.lock`, the committed UniFFI-generated Kotlin
+bindings, and `crypto-signing-backend/CHECKSUMS.sha256`) and writes
+deterministic JSON/text under `docs/evidence/`; it never embeds absolute
+paths, timestamps, or hostnames. `scripts/check_release_evidence.py` fails
+closed if a `NOTICE`/`LICENSES/` cross-reference is broken, the native
+inventory does not match `CHECKSUMS.sha256` exactly (9 rows), any
+`docs/evidence/*.json` file is stale relative to the current tree, or
+`docs/LEGAL_REVIEW.md` contains a generic placeholder instead of a named
+open-gate marker.
+
 Dependency lock and verification (regenerate only when coordinates
 change; do not hand-edit generated checksums):
 

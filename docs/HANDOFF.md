@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`. Phase C is NO-GO pending PE re-review and Identus #226. |
+| 7 | `fix/native-build-and-platform-evidence` | Legal-evidence packet | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`. Phase C is NO-GO pending PE re-review and Identus #226. Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -103,6 +103,38 @@ Stacked remediations, each additive (no amend / no force-push):
 
 Date: 2026-08-24
 
+- **Legal-evidence packet (non-counsel scope) on
+  `fix/native-build-and-platform-evidence`, starting from clean tip
+  `c65a20a`.** Added root `NOTICE`; `LICENSES/` (verbatim `Apache-2.0.txt`,
+  `MPL-2.0.txt`, `ISC-libsodium.txt`, `BouncyCastle.txt`, each fetched
+  2026-08-24 from its own canonical URL — see `LICENSES/README.md` for
+  source/SHA-256); `docs/LEGAL_REVIEW.md` (an owner/counsel evidence
+  checklist and template, not legal advice or approval); and deterministic
+  generated inventories under `docs/evidence/`
+  (`scripts/generate_legal_evidence.py`): per-module Gradle
+  source/runtime/test-only classification from `*/gradle.lockfile`,
+  `cargo metadata --locked` for the signing backend (69 packages, 63 linked
+  into the native artifacts, 0 dev-only), the 5 committed UniFFI-generated
+  binding files, an exact 9-row `crypto-signing-backend/CHECKSUMS.sha256`
+  cross-check, and a static Maven-native-carrier catalog
+  (Identus/IonSpin/LazySodium/libsodium). `scripts/check_release_evidence.py`
+  (25 new unit tests plus a live run) fails closed on a broken
+  `NOTICE`/`LICENSES/` reference, a native-inventory mismatch, stale
+  generated evidence, or a generic placeholder in `docs/LEGAL_REVIEW.md`; it
+  passed on this tree. `docs/THIRD_PARTY_NOTICES.md` is reconciled: JNA and
+  the `ed25519-bip32`/`cryptoxide` dual licenses (`Apache-2.0 OR
+  LGPL-2.1`/`MIT OR Apache-2.0`) now record an explicit Apache-2.0 election;
+  the single-license `uniffi` crate's MPL-2.0 file-level obligation (linked
+  into all 9 native artifacts) is reviewed the same way as
+  `lazysodium-android`; and the page states explicitly that the Windows
+  signing-backend candidate DLL and the Identus `apollo` derivation-backend
+  Windows native library are **not** distributed. `RELEASING.md`,
+  `TESTING.md`, `CHANGELOG.md`, and `docs/AUDIT/2026-08-23-final-pre-release-audit.md`
+  §8 point at the new packet without restating or changing any prior
+  finding. **This work does not mark Prompt 7, the Windows candidate, or any
+  release as GO.** Counsel review and upstream `hyperledger-identus/apollo`
+  issue #226 remain open gates, recorded as such (not as "TBD") in
+  `docs/LEGAL_REVIEW.md`.
 - **Gate 3 Windows x86-64 JVM (candidate-only) on
   `fix/native-build-and-platform-evidence`.** Linux promotion GO at
   `58f82a2`. JNA 5.19.1 resource is
