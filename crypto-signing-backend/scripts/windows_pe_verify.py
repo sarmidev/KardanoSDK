@@ -181,6 +181,9 @@ ALLOWED_IMPORT_DLLS = frozenset(
         "api-ms-win-crt-utility-l1-1-0.dll",
         "api-ms-win-crt-process-l1-1-0.dll",
         "api-ms-win-crt-conio-l1-1-0.dll",
+        # Observed on windows-2022 rustc 1.97.0 MSVC candidate A/B
+        # (run 32713976878); not guessed.
+        "api-ms-win-core-synch-l1-2-0.dll",
     }
 )
 
@@ -561,7 +564,9 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
         raise PeError("duplicate import DLL name")
     unexpected = [name for name in dll_names if name not in ALLOWED_IMPORT_DLLS]
     if unexpected:
-        raise PeError(f"unexpected import DLL(s): {unexpected}")
+        raise PeError(
+            f"unexpected import DLL(s): {unexpected}; observed={sorted(dll_names)}"
+        )
     for item in imports:
         if not item.functions:
             raise PeError(f"import DLL {item.name} has no named functions")
