@@ -108,8 +108,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   not promoted. PE-policy rerun `32719231997` at `7f2cc78` reproduced
   the same SHA-256 (artifacts A `9517151698` / B `9517151682` /
   report `9517246164`, expire 2026-09-07). Those Windows artifacts
-  are superseded by the next independent A/B after the PE/SDK
-  containment fixes; do not reuse them for re-review.
+  are superseded by run `32722013030` at `6e5bb97` (artifacts A
+  `9518136145` / B `9518130568` / report `9518237120`, expire
+  2026-09-07; same SHA-256). Do not reuse the older IDs for
+  re-review.
   `:crypto-signing-backend:jvmTest` is the Windows KAT in this
   workflow; `:crypto`/`:wallet` JVM tests still need the identus
   derivation wrapper's missing Windows native.

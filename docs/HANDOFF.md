@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Prior PE Phase B (`7f2cc78` / `32719231997`, docs tip `bc98c2a` / `32720083778`) is superseded. Phase C promotion is NO-GO pending PE re-review and Identus #226. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Fresh PE A/B at `6e5bb97` / run `32722013030` supersedes `32719231997` / `32720083778`. Phase C promotion is NO-GO pending PE re-review and Identus #226. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -123,8 +123,24 @@ Date: 2026-08-24
   recorded and is not an immutable-image claim. CHECKSUMS stays 9
   rows. Prior PE Phase B artifacts (`32719231997` at `7f2cc78`;
   `32720083778` at `bc98c2a`) are superseded and must not be reused
-  for re-review. Fresh A/B + `:crypto-signing-backend:jvmTest` IDs
-  are recorded after this push. `:crypto`/`:wallet` JVM tests remain
+  for re-review. Fresh independent A/B at `6e5bb97` / run
+  [32722013030](https://github.com/sarmidev/KardanoSDK/actions/runs/32722013030):
+  A==B SHA-256
+  `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`
+  (263680 bytes; same candidate bytes as `32715104620`). Artifacts A
+  `9518136145`, B `9518130568`, report `9518237120`, expire
+  2026-09-07. Sign export RVA `0x42c0` (ordinal 67). Selected
+  toolchain on the runner: MSVC `14.44.35207`
+  `Hostx64/x64` `link.exe` Version `14.44.35228.0`; Windows SDK
+  `10.0.26100.0` (`Include`/`Lib`/`bin` asserted);
+  `ImageOS=win22`; `ImageVersion=20260818.277.1`.
+  `:crypto-signing-backend:jvmTest` BUILD SUCCESSFUL. Linux
+  [32722013015](https://github.com/sarmidev/KardanoSDK/actions/runs/32722013015),
+  Native
+  [32722013073](https://github.com/sarmidev/KardanoSDK/actions/runs/32722013073),
+  Verify
+  [32722012993](https://github.com/sarmidev/KardanoSDK/actions/runs/32722012993)
+  were green at `6e5bb97`. `:crypto`/`:wallet` JVM tests remain
   blocked by `bip32-ed25519` 1.8.8 missing `win32-x86-64` (Identus
   #226). Identus is not being built. Phase C promotion is NO-GO
   pending independent PE re-review. Do not merge/tag,
