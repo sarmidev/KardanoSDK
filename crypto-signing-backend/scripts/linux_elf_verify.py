@@ -47,11 +47,13 @@ Policy (documented, not a strength claim):
   ``STB_WEAK`` unversioned import. Undefined ``STB_GLOBAL`` imports
   must not use 0. Base indices greater than 1 resolve uniquely to one
   ``vna_other`` or one ``vd_ndx``. Every ``vna_other`` is globally
-  unique across files. Dynsym entry 0 is the canonical null symbol.
+  unique across files. Every ``vd_ndx`` is unique, even when the name
+  and flags match. Dynsym entry 0 is the canonical null symbol.
   ``readelf --version-info`` index maps and ``readelf --dyn-syms --wide``
   sign records must match exactly (``--wide`` avoids 80-column wraps).
-  The required sign export is
-  unhidden and uses global/unversioned or a matching Verdef
+  The required sign export is unhidden, never a Vernaux/import, and
+  its readelf ``@``/``@@``/``(index)`` fields must match the parsed
+  Versym base/hidden state and resolved Verdef.
 - ELF64 arithmetic uses ``UINT64_MAX``; ``_checked_add`` / ``_checked_mul``
   reject negatives and sums that exceed ``UINT64_MAX``
 - raw-byte searches catch every documented forbidden build root at any
@@ -144,6 +146,8 @@ ELF64_VERSYM_SIZE = 2
 ELF64_VERDEF_SIZE = 20
 ELF64_VERDAUX_SIZE = 8
 VER_DEF_CURRENT = 1
+VER_FLG_BASE = 0x1
+VER_FLG_WEAK = 0x2
 VER_NDX_LOCAL = 0
 VER_NDX_GLOBAL = 1
 VERSYM_HIDDEN = 0x8000
@@ -334,6 +338,21 @@ class ReadelfDynsymRecord:
     ndx: str
     version: str | None
     version_index: int | None = None
+    version_default: bool | None = None
+
+
+@dataclass(frozen=True)
+class VerdefInfo:
+    name: str
+    flags: int = 0
+
+
+@dataclass(frozen=True)
+class SignVersymState:
+    raw: int
+    base: int
+    hidden: bool
+    verdef: VerdefInfo | None = None
 
 
 @dataclass
@@ -359,7 +378,8 @@ class ElfRecord:
     documented_glibc_baseline: str = DOCUMENTED_GLIBC_BASELINE_LABEL
     versym_values: list[int] = field(default_factory=list)
     verneed_indices: dict[int, str] = field(default_factory=dict)
-    verdef_indices: dict[int, str] = field(default_factory=dict)
+    verdef_indices: dict[int, VerdefInfo] = field(default_factory=dict)
+    sign_versym: SignVersymState | None = None
 
 
 def _u16(data: bytes, offset: int) -> int:
@@ -1016,11 +1036,16 @@ def parse_readelf_dynsym_records(text: str) -> list[ReadelfDynsymRecord]:
                 f"readelf --dyn-syms line {line_no} is missing a symbol name"
             )
         version = None
+        version_default = None
         name = raw_name
         if "@@" in raw_name:
             name, version = raw_name.split("@@", 1)
+            version_default = True
         elif "@" in raw_name:
             name, version = raw_name.split("@", 1)
+            version_default = False
+        if version is not None and not version:
+            raise ElfError(f"readelf --dyn-syms line {line_no} is missing a version name")
         raw_index = match.group(9)
         records.append(
             ReadelfDynsymRecord(
@@ -1031,6 +1056,7 @@ def parse_readelf_dynsym_records(text: str) -> list[ReadelfDynsymRecord]:
                 ndx=match.group(7),
                 version=version,
                 version_index=int(raw_index) if raw_index is not None else None,
+                version_default=version_default,
             )
         )
     return records
@@ -1038,7 +1064,7 @@ def parse_readelf_dynsym_records(text: str) -> list[ReadelfDynsymRecord]:
 
 def require_exact_sign_readelf(
     records: list[ReadelfDynsymRecord],
-    verdef_indices: dict[int, str],
+    sign_versym: SignVersymState,
 ) -> ReadelfDynsymRecord:
     matches = [item for item in records if item.name == SIGN_SYMBOL]
     if not matches:
@@ -1056,28 +1082,46 @@ def require_exact_sign_readelf(
         )
     if record.ndx == "UND" or not record.ndx.isdigit():
         raise ElfError(f"{SIGN_SYMBOL} readelf section {record.ndx!r} is not a defined section")
-    if record.version is not None and record.version not in verdef_indices.values():
+    if sign_versym.verdef is None and sign_versym.base != VER_NDX_GLOBAL:
+        raise ElfError(f"{SIGN_SYMBOL} parser versym {sign_versym.base} is not global or a Verdef")
+    if sign_versym.base == VER_NDX_GLOBAL:
+        if record.version is not None or record.version_index is not None:
+            raise ElfError(
+                f"readelf --dyn-syms {SIGN_SYMBOL} is versioned but the parser "
+                "versym is unversioned global"
+            )
+        return record
+    verdef = sign_versym.verdef
+    if verdef is None:
+        raise ElfError(f"{SIGN_SYMBOL} parser versym {sign_versym.base} has no resolved Verdef")
+    if record.version is None and record.version_index is None:
+        raise ElfError(
+            f"readelf --dyn-syms {SIGN_SYMBOL} is unversioned but the parser "
+            f"versym is {sign_versym.base}"
+        )
+    if record.version is None or record.version_index is None:
+        raise ElfError(
+            f"readelf --dyn-syms {SIGN_SYMBOL} is missing a GNU version suffix or index"
+        )
+    if record.version != verdef.name:
         raise ElfError(
             f"readelf --dyn-syms {SIGN_SYMBOL} version {record.version!r} "
-            "is not a parsed Verdef name"
+            f"does not match Verdef {verdef.name!r}"
         )
-    if record.version_index is not None:
-        if record.version is None:
-            if record.version_index != VER_NDX_GLOBAL:
-                raise ElfError(
-                    f"readelf --dyn-syms {SIGN_SYMBOL} version index "
-                    f"{record.version_index} is not global"
-                )
-        elif record.version_index not in verdef_indices:
-            raise ElfError(
-                f"readelf --dyn-syms {SIGN_SYMBOL} version index "
-                f"{record.version_index} is not a parsed Verdef"
-            )
-        elif verdef_indices[record.version_index] != record.version:
-            raise ElfError(
-                f"readelf --dyn-syms {SIGN_SYMBOL} version index "
-                f"{record.version_index} does not match {record.version!r}"
-            )
+    if record.version_index != sign_versym.base:
+        raise ElfError(
+            f"readelf --dyn-syms {SIGN_SYMBOL} version index "
+            f"{record.version_index} does not match parser versym {sign_versym.base}"
+        )
+    expect_default = not sign_versym.hidden
+    if record.version_default is None:
+        raise ElfError(f"readelf --dyn-syms {SIGN_SYMBOL} is missing a @/@@ version marker")
+    if record.version_default != expect_default:
+        raise ElfError(
+            f"readelf --dyn-syms {SIGN_SYMBOL} version marker "
+            f"{'@@' if record.version_default else '@'} does not match "
+            f"hidden={sign_versym.hidden} flags={verdef.flags:#x}"
+        )
     return record
 
 
@@ -1456,7 +1500,12 @@ def parse_elf64_le_x86_64_dso(
             record.verneed_indices,
             record.verdef_indices,
         )
-        _require_sign_versym(parsed_symbols, record.versym_values, record.verdef_indices)
+        record.sign_versym = _require_sign_versym(
+            parsed_symbols,
+            record.versym_values,
+            record.verneed_indices,
+            record.verdef_indices,
+        )
 
     record.forbidden_paths = scan_linux_forbidden_paths(data, extra_forbidden_roots)
     if record.forbidden_paths:
@@ -1513,15 +1562,17 @@ def _register_need_index(need_indices: dict[int, str], index: int, name: str) ->
     need_indices[index] = name
 
 
-def _register_def_index(def_indices: dict[int, str], index: int, name: str) -> None:
+def _register_def_index(def_indices: dict[int, VerdefInfo], index: int, info: VerdefInfo) -> None:
     _reject_reserved_version_index(index, "vd_ndx")
-    existing = def_indices.get(index)
-    if existing is not None and existing != name:
-        raise ElfError(f"duplicate vd_ndx {index} for {existing!r} and {name!r}")
-    def_indices[index] = name
+    if index in def_indices:
+        existing = def_indices[index]
+        raise ElfError(f"duplicate vd_ndx {index} ({existing.name!r} / {info.name!r})")
+    def_indices[index] = info
 
 
-def _check_need_def_collisions(need_indices: dict[int, str], def_indices: dict[int, str]) -> None:
+def _check_need_def_collisions(
+    need_indices: dict[int, str], def_indices: dict[int, VerdefInfo]
+) -> None:
     overlap = set(need_indices) & set(def_indices)
     if overlap:
         raise ElfError(f"version index collision between Verneed and Verdef: {sorted(overlap)}")
@@ -1549,7 +1600,7 @@ def _resolve_versym(
     symbols: list[DynSymbol],
     raw_values: list[int],
     need_indices: dict[int, str],
-    def_indices: dict[int, str],
+    def_indices: dict[int, VerdefInfo],
 ) -> None:
     if len(raw_values) != len(symbols):
         raise ElfError(".gnu.version count does not equal dynsym count")
@@ -1600,7 +1651,12 @@ def _resolve_versym(
                 raise ElfError(f"{SIGN_SYMBOL} versym {base} is not global or a Verdef")
 
 
-def _require_sign_versym(symbols: list[DynSymbol], raw_values: list[int], def_indices: dict[int, str]) -> None:
+def _require_sign_versym(
+    symbols: list[DynSymbol],
+    raw_values: list[int],
+    need_indices: dict[int, str],
+    def_indices: dict[int, VerdefInfo],
+) -> SignVersymState:
     matches = [index for index, item in enumerate(symbols) if item.name == SIGN_SYMBOL]
     if not matches:
         raise ElfError(f"{SIGN_SYMBOL} is not exported")
@@ -1612,13 +1668,13 @@ def _require_sign_versym(symbols: list[DynSymbol], raw_values: list[int], def_in
         raise ElfError(f"{SIGN_SYMBOL} versym is hidden")
     if base == VER_NDX_UNSPECIFIED:
         raise ElfError(f"{SIGN_SYMBOL} versym is unresolved")
+    if base in need_indices:
+        raise ElfError(f"{SIGN_SYMBOL} resolves to a Vernaux")
     if base != VER_NDX_GLOBAL and base not in def_indices:
         raise ElfError(f"{SIGN_SYMBOL} versym {base} is not global or a matching Verdef")
-    if base != VER_NDX_GLOBAL and base in def_indices:
-        return
     if base == VER_NDX_GLOBAL:
-        return
-    raise ElfError(f"{SIGN_SYMBOL} uses an import version")
+        return SignVersymState(raw=raw, base=base, hidden=hidden, verdef=None)
+    return SignVersymState(raw=raw, base=base, hidden=hidden, verdef=def_indices[base])
 
 
 def _parse_verneed(
@@ -1753,7 +1809,7 @@ def _parse_verdef(
     verdef_vaddr: int,
     verdef_num: int,
     dynstr,
-) -> dict[int, str]:
+) -> dict[int, VerdefInfo]:
     if verdef_num <= 0 or verdef_num > MAX_VERDEF:
         raise ElfError(f"DT_VERDEFNUM {verdef_num} is missing or exceeds MAX_VERDEF")
     section = _require_unique_named_type(sections, ".gnu.version_d", SHT_GNU_VERDEF)
@@ -1778,7 +1834,7 @@ def _parse_verdef(
 
     visited: set[int] = set()
     occupied: list[tuple[int, int]] = []
-    def_indices: dict[int, str] = {}
+    def_indices: dict[int, VerdefInfo] = {}
     cursor = mapped
     walked = 0
     for index in range(verdef_num):
@@ -1788,6 +1844,7 @@ def _parse_verdef(
         _claim_range(occupied, cursor, ELF64_VERDEF_SIZE, "Elf64_Verdef")
         visited.add(cursor)
         vd_version = _u16(data, cursor)
+        vd_flags = _u16(data, cursor + 2)
         vd_ndx = _u16(data, cursor + 4)
         vd_cnt = _u16(data, cursor + 6)
         vd_aux = _u32(data, cursor + 12)
@@ -1823,7 +1880,7 @@ def _parse_verdef(
                 if nxt <= aux:
                     raise ElfError("vda_next is not a positive forward offset")
                 aux = nxt
-        _register_def_index(def_indices, vd_ndx, first_name)
+        _register_def_index(def_indices, vd_ndx, VerdefInfo(name=first_name, flags=vd_flags))
         walked += 1
         last_vd = index + 1 == verdef_num
         if last_vd:
@@ -1925,9 +1982,11 @@ def verify_linux_x86_64_cdylib(
         dynsyms = _run([readelf_bin, "--dyn-syms", "--wide", str(path)])
         if dynsyms.returncode != 0:
             raise ElfError(f"readelf --dyn-syms --wide exited {dynsyms.returncode}")
+        if record.sign_versym is None:
+            raise ElfError(f"{SIGN_SYMBOL} parser versym state is missing")
         require_exact_sign_readelf(
             parse_readelf_dynsym_records((dynsyms.stdout or "") + (dynsyms.stderr or "")),
-            record.verdef_indices,
+            record.sign_versym,
         )
     if nm_bin:
         completed = _run(

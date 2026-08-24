@@ -80,10 +80,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `0..UINT64_MAX` and sums that overflow; raw known-root matches
   require a following `/`, path stop, or EOF. Versym 0 is limited to
   the null dynsym entry, `STB_LOCAL`, and undefined `STB_WEAK`;
-  `vna_other` is globally unique; `readelf` index maps and dynsym
-  sign records must match exactly. Fresh Phase B at `b59009d` is run
-  `32676885035` (success; artifacts expire 2026-09-07; not
-  downloaded). Runs `32675120131` and `32675524925` are superseded.
+  `vna_other` is globally unique; every `vd_ndx` is unique even when
+  the name matches; `readelf` sign records must match the parsed
+  sign Versym (`@@`/`@`/`(index)`). Runs `32676885035` and
+  `32677333260` are superseded.
   The ninth CHECKSUMS row is added only after that re-review is GO.
   Linux ARM, musl, older glibc, and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and

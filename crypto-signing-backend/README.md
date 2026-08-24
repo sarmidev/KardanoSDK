@@ -252,21 +252,15 @@ exact records, not substring search. Every `.gnu.version` entry is
 parsed; the hidden bit is split from the base index; indices greater
 than 1 resolve uniquely to a Vernaux `vna_other` (undefined) or a
 Verdef `vd_ndx` (defined). `vna_other` is globally unique across
-files. Versym 0 is only for dynsym entry 0, `STB_LOCAL`, or the
-undefined `STB_WEAK` unversioned import. Dynsym entry 0 is the
-canonical null symbol. `readelf --version-info` index maps and
-`readelf --dyn-syms --wide` sign records must match exactly. The sign
-export is unhidden and global/unversioned or a matching Verdef.
+files. Every `vd_ndx` is unique even when the name and flags match.
+Versym 0 is only for dynsym entry 0, `STB_LOCAL`, or the undefined
+`STB_WEAK` unversioned import. Dynsym entry 0 is the canonical null
+symbol. `readelf --dyn-syms --wide` sign records must match the
+parsed sign Versym (unversioned global vs Verdef name/`@@`/`@`/
+`(index)`). The sign export is unhidden and never a Vernaux.
 ELF64 add/mul checks operands against `UINT64_MAX` before summing.
-Fresh Phase B at `b59009d` is run `32676885035` (A/B + compare + JVM
-KAT success on `ubuntu-22.04`). Artifacts `linux-jvm-candidate-a`
-(id `9502949155`, expires 2026-09-07T00:31:06Z),
-`linux-jvm-candidate-b` (id `9502949717`, expires
-2026-09-07T00:31:09Z), and `linux-jvm-compare-report` (id
-`9502995719`, expires 2026-09-07T00:34:12Z) are not downloaded and
-not promoted. Verify `32676885074` and native `32676885086` were
-green at that tip. Runs `32675120131` and `32675524925` are
-superseded.
+Runs `32676885035` and `32677333260` are superseded; a fresh Phase B
+at this verifier tip is required before any CHECKSUMS row.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)
