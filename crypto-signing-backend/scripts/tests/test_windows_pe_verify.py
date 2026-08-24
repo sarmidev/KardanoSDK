@@ -71,6 +71,7 @@ def build_pe(
     delay_size: int = 0,
     debug_rva: int = 0,
     debug_size: int = 0,
+    debug_type: int | None = None,
     cert_rva: int = 0,
     cert_size: int = 0,
     embed: bytes = b"",
@@ -159,6 +160,11 @@ def build_pe(
 
     if embed:
         place(embed + b"\x00")
+
+    if debug_type is not None:
+        entry = struct.pack("<IIHHIIII", 0, 0, 0, 0, debug_type, 0, 0, 0)
+        debug_rva = place(entry, 4)
+        debug_size = pe.IMAGE_DEBUG_DIRECTORY_SIZE
 
     directories = [(0, 0)] * 16
     directories[pe.DIR_EXPORT] = (export_rva, export_size)
@@ -255,6 +261,8 @@ class ValidImageTests(unittest.TestCase):
         hashed = _write(build_pe(timestamp=0xA1B2C3D4))
         hashed_record = pe.verify_windows_x86_64_dll(hashed, require_tools=False)
         self.assertEqual(hashed_record.timestamp, 0xA1B2C3D4)
+        repro = _write(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO))
+        pe.verify_windows_x86_64_dll(repro, require_tools=False)
 
 
 class AdversarialHeaderTests(unittest.TestCase):
@@ -352,6 +360,10 @@ class AdversarialDebugCertPathTests(unittest.TestCase):
     def test_debug_certificate_pdb_and_host_paths(self) -> None:
         with self.assertRaises(pe.PeError):
             pe.parse_pe32_plus_x86_64_dll(build_pe(debug_rva=0x2000, debug_size=16))
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_CODEVIEW))
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=1))
         with self.assertRaises(pe.PeError):
             pe.parse_pe32_plus_x86_64_dll(build_pe(cert_rva=0x400, cert_size=8))
         path = _write(build_pe(embed=b"C:\\Users\\runneradmin\\work\\x"))

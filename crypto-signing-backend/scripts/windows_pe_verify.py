@@ -25,10 +25,11 @@ Policy (documented, not a strength claim):
 - import DLLs are a non-empty subset of the rustc 1.97 MSVC system
   allowlist (case-insensitive); delay-load and Authenticode directories
   are empty; no unexpected import names
-- no debug directory, no ``RSDS``/``.pdb``, no embedded workspace/home/temp
-  roots; COFF ``TimeDateStamp`` is recorded. VS 2022 ``/Brepro`` emits a
-  deterministic hash stamp, not necessarily 0; A==B is the reproducibility
-  gate
+- no CODEVIEW/PDB debug directory, no ``RSDS``/``.pdb``, no embedded
+  workspace/home/temp roots. ``/Brepro`` may emit ``IMAGE_DEBUG_TYPE_REPRO``
+  (and other non-PDB MSVC metadata types). COFF ``TimeDateStamp`` is
+  recorded; VS 2022 ``/Brepro`` may emit a hash, not 0; A==B is the
+  reproducibility gate
 - subsystem ``IMAGE_SUBSYSTEM_WINDOWS_GUI`` as rustc 1.97.0 + MSVC
   emit for this cdylib; DLL characteristics include ``DYNAMIC_BASE``
   and ``NX_COMPAT`` and only the documented extra bits
@@ -114,6 +115,23 @@ OPTIONAL_HEADER64_SIZE = 240
 SECTION_HEADER_SIZE = 40
 EXPORT_DIRECTORY_SIZE = 40
 IMPORT_DESCRIPTOR_SIZE = 20
+IMAGE_DEBUG_DIRECTORY_SIZE = 28
+IMAGE_DEBUG_TYPE_CODEVIEW = 2
+IMAGE_DEBUG_TYPE_VC_FEATURE = 12
+IMAGE_DEBUG_TYPE_POGO = 13
+IMAGE_DEBUG_TYPE_ILTCG = 14
+IMAGE_DEBUG_TYPE_REPRO = 16
+IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS = 20
+# rustc 1.97 + VS 2022 /DEBUG:NONE /Brepro. CODEVIEW/PDB is refused.
+ALLOWED_DEBUG_TYPES = frozenset(
+    {
+        IMAGE_DEBUG_TYPE_REPRO,
+        IMAGE_DEBUG_TYPE_VC_FEATURE,
+        IMAGE_DEBUG_TYPE_POGO,
+        IMAGE_DEBUG_TYPE_ILTCG,
+        IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS,
+    }
+)
 DATA_DIRECTORY_SIZE = 8
 UINT32_MAX = 0xFFFFFFFF
 UINT64_MAX = 0xFFFFFFFFFFFFFFFF
@@ -340,6 +358,38 @@ def _require_empty_directory(directories: list[DataDirectory], index: int, label
         raise PeError(f"{label} data directory must be empty")
 
 
+def _require_debug_directory(
+    data: bytes, sections: list[Section], entry: DataDirectory
+) -> None:
+    if entry.rva == 0 and entry.size == 0:
+        return
+    if entry.rva == 0 or entry.size == 0:
+        raise PeError("debug data directory is truncated")
+    if entry.size % IMAGE_DEBUG_DIRECTORY_SIZE != 0:
+        raise PeError("debug data directory size is not a multiple of 28")
+    count = entry.size // IMAGE_DEBUG_DIRECTORY_SIZE
+    if count == 0 or count > 16:
+        raise PeError("debug data directory entry count is out of range")
+    base = rva_to_offset(sections, entry.rva, entry.size)
+    for index in range(count):
+        off = _checked_add(base, _checked_mul(index, IMAGE_DEBUG_DIRECTORY_SIZE, limit=UINT32_MAX))
+        debug_type = _u32(data, off + 12)
+        size_of_data = _u32(data, off + 16)
+        address_of_raw = _u32(data, off + 20)
+        pointer_to_raw = _u32(data, off + 24)
+        if debug_type == IMAGE_DEBUG_TYPE_CODEVIEW:
+            raise PeError("CODEVIEW/PDB debug directory is not allowed")
+        if debug_type not in ALLOWED_DEBUG_TYPES:
+            raise PeError(f"unexpected debug directory type {debug_type}")
+        if size_of_data:
+            if pointer_to_raw:
+                end = _checked_add(pointer_to_raw, size_of_data, limit=len(data))
+                if end > len(data):
+                    raise PeError("debug payload PointerToRawData is out of range")
+            elif address_of_raw:
+                rva_to_offset(sections, address_of_raw, size_of_data)
+
+
 def parse_elf_style_ranges(ranges: list[tuple[int, int]], label: str) -> None:
     ordered = sorted(ranges)
     for index, (start, end) in enumerate(ordered):
@@ -486,7 +536,7 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
         raise PeError("unexpected overlay/trailing data after last section")
 
     _require_empty_directory(directories, DIR_SECURITY, "Authenticode/certificate")
-    _require_empty_directory(directories, DIR_DEBUG, "debug")
+    _require_debug_directory(data, sections, directories[DIR_DEBUG])
     _require_empty_directory(directories, DIR_ARCHITECTURE, "architecture")
     _require_empty_directory(directories, DIR_GLOBALPTR, "global pointer")
     _require_empty_directory(directories, DIR_BOUND_IMPORT, "bound import")

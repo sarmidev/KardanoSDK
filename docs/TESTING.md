@@ -235,8 +235,10 @@ CHECKSUMS row. Promoted from run `32678079715` (artifacts
 twice on pinned `windows-2022` (ImageOS `win22`, not `windows-latest`),
 records OS/MSVC/dumpbin evidence, compares SHA-256 + PE32+ reports
 (AMD64, PE32+, `IMAGE_FILE_DLL`, exact sign export, allowlisted
-imports, empty delay-load/debug/Authenticode, recorded `/Brepro`
-`TimeDateStamp` (VS 2022 may emit a hash, not 0; A==B is the gate),
+imports, empty delay-load/Authenticode, no CODEVIEW/PDB, recorded
+`/Brepro` `TimeDateStamp` and allowed non-PDB debug metadata
+(VS 2022 may emit a hash stamp and `IMAGE_DEBUG_TYPE_REPRO`; A==B
+is the gate),
 `DYNAMIC_BASE`+`NX_COMPAT`, no overlay), then runs the same four
 `jvmTest` tasks via `gradlew.bat`. The DLL is placed only on the
 runner JNA path for those tests. Permissions stay `contents: read`.
