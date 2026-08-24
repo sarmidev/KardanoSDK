@@ -479,6 +479,119 @@ class CompletedElectionWordingDetectionTests(unittest.TestCase):
             errors = checker.check_no_completed_election_wording()
         self.assertEqual(len(errors), 2)
 
+    # -- Gap 3 (2026-08-24 final round): grammar-local negation, not a
+    # fixed-width lookback window. -----------------------------------
+
+    def _errors_for(self, text: str) -> list[str]:
+        path = self._watch_single_file(text)
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            return checker.check_no_completed_election_wording()
+
+    def test_negation_before_a_clause_boundary_does_not_exempt_the_next_clause(self) -> None:
+        # A `:` separates the negation clause from the affirmative one --
+        # the negation must not leak across that boundary. This exact
+        # sentence matches TWO phrases ("is the elected" AND "elected
+        # branch" both appear in "it is the elected branch"), so both must
+        # be reported, neither exempted.
+        errors = self._errors_for("Not final: it is the elected branch.\n")
+        self.assertEqual(len(errors), 2)
+        joined = " ".join(errors)
+        self.assertIn("is the elected", joined)
+        self.assertIn("elected branch", joined)
+
+    def test_negation_before_a_semicolon_does_not_exempt_the_next_clause(self) -> None:
+        errors = self._errors_for("This is not rejected; SDK elects Apache.\n")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sdk elects", errors[0])
+
+    def test_negation_before_a_colon_does_not_exempt_election_is_accepted(self) -> None:
+        errors = self._errors_for("Not disputed: election is accepted today.\n")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("election is accepted", errors[0])
+
+    def test_negation_in_a_separate_sentence_does_not_exempt(self) -> None:
+        errors = self._errors_for(
+            "This is not the final word on anything. SDK elects Apache-2.0 outright.\n"
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sdk elects", errors[0])
+
+    def test_negation_in_a_separate_markdown_list_item_does_not_exempt(self) -> None:
+        errors = self._errors_for(
+            "- Not accepted anywhere in this document.\n"
+            "- SDK elects Apache-2.0 for every dual-licensed component.\n"
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sdk elects", errors[0])
+
+    def test_negation_in_a_separate_paragraph_does_not_exempt(self) -> None:
+        errors = self._errors_for(
+            "No claims here are final.\n\n"
+            "Apache-2.0 has elected status as the redistributed license.\n"
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("has elected", errors[0])
+
+    def test_contraction_negation_in_same_clause_is_allowed_only_via_explicit_pattern(self) -> None:
+        # A contraction ("isn't", "wasn't") in the SAME clause as the
+        # phrase is still not one of the explicit allowed disclaimer
+        # patterns, so it must still fail -- the fix is an explicit
+        # allowlist, not a generic negation-word scan that would have
+        # accidentally exempted this too.
+        errors = self._errors_for("This election is accepted, though it isn't final yet.\n")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("election is accepted", errors[0])
+
+    def test_case_insensitivity_of_both_phrase_and_disclaimer(self) -> None:
+        errors = self._errors_for("SDK ELECTS APACHE-2.0 FOR THIS DISTRIBUTION.\n")
+        self.assertEqual(len(errors), 1)
+        errors = self._errors_for(
+            "NO ELECTION IS ACCEPTED UNTIL REVIEWER, DATE, AND STATUS ARE RECORDED.\n"
+        )
+        self.assertEqual(errors, [])
+
+    def test_markdown_emphasis_and_code_spans_around_disclaimer_still_exempt(self) -> None:
+        errors = self._errors_for(
+            "But `none of those elections is yet` **ACCEPTED** -- each remains "
+            "an OPEN row pending reviewer, ISO-8601 date, and status.\n"
+        )
+        self.assertEqual(errors, [])
+
+    def test_real_notice_style_not_yet_accepted_disclaimer_is_allowed(self) -> None:
+        errors = self._errors_for(
+            "Kardano SDK proposes electing Apache-2.0 for this distribution, but "
+            "that election is not yet ACCEPTED -- see docs/LEGAL_REVIEW.md.\n"
+        )
+        self.assertEqual(errors, [])
+
+    def test_real_third_party_notices_style_none_yet_accepted_disclaimer_is_allowed(self) -> None:
+        errors = self._errors_for(
+            "for all three, but none of those elections is yet ACCEPTED -- each "
+            "remains an OPEN row.\n"
+        )
+        self.assertEqual(errors, [])
+
+    def test_disclaimer_clause_boundary_inside_parentheses_is_still_scoped_correctly(self) -> None:
+        # Mirrors the real LICENSES/README.md shape: the disclaimer clause
+        # is inside parentheses and followed by a semicolon-separated
+        # clause containing the actual "no election is accepted" text --
+        # parentheses themselves are not clause boundaries, but the
+        # semicolon before them still correctly separates this from an
+        # unrelated PRECEDING clause.
+        errors = self._errors_for(
+            "This clause is not relevant; it is the proposed election (not yet "
+            "ACCEPTED -- each remains OPEN; no election is accepted until all "
+            "three are recorded).\n"
+        )
+        self.assertEqual(errors, [])
+
+    def test_multiple_clauses_one_offending_one_disclaimed(self) -> None:
+        errors = self._errors_for(
+            "No election is accepted today. SDK elects Apache-2.0 regardless.\n"
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sdk elects", errors[0])
+
 
 class CargoElectionSchemaTests(unittest.TestCase):
     def _report(self, rows: list[dict], mandatory_count: int, accepted_count: int) -> dict:
@@ -1244,6 +1357,101 @@ class CargoInventoryHostAmbiguousFreshnessTests(unittest.TestCase):
         committed = self._committed_payload_with_election_row()
         fresh = copy.deepcopy(committed)
         fresh["license_elections"]["rows"] = list(reversed(fresh["license_elections"]["rows"]))
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    # -- Gap 2 (2026-08-24 final round): the comparison must preserve
+    # dictionary insertion order too (no `sort_keys`, no Python dict
+    # `==`/`!=`), not just list order. Python dict equality ignores key
+    # order entirely, so these prove the fix is a real byte/structure
+    # comparison, not the previous `normalized(fresh) != normalized(committed)`
+    # bare dict inequality. --------------------------------------------
+
+    def _add_known_errno_diff_preserving_order(self, payload: dict) -> dict:
+        """Like `_add_known_errno_diff`, but inserts errno's package id
+        WITHOUT `sorted()` re-imposing alphabetical order on the rest of
+        the list -- needed for fixtures (like
+        `_committed_payload_with_three_unrelated_packages`) whose list is
+        deliberately NOT already alphabetical, so this class's dict-order
+        tests below exercise a genuine relative-order match, not an
+        accidental artifact of `sorted()`.
+        """
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        payload = copy.deepcopy(payload)
+        linked = payload["membership_by_target"][triple]["linked_into_compiled_artifact"]
+        if pkg_id not in linked:
+            linked.insert(0, pkg_id)
+        errno_pkg = next(p for p in payload["packages"] if p["name"] == "errno")
+        errno_pkg["membership"][triple] = ["linked_into_compiled_artifact"]
+        return payload
+
+    def test_exact_canonical_order_on_both_sides_matches(self) -> None:
+        # Sanity check: identical key/list order on both sides (mirroring
+        # what check_evidence_is_freshly_regenerable now feeds this
+        # function -- both reloaded through the SAME sort_keys=True
+        # canonical dump) must still match when only the documented errno
+        # diff differs.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = self._add_known_errno_diff_preserving_order(committed)
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertTrue(matches, detail)
+
+    def test_reversed_keys_in_an_unrelated_package_dict_fails(self) -> None:
+        # Same keys, same values, reversed INSERTION order within one
+        # unrelated package's own dict -- Python dict `==` would call
+        # this identical; the fix must not.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = self._add_known_errno_diff_preserving_order(committed)
+        serde_pkg = next(p for p in fresh["packages"] if p["name"] == "zzz-crate")
+        reversed_pkg = dict(reversed(list(serde_pkg.items())))
+        self.assertEqual(reversed_pkg, serde_pkg)  # same by Python dict equality
+        fresh["packages"][fresh["packages"].index(serde_pkg)] = reversed_pkg
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches, detail)
+
+    def test_reversed_keys_in_an_unrelated_election_row_fails(self) -> None:
+        committed = self._committed_payload_with_election_row()
+        fresh = self._add_known_errno_diff_with_row(committed)
+        serde_row = next(r for r in fresh["license_elections"]["rows"] if r["name"] == "serde")
+        reversed_row = dict(reversed(list(serde_row.items())))
+        self.assertEqual(reversed_row, serde_row)
+        fresh["license_elections"]["rows"][fresh["license_elections"]["rows"].index(serde_row)] = reversed_row
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches, detail)
+
+    def test_reversed_keys_in_a_nested_membership_by_target_dict_fails(self) -> None:
+        # Reverses the key order of the nested per-target dict itself
+        # (membership_by_target[other_triple]), two levels deep.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = self._add_known_errno_diff(committed)
+        other_triple = "aarch64-apple-darwin"
+        nested = fresh["membership_by_target"][other_triple]
+        reversed_nested = dict(reversed(list(nested.items())))
+        self.assertEqual(reversed_nested, nested)
+        fresh["membership_by_target"][other_triple] = reversed_nested
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches, detail)
+
+    def test_reversed_top_level_keys_fails(self) -> None:
+        # Reverses the top-level payload dict's own key order (with the
+        # documented errno diff still present) -- a full-tree key reorder
+        # that has zero effect under Python dict equality.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = self._add_known_errno_diff(committed)
+        fresh = dict(reversed(list(fresh.items())))
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches, detail)
+
+    def test_reversed_keys_alongside_the_known_errno_diff_still_fails(self) -> None:
+        # The known, tolerated errno diff is present AND an unrelated
+        # dict's key order is separately reversed -- the reversal alone
+        # must still cause a failure; the errno exception must never
+        # mask it.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = self._add_known_errno_diff(committed)
+        aaa_pkg = next(p for p in fresh["packages"] if p["name"] == "aaa-crate")
+        fresh["packages"][fresh["packages"].index(aaa_pkg)] = dict(reversed(list(aaa_pkg.items())))
         matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
         self.assertFalse(matches)
 

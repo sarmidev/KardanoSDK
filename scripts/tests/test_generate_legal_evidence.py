@@ -669,22 +669,126 @@ class NativeCarrierValidationTests(unittest.TestCase):
         self.assertEqual(len(report["carriers"]), 1)
 
 
+import struct as _struct  # noqa: E402
+
+
+def _build_fat_macho(magic: bytes, bits: int, endian: str, arches: list[dict]) -> bytes:
+    """Build a structurally-valid fat/universal Mach-O fixture for one of
+    the four magic variants, with real, boundedly-consistent arch entries
+    (no overlap, all contained, header-adjacent-or-later offsets)."""
+    entry_size = 20 if bits == 32 else 32
+    header_end = 8 + len(arches) * entry_size
+    fmt = (">" if endian == "big" else "<") + ("iiIII" if bits == 32 else "iiQQII")
+    header = magic + len(arches).to_bytes(4, endian)
+    entries = b""
+    for arch in arches:
+        if bits == 32:
+            entries += _struct.pack(
+                fmt, arch["cputype"], arch.get("cpusubtype", 0), arch["offset"], arch["size"], arch.get("align", 0)
+            )
+        else:
+            entries += _struct.pack(
+                fmt,
+                arch["cputype"],
+                arch.get("cpusubtype", 0),
+                arch["offset"],
+                arch["size"],
+                arch.get("align", 0),
+                0,
+            )
+    total_len = max(header_end, max(a["offset"] + a["size"] for a in arches))
+    buf = bytearray(total_len)
+    buf[: len(header) + len(entries)] = header + entries
+    for i, arch in enumerate(arches):
+        buf[arch["offset"] : arch["offset"] + arch["size"]] = bytes([0xAB]) * arch["size"]
+    return bytes(buf)
+
+
+def _one_arch_fat_macho(magic: bytes, bits: int, endian: str, cputype: int) -> bytes:
+    entry_size = 20 if bits == 32 else 32
+    header_end = 8 + entry_size
+    return _build_fat_macho(
+        magic, bits, endian, [{"cputype": cputype, "offset": header_end, "size": 16, "align": 4}]
+    )
+
+
+def _build_pe(
+    machine: int = 0x8664,
+    num_sections: int = 1,
+    size_optional_header: int = 224,
+    e_lfanew: int = 64,
+    signature: bytes = b"PE\x00\x00",
+    truncate_to: int | None = None,
+) -> bytes:
+    """Build a structurally-valid (unless deliberately perturbed) minimal
+    PE/COFF fixture: full 64-byte DOS header, exact `e_lfanew`, `"PE\\0\\0"`,
+    a 20-byte COFF header, and a section table sized from `num_sections`.
+    """
+    dos = b"MZ" + b"\x00" * 58 + e_lfanew.to_bytes(4, "little")
+    padding = b"\x00" * max(0, e_lfanew - len(dos))
+    coff = _struct.pack("<HHIIIHH", machine, num_sections, 0, 0, 0, size_optional_header, 0)
+    optional = b"\x00" * size_optional_header
+    sections = b"\x00" * (num_sections * 40)
+    data = dos + padding + signature + coff + optional + sections
+    if truncate_to is not None:
+        data = data[:truncate_to]
+    return data
+
+
+def _build_xcoff(bits: int, nscns: int = 1, opthdr: int = 0, truncate_to: int | None = None) -> bytes:
+    """Build a structurally-valid (unless deliberately perturbed) minimal
+    XCOFF32/XCOFF64 fixture."""
+    if bits == 32:
+        header = (
+            b"\x01\xdf" + nscns.to_bytes(2, "big") + b"\x00" * 4 + b"\x00" * 4 + b"\x00" * 4
+            + opthdr.to_bytes(2, "big") + b"\x00" * 2
+        )
+        scnhdr_size = 40
+    else:
+        header = (
+            b"\x01\xf7" + nscns.to_bytes(2, "big") + b"\x00" * 4 + b"\x00" * 8
+            + opthdr.to_bytes(2, "big") + b"\x00" * 2 + b"\x00" * 4
+        )
+        scnhdr_size = 72
+    data = header + b"\x00" * opthdr + b"\x00" * (nscns * scnhdr_size)
+    if truncate_to is not None:
+        data = data[:truncate_to]
+    return data
+
+
 class NativeMemberDetectionTests(unittest.TestCase):
-    """`classify_native_member_signal()` -- Gap 4: magic-byte discovery
-    regardless of filename extension, with fail-closed extension/content
-    mismatch detection and explicit Java `.class`/fat-Mach-O disambiguation.
+    """`classify_native_member_signal()` -- Gap 4 (original round) plus the
+    2026-08-24 final round's structural-validation requirement: fat
+    Mach-O/PE/XCOFF magic bytes alone are never sufficient, every one of
+    those three formats gets a full bounded structural parse, and a
+    magic-prefixed member that fails that parse is a hard
+    `"malformed_native_magic"` failure (never silently `"not_native"`),
+    except the one documented Java `.class` collision.
     """
 
     ELF = b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 8
-    PE = b"MZ\x90\x00\x03\x00\x00\x00" + b"\x00" * 8
     MACHO_THIN_64 = b"\xcf\xfa\xed\xfe\x0c\x00\x00\x01" + b"\x00" * 8
     MACHO_THIN_32 = b"\xce\xfa\xed\xfe\x07\x00\x00\x00" + b"\x00" * 8
     AR = b"!<arch>\n" + b"fake-object-bytes"
-    XCOFF32 = b"\x01\xdf" + b"\x00" * 14
-    XCOFF64 = b"\x01\xf7" + b"\x00" * 14
-    # Fat/universal Mach-O with a plausible nfat_arch (2) -- empirically
-    # matches the real IonSpin libsodium universal .dylib.
-    FAT_MACHO = b"\xca\xfe\xba\xbe\x00\x00\x00\x02" + b"\x00" * 8
+
+    X86_64 = 0x01000007
+    ARM64 = 0x0100000C
+
+    PE = staticmethod(_build_pe)
+    XCOFF32 = _build_xcoff(32)
+    XCOFF64 = _build_xcoff(64)
+    # Fat/universal Mach-O with a plausible nfat_arch (2), real allowlisted
+    # cputypes, and non-overlapping contained slices -- empirically matches
+    # the real IonSpin libsodium universal .dylib's shape (arm64+x86-64).
+    FAT_MACHO = _build_fat_macho(
+        b"\xca\xfe\xba\xbe",
+        32,
+        "big",
+        [
+            {"cputype": X86_64, "offset": 48, "size": 32, "align": 4},
+            {"cputype": ARM64, "offset": 80, "size": 32, "align": 4},
+        ],
+    )
     # Genuine Java .class file: CAFEBABE + minor_version=0 + major_version
     # 52 (JDK 8) -- empirically matches androidx.annotation-jvm's real
     # .class files. Major version is always far outside a plausible
@@ -695,7 +799,7 @@ class NativeMemberDetectionTests(unittest.TestCase):
         self.assertEqual(evidence.classify_native_member_signal("libfoo.so", self.ELF), "native")
         self.assertEqual(evidence.classify_native_member_signal("jni/x86/libfoo.so", self.ELF), "native")
         self.assertEqual(evidence.classify_native_member_signal("foo.dylib", self.MACHO_THIN_64), "native")
-        self.assertEqual(evidence.classify_native_member_signal("foo.dll", self.PE), "native")
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", _build_pe()), "native")
         self.assertEqual(evidence.classify_native_member_signal("foo.jnilib", self.MACHO_THIN_32), "native")
         self.assertEqual(evidence.classify_native_member_signal("foo.a", self.AR), "native")
         # AIX XCOFF object masquerading as a `.a` -- real shape of JNA's
@@ -741,7 +845,7 @@ class NativeMemberDetectionTests(unittest.TestCase):
 
     def test_extensionless_member_with_native_magic_is_native(self) -> None:
         self.assertEqual(evidence.classify_native_member_signal("payload", self.ELF), "native")
-        self.assertEqual(evidence.classify_native_member_signal("payload", self.PE), "native")
+        self.assertEqual(evidence.classify_native_member_signal("payload", _build_pe()), "native")
         self.assertEqual(evidence.classify_native_member_signal("payload", self.AR), "native")
 
     def test_extensionless_member_without_native_magic_is_not_native(self) -> None:
@@ -753,7 +857,7 @@ class NativeMemberDetectionTests(unittest.TestCase):
                 self.assertEqual(evidence.classify_native_member_signal(name, self.ELF), "native")
 
     def test_renamed_pe_with_misleading_extension_is_native(self) -> None:
-        self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.PE), "native")
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", _build_pe()), "native")
 
     def test_renamed_thin_macho_with_misleading_extension_is_native(self) -> None:
         self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.MACHO_THIN_64), "native")
@@ -763,6 +867,10 @@ class NativeMemberDetectionTests(unittest.TestCase):
 
     def test_renamed_ar_with_misleading_extension_is_native(self) -> None:
         self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.AR), "native")
+
+    def test_renamed_xcoff_with_misleading_extension_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.XCOFF32), "native")
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.XCOFF64), "native")
 
     def test_fat_macho_arch_count_outside_plausible_range_is_not_native(self) -> None:
         # 0x63 = 99: far above MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT and also
@@ -775,6 +883,289 @@ class NativeMemberDetectionTests(unittest.TestCase):
     def test_truncated_magic_prefix_is_not_native(self) -> None:
         self.assertEqual(evidence.classify_native_member_signal("payload", b"\xca\xfe"), "not_native")
         self.assertEqual(evidence.classify_native_member_signal("payload.so", b"\x7f"), "extension_magic_mismatch")
+
+    # -- Gap 1 (2026-08-24 final round): all four fat-Mach-O magic variants,
+    # full structural validation, renamed-member coverage, and every
+    # documented malformed shape. --------------------------------------
+
+    FAT_MACHO_VARIANTS = (
+        (b"\xca\xfe\xba\xbe", 32, "big"),  # FAT_MAGIC
+        (b"\xbe\xba\xfe\xca", 32, "little"),  # FAT_CIGAM
+        (b"\xca\xfe\xba\xbf", 64, "big"),  # FAT_MAGIC_64
+        (b"\xbf\xba\xfe\xca", 64, "little"),  # FAT_CIGAM_64
+    )
+
+    def test_all_four_fat_macho_magic_variants_with_valid_structure_are_native(self) -> None:
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex(), bits=bits, endian=endian):
+                data = _one_arch_fat_macho(magic, bits, endian, self.X86_64)
+                self.assertEqual(evidence.classify_native_member_signal("libfoo.dylib", data), "native")
+                # Renamed/extensionless -- must still be discovered by magic.
+                self.assertEqual(evidence.classify_native_member_signal("payload.dat", data), "native")
+                self.assertEqual(evidence.classify_native_member_signal("payload", data), "native")
+
+    def test_all_four_fat_macho_variants_with_two_non_overlapping_arches_are_native(self) -> None:
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex(), bits=bits, endian=endian):
+                entry_size = 20 if bits == 32 else 32
+                header_end = 8 + 2 * entry_size
+                data = _build_fat_macho(
+                    magic,
+                    bits,
+                    endian,
+                    [
+                        {"cputype": self.X86_64, "offset": header_end, "size": 16, "align": 4},
+                        {"cputype": self.ARM64, "offset": header_end + 16, "size": 16, "align": 4},
+                    ],
+                )
+                self.assertEqual(evidence.classify_native_member_signal("payload.dylib", data), "native")
+
+    def test_fat_macho_truncated_header_is_malformed(self) -> None:
+        # Real magic, but not even the 8-byte header (magic + nfat_arch)
+        # fits -- never a fallback to `not_native` except the exact
+        # CAFEBABE/Java-class collision magic, which is tested separately.
+        for magic, _bits, _endian in self.FAT_MACHO_VARIANTS[1:]:
+            with self.subTest(magic=magic.hex()):
+                self.assertEqual(
+                    evidence.classify_native_member_signal("payload", magic + b"\x00\x00\x00"),
+                    "malformed_native_magic",
+                )
+
+    def test_fat_macho_zero_arch_count_is_malformed_or_not_native(self) -> None:
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex()):
+                data = magic + (0).to_bytes(4, endian) + b"\x00" * 16
+                expected = "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
+                self.assertEqual(evidence.classify_native_member_signal("payload", data), expected)
+
+    def test_fat_macho_excess_arch_count_is_malformed_or_not_native(self) -> None:
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex()):
+                data = magic + (99).to_bytes(4, endian) + b"\x00" * 16
+                expected = "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
+                self.assertEqual(evidence.classify_native_member_signal("payload", data), expected)
+
+    def test_fat_macho_arch_table_extends_past_available_data_is_malformed(self) -> None:
+        # nfat_arch claims 2 entries, but only enough bytes for the header
+        # itself (never for the caller to actually trust the count without
+        # verifying containment).
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex()):
+                data = magic + (2).to_bytes(4, endian) + b"\x00" * 4
+                expected = "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
+                self.assertEqual(evidence.classify_native_member_signal("payload", data), expected)
+
+    def _expected_signal_for_malformed_fat_macho(self, magic: bytes) -> str:
+        # Every fat-Mach-O variant except the exact Java-`.class`-colliding
+        # magic has no legitimate innocent explanation for a structurally
+        # invalid header, so it must fail generation outright; the
+        # colliding magic alone falls back to `not_native` (see
+        # `JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC`).
+        return "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
+
+    def test_fat_macho_arch_offset_size_out_of_bounds_is_malformed(self) -> None:
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex()):
+                entry_size = 20 if bits == 32 else 32
+                header_end = 8 + entry_size
+                # Claims a slice that extends past what is actually
+                # present: build a valid-looking fixture, then truncate the
+                # payload region itself out from under the claimed size.
+                data = _build_fat_macho(magic, bits, endian, [{"cputype": self.X86_64, "offset": header_end, "size": 16}])
+                data = data[:-1]
+                self.assertEqual(
+                    evidence.classify_native_member_signal("payload", data),
+                    self._expected_signal_for_malformed_fat_macho(magic),
+                )
+
+    def test_fat_macho_arch_offset_overlaps_header_table_is_malformed(self) -> None:
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex()):
+                # offset=0 overlaps the fat header/arch-table region itself.
+                entry_size = 20 if bits == 32 else 32
+                fmt = (">" if endian == "big" else "<") + ("iiIII" if bits == 32 else "iiQQII")
+                header = magic + (1).to_bytes(4, endian)
+                if bits == 32:
+                    entry = _struct.pack(fmt, self.X86_64, 0, 0, 16, 4)
+                else:
+                    entry = _struct.pack(fmt, self.X86_64, 0, 0, 16, 4, 0)
+                data = header + entry + b"\x00" * 32
+                self.assertEqual(
+                    evidence.classify_native_member_signal("payload", data),
+                    self._expected_signal_for_malformed_fat_macho(magic),
+                )
+
+    def test_fat_macho_overlapping_arch_slices_is_malformed(self) -> None:
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex()):
+                entry_size = 20 if bits == 32 else 32
+                header_end = 8 + 2 * entry_size
+                data = _build_fat_macho(
+                    magic,
+                    bits,
+                    endian,
+                    [
+                        {"cputype": self.X86_64, "offset": header_end, "size": 32},
+                        # Second slice starts before the first one ends.
+                        {"cputype": self.ARM64, "offset": header_end + 16, "size": 16},
+                    ],
+                )
+                self.assertEqual(
+                    evidence.classify_native_member_signal("payload", data),
+                    self._expected_signal_for_malformed_fat_macho(magic),
+                )
+
+    def test_fat_macho_implausible_cputype_is_malformed(self) -> None:
+        data = _one_arch_fat_macho(b"\xca\xfe\xba\xbf", 64, "big", cputype=0x7FFFFFFF)
+        self.assertEqual(evidence.classify_native_member_signal("payload", data), "malformed_native_magic")
+
+    def test_fat_macho_implausible_align_is_malformed(self) -> None:
+        # FAT_MAGIC_64 has no Java-class collision, so an implausible
+        # `align` field must fail generation outright.
+        entry_size = 32
+        header_end = 8 + entry_size
+        data = _build_fat_macho(
+            b"\xca\xfe\xba\xbf", 64, "big", [{"cputype": self.X86_64, "offset": header_end, "size": 16, "align": 999}]
+        )
+        self.assertEqual(evidence.classify_native_member_signal("payload", data), "malformed_native_magic")
+
+    def test_fat_macho_wrong_endian_field_encoding_is_malformed_or_not_native(self) -> None:
+        # FAT_MAGIC (the exact Java-`.class`-colliding, 32-bit big-endian
+        # variant) with `nfat_arch` encoded little-endian instead of the
+        # big-endian its own magic implies produces an implausible count
+        # and must fall back to the documented `not_native` collision
+        # outcome -- never silently accepted as `"native"`.
+        colliding = b"\xca\xfe\xba\xbe" + (2).to_bytes(4, "little") + b"\x00" * 16
+        self.assertEqual(evidence.classify_native_member_signal("payload", colliding), "not_native")
+        # FAT_MAGIC_64 (no legitimate collision) with the same mistake must
+        # fail generation outright.
+        non_colliding = b"\xca\xfe\xba\xbf" + (2).to_bytes(4, "little") + b"\x00" * 32
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload", non_colliding), "malformed_native_magic"
+        )
+
+    # -- Gap 4 (2026-08-24 final round): structural PE validation. -------
+
+    def test_pe_minimal_valid_fixture_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", _build_pe()), "native")
+
+    def test_pe_multi_section_valid_fixture_is_native(self) -> None:
+        self.assertEqual(
+            evidence.classify_native_member_signal("foo.dll", _build_pe(num_sections=5)), "native"
+        )
+
+    def test_pe_ordinary_text_beginning_mz_is_malformed_not_native(self) -> None:
+        # Ordinary text that happens to start with "MZ" must not be
+        # silently accepted as native, and must not be silently dropped as
+        # not_native either -- it is a malformed claim.
+        self.assertEqual(
+            evidence.classify_native_member_signal("readme.txt", b"MZ some ordinary text, not a PE file at all"),
+            "malformed_native_magic",
+        )
+
+    def test_pe_truncated_dos_header_is_malformed(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", b"MZ\x00\x00"), "malformed_native_magic")
+
+    def test_pe_e_lfanew_before_dos_header_end_is_malformed(self) -> None:
+        data = _build_pe(e_lfanew=10)
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data), "malformed_native_magic")
+
+    def test_pe_e_lfanew_points_outside_member_is_malformed(self) -> None:
+        # A huge claimed e_lfanew with no actual data behind it (never
+        # pad/allocate to match an untrusted offset -- the checked bound
+        # must fail before any such read).
+        e_lfanew = 10_000_000
+        dos = b"MZ" + b"\x00" * 58 + e_lfanew.to_bytes(4, "little")
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", dos), "malformed_native_magic")
+
+    def test_pe_wrong_signature_is_malformed(self) -> None:
+        data = _build_pe(signature=b"XX\x00\x00")
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data), "malformed_native_magic")
+
+    def test_pe_truncated_after_signature_is_malformed(self) -> None:
+        data = _build_pe(truncate_to=68)
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data), "malformed_native_magic")
+
+    def test_pe_implausible_machine_is_malformed(self) -> None:
+        data = _build_pe(machine=0xDEAD)
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data), "malformed_native_magic")
+
+    def test_pe_zero_sections_is_malformed(self) -> None:
+        data = _build_pe(num_sections=0)
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data), "malformed_native_magic")
+
+    def test_pe_section_count_overflow_is_malformed(self) -> None:
+        # Claims far more sections than MAX_PLAUSIBLE_PE_SECTION_COUNT, with
+        # no matching bytes -- must not be trusted.
+        dos = b"MZ" + b"\x00" * 58 + (64).to_bytes(4, "little")
+        coff = _struct.pack("<HHIIIHH", 0x8664, 5000, 0, 0, 0, 224, 0)
+        data = dos + b"PE\x00\x00" + coff + b"\x00" * 224
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data), "malformed_native_magic")
+
+    def test_pe_optional_header_size_overflow_is_malformed(self) -> None:
+        # 60000 exceeds MAX_PLAUSIBLE_PE_OPTIONAL_HEADER_SIZE (512) but
+        # still fits the field's own 16-bit width.
+        data = _build_pe(size_optional_header=60_000)
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data), "malformed_native_magic")
+
+    def test_pe_section_table_extends_past_available_data_is_malformed(self) -> None:
+        data = _build_pe(num_sections=3)
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", data[:-10]), "malformed_native_magic")
+
+    def test_pe_renamed_with_misleading_extension_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", _build_pe()), "native")
+        self.assertEqual(evidence.classify_native_member_signal("payload", _build_pe()), "native")
+
+    # -- Gap 4 (2026-08-24 final round): structural XCOFF validation. ----
+
+    def test_xcoff_minimal_valid_fixtures_are_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("libfoo.a", _build_xcoff(32)), "native")
+        self.assertEqual(evidence.classify_native_member_signal("libfoo.a", _build_xcoff(64)), "native")
+
+    def test_xcoff_short_prefix_ordinary_data_is_malformed_not_native(self) -> None:
+        # Only the 2-byte magic, no room for even the minimum file header.
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload", b"\x01\xdf" + b"ordinary short data"[:4]),
+            "malformed_native_magic",
+        )
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload", b"\x01\xf7\x00\x01"),
+            "malformed_native_magic",
+        )
+
+    def test_xcoff_truncated_file_header_is_malformed(self) -> None:
+        self.assertEqual(
+            evidence.classify_native_member_signal("libfoo.a", _build_xcoff(32, truncate_to=10)),
+            "malformed_native_magic",
+        )
+        self.assertEqual(
+            evidence.classify_native_member_signal("libfoo.a", _build_xcoff(64, truncate_to=10)),
+            "malformed_native_magic",
+        )
+
+    def test_xcoff_zero_section_count_is_malformed(self) -> None:
+        self.assertEqual(
+            evidence.classify_native_member_signal("libfoo.a", _build_xcoff(32, nscns=0)),
+            "malformed_native_magic",
+        )
+
+    def test_xcoff_section_count_overflow_is_malformed(self) -> None:
+        # Claims far more sections than MAX_PLAUSIBLE_XCOFF_SECTION_COUNT,
+        # with no matching bytes -- must not be trusted.
+        header = b"\x01\xdf" + (5000).to_bytes(2, "big") + b"\x00" * 14
+        self.assertEqual(evidence.classify_native_member_signal("libfoo.a", header), "malformed_native_magic")
+
+    def test_xcoff_optional_header_size_overflow_is_malformed(self) -> None:
+        header = b"\x01\xdf" + (1).to_bytes(2, "big") + b"\x00" * 10 + (50_000).to_bytes(2, "big") + b"\x00" * 2
+        self.assertEqual(evidence.classify_native_member_signal("libfoo.a", header), "malformed_native_magic")
+
+    def test_xcoff_section_table_extends_past_available_data_is_malformed(self) -> None:
+        data = _build_xcoff(32, nscns=2)
+        self.assertEqual(evidence.classify_native_member_signal("libfoo.a", data[:-5]), "malformed_native_magic")
+
+    def test_xcoff_renamed_with_misleading_extension_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", _build_xcoff(32)), "native")
+        self.assertEqual(evidence.classify_native_member_signal("payload", _build_xcoff(64)), "native")
 
 
 class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):

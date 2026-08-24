@@ -158,6 +158,59 @@ COMPLETED_ELECTION_PHRASES = (
     "election has been accepted",
 )
 
+# Clause/sentence boundary characters used to scope negation-exemption
+# lookups (see check_no_completed_election_wording below) to the single
+# clause containing a matched phrase -- deliberately NOT commas, dashes,
+# or parentheses, since this packet's own real disclaimer sentences use
+# those inside one otherwise-legitimate clause (e.g. "not yet ACCEPTED —
+# each remains an OPEN row pending reviewer, ISO-8601 date, and status;
+# no election is accepted until all three are recorded, see ..."). A
+# negation in an earlier or later clause -- separated by one of these
+# characters -- must never exempt a match in a different clause.
+_ELECTION_WORDING_CLAUSE_BOUNDARY_RE = re.compile(r"[.;:!?\n]")
+
+# The explicit, narrow set of grammar-local disclaimer clauses this packet
+# is allowed to use when it legitimately needs to mention otherwise-
+# flagged "completed election" language while stating that the election
+# is NOT accepted. Matched against one normalized clause at a time (never
+# a bare "is there any negation word nearby" heuristic, and never the
+# whole document) -- a match anywhere else in the same clause containing
+# the flagged phrase is required, not merely a negation word appearing
+# somewhere in the document.
+ALLOWED_ELECTION_DISCLAIMER_PATTERNS = (
+    re.compile(r"\bno election (?:is|has been) accepted\b"),
+    re.compile(r"\bnone of (?:those|these) elections? is yet accepted\b"),
+    re.compile(r"\bthe proposed election is not (?:yet )?accepted\b"),
+    re.compile(r"\bthat election is not (?:yet )?accepted\b"),
+    re.compile(r"\bnot yet accepted\b"),
+)
+
+
+def _election_wording_clause_span(lowered_text: str, idx: int) -> tuple[int, int]:
+    """The `[start, end)` span of the clause containing position `idx` in
+    `lowered_text`, bounded by the nearest clause-boundary character (or
+    the start/end of the text) on either side. Replaces a previous fixed
+    24-character lookback window, which could both miss a same-clause
+    negation more than 24 characters away and wrongly absorb a negation
+    that actually belongs to an entirely separate preceding clause.
+    """
+    start = 0
+    for boundary in _ELECTION_WORDING_CLAUSE_BOUNDARY_RE.finditer(lowered_text, 0, idx):
+        start = boundary.end()
+    end_match = _ELECTION_WORDING_CLAUSE_BOUNDARY_RE.search(lowered_text, idx)
+    end = end_match.start() if end_match else len(lowered_text)
+    return start, end
+
+
+def _normalize_election_wording_clause(clause: str) -> str:
+    """Strip Markdown emphasis/code-span punctuation and collapse
+    whitespace, so `ALLOWED_ELECTION_DISCLAIMER_PATTERNS` match the same
+    regardless of `**bold**`/`` `code` ``/line-wrapping around the words
+    that actually matter.
+    """
+    normalized = clause.replace("*", "").replace("`", "")
+    return re.sub(r"\s+", " ", normalized).strip()
+
 
 def run_git(*args: str) -> str:
     import subprocess
@@ -240,6 +293,15 @@ def check_no_completed_election_wording() -> list[str]:
     language such as "elected branch" or "SDK elects" for it -- only
     "proposes electing" / "proposed election", with an explicit statement
     that the election is not yet accepted.
+
+    Detection is affirmative-language-first: every occurrence of a
+    `COMPLETED_ELECTION_PHRASES` substring is a violation UNLESS the exact
+    clause containing it (bounded by `_election_wording_clause_span`, not
+    a fixed-width lookback) matches one of the explicit, narrow
+    `ALLOWED_ELECTION_DISCLAIMER_PATTERNS`. A negation word in a different
+    clause or sentence -- even immediately before/after a
+    `.`/`;`/`:`/`!`/`?`/newline -- never exempts a match in another
+    clause.
     """
     errors: list[str] = []
     for rel_path in ELECTION_WORDING_WATCHED_FILES:
@@ -256,9 +318,10 @@ def check_no_completed_election_wording() -> list[str]:
                 if idx == -1:
                     break
                 search_start = idx + len(phrase)
-                preceding = lowered[max(0, idx - 24) : idx]
-                if re.search(r"\bno\b|\bnot\b|\bnone\b|\bn't\b", preceding):
-                    continue  # explicit negation ("no election is accepted until ...")
+                clause_start, clause_end = _election_wording_clause_span(lowered, idx)
+                clause = _normalize_election_wording_clause(lowered[clause_start:clause_end])
+                if any(pattern.search(clause) for pattern in ALLOWED_ELECTION_DISCLAIMER_PATTERNS):
+                    continue  # exact grammar-local disclaimer clause, not a real claim
                 lineno = lowered.count("\n", 0, idx) + 1
                 errors.append(
                     f"{rel_path}:{lineno}: uses completed-election wording "
@@ -647,6 +710,11 @@ def _cargo_inventory_diff_is_known_errno_host_ambiguity(
     # filter below preserves the exact relative order of every remaining
     # element; only the literal `pkg_id` string is ever removed from it.
     def normalized(payload: dict) -> dict:
+        # `json.loads(json.dumps(...))` here is a plain deep-copy, not a
+        # canonicalization step: `json.dumps` with no `sort_keys` preserves
+        # every dict's existing key insertion order and every list's
+        # existing element order exactly, so this never reorders anything
+        # the caller didn't already have.
         payload = json.loads(json.dumps(payload))
         mbt = payload.get("membership_by_target", {}).get(triple, {})
         linked = mbt.get("linked_into_compiled_artifact")
@@ -660,7 +728,27 @@ def _cargo_inventory_diff_is_known_errno_host_ambiguity(
             errno_row.get("target_membership", {}).pop(triple, None)
         return payload
 
-    if normalized(fresh) != normalized(committed):
+    def canonical_bytes_preserving_order(payload: dict) -> bytes:
+        # Deliberately NOT `sort_keys=True` and deliberately NOT a dict
+        # `==`/`!=` comparison: Python dict equality ignores key insertion
+        # order entirely (`{"a": 1, "b": 2} == {"b": 2, "a": 1}` is `True`),
+        # which would silently tolerate a nested dict's keys being reversed
+        # between `fresh` and `committed` -- exactly the kind of
+        # broader-than-documented masking this exception must never do.
+        # Serializing both sides to bytes with every existing list/dict
+        # order preserved and comparing those bytes catches list reordering
+        # (Python list equality is already order-sensitive) AND dict-key
+        # reordering (which bare dict equality is not), while remaining
+        # insensitive to nothing else -- the caller is responsible for
+        # feeding both sides through the same canonicalization (see
+        # `check_evidence_is_freshly_regenerable`'s reload of `fresh_text`)
+        # so an incidental Python-construction-order difference is never
+        # mistaken for a real one.
+        return json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+
+    if canonical_bytes_preserving_order(normalized(fresh)) != canonical_bytes_preserving_order(
+        normalized(committed)
+    ):
         return False, "byte differences remain outside the known errno@0.3.14 host-ambiguous slice"
 
     return True, (
@@ -749,8 +837,17 @@ def check_evidence_is_freshly_regenerable() -> list[str]:
             continue
         if filename == "cargo_dependency_inventory.json" and not _host_is_linux_x86_64():
             committed_payload = json.loads(committed_text, object_pairs_hook=_reject_duplicate_keys)
+            # Reload fresh through its OWN canonical (sort_keys=True) dump
+            # rather than passing the raw generator dict: the ambiguity
+            # function below does a strict, order-preserving byte comparison
+            # (see its own docstring), so both sides must start from the
+            # same canonical key ordering for that comparison to mean
+            # anything other than "the generator's own construction order
+            # happens to differ from alphabetical" -- an accident of Python
+            # dict-literal order, not a real evidence difference.
+            fresh_canonical_payload = json.loads(fresh_text, object_pairs_hook=_reject_duplicate_keys)
             matches, detail = _cargo_inventory_diff_is_known_errno_host_ambiguity(
-                fresh_payload, committed_payload
+                fresh_canonical_payload, committed_payload
             )
             if matches:
                 print(

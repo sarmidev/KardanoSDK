@@ -56,6 +56,7 @@ import hashlib
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import tomllib
@@ -1693,62 +1694,278 @@ NATIVE_MEMBER_EXTENSIONS = (".so", ".dll", ".dylib", ".jnilib", ".a")
 # regardless of its filename extension -- a native payload packaged with a
 # misleading extension (`payload.bin`, `.dat`, even a `.class`-suffixed
 # file) or no extension at all must not be able to evade discovery merely
-# by its name. `CAFEBABE` (Mach-O universal/fat binary) is deliberately
-# NOT in this flat list: see `_looks_like_fat_macho()` below for why that
-# one signature needs an extra disambiguating check instead of a flat
-# prefix match.
+# by its name. Three magic families below (fat Mach-O, PE, XCOFF) are
+# deliberately NOT in this flat list, because a bare 4-byte (or 2-byte)
+# prefix match is not sufficient evidence for them: each needs its own
+# bounded structural parse (`_validate_fat_macho_structure`,
+# `_validate_pe_structure`, `_validate_xcoff_structure` below) before this
+# generator will call it a genuine native member, and a member whose
+# prefix matches one of those magics but fails that structural parse is a
+# hard failure (`"malformed_native_magic"`), never silently `"not_native"`.
 NATIVE_MAGIC_SIGNATURES: tuple[bytes, ...] = (
     b"\x7fELF",  # ELF (Linux/BSD/Solaris shared objects and executables)
     b"\xfe\xed\xfa\xce",  # Mach-O 32-bit (thin)
     b"\xfe\xed\xfa\xcf",  # Mach-O 64-bit (thin)
     b"\xcf\xfa\xed\xfe",  # Mach-O 64-bit (thin), reversed byte order
     b"\xce\xfa\xed\xfe",  # Mach-O 32-bit (thin), reversed byte order
-    b"MZ",  # PE/COFF (Windows DLL/EXE) DOS stub header
     b"!<arch>\n",  # BSD/System-V ar archive (static library container, e.g. .a)
-    b"\x01\xdf",  # AIX XCOFF32 -- e.g. JNA's com/sun/jna/aix-ppc/libjnidispatch.a,
-    # which is a raw XCOFF object, NOT a "!<arch>\n" ar archive, despite its
-    # `.a` extension (empirically confirmed 2026-08-24 against the real
-    # resolved jna-5.19.1.jar in the local Gradle cache).
-    b"\x01\xf7",  # AIX XCOFF64 -- e.g. .../aix-ppc64/libjnidispatch.a
 )
 MAX_NATIVE_MAGIC_PREFIX_LEN = 8
 
-FAT_MACHO_MAGIC = b"\xca\xfe\xba\xbe"
+# Mach-O "fat"/universal binary magic numbers (mach-o/fat.h), all four
+# valid combinations of 32/64-bit and byte order. Apple's own convention
+# writes the fat header big-endian on disk (`FAT_MAGIC`/`FAT_MAGIC_64`);
+# `FAT_CIGAM`/`FAT_CIGAM_64` are the byte-swapped values a little-endian
+# reader would see if the header were instead written in native/swapped
+# order -- both this generator's own comparisons below and any other tool
+# checking either byte pattern is intentional here, not a workaround for
+# one specific ambiguous encoding.
+#   FAT_MAGIC    = 0xcafebabe -> bytes CA FE BA BE (big-endian, 32-bit arch entries)
+#   FAT_CIGAM    = 0xbebafeca -> bytes BE BA FE CA (little-endian, 32-bit arch entries)
+#   FAT_MAGIC_64 = 0xcafebabf -> bytes CA FE BA BF (big-endian, 64-bit arch entries)
+#   FAT_CIGAM_64 = 0xbfbafeca -> bytes BF BA FE CA (little-endian, 64-bit arch entries)
+# Maps each magic to (bits, byte order of every subsequent header field).
+FAT_MACHO_MAGIC_VARIANTS: dict[bytes, tuple[int, str]] = {
+    b"\xca\xfe\xba\xbe": (32, "big"),
+    b"\xbe\xba\xfe\xca": (32, "little"),
+    b"\xca\xfe\xba\xbf": (64, "big"),
+    b"\xbf\xba\xfe\xca": (64, "little"),
+}
+FAT_MACHO_HEADER_SIZE = 8  # magic (4) + nfat_arch (4)
+FAT_MACHO_ARCH_ENTRY_SIZE_32 = 20  # cputype/cpusubtype/offset/size/align, all u32
+FAT_MACHO_ARCH_ENTRY_SIZE_64 = 32  # + 64-bit offset/size + a reserved u32
 
-# `CAFEBABE` is Apple's fat/universal Mach-O magic number AND (a deliberate
-# historical Sun/Apple naming coincidence, not a bug in either format) the
-# exact same 4 bytes every Java `.class` file starts with. A jar's `.class`
-# files vastly outnumber any real native member in this dependency graph,
-# so treating this one signature as an unconditional native indicator would
-# reintroduce the exact false-positive this generator was already found to
-# produce against `androidx.annotation:annotation-jvm` (dozens of ordinary
-# `.class` files misreported as "native"). The two formats diverge in their
-# next 4 bytes: a fat Mach-O's are `nfat_arch` (a big-endian count of the
-# fat_arch structs that follow, i.e. how many architecture slices this
-# binary bundles), while a class file's are `minor_version`(u2) then
-# `major_version`(u2) -- and every real major_version Java has ever shipped
-# (45 for JDK 1.1, increasing monotonically since) is far above any
-# plausible architecture-slice count a real fat binary would use.
-# Empirically confirmed 2026-08-24 against real, currently-resolved
-# artifacts in this repository's own dependency graph: the IonSpin
-# libsodium JVM jar's `libdynamic-macos.dylib` (a genuine universal
-# arm64+x86-64 fat Mach-O) has `nfat_arch == 2`, while
-# `androidx.annotation:annotation-jvm`'s real `.class` files have
-# `major_version == 52` (JDK 8) -- both far apart from this bound, which is
-# deliberately set with a wide margin on both sides rather than tuned to
-# either exact value.
+# `CAFEBABE` (the 32-bit big-endian `FAT_MAGIC` variant above) is ALSO,
+# by deliberate historical Sun/Apple naming coincidence and not a bug in
+# either format, the exact same 4 bytes every Java `.class` file starts
+# with. A jar's `.class` files vastly outnumber any real native member in
+# this dependency graph, so this one specific magic (and only this one --
+# the other three fat variants below have no such legitimate collision)
+# gets a `"not_native"` fallback when it fails full structural validation,
+# instead of the hard `"malformed_native_magic"` failure every other
+# native-magic mismatch gets. The two formats diverge in their next 4
+# bytes: a fat Mach-O's are `nfat_arch` (a big-endian count of the
+# fat_arch structs that follow), while a class file's are
+# `minor_version`(u2) then `major_version`(u2) -- and every real
+# major_version Java has ever shipped (45 for JDK 1.1, increasing
+# monotonically since) is far above any plausible architecture-slice
+# count a real fat binary would use. Empirically confirmed 2026-08-24
+# against real, currently-resolved artifacts in this repository's own
+# dependency graph: the IonSpin libsodium JVM jar's
+# `libdynamic-macos.dylib` (a genuine universal arm64+x86-64 fat Mach-O)
+# has `nfat_arch == 2`, while `androidx.annotation:annotation-jvm`'s real
+# `.class` files have `major_version == 52` (JDK 8).
+JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC = b"\xca\xfe\xba\xbe"
+
 MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT = 20
 
+# Real Apple Mach-O `cputype` values this generator has ever actually
+# needed to accept (mach/machine.h) -- deliberately an allowlist, not a
+# "non-zero" heuristic, so a structurally-well-formed-looking but bogus
+# cputype still fails closed as implausible rather than being guessed at.
+# `CPU_ARCH_ABI64 = 0x01000000` / `CPU_ARCH_ABI64_32 = 0x02000000` are the
+# 64-bit-variant mask bits Apple ORs into the matching 32-bit base type.
+_MACHO_CPU_ARCH_ABI64 = 0x01000000
+_MACHO_CPU_ARCH_ABI64_32 = 0x02000000
+KNOWN_MACHO_CPU_TYPES = frozenset(
+    {
+        1,  # VAX
+        6,  # MC680x0
+        7,  # X86 / I386
+        8,  # MIPS
+        10,  # MC98000
+        11,  # HPPA
+        12,  # ARM
+        13,  # MC88000
+        14,  # SPARC
+        15,  # I860
+        18,  # POWERPC
+        7 | _MACHO_CPU_ARCH_ABI64,  # X86_64
+        12 | _MACHO_CPU_ARCH_ABI64,  # ARM64
+        12 | _MACHO_CPU_ARCH_ABI64_32,  # ARM64_32
+        18 | _MACHO_CPU_ARCH_ABI64,  # POWERPC64
+    }
+)
+MAX_PLAUSIBLE_MACHO_ARCH_ALIGN_SHIFT = 31  # `align` is a power-of-two exponent
 
-def _looks_like_fat_macho(prefix: bytes) -> bool:
-    if not prefix.startswith(FAT_MACHO_MAGIC) or len(prefix) < 8:
+
+def _validate_fat_macho_structure(data: bytes) -> bool:
+    """Structurally validate a Mach-O fat/universal binary header, not just
+    its 4-byte magic.
+
+    Parses a BOUNDED fat header (magic + `nfat_arch`) and every 32- or
+    64-bit `fat_arch` entry the header claims, per this file's own
+    matched-variant byte order (never assumed independently of which
+    magic matched). Requires: `nfat_arch` in a plausible range (never a
+    length taken on faith -- see `MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT`);
+    the full header AND arch table actually fit within `data` (no
+    allocation or slice ever extends past what was actually read); at
+    least one arch entry; every entry's `cputype` is one of
+    `KNOWN_MACHO_CPU_TYPES` and `align` is a plausible shift amount; every
+    entry's `[offset, offset + size)` byte range is entirely contained in
+    `data`, starts at or after the end of the header/arch-table region
+    (never overlapping it), has a strictly positive size, and does not
+    overlap any other entry's range. Any violation returns `False` --
+    callers decide the fail-closed consequence of that, this function
+    never raises.
+    """
+    if len(data) < FAT_MACHO_HEADER_SIZE:
         return False
-    nfat_arch = int.from_bytes(prefix[4:8], "big")
-    return 1 <= nfat_arch <= MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT
+    variant = FAT_MACHO_MAGIC_VARIANTS.get(data[:4])
+    if variant is None:
+        return False
+    bits, endian = variant
+    nfat_arch = int.from_bytes(data[4:8], endian)
+    if not (1 <= nfat_arch <= MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT):
+        return False
+    entry_size = FAT_MACHO_ARCH_ENTRY_SIZE_32 if bits == 32 else FAT_MACHO_ARCH_ENTRY_SIZE_64
+    header_end = FAT_MACHO_HEADER_SIZE + nfat_arch * entry_size
+    total_size = len(data)
+    if total_size < header_end:
+        return False
+    endian_prefix = ">" if endian == "big" else "<"
+    fmt = f"{endian_prefix}iiIII" if bits == 32 else f"{endian_prefix}iiQQII"
+    slices: list[tuple[int, int]] = []
+    for index in range(nfat_arch):
+        start = FAT_MACHO_HEADER_SIZE + index * entry_size
+        entry = data[start : start + entry_size]
+        fields = struct.unpack(fmt, entry)
+        cputype, _cpusubtype, offset, size, align = fields[0], fields[1], fields[2], fields[3], fields[4]
+        if cputype not in KNOWN_MACHO_CPU_TYPES:
+            return False
+        if not (0 <= align <= MAX_PLAUSIBLE_MACHO_ARCH_ALIGN_SHIFT):
+            return False
+        if size <= 0:
+            return False
+        if offset < header_end:
+            return False
+        if offset + size > total_size:
+            return False
+        slices.append((offset, offset + size))
+    slices.sort()
+    for (_start, end), (next_start, _next_end) in zip(slices, slices[1:]):
+        if next_start < end:
+            return False
+    return True
 
 
-def _has_native_magic(prefix: bytes) -> bool:
-    return any(prefix.startswith(sig) for sig in NATIVE_MAGIC_SIGNATURES) or _looks_like_fat_macho(prefix)
+# Windows PE/COFF (`MZ` DOS stub -> `e_lfanew` -> "PE\0\0" -> COFF file
+# header -> optional header -> section table), all fields little-endian
+# per the PE/COFF spec. Bounds below are deliberately generous (real
+# toolchains rarely approach them) but still finite, so a claimed
+# section/optional-header size can never justify an unbounded read.
+PE_DOS_HEADER_SIZE = 64  # sizeof(IMAGE_DOS_HEADER); e_lfanew is the last field, at offset 0x3C
+PE_E_LFANEW_OFFSET = 0x3C
+PE_SIGNATURE = b"PE\x00\x00"
+PE_COFF_HEADER_SIZE = 20  # sizeof(IMAGE_FILE_HEADER), immediately after the 4-byte "PE\0\0"
+PE_SECTION_HEADER_SIZE = 40  # sizeof(IMAGE_SECTION_HEADER)
+MAX_PLAUSIBLE_PE_SECTION_COUNT = 96
+MAX_PLAUSIBLE_PE_OPTIONAL_HEADER_SIZE = 512
+# IMAGE_FILE_HEADER.Machine values this generator has ever actually needed
+# to accept -- an allowlist, same rationale as KNOWN_MACHO_CPU_TYPES.
+KNOWN_PE_MACHINE_TYPES = frozenset(
+    {
+        0x014C,  # IMAGE_FILE_MACHINE_I386
+        0x0200,  # IMAGE_FILE_MACHINE_IA64
+        0x8664,  # IMAGE_FILE_MACHINE_AMD64
+        0x01C0,  # IMAGE_FILE_MACHINE_ARM
+        0x01C4,  # IMAGE_FILE_MACHINE_ARMNT (ARMv7 Thumb-2)
+        0xAA64,  # IMAGE_FILE_MACHINE_ARM64
+    }
+)
+
+
+def _validate_pe_structure(data: bytes) -> bool:
+    """Structurally validate a Windows PE/COFF image, not just its `MZ`
+    prefix.
+
+    An ordinary text file (or any other non-PE data) that happens to
+    start with `MZ` must fail this, not silently pass as native: requires
+    the full minimum DOS header, a plausible `e_lfanew` pointing to an
+    exact `"PE\\0\\0"` signature entirely within `data`, a plausible COFF
+    file header (allowlisted `Machine`, in-range `NumberOfSections`,
+    in-range `SizeOfOptionalHeader`), and a section table that -- given
+    those two counts -- fits entirely within `data`. Every offset is
+    checked against `len(data)` before it is ever used to slice, so a
+    huge claimed `e_lfanew`/section count fails the bound check rather
+    than allocating or reading anything untrusted. Never raises.
+    """
+    if len(data) < PE_DOS_HEADER_SIZE or data[:2] != b"MZ":
+        return False
+    e_lfanew = int.from_bytes(data[PE_E_LFANEW_OFFSET : PE_E_LFANEW_OFFSET + 4], "little")
+    if e_lfanew < PE_DOS_HEADER_SIZE:
+        return False
+    pe_sig_end = e_lfanew + 4
+    if pe_sig_end > len(data):
+        return False
+    if data[e_lfanew:pe_sig_end] != PE_SIGNATURE:
+        return False
+    coff_end = pe_sig_end + PE_COFF_HEADER_SIZE
+    if coff_end > len(data):
+        return False
+    coff = data[pe_sig_end:coff_end]
+    machine = int.from_bytes(coff[0:2], "little")
+    num_sections = int.from_bytes(coff[2:4], "little")
+    size_optional_header = int.from_bytes(coff[16:18], "little")
+    if machine not in KNOWN_PE_MACHINE_TYPES:
+        return False
+    if not (1 <= num_sections <= MAX_PLAUSIBLE_PE_SECTION_COUNT):
+        return False
+    if not (0 <= size_optional_header <= MAX_PLAUSIBLE_PE_OPTIONAL_HEADER_SIZE):
+        return False
+    sections_end = coff_end + size_optional_header + num_sections * PE_SECTION_HEADER_SIZE
+    return sections_end <= len(data)
+
+
+# AIX XCOFF object/executable file headers. Both the 32- and 64-bit
+# variants place `f_nscns` (section count) at the same byte offset (2)
+# and `f_opthdr` (optional-header size) at the same byte offset (16),
+# despite differing total header sizes, because the wider 64-bit
+# `f_symptr` field absorbs exactly the size difference of the fields
+# ahead of it -- this is a real, documented property of the two struct
+# layouts (`struct external_filehdr` for 32-bit XCOFF is 20 bytes;
+# for 64-bit XCOFF it is 24 bytes), not a simplification. XCOFF, unlike
+# PE, has no little-endian on-disk variant on AIX; both magics are
+# checked as fixed big-endian byte strings.
+XCOFF32_MAGIC = b"\x01\xdf"
+XCOFF64_MAGIC = b"\x01\xf7"
+XCOFF32_FILEHDR_SIZE = 20
+XCOFF64_FILEHDR_SIZE = 24
+XCOFF32_SCNHDR_SIZE = 40
+XCOFF64_SCNHDR_SIZE = 72
+XCOFF_NSCNS_OFFSET = 2
+XCOFF_OPTHDR_OFFSET = 16
+MAX_PLAUSIBLE_XCOFF_SECTION_COUNT = 96
+MAX_PLAUSIBLE_XCOFF_OPTIONAL_HEADER_SIZE = 4096
+
+
+def _validate_xcoff_structure(data: bytes) -> bool:
+    """Structurally validate an AIX XCOFF32/XCOFF64 object, not just its
+    2-byte magic.
+
+    Requires the recognized magic's own minimum file header to actually
+    fit in `data`, a plausible section count and optional-header size
+    (never a length taken on faith), and a section-header table that --
+    given those two counts -- fits entirely within `data`. A short
+    magic-prefixed member that cannot even hold the minimum file header
+    fails immediately, before any field is read. Never raises.
+    """
+    if data[:2] == XCOFF32_MAGIC:
+        filehdr_size, scnhdr_size = XCOFF32_FILEHDR_SIZE, XCOFF32_SCNHDR_SIZE
+    elif data[:2] == XCOFF64_MAGIC:
+        filehdr_size, scnhdr_size = XCOFF64_FILEHDR_SIZE, XCOFF64_SCNHDR_SIZE
+    else:
+        return False
+    if len(data) < filehdr_size:
+        return False
+    nscns = int.from_bytes(data[XCOFF_NSCNS_OFFSET : XCOFF_NSCNS_OFFSET + 2], "big")
+    opthdr = int.from_bytes(data[XCOFF_OPTHDR_OFFSET : XCOFF_OPTHDR_OFFSET + 2], "big")
+    if not (1 <= nscns <= MAX_PLAUSIBLE_XCOFF_SECTION_COUNT):
+        return False
+    if not (0 <= opthdr <= MAX_PLAUSIBLE_XCOFF_OPTIONAL_HEADER_SIZE):
+        return False
+    table_end = filehdr_size + opthdr + nscns * scnhdr_size
+    return table_end <= len(data)
 
 
 def _member_has_native_extension(name: str) -> bool:
@@ -1757,31 +1974,72 @@ def _member_has_native_extension(name: str) -> bool:
     return any(lower.endswith(ext) for ext in NATIVE_MEMBER_EXTENSIONS)
 
 
-def classify_native_member_signal(name: str, prefix: bytes) -> str:
+def _classify_by_magic(data: bytes) -> str:
+    """Classify one archive member's content, independent of its filename.
+
+    Returns exactly one of:
+    - `"native"`: a supported native-code format, positively confirmed --
+      either a simple prefix match (ELF/thin Mach-O/ar) or, for fat
+      Mach-O/PE/XCOFF, a full bounded structural parse that passed.
+    - `"malformed_native_magic"`: the leading bytes matched a recognized
+      native-format magic, but the structural parse for that format
+      failed. This is a hard failure the caller must never silently
+      absorb as `"not_native"` -- with exactly one documented exception
+      (see `JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC`): the one fat-Mach-O
+      magic that is byte-identical to every Java `.class` file's own
+      magic falls back to `"not_native"` instead, since that specific
+      4-byte collision has an extremely common, completely legitimate
+      innocent explanation this generator already scans past constantly.
+    - `"not_native"`: no recognized native-format magic matched at all.
+    """
+    prefix = data[:MAX_NATIVE_MAGIC_PREFIX_LEN]
+    if data[:4] in FAT_MACHO_MAGIC_VARIANTS:
+        if _validate_fat_macho_structure(data):
+            return "native"
+        if data[:4] == JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC:
+            return "not_native"
+        return "malformed_native_magic"
+    if data[:2] == b"MZ":
+        return "native" if _validate_pe_structure(data) else "malformed_native_magic"
+    if data[:2] in (XCOFF32_MAGIC, XCOFF64_MAGIC):
+        return "native" if _validate_xcoff_structure(data) else "malformed_native_magic"
+    if any(prefix.startswith(sig) for sig in NATIVE_MAGIC_SIGNATURES):
+        return "native"
+    return "not_native"
+
+
+def classify_native_member_signal(name: str, data: bytes) -> str:
     """Classify one archive member for native-code discovery purposes.
 
     Returns exactly one of:
     - `"native"`: treat as a native carrier member requiring review --
       either a known native extension (`NATIVE_MEMBER_EXTENSIONS`) whose
-      leading bytes match a supported native magic signature, or an
-      unknown/absent extension whose leading bytes match one anyway (a
+      content positively confirms a supported native format, or an
+      unknown/absent extension whose content does anyway (a
       renamed/extensionless payload -- `payload.bin`, `.dat`, even a
-      misleading `.class` name, all still count if the magic is real).
+      misleading `.class` name, all still count if the magic AND
+      structure are real).
+    - `"malformed_native_magic"`: the member's leading bytes matched a
+      recognized native-format magic (fat Mach-O/PE/XCOFF), but a full
+      structural parse of that claimed format failed -- regardless of
+      the member's extension. Never silently accepted OR silently
+      ignored; the caller must fail closed and a human reviewer must
+      inspect this member.
     - `"extension_magic_mismatch"`: the member's extension IS one of
-      `NATIVE_MEMBER_EXTENSIONS`, but its leading bytes do NOT match any
-      supported native magic signature. This is never silently accepted
-      OR silently ignored -- the caller must fail closed, since a `.so`/
-      `.dll`/`.dylib`/`.jnilib`/`.a` member whose content does not look
-      like the format its own extension claims is exactly the kind of
-      unsupported/ambiguous case this discovery must not guess about.
-    - `"not_native"`: neither condition holds; ordinary member (a
-      `.class` file, a resource, a POM, etc.).
+      `NATIVE_MEMBER_EXTENSIONS`, but its content does not match any
+      supported native magic signature at all (not even one that then
+      failed structural validation -- that case is
+      `"malformed_native_magic"` above). Never silently accepted OR
+      silently ignored.
+    - `"not_native"`: none of the above; ordinary member (a `.class`
+      file, a resource, a POM, etc.).
     """
-    has_ext = _member_has_native_extension(name)
-    has_magic = _has_native_magic(prefix)
-    if has_ext:
-        return "native" if has_magic else "extension_magic_mismatch"
-    return "native" if has_magic else "not_native"
+    magic_signal = _classify_by_magic(data)
+    if magic_signal in ("native", "malformed_native_magic"):
+        return magic_signal
+    if _member_has_native_extension(name):
+        return "extension_magic_mismatch"
+    return "not_native"
 
 
 MAX_ZIP_MEMBERS_SCANNED = 20_000
@@ -1831,10 +2089,17 @@ def _scan_zip_for_native_members(archive_path: Path) -> list[dict[str, Any]]:
                     f"MAX_ZIP_MEMBER_BYTES_READ={MAX_ZIP_MEMBER_BYTES_READ}"
                 )
             with zf.open(info) as fh:
-                prefix = fh.read(MAX_NATIVE_MAGIC_PREFIX_LEN)
-                rest = fh.read()
-            data = prefix + rest
-            signal = classify_native_member_signal(info.filename, prefix)
+                data = fh.read()
+            signal = classify_native_member_signal(info.filename, data)
+            if signal == "malformed_native_magic":
+                raise EvidenceError(
+                    f"{archive_path}: member {info.filename!r} has leading "
+                    "bytes matching a recognized native-code magic "
+                    "(fat Mach-O/PE/XCOFF) but failed this generator's "
+                    "bounded structural validation for that format -- "
+                    "refusing to classify automatically; a human reviewer "
+                    "must inspect this member"
+                )
             if signal == "extension_magic_mismatch":
                 raise EvidenceError(
                     f"{archive_path}: member {info.filename!r} has a "
