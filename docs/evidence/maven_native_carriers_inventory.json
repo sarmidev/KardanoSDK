@@ -42,6 +42,75 @@
       "windows_native_available_upstream": false
     },
     {
+      "artifact_sha256": "4db0135006f5ecbcc445f9ec8800101ab40438e5a9daa083c5ccab85cc661d3a",
+      "carrier_kind": "JVM .jar",
+      "distributed_by_kardano": false,
+      "distribution_status": "transitively_available",
+      "embedded_natives": [
+        {
+          "arch": "arm64",
+          "path": "darwin-aarch64/libuniffi_ed25519_bip32_wrapper.dylib",
+          "platform": "macOS",
+          "sha256": "35644b7fe8eac8347c9e51f50d64bcba79eb0a39240009bc5f68a057c4fbd309",
+          "size_bytes": 561744
+        },
+        {
+          "arch": "arm64",
+          "path": "darwin-aarch64/libuniffi_ed25519_bip32_wrapper.a",
+          "platform": "macOS",
+          "sha256": "6aeb164932970ba0b57f9c6447b5c18c1a48e0cb4178e5c5ba90dc3d9f72937e",
+          "size_bytes": 28805776
+        },
+        {
+          "arch": "x86-64",
+          "path": "darwin-x86-64/libuniffi_ed25519_bip32_wrapper.dylib",
+          "platform": "macOS",
+          "sha256": "719b7ddbd23ace7da3744ccc21477d804d5f0372d9c4387bf589ba9c1b4023c3",
+          "size_bytes": 551808
+        },
+        {
+          "arch": "x86-64",
+          "path": "darwin-x86-64/libuniffi_ed25519_bip32_wrapper.a",
+          "platform": "macOS",
+          "sha256": "fb7c79708a983112ed93fc3e2759dc7e862aac39131730025ca613d20acf1bfc",
+          "size_bytes": 28778240
+        },
+        {
+          "arch": "aarch64",
+          "path": "linux-aarch64/libuniffi_ed25519_bip32_wrapper.so",
+          "platform": "Linux",
+          "sha256": "c977c2bdaeea541449b30e4e14b0aa405d005e78a7a8e6ae5efec812dd911690",
+          "size_bytes": 659056
+        },
+        {
+          "arch": "aarch64",
+          "path": "linux-aarch64/libuniffi_ed25519_bip32_wrapper.a",
+          "platform": "Linux",
+          "sha256": "404b66ca22b2a2156c64c5ff48ebca68104441c48208081d81923b98d77778f8",
+          "size_bytes": 39509386
+        },
+        {
+          "arch": "x86-64",
+          "path": "linux-x86-64/libuniffi_ed25519_bip32_wrapper.so",
+          "platform": "Linux",
+          "sha256": "81f41f32d0e678f30ae1329baeeaae061630eb0ce435ed84750fe18aade9eb1c",
+          "size_bytes": 631304
+        },
+        {
+          "arch": "x86-64",
+          "path": "linux-x86-64/libuniffi_ed25519_bip32_wrapper.a",
+          "platform": "Linux",
+          "sha256": "c75e8f4b4b7ef07b35374373ccc69399895811d563dbd1b73cffeb6119824709",
+          "size_bytes": 38550120
+        }
+      ],
+      "inspected_2026_08_24": true,
+      "license": "Apache-2.0 (wrapper POM); embedded native's own obligations OPEN",
+      "maven_coordinate": "org.hyperledger.identus:bip32-ed25519-jvm:1.8.8",
+      "note": "No win32-x86-64 (or any Windows) build is published upstream for this JVM-classified artifact at all -- a strictly narrower gap than the Android variant's (hyperledger-identus/apollo issue #226), since Windows is not attempted here even conditionally. This repository has not independently reproduced these binaries from source and does not claim an exact source-to-binary mapping; whether this build embeds an MPL-2.0 UniFFI runtime (as this repo's own crypto-signing-backend does) is an OPEN counsel determination, the same unresolved question as the Android variant above -- not concluded 'satisfied' or 'no obligation' here.",
+      "windows_native_available_upstream": false
+    },
+    {
       "artifact_sha256": "63d7b2ea35c6fa57636931977f25929d4f2cac9513411f16337a244b7ddc239b",
       "carrier_kind": "JVM .jar",
       "distributed_by_kardano": true,
@@ -124,6 +193,47 @@
       "windows_native_available_upstream": false
     },
     {
+      "artifact_sha256": "8ca4032b6d79b351f0b59ad4b580eddbb9423e1652f7c958830687f1eee2ec03",
+      "carrier_kind": "Android .aar",
+      "distributed_by_kardano": true,
+      "distribution_status": "redistributed_by_kardano",
+      "embedded_natives": [
+        {
+          "arch": "arm64-v8a",
+          "path": "jni/arm64-v8a/libandroidx.graphics.path.so",
+          "platform": "Android",
+          "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+          "size_bytes": 10096
+        },
+        {
+          "arch": "armeabi-v7a",
+          "path": "jni/armeabi-v7a/libandroidx.graphics.path.so",
+          "platform": "Android",
+          "sha256": "41399eba6fc2a60f6f14642375c1824f3cf25eb8fec7397d753730a3ceda3e2b",
+          "size_bytes": 7252
+        },
+        {
+          "arch": "x86",
+          "path": "jni/x86/libandroidx.graphics.path.so",
+          "platform": "Android",
+          "sha256": "eb0570b41fd3bff25d8204a967c03bd7550719e768b791f680cc40cbe35f29af",
+          "size_bytes": 9284
+        },
+        {
+          "arch": "x86_64",
+          "path": "jni/x86_64/libandroidx.graphics.path.so",
+          "platform": "Android",
+          "sha256": "4e56c996f13670e70082658de7880c4020eabf4f25e43387f88ed78a713fc9f0",
+          "size_bytes": 10760
+        }
+      ],
+      "inspected_2026_08_24": true,
+      "license": "Apache-2.0",
+      "maven_coordinate": "androidx.graphics:graphics-path:1.0.1",
+      "note": "AndroidX Graphics Path (`shared`/`androidApp` runtime dependency, resolved via Compose UI graphics support). Android-only carrier; no Windows binary is bundled.",
+      "windows_native_available_upstream": false
+    },
+    {
       "artifact_sha256": "aec37b44e8dabf4de620068146769655748be3971bf868614e5ec6b240b2ac35",
       "carrier_kind": "JVM .jar (Desktop app runtime classpath)",
       "distributed_by_kardano": false,
@@ -151,11 +261,18 @@
       "windows_native_available_upstream": false
     },
     {
+      "additional_artifacts": [
+        {
+          "artifact_sha256": "b57125cb7d16253f0d65a80f7d3a4c3664effa711b8bdbb7f87fb572ce1624ed",
+          "kind": "aar",
+          "note": "Android Gradle Module Metadata variant of this same coordinate; contains only the 7 embedded_natives rows below whose path starts with 'jni/' (Android ABI directory names), not the 27 'com/sun/jna/...' rows."
+        }
+      ],
       "artifact_sha256": "4fb141dd8ef6b0585ffceea4bc49602fbc6312fa977e2c488794ea3e6aafecae",
       "carrier_kind": "JVM/Android jar (also used directly by crypto-signing-backend)",
       "distributed_by_kardano": true,
       "distribution_status": "redistributed_by_kardano",
-      "embedded_native_count": 27,
+      "embedded_native_count": 34,
       "embedded_natives": [
         {
           "arch": "ppc",
@@ -345,14 +462,63 @@
           "platform": "Windows",
           "sha256": "752d597cee7e95cb517327146bf42f124c0d6c0bc48b3ecc3b1b3b0531a52f44",
           "size_bytes": 226304
+        },
+        {
+          "arch": "arm64-v8a",
+          "path": "jni/arm64-v8a/libjnidispatch.so",
+          "platform": "Android",
+          "sha256": "abc26e994517bcaa3309acdb0a27373864086c7569c89d3087b8626fada9ef06",
+          "size_bytes": 176520
+        },
+        {
+          "arch": "armeabi-v7a",
+          "path": "jni/armeabi-v7a/libjnidispatch.so",
+          "platform": "Android",
+          "sha256": "9652282ef31834281229370a354d56c1522fe36e93625169df99b3e346f76092",
+          "size_bytes": 126496
+        },
+        {
+          "arch": "armeabi",
+          "path": "jni/armeabi/libjnidispatch.so",
+          "platform": "Android",
+          "sha256": "101daa2222382f3727800c0c49731346c5c4f81f1ecf1fde85ebcea64b151901",
+          "size_bytes": 126980
+        },
+        {
+          "arch": "mips",
+          "path": "jni/mips/libjnidispatch.so",
+          "platform": "Android",
+          "sha256": "eb549d34eb17b394f4ba74c21c51f41340d8b049aa90cc9feaef734695890402",
+          "size_bytes": 130556
+        },
+        {
+          "arch": "mips64",
+          "path": "jni/mips64/libjnidispatch.so",
+          "platform": "Android",
+          "sha256": "93f5b0bec919b95160db0bf35c5ed6904d4d48f282501f0ff4a85f6511f3e44d",
+          "size_bytes": 150256
+        },
+        {
+          "arch": "x86",
+          "path": "jni/x86/libjnidispatch.so",
+          "platform": "Android",
+          "sha256": "d10fcc75029621a88fa6020807e7ba82ff434a01ead396cf0e36c50e6c393118",
+          "size_bytes": 124380
+        },
+        {
+          "arch": "x86_64",
+          "path": "jni/x86_64/libjnidispatch.so",
+          "platform": "Android",
+          "sha256": "3809247e9b804a05ed8377b87d545cf5b5e97f960f75e725bc8497b40260e417",
+          "size_bytes": 126912
         }
       ],
       "inspected_2026_08_24": true,
       "license": "Apache-2.0 OR LGPL-2.1-or-later (Kardano SDK elects Apache-2.0)",
       "maven_coordinate": "net.java.dev.jna:jna:5.19.1",
-      "note": "JNA is both a direct SDK dependency and its own native carrier. Only one of these 27 platform-specific libjnidispatch binaries loads at runtime per host; the jar as distributed contains all 27. A prior version of this catalog said 25 -- aix-ppc and aix-ppc64 were missed; corrected here after a full zip-member enumeration. Do not classify JNA as a source-only dependency.",
+      "note": "JNA is both a direct SDK dependency and its own native carrier. Only one of the 27 `.jar`-packaged platform-specific libjnidispatch binaries loads at runtime per host; a JVM-only consumer's jar as distributed contains all 27. Android consumers instead resolve the separate `.aar` variant (see additional_artifacts above), which bundles only the 7 Android-ABI-named binaries also listed here -- 34 total rows, not 27, once both real, resolved artifacts of this coordinate are counted. A prior version of this catalog said 25 -- aix-ppc and aix-ppc64 were missed; corrected here after a full zip-member enumeration. Do not classify JNA as a source-only dependency.",
       "windows_native_available_upstream": true
     }
   ],
-  "method": "Point-in-time inspection (2026-08-24) of the actual resolved artifact bytes in the local Gradle module cache: Python `zipfile` for the embedded native member list, with size and SHA-256 read directly from each archive member's own extracted bytes (not estimated, not copied from any upstream release notes). This table is static; it is not re-derived from a live artifact fetch on every run (see docs/LEGAL_REVIEW.md \u00a78 for why, and the re-verification command). Distinct from crypto-signing-backend/CHECKSUMS.sha256, which lists only first-party binaries built from this repository's own Rust crate. `distribution_status` is one of ('resolved_runtime_dependency', 'transitively_available', 'redistributed_by_kardano', 'not_in_first_release_scope')."
+  "method": "Point-in-time inspection (2026-08-24) of the actual resolved artifact bytes in the local Gradle module cache: Python `zipfile` for the embedded native member list, with size and SHA-256 read directly from each archive member's own extracted bytes (not estimated, not copied from any upstream release notes). This table is static; it is not re-derived from a live artifact fetch on every run (see docs/LEGAL_REVIEW.md \u00a78 for why, and the re-verification command). Distinct from crypto-signing-backend/CHECKSUMS.sha256, which lists only first-party binaries built from this repository's own Rust crate. `distribution_status` is one of ('resolved_runtime_dependency', 'transitively_available', 'redistributed_by_kardano', 'not_in_first_release_scope'). Defense-in-depth: when generation runs with a warm local Gradle module cache, every resolved runtime coordinate's actual .jar/.aar is scanned (extensions ('.so', '.dll', '.dylib', '.jnilib', '.a') plus ELF/Mach-O/PE/ar magic-byte sniffing for extensionless members) via cross_check_maven_native_carriers_against_local_cache(), which fails generation on any undeclared native-carrying coordinate, unreviewed extra/missing member, or member hash/size drift against this table; a cold cache (as in CI) skips this specific cross-check without weakening any other check in this file."
 }

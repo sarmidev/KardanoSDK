@@ -1,4 +1,27 @@
 {
+  "license_elections": {
+    "accepted_count": 0,
+    "all_mandatory_elections_accepted": false,
+    "mandatory_row_count": 1,
+    "method": "Every resolved Gradle-runtime coordinate whose own POM lists more than one <license> (a real disjunctive choice, not a compound AND expression -- Maven POMs do not express AND-required licenses the way Cargo.toml's SPDX `license` field can) gets one row here, sourced from scripts/license_catalog.GRADLE_LICENSE_CATALOG's election_status/election_reviewer/election_review_date fields. status only ever becomes ACCEPTED by a human editing that catalog; this generator never sets it itself, and scripts/check_release_evidence.py's release mode fails while any row here is not ACCEPTED with a non-empty reviewer, an ISO-8601 review_date, and a proposed_election that is exactly one of the row's own or_election_options.",
+    "rows": [
+      {
+        "coordinate": "net.java.dev.jna:jna:5.19.1",
+        "licenses": [
+          "LGPL-2.1-or-later",
+          "Apache-2.0"
+        ],
+        "or_election_options": [
+          "LGPL-2.1-or-later",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN"
+      }
+    ]
+  },
   "method": "Every coordinate is looked up first in scripts/license_catalog.GRADLE_LICENSE_CATALOG (a curated, dated, hand-reviewed catalog -- the only place a multi-license/election entry may live), then in scripts/license_catalog_harvested.HARVESTED_POM_LICENSE_CATALOG (a mechanically harvested, always-single-license catalog committed by scripts/harvest_gradle_pom_licenses.py so this generator does not need a pre-populated local Gradle cache to reproduce this report -- see docs/LEGAL_REVIEW.md \u00a71 and scripts/tests/test_generate_legal_evidence.py's cold-cache tests). A coordinate in neither catalog falls back to a live read of the local Gradle module cache (GRADLE_USER_HOME/caches/modules-2/files-2.1) as defense in depth only; this generator FAILS CLOSED (raises, does not write any evidence file) if any runtime coordinate is unresolved by all three paths -- it never records a silent 'unresolved' entry.",
   "mit_only_coordinates": [
     "com.goterl:resource-loader:2.0.2",
@@ -8,6 +31,9 @@
   "resolved": {
     "androidx.activity:activity-compose:1.13.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -16,6 +42,9 @@
     },
     "androidx.activity:activity-compose:1.8.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -24,6 +53,9 @@
     },
     "androidx.activity:activity-ktx:1.13.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -32,6 +64,9 @@
     },
     "androidx.activity:activity-ktx:1.8.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -40,6 +75,9 @@
     },
     "androidx.activity:activity:1.13.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -48,6 +86,9 @@
     },
     "androidx.activity:activity:1.8.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -56,6 +97,9 @@
     },
     "androidx.annotation:annotation-experimental:1.4.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -64,6 +108,9 @@
     },
     "androidx.annotation:annotation-jvm:1.8.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -72,6 +119,9 @@
     },
     "androidx.annotation:annotation-jvm:1.9.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -80,6 +130,9 @@
     },
     "androidx.annotation:annotation:1.8.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -88,6 +141,9 @@
     },
     "androidx.annotation:annotation:1.9.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -96,6 +152,9 @@
     },
     "androidx.arch.core:core-common:2.2.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -104,6 +163,9 @@
     },
     "androidx.arch.core:core-runtime:2.2.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -112,6 +174,9 @@
     },
     "androidx.autofill:autofill:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -120,6 +185,9 @@
     },
     "androidx.collection:collection-jvm:1.4.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -128,6 +196,9 @@
     },
     "androidx.collection:collection-jvm:1.5.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -136,6 +207,9 @@
     },
     "androidx.collection:collection-ktx:1.5.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -144,6 +218,9 @@
     },
     "androidx.collection:collection:1.4.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -152,6 +229,9 @@
     },
     "androidx.collection:collection:1.5.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -160,6 +240,9 @@
     },
     "androidx.compose.animation:animation-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -168,6 +251,9 @@
     },
     "androidx.compose.animation:animation-core-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -176,6 +262,9 @@
     },
     "androidx.compose.animation:animation-core:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -184,6 +273,9 @@
     },
     "androidx.compose.animation:animation:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -192,6 +284,9 @@
     },
     "androidx.compose.foundation:foundation-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -200,6 +295,9 @@
     },
     "androidx.compose.foundation:foundation-layout-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -208,6 +306,9 @@
     },
     "androidx.compose.foundation:foundation-layout:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -216,6 +317,9 @@
     },
     "androidx.compose.foundation:foundation:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -224,6 +328,9 @@
     },
     "androidx.compose.material3:material3-android:1.5.0-alpha17": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -232,6 +339,9 @@
     },
     "androidx.compose.material3:material3:1.5.0-alpha17": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -240,6 +350,9 @@
     },
     "androidx.compose.material:material-ripple-android:1.11.0-rc01": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -248,6 +361,9 @@
     },
     "androidx.compose.material:material-ripple:1.11.0-rc01": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -256,6 +372,9 @@
     },
     "androidx.compose.runtime:runtime-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -264,6 +383,9 @@
     },
     "androidx.compose.runtime:runtime-annotation-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -272,6 +394,9 @@
     },
     "androidx.compose.runtime:runtime-annotation-jvm:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -280,6 +405,9 @@
     },
     "androidx.compose.runtime:runtime-annotation:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -288,6 +416,9 @@
     },
     "androidx.compose.runtime:runtime-desktop:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -296,6 +427,9 @@
     },
     "androidx.compose.runtime:runtime-retain-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -304,6 +438,9 @@
     },
     "androidx.compose.runtime:runtime-retain-desktop:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -312,6 +449,9 @@
     },
     "androidx.compose.runtime:runtime-retain:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -320,6 +460,9 @@
     },
     "androidx.compose.runtime:runtime-saveable-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -328,6 +471,9 @@
     },
     "androidx.compose.runtime:runtime-saveable-desktop:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -336,6 +482,9 @@
     },
     "androidx.compose.runtime:runtime-saveable:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -344,6 +493,9 @@
     },
     "androidx.compose.runtime:runtime:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -352,6 +504,9 @@
     },
     "androidx.compose.ui:ui-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -360,6 +515,9 @@
     },
     "androidx.compose.ui:ui-geometry-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -368,6 +526,9 @@
     },
     "androidx.compose.ui:ui-geometry:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -376,6 +537,9 @@
     },
     "androidx.compose.ui:ui-graphics-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -384,6 +548,9 @@
     },
     "androidx.compose.ui:ui-graphics:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -392,6 +559,9 @@
     },
     "androidx.compose.ui:ui-text-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -400,6 +570,9 @@
     },
     "androidx.compose.ui:ui-text:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -408,6 +581,9 @@
     },
     "androidx.compose.ui:ui-tooling-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -416,6 +592,9 @@
     },
     "androidx.compose.ui:ui-tooling-data-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -424,6 +603,9 @@
     },
     "androidx.compose.ui:ui-tooling-data:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -432,6 +614,9 @@
     },
     "androidx.compose.ui:ui-tooling-preview-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -440,6 +625,9 @@
     },
     "androidx.compose.ui:ui-tooling-preview:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -448,6 +636,9 @@
     },
     "androidx.compose.ui:ui-tooling:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -456,6 +647,9 @@
     },
     "androidx.compose.ui:ui-unit-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -464,6 +658,9 @@
     },
     "androidx.compose.ui:ui-unit:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -472,6 +669,9 @@
     },
     "androidx.compose.ui:ui-util-android:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -480,6 +680,9 @@
     },
     "androidx.compose.ui:ui-util:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -488,6 +691,9 @@
     },
     "androidx.compose.ui:ui:1.11.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -496,6 +702,9 @@
     },
     "androidx.concurrent:concurrent-futures:1.1.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -504,6 +713,9 @@
     },
     "androidx.core:core-ktx:1.16.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -512,6 +724,9 @@
     },
     "androidx.core:core-ktx:1.18.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -520,6 +735,9 @@
     },
     "androidx.core:core-viewtree:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -528,6 +746,9 @@
     },
     "androidx.core:core:1.16.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -536,6 +757,9 @@
     },
     "androidx.core:core:1.18.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -544,6 +768,9 @@
     },
     "androidx.customview:customview-poolingcontainer:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -552,6 +779,9 @@
     },
     "androidx.documentfile:documentfile:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -560,6 +790,9 @@
     },
     "androidx.dynamicanimation:dynamicanimation:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -568,6 +801,9 @@
     },
     "androidx.emoji2:emoji2:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -576,6 +812,9 @@
     },
     "androidx.graphics:graphics-path:1.0.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -584,6 +823,9 @@
     },
     "androidx.graphics:graphics-shapes-android:1.1.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -592,6 +834,9 @@
     },
     "androidx.graphics:graphics-shapes-desktop:1.1.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -600,6 +845,9 @@
     },
     "androidx.graphics:graphics-shapes:1.1.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -608,6 +856,9 @@
     },
     "androidx.interpolator:interpolator:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -616,6 +867,9 @@
     },
     "androidx.legacy:legacy-support-core-utils:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -624,6 +878,9 @@
     },
     "androidx.lifecycle:lifecycle-common-java8:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -632,6 +889,9 @@
     },
     "androidx.lifecycle:lifecycle-common-jvm:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -640,6 +900,9 @@
     },
     "androidx.lifecycle:lifecycle-common:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -648,6 +911,9 @@
     },
     "androidx.lifecycle:lifecycle-common:2.6.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -656,6 +922,9 @@
     },
     "androidx.lifecycle:lifecycle-livedata-core-ktx:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -664,6 +933,9 @@
     },
     "androidx.lifecycle:lifecycle-livedata-core:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -672,6 +944,9 @@
     },
     "androidx.lifecycle:lifecycle-livedata:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -680,6 +955,9 @@
     },
     "androidx.lifecycle:lifecycle-process:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -688,6 +966,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime-android:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -696,6 +977,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -704,6 +988,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime-compose-desktop:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -712,6 +999,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime-compose:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -720,6 +1010,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime-desktop:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -728,6 +1021,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -736,6 +1032,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime-ktx:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -744,6 +1043,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -752,6 +1054,9 @@
     },
     "androidx.lifecycle:lifecycle-runtime:2.6.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -760,6 +1065,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-android:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -768,6 +1076,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -776,6 +1087,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -784,6 +1098,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-desktop:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -792,6 +1109,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -800,6 +1120,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -808,6 +1131,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-savedstate-desktop:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -816,6 +1142,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -824,6 +1153,9 @@
     },
     "androidx.lifecycle:lifecycle-viewmodel:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -832,6 +1164,9 @@
     },
     "androidx.loader:loader:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -840,6 +1175,9 @@
     },
     "androidx.localbroadcastmanager:localbroadcastmanager:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -848,6 +1186,9 @@
     },
     "androidx.navigationevent:navigationevent-android:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -856,6 +1197,9 @@
     },
     "androidx.navigationevent:navigationevent-compose-android:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -864,6 +1208,9 @@
     },
     "androidx.navigationevent:navigationevent-compose:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -872,6 +1219,9 @@
     },
     "androidx.navigationevent:navigationevent-desktop:1.0.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -880,6 +1230,9 @@
     },
     "androidx.navigationevent:navigationevent:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -888,6 +1241,9 @@
     },
     "androidx.navigationevent:navigationevent:1.0.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -896,6 +1252,9 @@
     },
     "androidx.print:print:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -904,6 +1263,9 @@
     },
     "androidx.profileinstaller:profileinstaller:1.3.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -912,6 +1274,9 @@
     },
     "androidx.profileinstaller:profileinstaller:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -920,6 +1285,9 @@
     },
     "androidx.savedstate:savedstate-android:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -928,6 +1296,9 @@
     },
     "androidx.savedstate:savedstate-compose-android:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -936,6 +1307,9 @@
     },
     "androidx.savedstate:savedstate-compose-desktop:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -944,6 +1318,9 @@
     },
     "androidx.savedstate:savedstate-compose:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -952,6 +1329,9 @@
     },
     "androidx.savedstate:savedstate-desktop:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -960,6 +1340,9 @@
     },
     "androidx.savedstate:savedstate-ktx:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -968,6 +1351,9 @@
     },
     "androidx.savedstate:savedstate:1.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -976,6 +1362,9 @@
     },
     "androidx.startup:startup-runtime:1.1.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -984,6 +1373,9 @@
     },
     "androidx.startup:startup-runtime:1.2.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -992,6 +1384,9 @@
     },
     "androidx.tracing:tracing:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1000,6 +1395,9 @@
     },
     "androidx.tracing:tracing:1.2.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1008,6 +1406,9 @@
     },
     "androidx.transition:transition:1.6.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1016,6 +1417,9 @@
     },
     "androidx.versionedparcelable:versionedparcelable:1.1.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1024,6 +1428,9 @@
     },
     "androidx.window:window-core-android:1.5.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1032,6 +1439,9 @@
     },
     "androidx.window:window-core:1.5.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1040,6 +1450,9 @@
     },
     "androidx.window:window:1.5.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1048,6 +1461,9 @@
     },
     "com.google.guava:listenablefuture:1.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1056,6 +1472,9 @@
     },
     "com.goterl:lazysodium-android:5.2.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "MPL-2.0"
       ],
@@ -1064,6 +1483,9 @@
     },
     "com.goterl:resource-loader:2.0.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "MIT"
       ],
@@ -1072,6 +1494,9 @@
     },
     "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache License, Version 2.0"
       ],
@@ -1080,6 +1505,9 @@
     },
     "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1088,6 +1516,9 @@
     },
     "com.squareup.okhttp3:okhttp-android:5.3.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1096,6 +1527,9 @@
     },
     "com.squareup.okhttp3:okhttp:5.3.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1104,6 +1538,9 @@
     },
     "com.squareup.okio:okio-jvm:3.17.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1112,6 +1549,9 @@
     },
     "com.squareup.okio:okio-jvm:3.7.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1120,6 +1560,9 @@
     },
     "com.squareup.okio:okio:3.17.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1128,6 +1571,9 @@
     },
     "com.squareup.okio:okio:3.7.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1136,6 +1582,9 @@
     },
     "io.ktor:ktor-client-cio-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1144,6 +1593,9 @@
     },
     "io.ktor:ktor-client-cio:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1152,6 +1604,9 @@
     },
     "io.ktor:ktor-client-content-negotiation-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1160,6 +1615,9 @@
     },
     "io.ktor:ktor-client-content-negotiation:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1168,6 +1626,9 @@
     },
     "io.ktor:ktor-client-core-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1176,6 +1637,9 @@
     },
     "io.ktor:ktor-client-core:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1184,6 +1648,9 @@
     },
     "io.ktor:ktor-client-okhttp-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1192,6 +1659,9 @@
     },
     "io.ktor:ktor-client-okhttp:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1200,6 +1670,9 @@
     },
     "io.ktor:ktor-events-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1208,6 +1681,9 @@
     },
     "io.ktor:ktor-events:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1216,6 +1692,9 @@
     },
     "io.ktor:ktor-http-cio-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1224,6 +1703,9 @@
     },
     "io.ktor:ktor-http-cio:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1232,6 +1714,9 @@
     },
     "io.ktor:ktor-http-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1240,6 +1725,9 @@
     },
     "io.ktor:ktor-http:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1248,6 +1736,9 @@
     },
     "io.ktor:ktor-io-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1256,6 +1747,9 @@
     },
     "io.ktor:ktor-io:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1264,6 +1758,9 @@
     },
     "io.ktor:ktor-network-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1272,6 +1769,9 @@
     },
     "io.ktor:ktor-network-tls-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1280,6 +1780,9 @@
     },
     "io.ktor:ktor-network-tls:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1288,6 +1791,9 @@
     },
     "io.ktor:ktor-network:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1296,6 +1802,9 @@
     },
     "io.ktor:ktor-serialization-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1304,6 +1813,9 @@
     },
     "io.ktor:ktor-serialization-kotlinx-json-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1312,6 +1824,9 @@
     },
     "io.ktor:ktor-serialization-kotlinx-json:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1320,6 +1835,9 @@
     },
     "io.ktor:ktor-serialization-kotlinx-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1328,6 +1846,9 @@
     },
     "io.ktor:ktor-serialization-kotlinx:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1336,6 +1857,9 @@
     },
     "io.ktor:ktor-serialization:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1344,6 +1868,9 @@
     },
     "io.ktor:ktor-sse-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1352,6 +1879,9 @@
     },
     "io.ktor:ktor-sse:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1360,6 +1890,9 @@
     },
     "io.ktor:ktor-utils-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1368,6 +1901,9 @@
     },
     "io.ktor:ktor-utils:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1376,6 +1912,9 @@
     },
     "io.ktor:ktor-websocket-serialization-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1384,6 +1923,9 @@
     },
     "io.ktor:ktor-websocket-serialization:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1392,6 +1934,9 @@
     },
     "io.ktor:ktor-websockets-jvm:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1400,6 +1945,9 @@
     },
     "io.ktor:ktor-websockets:3.5.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1408,6 +1956,9 @@
     },
     "net.java.dev.jna:jna:5.19.1": {
       "election": "Apache-2.0",
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": "OPEN",
       "licenses": [
         "LGPL-2.1-or-later",
         "Apache-2.0"
@@ -1417,6 +1968,9 @@
     },
     "org.bouncycastle:bcprov-jdk18on:1.85.2": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Bouncy Castle Licence"
       ],
@@ -1425,6 +1979,9 @@
     },
     "org.hyperledger.identus:bip32-ed25519-android:1.8.8": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1433,6 +1990,9 @@
     },
     "org.hyperledger.identus:bip32-ed25519-jvm:1.8.8": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache License, Version 2.0"
       ],
@@ -1441,6 +2001,9 @@
     },
     "org.hyperledger.identus:bip32-ed25519:1.8.8": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1449,6 +2012,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-common:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1457,6 +2023,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose-desktop:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1465,6 +2034,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1473,6 +2045,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-runtime:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1481,6 +2056,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose-desktop:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1489,6 +2067,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1497,6 +2078,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1505,6 +2089,9 @@
     },
     "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.10.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1513,6 +2100,9 @@
     },
     "org.jetbrains.androidx.savedstate:savedstate-compose-desktop:1.3.6": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1521,6 +2111,9 @@
     },
     "org.jetbrains.androidx.savedstate:savedstate-compose:1.3.6": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1529,6 +2122,9 @@
     },
     "org.jetbrains.androidx.savedstate:savedstate:1.3.6": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1537,6 +2133,9 @@
     },
     "org.jetbrains.compose.animation:animation-core-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1545,6 +2144,9 @@
     },
     "org.jetbrains.compose.animation:animation-core:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1553,6 +2155,9 @@
     },
     "org.jetbrains.compose.animation:animation-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1561,6 +2166,9 @@
     },
     "org.jetbrains.compose.animation:animation:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1569,6 +2177,9 @@
     },
     "org.jetbrains.compose.components:components-resources-android:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1577,6 +2188,9 @@
     },
     "org.jetbrains.compose.components:components-resources-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1585,6 +2199,9 @@
     },
     "org.jetbrains.compose.components:components-resources:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1593,6 +2210,9 @@
     },
     "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1601,6 +2221,9 @@
     },
     "org.jetbrains.compose.desktop:desktop-jvm:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1609,6 +2232,9 @@
     },
     "org.jetbrains.compose.desktop:desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1617,6 +2243,9 @@
     },
     "org.jetbrains.compose.foundation:foundation-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1625,6 +2254,9 @@
     },
     "org.jetbrains.compose.foundation:foundation-layout-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1633,6 +2265,9 @@
     },
     "org.jetbrains.compose.foundation:foundation-layout:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1641,6 +2276,9 @@
     },
     "org.jetbrains.compose.foundation:foundation:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1649,6 +2287,9 @@
     },
     "org.jetbrains.compose.hot-reload:hot-reload-annotations-jvm:1.1.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1657,6 +2298,9 @@
     },
     "org.jetbrains.compose.hot-reload:hot-reload-annotations:1.1.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1665,6 +2309,9 @@
     },
     "org.jetbrains.compose.hot-reload:hot-reload-runtime-api-jvm:1.1.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1673,6 +2320,9 @@
     },
     "org.jetbrains.compose.hot-reload:hot-reload-runtime-api:1.1.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1681,6 +2331,9 @@
     },
     "org.jetbrains.compose.material3:material3-desktop:1.11.0-alpha07": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1689,6 +2342,9 @@
     },
     "org.jetbrains.compose.material3:material3:1.11.0-alpha07": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1697,6 +2353,9 @@
     },
     "org.jetbrains.compose.material:material-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1705,6 +2364,9 @@
     },
     "org.jetbrains.compose.material:material-ripple-desktop:1.11.0-beta03": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1713,6 +2375,9 @@
     },
     "org.jetbrains.compose.material:material-ripple-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1721,6 +2386,9 @@
     },
     "org.jetbrains.compose.material:material-ripple:1.11.0-beta03": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1729,6 +2397,9 @@
     },
     "org.jetbrains.compose.material:material-ripple:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1737,6 +2408,9 @@
     },
     "org.jetbrains.compose.material:material:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1745,6 +2419,9 @@
     },
     "org.jetbrains.compose.runtime:runtime-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1753,6 +2430,9 @@
     },
     "org.jetbrains.compose.runtime:runtime-saveable-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1761,6 +2441,9 @@
     },
     "org.jetbrains.compose.runtime:runtime-saveable:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1769,6 +2452,9 @@
     },
     "org.jetbrains.compose.runtime:runtime:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1777,6 +2463,9 @@
     },
     "org.jetbrains.compose.ui:ui-backhandler-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1785,6 +2474,9 @@
     },
     "org.jetbrains.compose.ui:ui-backhandler:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1793,6 +2485,9 @@
     },
     "org.jetbrains.compose.ui:ui-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1801,6 +2496,9 @@
     },
     "org.jetbrains.compose.ui:ui-geometry-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1809,6 +2507,9 @@
     },
     "org.jetbrains.compose.ui:ui-geometry:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1817,6 +2518,9 @@
     },
     "org.jetbrains.compose.ui:ui-graphics-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1825,6 +2529,9 @@
     },
     "org.jetbrains.compose.ui:ui-graphics:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1833,6 +2540,9 @@
     },
     "org.jetbrains.compose.ui:ui-text-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1841,6 +2551,9 @@
     },
     "org.jetbrains.compose.ui:ui-text:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1849,6 +2562,9 @@
     },
     "org.jetbrains.compose.ui:ui-tooling-data:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1857,6 +2573,9 @@
     },
     "org.jetbrains.compose.ui:ui-tooling-preview-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1865,6 +2584,9 @@
     },
     "org.jetbrains.compose.ui:ui-tooling-preview:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1873,6 +2595,9 @@
     },
     "org.jetbrains.compose.ui:ui-tooling:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1881,6 +2606,9 @@
     },
     "org.jetbrains.compose.ui:ui-unit-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1889,6 +2617,9 @@
     },
     "org.jetbrains.compose.ui:ui-unit:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1897,6 +2628,9 @@
     },
     "org.jetbrains.compose.ui:ui-util-desktop:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1905,6 +2639,9 @@
     },
     "org.jetbrains.compose.ui:ui-util:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1913,6 +2650,9 @@
     },
     "org.jetbrains.compose.ui:ui:1.11.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1921,6 +2661,9 @@
     },
     "org.jetbrains.kotlin:kotlin-stdlib-common:2.4.10": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1929,6 +2672,9 @@
     },
     "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.23": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1937,6 +2683,9 @@
     },
     "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.23": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1945,6 +2694,9 @@
     },
     "org.jetbrains.kotlin:kotlin-stdlib:2.4.10": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1953,6 +2705,9 @@
     },
     "org.jetbrains.kotlinx:atomicfu-jvm:0.26.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -1961,6 +2716,9 @@
     },
     "org.jetbrains.kotlinx:atomicfu-jvm:0.28.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1969,6 +2727,9 @@
     },
     "org.jetbrains.kotlinx:atomicfu:0.26.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1977,6 +2738,9 @@
     },
     "org.jetbrains.kotlinx:atomicfu:0.28.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1985,6 +2749,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -1993,6 +2760,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2001,6 +2771,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2009,6 +2782,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.6.4": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2017,6 +2793,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2025,6 +2804,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.4": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2033,6 +2815,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2041,6 +2826,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2049,6 +2837,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2057,6 +2848,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2065,6 +2859,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-datetime-jvm:0.7.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2073,6 +2870,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-datetime:0.7.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2081,6 +2881,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-io-bytestring-jvm:0.9.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2089,6 +2892,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-io-bytestring:0.9.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2097,6 +2903,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-io-core-jvm:0.9.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2105,6 +2914,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-io-core:0.9.1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2113,6 +2925,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-bom:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2121,6 +2936,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-bom:1.6.3": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2129,6 +2947,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2137,6 +2958,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.6.3": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2145,6 +2969,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-core:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2153,6 +2980,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-core:1.6.3": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2161,6 +2991,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-json-io-jvm:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2169,6 +3002,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-json-io:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2177,6 +3013,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2185,6 +3024,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.6.3": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2193,6 +3035,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2201,6 +3046,9 @@
     },
     "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2209,6 +3057,9 @@
     },
     "org.jetbrains.runtime:jbr-api:1.9.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache License, Version 2.0"
       ],
@@ -2217,6 +3068,9 @@
     },
     "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2225,6 +3079,9 @@
     },
     "org.jetbrains.skiko:skiko-awt:0.144.6": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2233,6 +3090,9 @@
     },
     "org.jetbrains.skiko:skiko:0.144.6": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2241,6 +3101,9 @@
     },
     "org.jetbrains:annotations:13.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2249,6 +3112,9 @@
     },
     "org.jetbrains:annotations:23.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2257,6 +3123,9 @@
     },
     "org.jspecify:jspecify:1.0.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache License, Version 2.0"
       ],
@@ -2265,6 +3134,9 @@
     },
     "org.kotlincrypto.bitops:bits-jvm:0.3.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2273,6 +3145,9 @@
     },
     "org.kotlincrypto.bitops:bits:0.3.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2281,6 +3156,9 @@
     },
     "org.kotlincrypto.bitops:endian-jvm:0.3.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2289,6 +3167,9 @@
     },
     "org.kotlincrypto.bitops:endian:0.3.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2297,6 +3178,9 @@
     },
     "org.kotlincrypto.core:core-jvm:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2305,6 +3189,9 @@
     },
     "org.kotlincrypto.core:core:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2313,6 +3200,9 @@
     },
     "org.kotlincrypto.core:digest-jvm:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2321,6 +3211,9 @@
     },
     "org.kotlincrypto.core:digest:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2329,6 +3222,9 @@
     },
     "org.kotlincrypto.hash:blake2-jvm:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2337,6 +3233,9 @@
     },
     "org.kotlincrypto.hash:blake2:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2345,6 +3244,9 @@
     },
     "org.kotlincrypto.hash:sha2-jvm:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2353,6 +3255,9 @@
     },
     "org.kotlincrypto.hash:sha2:0.8.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "Apache-2.0"
       ],
@@ -2361,6 +3266,9 @@
     },
     "org.kotlincrypto:error-jvm:0.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2369,6 +3277,9 @@
     },
     "org.kotlincrypto:error:0.4.0": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "The Apache Software License, Version 2.0"
       ],
@@ -2377,6 +3288,9 @@
     },
     "org.slf4j:slf4j-api:2.0.0-alpha1": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "MIT"
       ],
@@ -2385,6 +3299,9 @@
     },
     "org.slf4j:slf4j-api:2.0.18": {
       "election": null,
+      "election_review_date": null,
+      "election_reviewer": null,
+      "election_status": null,
       "licenses": [
         "MIT"
       ],

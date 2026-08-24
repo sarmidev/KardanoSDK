@@ -84,5 +84,5 @@
     }
   ],
   "method": "Every row is required to appear in both crypto-signing-backend/CHECKSUMS.sha256 and this script's NATIVE_ARTIFACT_CATALOG; a mismatch in either direction, a duplicate path, a malformed line, a symlink, or a SHA-256 mismatch against the committed bytes all fail generation.",
-  "windows_candidate_not_promoted": "win32-x86-64/kardano_ed25519_bip32_signing.dll has a technical GO on PE-structure evidence (windows-jvm-rebuild-evidence.yml) but remains unpromoted: not in crypto-signing-backend/CHECKSUMS.sha256, not in this catalog, and not distributed, pending independent PE re-review and upstream hyperledger-identus/apollo issue #226."
+  "windows_candidate_not_promoted": "win32-x86-64/kardano_ed25519_bip32_signing.dll has a technical GO on PE-structure evidence (windows-jvm-rebuild-evidence.yml). Its independent PE technical review is complete (commit c65a20a), which closes ONLY that technical-review gate -- it is not a legal approval and does not promote this candidate or mean any DLL is distributed. It remains unpromoted: not in crypto-signing-backend/CHECKSUMS.sha256, not in this catalog, and not distributed, solely because of the still-open upstream hyperledger-identus/apollo issue #226 (and any separate manual/release decision)."
 }

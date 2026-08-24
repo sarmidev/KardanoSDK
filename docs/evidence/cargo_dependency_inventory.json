@@ -1,11 +1,14 @@
 {
   "license_elections": {
+    "accepted_and_component_count": 0,
     "accepted_count": 0,
     "all_mandatory_elections_accepted": false,
+    "mandatory_and_component_count": 0,
     "mandatory_row_count": 27,
-    "method": "Every package whose Cargo.toml `license` field is not a single unambiguous SPDX license (i.e. contains OR, AND, or WITH, or is missing) gets one row here. AND-components are always mandatory regardless of any OR election elsewhere in the same expression (unicode-ident's Unicode-3.0 AND-component, for example, is not satisfied by electing either side of its (MIT OR Apache-2.0) OR-component). A target-linked package with no catalog row fails generation rather than being silently treated as covered by some other package's election.",
+    "method": "Every package whose Cargo.toml `license` field is not a single unambiguous SPDX license (i.e. contains OR, AND, or WITH, or is missing) gets one row here. AND-components are always mandatory regardless of any OR election elsewhere in the same expression (unicode-ident's Unicode-3.0 AND-component, for example, is not satisfied by electing either side of its (MIT OR Apache-2.0) OR-component) and carry their OWN `and_component_acceptance` status/reviewer/review_date entry, separate from the row's OR election -- accepting the OR side never implicitly accepts an AND-required component, and vice versa. A target-linked package with no catalog row fails generation rather than being silently treated as covered by some other package's election.",
     "rows": [
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -51,6 +54,7 @@
         "version": "1.0.103"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "Apache-2.0 OR MIT",
         "linked_in_any_target": false,
@@ -96,6 +100,7 @@
         "version": "1.5.1"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -141,6 +146,7 @@
         "version": "2.13.0"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -186,6 +192,7 @@
         "version": "1.2.4"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -231,6 +238,7 @@
         "version": "0.1.9"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -276,6 +284,7 @@
         "version": "1.0.4"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT/Apache-2.0",
         "linked_in_any_target": true,
@@ -321,6 +330,7 @@
         "version": "0.5.3"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -366,6 +376,7 @@
         "version": "0.4.2"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "Apache-2.0 OR MIT",
         "linked_in_any_target": true,
@@ -411,6 +422,7 @@
         "version": "1.0.2"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -448,11 +460,15 @@
           ],
           "x86_64-linux-android": [
             "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
           ]
         },
         "version": "0.3.14"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "Apache-2.0 OR MIT",
         "linked_in_any_target": true,
@@ -498,6 +514,7 @@
         "version": "2.4.1"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT/Apache-2.0",
         "linked_in_any_target": false,
@@ -543,6 +560,7 @@
         "version": "2.11.0"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -588,6 +606,7 @@
         "version": "0.4.3"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -633,6 +652,7 @@
         "version": "0.17.1"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -678,6 +698,7 @@
         "version": "0.5.0"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "Apache-2.0 OR MIT",
         "linked_in_any_target": true,
@@ -723,6 +744,7 @@
         "version": "2.14.0"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -768,6 +790,7 @@
         "version": "1.0.18"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -813,6 +836,7 @@
         "version": "0.2.186"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
         "linked_in_any_target": true,
@@ -847,6 +871,7 @@
         "version": "0.12.1"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "Unlicense OR MIT",
         "linked_in_any_target": true,
@@ -892,6 +917,7 @@
         "version": "2.8.3"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -937,6 +963,7 @@
         "version": "1.21.4"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": false,
@@ -982,6 +1009,7 @@
         "version": "1.0.106"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": false,
@@ -1027,6 +1055,7 @@
         "version": "1.0.46"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
         "linked_in_any_target": true,
@@ -1073,6 +1102,7 @@
         "version": "1.1.4"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -1118,6 +1148,7 @@
         "version": "1.0.28"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -1163,6 +1194,7 @@
         "version": "1.0.228"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -1208,6 +1240,7 @@
         "version": "1.0.228"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": false,
@@ -1253,6 +1286,7 @@
         "version": "1.0.228"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -1298,6 +1332,7 @@
         "version": "1.0.150"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT/Apache-2.0",
         "linked_in_any_target": false,
@@ -1343,6 +1378,7 @@
         "version": "0.3.11"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -1388,6 +1424,7 @@
         "version": "1.1.0"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": false,
@@ -1433,6 +1470,7 @@
         "version": "2.0.118"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -1478,6 +1516,7 @@
         "version": "3.27.0"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": true,
@@ -1523,6 +1562,7 @@
         "version": "2.0.18"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT OR Apache-2.0",
         "linked_in_any_target": false,
@@ -1568,6 +1608,7 @@
         "version": "2.0.18"
       },
       {
+        "and_component_acceptance": [],
         "and_required_components": [],
         "expression": "MIT/Apache-2.0",
         "linked_in_any_target": false,
@@ -1613,6 +1654,14 @@
         "version": "0.5.11"
       },
       {
+        "and_component_acceptance": [
+          {
+            "component": "Unicode-3.0",
+            "review_date": null,
+            "reviewer": null,
+            "status": "NOT_APPLICABLE"
+          }
+        ],
         "and_required_components": [
           "Unicode-3.0"
         ],
@@ -2124,6 +2173,7 @@
         "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
         "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
         "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
         "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
         "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
         "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
@@ -2605,6 +2655,9 @@
           "linked_into_compiled_artifact"
         ],
         "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
           "linked_into_compiled_artifact"
         ]
       },
