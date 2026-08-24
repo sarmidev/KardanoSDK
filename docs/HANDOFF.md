@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Sign readelf coupled to parser Versym; unique `vd_ndx`. Runs `32676885035` and `32677333260` superseded. Not promoted. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM `.so` promoted from run `32678079715` at `85670a7` (SHA-256 `cb439099…4ed5`). Ninth CHECKSUMS row. Independent promotion re-review still required. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -125,10 +125,12 @@ Date: 2026-08-23
   `UINT64_MAX`-checked; raw known roots use a following-byte boundary.
   Versym 0, canonical dynsym 0, globally unique `vna_other`/`vd_ndx`,
   and `readelf --dyn-syms --wide` sign records coupled to the parsed
-  sign Versym. Runs `32676885035` and `32677333260` are superseded.
-  CHECKSUMS still has
-  the eight committed artifacts. Device runtime remains historical
-  (W5-2). Do not start Windows or merge/tag.
+  sign Versym. Phase C promotion from run `32678079715` (artifacts
+  `9503309381` / `9503308946` / `9503350346`, expire 2026-09-07)
+  added the ninth CHECKSUMS row
+  `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`.
+  Device runtime remains historical (W5-2). Do not start Windows or
+  merge/tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope
@@ -246,12 +248,9 @@ Do not use:
 ## Next Recommended Task
 
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
-`d09db44`. Gate 2 Linux Phase A/B re-review is the next gate (promotion
-only after two independent `ubuntu-22.04` hashes match **and** that
-re-review is GO). Runs `32676885035` and `32677333260` are superseded.
-Independent re-review is still required. A fresh Phase B at the
-current verifier tip is required. Do not promote. Do not start
-Windows until then. Residual owner work:
+`d09db44`. Gate 2 Linux Phase C promotion from run `32678079715` is on
+the branch (ninth CHECKSUMS row). Independent promotion re-review is
+the next gate. Do not start Windows. Residual owner work:
 authenticated GitHub artifact download, secret-scanning / Dependabot,
 the manual accessibility walkthrough, and a post-replacement Android
 device `connectedAndroidDeviceTest`. Do not merge from an automated

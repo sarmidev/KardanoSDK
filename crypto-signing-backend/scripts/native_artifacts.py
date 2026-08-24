@@ -1,10 +1,10 @@
 """Catalog and fail-closed comparison helpers for signing-backend natives.
 
-This module does not rebuild binaries. It names the eight committed artifacts
-that exist today, plus the Linux x86-64 JVM candidate catalog used by
-``linux-jvm`` rebuilds. Linux is not in CHECKSUMS until promotion.
-Parses SHA-256 manifests, inspects staged copies, and compares them
-against a manifest. Rebuilds must write only into staging.
+This module does not rebuild binaries. It names the nine committed
+artifacts, including the Linux x86-64 JVM ``.so`` promoted from
+``ubuntu-22.04`` Phase C. Parses SHA-256 manifests, inspects staged
+copies, and compares them against a manifest. Rebuilds must write
+only into staging.
 """
 
 from __future__ import annotations
@@ -94,8 +94,7 @@ class ArtifactSpec:
     host_only: bool = False
 
 
-# The eight committed natives. Linux x86-64 JVM is LINUX_JVM_ARTIFACTS
-# (candidate catalog) until a promotion commit adds it here.
+# Nine committed natives. Linux x86-64 JVM is in this catalog after Phase C.
 EXISTING_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec(
         artifact_id="macos-jvm-arm64",
@@ -177,9 +176,6 @@ EXISTING_ARTIFACTS: tuple[ArtifactSpec, ...] = (
         expected_file_tokens=("ar archive",),
         rust_target="aarch64-apple-ios-sim",
     ),
-)
-
-LINUX_JVM_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec(
         artifact_id="linux-jvm-x86_64",
         relative_path=f"src/jvmMain/resources/{LINUX_JNA_PREFIX}/{LIB_STEM}.so",
@@ -192,7 +188,11 @@ LINUX_JVM_ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ),
 )
 
-KNOWN_ARTIFACTS: tuple[ArtifactSpec, ...] = EXISTING_ARTIFACTS + LINUX_JVM_ARTIFACTS
+LINUX_JVM_ARTIFACTS: tuple[ArtifactSpec, ...] = tuple(
+    spec for spec in EXISTING_ARTIFACTS if spec.group == "linux-jvm"
+)
+
+KNOWN_ARTIFACTS: tuple[ArtifactSpec, ...] = EXISTING_ARTIFACTS
 
 ARTIFACT_BY_ID: dict[str, ArtifactSpec] = {
     spec.artifact_id: spec for spec in KNOWN_ARTIFACTS
@@ -208,10 +208,7 @@ def artifacts_for_groups(groups: tuple[str, ...] | None) -> list[ArtifactSpec]:
         return list(EXISTING_ARTIFACTS)
     wanted: list[ArtifactSpec] = []
     for group in groups:
-        if group == "linux-jvm":
-            wanted.extend(LINUX_JVM_ARTIFACTS)
-        else:
-            wanted.extend(spec for spec in EXISTING_ARTIFACTS if spec.group == group)
+        wanted.extend(spec for spec in EXISTING_ARTIFACTS if spec.group == group)
     return wanted
 
 

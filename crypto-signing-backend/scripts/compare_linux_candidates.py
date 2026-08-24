@@ -2,7 +2,9 @@
 """Compare two independent Linux x86-64 JVM staging trees.
 
 Requires byte-identical SHA-256 and matching ELF/symbol/dependency
-reports. Does not write CHECKSUMS.sha256 or copy into src/.
+reports. After Phase C promotion, also requires that shared digest to
+equal the committed Linux CHECKSUMS row and the committed ``.so``.
+Does not write CHECKSUMS.sha256 or copy into src/.
 """
 
 from __future__ import annotations
@@ -60,6 +62,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--left", type=Path, required=True)
     parser.add_argument("--right", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument(
+        "--checksums",
+        type=Path,
+        help="Committed CHECKSUMS.sha256; require A/B SHA-256 to match the Linux row.",
+    )
+    parser.add_argument(
+        "--committed-so",
+        type=Path,
+        help="Committed Linux .so path; require byte identity with A/B.",
+    )
     args = parser.parse_args(argv)
     findings: list[str] = []
     try:
@@ -90,6 +102,26 @@ def main(argv: list[str] | None = None) -> int:
             findings.append("sign symbol missing or ambiguous on one candidate")
         if left.get("forbidden_paths") or right.get("forbidden_paths"):
             findings.append("embedded host-absolute paths are present")
+        linux_rel = natives.LINUX_JVM_ARTIFACTS[0].relative_path
+        if args.checksums is not None:
+            rows = natives.load_manifest(args.checksums.resolve())
+            expected = rows.get(linux_rel)
+            if expected is None:
+                findings.append(f"committed CHECKSUMS is missing {linux_rel}")
+            elif left.get("sha256") != expected or right.get("sha256") != expected:
+                findings.append(
+                    f"candidate SHA-256 {left.get('sha256')} != CHECKSUMS {expected}"
+                )
+        if args.committed_so is not None:
+            committed = args.committed_so.resolve()
+            if not committed.is_file():
+                findings.append(f"committed Linux .so is missing: {committed}")
+            else:
+                committed_sha = natives.sha256_file(committed)
+                if committed_sha != left.get("sha256") or committed_sha != right.get("sha256"):
+                    findings.append(
+                        f"candidate SHA-256 {left.get('sha256')} != committed .so {committed_sha}"
+                    )
         baseline = linux_elf.DOCUMENTED_GLIBC_BASELINE_LABEL
         for side, report in (("left", left), ("right", right)):
             if report.get("documented_glibc_baseline") != baseline:

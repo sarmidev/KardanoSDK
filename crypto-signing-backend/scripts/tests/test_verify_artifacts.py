@@ -51,19 +51,19 @@ class ParseChecksumsTests(unittest.TestCase):
 
 
 class LinuxCatalogTests(unittest.TestCase):
-    def test_linux_is_candidate_catalog_not_committed_eight(self) -> None:
+    def test_linux_is_in_the_promoted_catalog(self) -> None:
         linux = natives.LINUX_JVM_ARTIFACTS[0]
         self.assertEqual(linux.group, "linux-jvm")
         self.assertEqual(
             linux.relative_path,
             "src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so",
         )
-        self.assertNotIn(linux, natives.EXISTING_ARTIFACTS)
+        self.assertIn(linux, natives.EXISTING_ARTIFACTS)
         self.assertEqual(
             [spec.artifact_id for spec in natives.artifacts_for_groups(("linux-jvm",))],
             ["linux-jvm-x86_64"],
         )
-        self.assertEqual(len(natives.EXISTING_ARTIFACTS), 8)
+        self.assertEqual(len(natives.EXISTING_ARTIFACTS), 9)
 
 
 class ManifestCoverageTests(unittest.TestCase):
@@ -82,9 +82,7 @@ class ManifestCoverageTests(unittest.TestCase):
         checksums = {
             spec.relative_path: "ab" * 32 for spec in natives.EXISTING_ARTIFACTS
         }
-        checksums["src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so"] = (
-            "cd" * 32
-        )
+        checksums["src/unexpected-extra.so"] = "cd" * 32
         findings = natives.check_manifest_coverage(checksums)
         self.assertTrue(any(item.kind == "extra-manifest" for item in findings))
 
@@ -141,7 +139,7 @@ class CompareTreeTests(unittest.TestCase):
     def test_extra_staged_binary_is_a_finding(self) -> None:
         payloads = self._payloads()
         committed, staged = self._tree(payloads)
-        extra = staged / "src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so"
+        extra = staged / "src/jvmMain/resources/unexpected/libkardano_ed25519_bip32_signing.so"
         _write(extra, b"extra\n")
         findings, _, _ = natives.compare_trees(
             committed, staged, require_inspection=False

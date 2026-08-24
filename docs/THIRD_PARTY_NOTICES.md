@@ -56,6 +56,7 @@ artifact/repository inspection.
 | Asset | Source | Note |
 |---|---|---|
 | Kardano SDK icon mark (light/dark variants, low/medium/high resolution PNGs) | Sarmidev (project owner) | First-party artwork, not a third-party component. Derived files — the Android adaptive-icon/legacy launcher PNGs (including the monochrome adaptive layer traced from the adaptive foreground alpha), the iOS `AppIcon` PNGs, the Desktop `.icns`/`.ico`/`.png` icons, the Compose header mark (`kardano_mark_light.png`/`kardano_mark_dark.png`), and the `site/assets/brand/` web derivatives (`kardano-mark-light.png`/`kardano-mark-dark.png` copies, plus `favicon-32.png`/`favicon-64.png`/`apple-touch-icon.png`/`og-image.png` resize/pad-only derivatives, added for the public landing page) — are resized/padded/composited copies of these two source PNGs, added in Block 1.12-pre-d and extended for the landing page. It is not the Kotlin or Cardano logo. |
+| Linux x86-64 signing cdylib (`linux-x86-64/libkardano_ed25519_bip32_signing.so`) | First-party (in-tree `crypto-signing-backend` crate) | Committed JNA resource promoted from `ubuntu-22.04` run `32678079715` (SHA-256 `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`). Not a third-party redistributed binary. Scope is Linux x86-64 / glibc >= 2.35. |
 
 ## Release-time checklist
 

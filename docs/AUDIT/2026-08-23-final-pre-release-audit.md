@@ -311,11 +311,12 @@ On `fix/native-build-and-platform-evidence`:
   raw-byte plus slash-byte path scan; invalid UTF-8 fails on a
   forbidden root or an unapproved absolute-looking path; `/proc` is a
   runtime prefix) and two-build identity; it is not
-  in CHECKSUMS until Phase A/B re-review is GO and a promotion commit
-  lands. Versym indices resolve to unique `vna_other`/`vd_ndx`;
+  promoted in Phase C from run `32678079715` (SHA-256
+  `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`;
+  artifacts `9503309381` / `9503308946` / `9503350346`, expire
+  2026-09-07). Versym indices resolve to unique `vna_other`/`vd_ndx`;
   ELF64 add/mul is `UINT64_MAX`-checked; raw known roots require a
   following `/`, path stop, or EOF. Versym 0 / dynsym 0 / globally
   unique `vna_other`/`vd_ndx` / readelf sign records coupled to the
-  parsed sign Versym. Runs `32676885035` and `32677333260` are
-  superseded.
+  parsed sign Versym.
   Linux ARM, musl, older glibc, and Windows remain out of scope.

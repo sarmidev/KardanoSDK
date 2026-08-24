@@ -42,13 +42,14 @@ does not invent a second loader path.
 
 - `darwin-aarch64` — committed; **runtime-verified** here (`jvmTest` on the macOS arm64 host).
 - `darwin-x86-64` — committed; cross-built on macOS, **not** runtime-verified on this arm64 host.
-- `linux-x86-64` — JNA prefix for Linux x86-64 (`libkardano_ed25519_bip32_signing.so`).
-  Built only on a native Ubuntu 22.04 x86-64 host (`x86_64-unknown-linux-gnu`,
-  ImageOS `ubuntu22`). Documented runtime floor is glibc 2.35, measured from
-  `ldd --version` on the runner (not assumed). Not committed until two
-  independent runner hashes match, Phase A/B re-review is GO, and a promotion
-  commit adds the CHECKSUMS row. Linux ARM, musl, and older glibc are out of
-  scope.
+- `linux-x86-64` — committed JNA prefix for Linux x86-64
+  (`libkardano_ed25519_bip32_signing.so`). Built only on native Ubuntu
+  22.04 x86-64 (`x86_64-unknown-linux-gnu`, ImageOS `ubuntu22`).
+  Documented runtime floor is glibc 2.35, measured from `ldd --version`
+  on the runner. Promoted from run `32678079715` at
+  `85670a7206b692c110624b4ef9a69dbfff319ca3` (SHA-256
+  `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`).
+  Linux ARM, musl, and older glibc are out of scope.
 - **Windows JVM hosts are not covered.**
 
 ## Verified (ADR-0016 §7d / §9f) — legs against this real module
@@ -63,7 +64,7 @@ UUID-normalized set in `CHECKSUMS.sha256` (replacement commit `5582637`,
 | iOS compile + simulator link | `./gradlew :crypto-signing-backend:compileKotlinIosArm64` + `:linkDebugTestIosSimulatorArm64` | both `BUILD SUCCESSFUL` on 2026-08-23; Verify `macos-signing-and-ios` runs the eight `compileKotlinIosArm64` tasks **and** `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` | current iOS rows (`a933ee42…6fb2`, `a894136b…2056`) |
 | Eight `compileKotlinIosArm64` modules | `:core` `:crypto` `:crypto-signing-backend` `:provider` `:provider-blockfrost` `:wallet` `:tx` `:shared` | all `BUILD SUCCESSFUL` on 2026-08-23; same eight tasks run on Verify macOS | current iOS `.a` rows above |
 | Android packaging | `./gradlew :androidApp:assembleDebug` + `:androidApp:assembleRelease` | both `BUILD SUCCESSFUL` on 2026-08-23; Verify Ubuntu `android-lint` keeps `lintDebug`/`lintRelease` and now also runs both assemble tasks | current Android `.so` rows in `CHECKSUMS.sha256` |
-| Symbol proof (per target) | `nm -gU` (macOS/iOS), `llvm-nm -D` (Android) | `kardano_ed25519_bip32_signing_fn_func_sign` exported on all 8 artifacts | current `CHECKSUMS.sha256` |
+| Symbol proof (per target) | `nm -gU` (macOS/iOS), `llvm-nm -D` (Android), ELF `.dynsym` (Linux) | `kardano_ed25519_bip32_signing_fn_func_sign` exported on all 9 artifacts | current `CHECKSUMS.sha256` |
 | Android real-runtime KAT | `./gradlew :crypto-signing-backend:connectedAndroidDeviceTest` | 4/4 on `SM-A356B` (Android 15) + 4/4 on `kardano_api24` (API 24) | **historical only** — W5-2 `40ab80c` CHECKSUMS (host-path-tied Android `.so` rows `fdc2a0e2…`, `6c80eb89…`, `e6194b64…`, `5bbe657d…`). No post-replacement device or emulator run has occurred. Owner/manual gate. |
 
 No GitHub Actions emulator/device runner is added: `scripts/action_pin_inventory.py`
@@ -141,13 +142,16 @@ shasum -a 256 \
   src/androidMain/jniLibs/x86_64/$LIB.so \
   src/jvmMain/resources/darwin-aarch64/$LIB.dylib \
   src/jvmMain/resources/darwin-x86-64/$LIB.dylib \
+  src/jvmMain/resources/linux-x86-64/$LIB.so \
   > CHECKSUMS.sha256
+# Linux row must come from a native ubuntu-22.04 rebuild, not a macOS host.
 ```
 
 ## Verifying the committed binaries (checksum manifest, W5-2)
 
-[`CHECKSUMS.sha256`](CHECKSUMS.sha256) records the SHA-256 of all 8 committed native binaries
-(the two iOS `.a`, the four Android `.so`, the two macOS JVM `.dylib`), so a consumer can confirm
+[`CHECKSUMS.sha256`](CHECKSUMS.sha256) records the SHA-256 of all 9 committed native binaries
+(the two iOS `.a`, the four Android `.so`, the two macOS JVM `.dylib`, and the
+Linux x86-64 JVM `.so`), so a consumer can confirm
 which exact bytes they are trusting without cloning the repository at every historical commit to
 diff them by hand. Verify from this module's directory:
 
@@ -237,8 +241,9 @@ identity of those committed bytes, not proof of source provenance.
 The current verifier accepts both committed Darwin dylibs (canonical
 UUID match; arm64 ad-hoc exact-identifier). Linux x86-64 JVM rebuilds
 are native `ubuntu-22.04` only (`linux-jvm-rebuild-evidence.yml`); they
-are not written into CHECKSUMS until two independent candidates match
-and re-review is GO. The ELF verifier is fail-closed on `.dynsym`
+are committed after Phase C promotion from run `32678079715`. Fresh
+Linux rebuilds must match A==B **and** this CHECKSUMS row. The ELF
+verifier is fail-closed on `.dynsym`
 export semantics, GNU version requirements (full-string
 `GLIBC_<major>.<minor>` or legacy `GLIBC_<major>.<minor>.<patch>` only;
 numeric compare against baseline `(2, 35, 0)`; `GLIBC_PRIVATE` and
@@ -259,8 +264,12 @@ symbol. `readelf --dyn-syms --wide` sign records must match the
 parsed sign Versym (unversioned global vs Verdef name/`@@`/`@`/
 `(index)`). The sign export is unhidden and never a Vernaux.
 ELF64 add/mul checks operands against `UINT64_MAX` before summing.
-Runs `32676885035` and `32677333260` are superseded; a fresh Phase B
-at this verifier tip is required before any CHECKSUMS row.
+Promoted from Linux run `32678079715` (artifacts
+`linux-jvm-candidate-a` `9503309381`, `linux-jvm-candidate-b`
+`9503308946`, `linux-jvm-compare-report` `9503350346`, expire
+2026-09-07). SHA-256
+`cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`.
+Runs `32676885035` and `32677333260` are superseded.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

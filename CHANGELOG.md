@@ -82,9 +82,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   the null dynsym entry, `STB_LOCAL`, and undefined `STB_WEAK`;
   `vna_other` is globally unique; every `vd_ndx` is unique even when
   the name matches; `readelf` sign records must match the parsed
-  sign Versym (`@@`/`@`/`(index)`). Runs `32676885035` and
-  `32677333260` are superseded.
-  The ninth CHECKSUMS row is added only after that re-review is GO.
+  sign Versym (`@@`/`@`/`(index)`). Phase C promotion from run
+  `32678079715` at `85670a7` added the ninth CHECKSUMS row
+  `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`
+  (artifacts `9503309381` / `9503308946` / `9503350346`, expire
+  2026-09-07). Fresh Linux rebuilds must match A==B and that row.
   Linux ARM, musl, older glibc, and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so

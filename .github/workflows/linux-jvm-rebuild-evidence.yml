@@ -1,12 +1,13 @@
 name: Linux JVM rebuild evidence
 
 # Two independent native Ubuntu x86-64 rebuilds of the Linux JVM signing
-# cdylib, then a comparison job that requires byte-identical SHA-256 and
-# matching ELF reports before running Linux JVM KATs against the candidate.
-# This workflow never copies into committed src/ and never rewrites
-# CHECKSUMS.sha256. Linux ARM, musl, and older-than-baseline glibc are
-# out of scope. Runner is pinned ubuntu-22.04 (ImageOS ubuntu22), not
-# ubuntu-latest. Documented glibc floor is 2.35, measured at runtime.
+# cdylib, then a comparison job that requires A==B SHA-256, matching ELF
+# reports, and identity with the committed linux-x86-64 .so / CHECKSUMS
+# row before running Linux JVM KATs. This workflow never copies into
+# committed src/ and never rewrites CHECKSUMS.sha256. Linux ARM, musl,
+# and older-than-baseline glibc are out of scope. Runner is pinned
+# ubuntu-22.04 (ImageOS ubuntu22), not ubuntu-latest. Documented glibc
+# floor is 2.35, measured at runtime.
 
 on:
   pull_request:
@@ -190,6 +191,9 @@ jobs:
           --left "$RUNNER_TEMP/linux-jvm-a"
           --right "$RUNNER_TEMP/linux-jvm-b"
           --report "$RUNNER_TEMP/linux-jvm-compare/compare-report.json"
+          --checksums crypto-signing-backend/CHECKSUMS.sha256
+          --committed-so
+          crypto-signing-backend/src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so
       - name: Place candidate on JNA resource path
         run: |
           DEST="crypto-signing-backend/src/jvmMain/resources/linux-x86-64"

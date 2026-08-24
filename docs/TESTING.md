@@ -186,9 +186,10 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
   run where that environment is unavailable.
 - JVM signing runtime coverage uses the committed macOS natives on Darwin. Linux x86-64
   uses JNA prefix `linux-x86-64/` and is rebuilt only on native `ubuntu-22.04`
-  (glibc >= 2.35, measured at runtime). The `.so` is not in CHECKSUMS until two
-  independent candidates match and re-review is GO. Linux ARM, musl, older
-  glibc, and Windows are out of scope.
+  (glibc >= 2.35, measured at runtime). The `.so` is the ninth CHECKSUMS row
+  (`cb439099…4ed5`), promoted from run `32678079715`. Fresh Linux rebuilds
+  must match A==B and that row. Linux ARM, musl, older glibc, and Windows
+  are out of scope.
 
 Native rebuild comparison (does not overwrite committed binaries):
 
@@ -221,9 +222,10 @@ undefined weak import, fail-closed `readelf --version-info` and
 `--dyn-syms --wide` corroboration coupled to the parsed sign Versym,
 `UINT64_MAX` checked add/mul, and a two-pass path scan. Permissions
 stay `contents: read`. Uploads use `if-no-files-found: error`. The
-job does not write CHECKSUMS or committed `src/`. Runs `32676885035`
-and `32677333260` are superseded. A fresh Phase B at this verifier
-tip is required.
+job does not write CHECKSUMS or committed `src/`. After Phase C it
+requires A==B **and** identity with the committed Linux `.so` /
+CHECKSUMS row. Promoted from run `32678079715` (artifacts
+`9503309381` / `9503308946` / `9503350346`, expire 2026-09-07).
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare
