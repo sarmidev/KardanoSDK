@@ -330,7 +330,23 @@ UniFFI-generated Kotlin binding files, and
 JSON/text under `docs/evidence/`; it never embeds absolute paths,
 timestamps, or hostnames, and it hashes `Cargo.lock` before/after every
 Cargo invocation to fail closed if `--locked` did not actually prevent a
-mutation. `scripts/check_release_evidence.py` fails closed (either mode) if
+mutation.
+
+`docs/evidence/java_class_version_evidence.json`'s live verification is the
+one deliberate exception to "no network needed": every plain run above
+resolves an actual `org.bouncycastle:bcprov-jdk18on:1.85.2` `.jar` to scan
+-- an explicit `--bcprov-jar PATH`, the `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR`
+environment variable (a local Gradle-cache copy is convenient for offline
+iteration), or (the default, if neither is set) a fresh pinned-host,
+SHA-256-and-size-verified download from Maven Central. There is no
+cold-cache/no-op skip branch: a missing/wrong-hash jar is a hard failure of
+the command above, never a silent pass. CI bootstraps this once per job via
+a dedicated step in `.github/workflows/verify.yml` and reuses that same
+verified copy (via the environment variable) for every later step in the
+job, so it is fetched from the network only once even though the generator
+and checker both run several times.
+
+`scripts/check_release_evidence.py` fails closed (either mode) if
 a `NOTICE`/`LICENSES/` cross-reference is broken (including a missing
 `LICENSES/MIT.txt` when an MIT-only Gradle or Cargo package is present), the
 native inventory does not match `CHECKSUMS.sha256` exactly (9 rows) or a

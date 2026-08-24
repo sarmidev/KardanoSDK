@@ -60,17 +60,48 @@ jobs:
           git diff --cached --exit-code
           sha256sum crypto-signing-backend/Cargo.lock > /tmp/cargo-lock-before.sha256
       - name: Bootstrap Cargo registry over the network (--locked only, no lockfile edits)
-        # This is the ONLY step in this job that is allowed real network
-        # access. It fetches exactly the crates crypto-signing-backend/Cargo.lock
-        # already pins (a --locked fetch fails rather than re-resolving), and
-        # every later step in this job runs with CARGO_NET_OFFLINE=true so a
-        # generator/test that tried to reach the network would fail loudly
-        # instead of silently re-resolving or mutating the lockfile.
+        # The FIRST of exactly two steps in this job allowed real network
+        # access (the second is the pinned bcprov-jdk18on fetch immediately
+        # below). This one fetches exactly the crates
+        # crypto-signing-backend/Cargo.lock already pins (a --locked fetch
+        # fails rather than re-resolving), and every later step in this job
+        # runs with CARGO_NET_OFFLINE=true so a generator/test that tried to
+        # reach the network for Cargo resolution specifically would fail
+        # loudly instead of silently re-resolving or mutating the lockfile.
         run: |
           cargo fetch --locked --manifest-path crypto-signing-backend/Cargo.toml
           cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/before.hash
           sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/after.hash
           diff /tmp/before.hash /tmp/after.hash
+      - name: Bootstrap the pinned bcprov-jdk18on jar over the network (host-pinned, SHA-256 + size verified)
+        # The SECOND (and last) step in this job allowed real network
+        # access. A 2026-08-24 independent review found the live
+        # java_class_version_evidence.json verifier previously depended
+        # only on this job's own local Gradle module cache, which this job
+        # never populates (it runs no ./gradlew task at all -- see the
+        # "clean temporary GRADLE_USER_HOME" step below) -- silently
+        # returning success with nothing actually checked. This step
+        # downloads the exact org.bouncycastle:bcprov-jdk18on:1.85.2 .jar
+        # directly from Maven Central, independent of any Gradle cache;
+        # generate_legal_evidence.fetch_and_verify_bcprov_jar() pins the
+        # request to repo1.maven.org (refuses any redirect elsewhere) and
+        # requires the downloaded bytes' whole-archive SHA-256 and exact
+        # size to match the committed, reviewed
+        # docs/evidence/java_class_version_evidence.json pin before
+        # returning a path -- a network/host/size/hash failure fails this
+        # step, not a later one. Every later step in this job reuses this
+        # SAME already-verified local copy via
+        # KARDANO_LEGAL_EVIDENCE_BCPROV_JAR instead of re-fetching.
+        run: |
+          mkdir -p "$RUNNER_TEMP/bcprov-fetch"
+          python3 -c "
+          import pathlib, sys
+          sys.path.insert(0, 'scripts')
+          import generate_legal_evidence as evidence
+          jar = evidence.fetch_and_verify_bcprov_jar(pathlib.Path('$RUNNER_TEMP/bcprov-fetch'))
+          print(jar)
+          " | tee /tmp/bcprov-jar-path.txt
+          echo "KARDANO_LEGAL_EVIDENCE_BCPROV_JAR=$(cat /tmp/bcprov-jar-path.txt)" >> "$GITHUB_ENV"
       - name: Run legal-evidence regression tests
         env:
           CARGO_NET_OFFLINE: "true"
@@ -89,6 +120,11 @@ jobs:
         # are now a complete, committed catalog, and
         # scripts/generate_legal_evidence.py fails closed (raises, writes
         # nothing) if any coordinate is still unresolved.
+        # java_class_version_evidence.json's own live verification is
+        # independent of GRADLE_USER_HOME entirely (a different mechanism --
+        # the KARDANO_LEGAL_EVIDENCE_BCPROV_JAR env var set two steps above,
+        # never this job's Gradle cache); this step's cold GRADLE_USER_HOME
+        # only exercises the Gradle-license-resolution independence above.
         env:
           CARGO_NET_OFFLINE: "true"
         run: |

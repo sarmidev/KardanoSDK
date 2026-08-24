@@ -459,9 +459,29 @@ network access to reproduce it. Re-verify by re-running the
 `unzip -l`/hash commands against a freshly resolved copy of the same
 coordinate+version before relying on this table for a release decision.
 
+**`java_class_version_evidence.json` is the one deliberate exception --
+live-verified every run, network access included by design.** A
+2026-08-25 independent review found the opposite tradeoff (the same
+"local-cache cross-check, cold cache is a safe no-op" pattern
+`maven_native_carriers_inventory()` uses above) meant this evidence's own
+live check silently returned success with nothing actually checked on this
+repo's own legal-evidence-scan CI job, which never populates a Gradle
+cache at all -- exactly the environment it needed to be authoritative in.
+The fix: `live_verify_java_class_version_evidence()` always resolves an
+ACTUAL `org.bouncycastle:bcprov-jdk18on:1.85.2` `.jar` to scan --
+`--bcprov-jar PATH`, the `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR` environment
+variable, or (the default) `fetch_and_verify_bcprov_jar()`'s pinned-host
+(`repo1.maven.org`, no redirect elsewhere), SHA-256-and-size-verified
+download from Maven Central. There is no skip branch: a missing or
+unreachable jar is a hard failure of generation/checking, never a silent
+pass. `.github/workflows/verify.yml`'s `legal-evidence-scan` job bootstraps
+this once via a dedicated step (immediately after the Cargo bootstrap
+step) and every later step in that job reuses the SAME already-verified
+local copy via the environment variable instead of re-fetching.
+
 **Cargo network access is explicit, bounded to one bootstrap step, and
-never implicit inside generation.** The only command in this packet's
-workflow allowed to touch the network is
+never implicit inside generation.** The only Cargo command in this
+packet's workflow allowed to touch the network is
 `cargo fetch --locked --manifest-path crypto-signing-backend/Cargo.toml`,
 run once before generation (`.github/workflows/verify.yml`'s
 "Bootstrap Cargo registry over the network" step; `--locked` means it
@@ -527,8 +547,12 @@ legal-evidence job.
 ## Regeneration and verification
 
 ```bash
-# Network bootstrap (the only step allowed to touch the network -- see §13):
+# Network bootstrap (the two steps allowed to touch the network -- see §13):
 cargo fetch --locked --manifest-path crypto-signing-backend/Cargo.toml
+# java_class_version_evidence.json's own live verification fetches its
+# pinned bcprov-jdk18on jar itself if neither --bcprov-jar nor
+# KARDANO_LEGAL_EVIDENCE_BCPROV_JAR is already set -- no separate manual
+# bootstrap command is required here, unlike the Cargo step above.
 
 # Evidence-content commit (everything except scope_binding.json):
 CARGO_NET_OFFLINE=true python3 scripts/generate_legal_evidence.py

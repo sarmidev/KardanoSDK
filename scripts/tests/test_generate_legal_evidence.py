@@ -9,8 +9,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -3435,20 +3438,56 @@ class JavaClassVersionEvidenceCatalogValidationTests(unittest.TestCase):
             evidence._validate_sealed_java_class_version_evidence(bad)
         self.assertIn("!= max_major_version", str(ctx.exception))
 
+    def test_zero_artifact_size_bytes_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        bad["artifact_size_bytes"] = 0
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("not a positive int", str(ctx.exception))
 
-class JavaClassVersionEvidenceTests(unittest.TestCase):
-    """cross_check_java_class_version_evidence_against_local_cache() /
-    java_class_version_evidence() -- Gap: 'Commit deterministic Java
-    major-version evidence from resolved bytes'.
+    def test_non_int_artifact_size_bytes_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        bad["artifact_size_bytes"] = "10280518"
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("not a positive int", str(ctx.exception))
 
-    Builds a disposable, synthetic Gradle module cache (never a real
-    download) so every failure mode can be exercised deterministically
-    against a fake `JAVA_CLASS_VERSION_EVIDENCE` snapshot: a cold cache, a
+    def test_wrong_host_artifact_url_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        bad["artifact_maven_central_url"] = (
+            "https://evil.example.com/maven2/org/bouncycastle/bcprov-jdk18on/"
+            "1.85.2/bcprov-jdk18on-1.85.2.jar"
+        )
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("pinned host", str(ctx.exception))
+
+    def test_non_https_artifact_url_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        bad["artifact_maven_central_url"] = bad["artifact_maven_central_url"].replace(
+            "https://", "http://"
+        )
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("pinned host", str(ctx.exception))
+
+
+class LiveVerifyJavaClassVersionEvidenceTests(unittest.TestCase):
+    """live_verify_java_class_version_evidence() / java_class_version_evidence()
+    -- Gap: 'exact-tip CI uses an empty Gradle cache and the live bcprov
+    verifier currently returns success when the JAR is absent'.
+
+    Builds a disposable fixture `.jar` on disk and always passes it as an
+    EXPLICIT path (never the old Gradle-module-cache mocking) so every
+    failure mode can be exercised deterministically against a fake
+    `JAVA_CLASS_VERSION_EVIDENCE` snapshot: a missing explicit path, a
     matching fixture, a wrong whole-archive hash, a wrong member byte hash,
     a wrong member version, a wrong member path, a real member the pinned
     evidence still claims (missing Java25 class), a real member the pinned
-    evidence never reviewed (new higher class), and a duplicate member
-    path within one archive.
+    evidence never reviewed (new higher class), and a duplicate member path
+    within one archive -- plus explicit proof that a missing/unresolvable
+    jar with NO explicit path and NO env var is a hard failure, never a
+    silent skip.
     """
 
     GROUP = "com.example"
@@ -3457,38 +3496,39 @@ class JavaClassVersionEvidenceTests(unittest.TestCase):
     COORDINATE = f"{GROUP}:{ARTIFACT}:{VERSION}"
 
     def setUp(self) -> None:
-        self._orig_modules2 = evidence.GRADLE_MODULES2
         self._tmp = tempfile.TemporaryDirectory()
-        evidence.GRADLE_MODULES2 = Path(self._tmp.name)
+        self._env_patch = mock.patch.dict(os.environ, {}, clear=False)
+        self._env_patch.start()
+        os.environ.pop(evidence.BCPROV_JAR_PATH_ENV_VAR, None)
 
     def tearDown(self) -> None:
-        evidence.GRADLE_MODULES2 = self._orig_modules2
+        self._env_patch.stop()
         self._tmp.cleanup()
 
     def _write_jar(self, members: dict[str, bytes]) -> tuple[Path, str]:
-        base = evidence.GRADLE_MODULES2 / self.GROUP / self.ARTIFACT / self.VERSION / "deadbeef"
-        base.mkdir(parents=True, exist_ok=True)
-        jar_path = base / f"{self.ARTIFACT}-{self.VERSION}.jar"
+        jar_path = Path(self._tmp.name) / f"{self.ARTIFACT}-{self.VERSION}.jar"
         with zipfile.ZipFile(jar_path, "w") as zf:
             for name, data in members.items():
                 zf.writestr(name, data)
         return jar_path, evidence.sha256_file(jar_path)
 
-    def _matching_fixture(self) -> dict[str, Any]:
+    def _matching_fixture(self) -> tuple[dict[str, Any], Path]:
         low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
         high1 = _build_java_class(major_version=69, minor_version=0, class_name="High1")
         high2 = _build_java_class(major_version=69, minor_version=0, class_name="High2")
-        _, artifact_digest = self._write_jar(
+        jar_path, artifact_digest = self._write_jar(
             {
                 "Low.class": low,
                 "META-INF/versions/25/High1.class": high1,
                 "META-INF/versions/25/High2.class": high2,
             }
         )
-        return {
+        expected = {
             "method": "test fixture",
             "coordinate": self.COORDINATE,
+            "artifact_maven_central_url": "https://repo1.maven.org/maven2/test/fixture.jar",
             "artifact_sha256": artifact_digest,
+            "artifact_size_bytes": jar_path.stat().st_size,
             "total_class_members_scanned": 3,
             "max_major_version": 69,
             "members_at_max_major_version": [
@@ -3508,53 +3548,58 @@ class JavaClassVersionEvidenceTests(unittest.TestCase):
                 },
             ],
         }
+        return expected, jar_path
 
-    def test_cold_cache_is_a_no_op(self) -> None:
-        fake = {
-            "coordinate": self.COORDINATE,
-            "artifact_sha256": "0" * 64,
-            "total_class_members_scanned": 0,
-            "max_major_version": 69,
-            "members_at_max_major_version": [],
-        }
-        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", fake):
-            evidence.cross_check_java_class_version_evidence_against_local_cache()  # no raise
+    def test_missing_explicit_path_raises(self) -> None:
+        missing = Path(self._tmp.name) / "does-not-exist.jar"
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence.live_verify_java_class_version_evidence(missing)
+        self.assertIn("does not exist", str(ctx.exception))
+
+    def test_symlinked_explicit_path_raises(self) -> None:
+        expected, real_jar = self._matching_fixture()
+        link_path = Path(self._tmp.name) / "link.jar"
+        link_path.symlink_to(real_jar)
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.live_verify_java_class_version_evidence(link_path)
+        self.assertIn("symlink", str(ctx.exception))
 
     def test_matching_fixture_passes(self) -> None:
-        expected = self._matching_fixture()
+        expected, jar_path = self._matching_fixture()
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
-            evidence.cross_check_java_class_version_evidence_against_local_cache()  # no raise
+            evidence.live_verify_java_class_version_evidence(jar_path)  # no raise
 
     def test_wrong_artifact_hash_raises(self) -> None:
-        expected = self._matching_fixture()
+        expected, jar_path = self._matching_fixture()
         expected["artifact_sha256"] = "1" * 64
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
+                evidence.live_verify_java_class_version_evidence(jar_path)
         self.assertIn("wrong/substituted artifact", str(ctx.exception))
 
     def test_wrong_member_bytes_hash_raises(self) -> None:
-        expected = self._matching_fixture()
+        expected, jar_path = self._matching_fixture()
         expected["members_at_max_major_version"][0]["sha256"] = "2" * 64
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
+                evidence.live_verify_java_class_version_evidence(jar_path)
         self.assertIn("do not exactly match", str(ctx.exception))
 
     def test_wrong_member_version_raises(self) -> None:
-        expected = self._matching_fixture()
+        expected, jar_path = self._matching_fixture()
         expected["members_at_max_major_version"][0]["minor_version"] = 65535
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
+                evidence.live_verify_java_class_version_evidence(jar_path)
         self.assertIn("do not exactly match", str(ctx.exception))
 
     def test_wrong_member_path_raises(self) -> None:
-        expected = self._matching_fixture()
+        expected, jar_path = self._matching_fixture()
         expected["members_at_max_major_version"][0]["path"] = "META-INF/versions/25/WrongName.class"
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
+                evidence.live_verify_java_class_version_evidence(jar_path)
         self.assertIn("do not exactly match", str(ctx.exception))
 
     def test_missing_java25_class_raises(self) -> None:
@@ -3563,7 +3608,7 @@ class JavaClassVersionEvidenceTests(unittest.TestCase):
         low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
         high1 = _build_java_class(major_version=69, minor_version=0, class_name="High1")
         high2 = _build_java_class(major_version=69, minor_version=0, class_name="High2")
-        _, artifact_digest = self._write_jar(
+        jar_path, artifact_digest = self._write_jar(
             {"Low.class": low, "META-INF/versions/25/High1.class": high1}
         )
         expected = {
@@ -3590,7 +3635,7 @@ class JavaClassVersionEvidenceTests(unittest.TestCase):
         }
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
+                evidence.live_verify_java_class_version_evidence(jar_path)
         self.assertIn("do not exactly match", str(ctx.exception))
 
     def test_new_higher_class_raises(self) -> None:
@@ -3600,7 +3645,7 @@ class JavaClassVersionEvidenceTests(unittest.TestCase):
         # last reviewed.
         low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
         higher = _build_java_class(major_version=69, minor_version=0, class_name="Higher")
-        _, artifact_digest = self._write_jar(
+        jar_path, artifact_digest = self._write_jar(
             {"Low.class": low, "META-INF/versions/25/Higher.class": higher}
         )
         expected = {
@@ -3620,13 +3665,11 @@ class JavaClassVersionEvidenceTests(unittest.TestCase):
         }
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
+                evidence.live_verify_java_class_version_evidence(jar_path)
         self.assertIn("pins", str(ctx.exception))
 
     def test_duplicate_members_raises(self) -> None:
-        base = evidence.GRADLE_MODULES2 / self.GROUP / self.ARTIFACT / self.VERSION / "deadbeef"
-        base.mkdir(parents=True, exist_ok=True)
-        jar_path = base / f"{self.ARTIFACT}-{self.VERSION}.jar"
+        jar_path = Path(self._tmp.name) / f"{self.ARTIFACT}-{self.VERSION}.jar"
         cls = _build_java_class(major_version=69, minor_version=0, class_name="Dup")
         with zipfile.ZipFile(jar_path, "w") as zf:
             zf.writestr("META-INF/versions/25/Dup.class", cls)
@@ -3648,37 +3691,275 @@ class JavaClassVersionEvidenceTests(unittest.TestCase):
         }
         with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
+                evidence.live_verify_java_class_version_evidence(jar_path)
         self.assertIn("normalize to the same canonical path", str(ctx.exception))
 
-    def test_ambiguous_duplicate_resolved_jars_raises(self) -> None:
-        low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
-        self._write_jar({"Low.class": low})
-        # A second, differently-named variant directory with DIFFERENT
-        # bytes for the same coordinate -- ambiguous which was really used.
-        other_base = evidence.GRADLE_MODULES2 / self.GROUP / self.ARTIFACT / self.VERSION / "feedface"
-        other_base.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(other_base / f"{self.ARTIFACT}-{self.VERSION}.jar", "w") as zf:
-            zf.writestr("Low.class", _build_java_class(major_version=52, minor_version=0, class_name="Different"))
-        expected = self._matching_fixture()
-        expected["coordinate"] = self.COORDINATE
-        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+    def test_no_explicit_path_no_env_var_falls_back_to_fetch_and_fetch_failure_propagates(
+        self,
+    ) -> None:
+        # Proof there is no third "quietly skip" branch: with neither an
+        # explicit path nor the env var set, this MUST attempt
+        # fetch_and_verify_bcprov_jar() -- which is mocked here to fail --
+        # and that failure must propagate, never be swallowed into success.
+        with mock.patch.object(
+            evidence, "fetch_and_verify_bcprov_jar", side_effect=evidence.EvidenceError("network down")
+        ) as fetch_mock:
             with self.assertRaises(evidence.EvidenceError) as ctx:
-                evidence.cross_check_java_class_version_evidence_against_local_cache()
-        self.assertIn("ambiguous which is the real resolved artifact", str(ctx.exception))
+                evidence.live_verify_java_class_version_evidence()
+        fetch_mock.assert_called_once()
+        self.assertIn("network down", str(ctx.exception))
 
-    def test_java_class_version_evidence_returns_the_real_pinned_snapshot_on_a_cold_cache(self) -> None:
-        # GRADLE_MODULES2 is mocked to an empty temp dir with no fixture
-        # written for org.bouncycastle:bcprov-jdk18on -- cold cache, so
-        # the live cross-check no-ops and the REAL pinned snapshot (not a
-        # test fixture) is returned unmodified.
-        result = evidence.java_class_version_evidence()
-        self.assertEqual(result["coordinate"], evidence.JAVA_CLASS_VERSION_EVIDENCE["coordinate"])
-        self.assertEqual(result["max_major_version"], evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION)
+    def test_no_explicit_path_no_env_var_uses_fetch_result_on_success(self) -> None:
+        expected, jar_path = self._matching_fixture()
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with mock.patch.object(
+                evidence, "fetch_and_verify_bcprov_jar", return_value=jar_path
+            ) as fetch_mock:
+                evidence.live_verify_java_class_version_evidence()  # no raise
+        fetch_mock.assert_called_once()
+
+    def test_env_var_path_is_used_instead_of_fetching(self) -> None:
+        expected, jar_path = self._matching_fixture()
+        os.environ[evidence.BCPROV_JAR_PATH_ENV_VAR] = str(jar_path)
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with mock.patch.object(evidence, "fetch_and_verify_bcprov_jar") as fetch_mock:
+                evidence.live_verify_java_class_version_evidence()  # no raise
+        fetch_mock.assert_not_called()
+
+    def test_missing_env_var_path_raises_without_falling_back_to_fetch(self) -> None:
+        os.environ[evidence.BCPROV_JAR_PATH_ENV_VAR] = str(
+            Path(self._tmp.name) / "does-not-exist-from-env.jar"
+        )
+        with mock.patch.object(evidence, "fetch_and_verify_bcprov_jar") as fetch_mock:
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.live_verify_java_class_version_evidence()
+        fetch_mock.assert_not_called()
+        self.assertIn("does not exist", str(ctx.exception))
+
+    def test_explicit_path_argument_takes_precedence_over_env_var(self) -> None:
+        expected, jar_path = self._matching_fixture()
+        # The env var points at a real, but WRONG (never-matching), file --
+        # if the explicit argument did not take precedence, this would
+        # raise on the whole-archive hash instead of passing.
+        wrong_path = Path(self._tmp.name) / "env-var-should-be-ignored.jar"
+        wrong_path.write_bytes(b"not a jar")
+        os.environ[evidence.BCPROV_JAR_PATH_ENV_VAR] = str(wrong_path)
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            evidence.live_verify_java_class_version_evidence(jar_path)  # no raise
+
+    def test_java_class_version_evidence_forwards_explicit_path(self) -> None:
+        expected, jar_path = self._matching_fixture()
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            result = evidence.java_class_version_evidence(jar_path)
+        self.assertEqual(result["coordinate"], expected["coordinate"])
+        self.assertEqual(result["max_major_version"], expected["max_major_version"])
+
+    def test_java_class_version_evidence_returns_the_pinned_snapshot_unmodified_via_fetch_path(
+        self,
+    ) -> None:
+        # No explicit path, no env var -- fetch_and_verify_bcprov_jar() is
+        # mocked to hand back a matching fixture, proving
+        # java_class_version_evidence()'s returned dict is exactly the
+        # pinned JAVA_CLASS_VERSION_EVIDENCE snapshot content, unmodified,
+        # reached via the mandatory fetch path rather than any skip branch.
+        expected, jar_path = self._matching_fixture()
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with mock.patch.object(
+                evidence, "fetch_and_verify_bcprov_jar", return_value=jar_path
+            ) as fetch_mock:
+                result = evidence.java_class_version_evidence()
+        fetch_mock.assert_called_once()
+        self.assertEqual(result["coordinate"], expected["coordinate"])
+        self.assertEqual(result["artifact_sha256"], expected["artifact_sha256"])
+        self.assertEqual(result["max_major_version"], expected["max_major_version"])
         self.assertEqual(
             result["members_at_max_major_version"],
-            list(evidence.JAVA_CLASS_VERSION_EVIDENCE["members_at_max_major_version"]),
+            list(expected["members_at_max_major_version"]),
         )
+
+
+class PinnedHostRedirectHandlerTests(unittest.TestCase):
+    """_PinnedHostRedirectHandler -- refuses a redirect to any host outside
+    the allowed set, passes an allowed-host redirect through unchanged."""
+
+    def _fake_request(self, url: str) -> Any:
+        return urllib.request.Request(url)
+
+    def test_disallowed_host_redirect_raises(self) -> None:
+        handler = evidence._PinnedHostRedirectHandler(frozenset({"repo1.maven.org"}))
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            handler.redirect_request(
+                self._fake_request("https://repo1.maven.org/some.jar"),
+                None,
+                302,
+                "Found",
+                {},
+                "https://evil.example.com/some.jar",
+            )
+        self.assertIn("unexpected host", str(ctx.exception))
+        self.assertIn("evil.example.com", str(ctx.exception))
+
+    def test_allowed_host_redirect_passes_through(self) -> None:
+        handler = evidence._PinnedHostRedirectHandler(frozenset({"repo1.maven.org"}))
+        result = handler.redirect_request(
+            self._fake_request("http://repo1.maven.org/some.jar"),
+            None,
+            301,
+            "Moved Permanently",
+            {},
+            "https://repo1.maven.org/some.jar",
+        )
+        self.assertEqual(result.full_url, "https://repo1.maven.org/some.jar")
+
+
+class FetchAndVerifyBcprovJarTests(unittest.TestCase):
+    """fetch_and_verify_bcprov_jar() -- mocks the one real-network seam
+    (`_fetch_url_bytes`) so every failure mode (wrong hash, truncated/
+    padded download, oversized response, symlinked destination, sidecar
+    disagreement) is exercised deterministically, with no real HTTP call.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dest_dir = Path(self._tmp.name)
+        self.real_bytes = b"fake bcprov jar bytes for testing only"
+        self.real_sha256 = hashlib.sha256(self.real_bytes).hexdigest()
+        self.real_size = len(self.real_bytes)
+        self._patched_evidence = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        self._patched_evidence["artifact_sha256"] = self.real_sha256
+        self._patched_evidence["artifact_size_bytes"] = self.real_size
+        self._evidence_patch = mock.patch.object(
+            evidence, "JAVA_CLASS_VERSION_EVIDENCE", self._patched_evidence
+        )
+        self._evidence_patch.start()
+
+    def tearDown(self) -> None:
+        self._evidence_patch.stop()
+        self._tmp.cleanup()
+
+    def _mock_fetch(self, *, data: bytes, declared_length: str | None):
+        return mock.patch.object(
+            evidence, "_fetch_url_bytes", return_value=(data, declared_length)
+        )
+
+    def test_symlinked_dest_dir_raises(self) -> None:
+        real_dir = Path(self._tmp.name) / "real"
+        real_dir.mkdir()
+        link_dir = Path(self._tmp.name) / "link"
+        link_dir.symlink_to(real_dir)
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence.fetch_and_verify_bcprov_jar(link_dir)
+        self.assertIn("symlinked", str(ctx.exception))
+
+    def test_successful_fetch_writes_verified_bytes(self) -> None:
+        with self._mock_fetch(data=self.real_bytes, declared_length=str(self.real_size)):
+            with mock.patch.object(evidence, "_best_effort_verify_bcprov_sha256_sidecar"):
+                jar_path = evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertTrue(jar_path.is_file())
+        self.assertEqual(jar_path.read_bytes(), self.real_bytes)
+
+    def test_missing_declared_content_length_still_checks_pinned_size(self) -> None:
+        with self._mock_fetch(data=self.real_bytes, declared_length=None):
+            with mock.patch.object(evidence, "_best_effort_verify_bcprov_sha256_sidecar"):
+                jar_path = evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertEqual(jar_path.read_bytes(), self.real_bytes)
+
+    def test_wrong_sha256_raises(self) -> None:
+        # Same LENGTH as the real bytes (so the declared-length and pinned-
+        # size checks both pass) but different CONTENT -- isolates the
+        # whole-archive SHA-256 check specifically.
+        wrong_bytes = b"X" + self.real_bytes[1:]
+        self.assertEqual(len(wrong_bytes), self.real_size)
+        with self._mock_fetch(data=wrong_bytes, declared_length=str(self.real_size)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("sha256", str(ctx.exception))
+        self.assertFalse((self.dest_dir / "bcprov-jdk18on-1.85.2.jar").exists())
+
+    def test_truncated_download_raises_on_declared_length_mismatch(self) -> None:
+        # The server truthfully declares the (truncated) length it
+        # actually sent, but that length disagrees with our own pinned
+        # artifact_size_bytes -- isolates the Content-Length-vs-pinned-size
+        # check specifically, before any byte is even hashed.
+        truncated = self.real_bytes[:-5]
+        with self._mock_fetch(data=truncated, declared_length=str(len(truncated))):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("Content-Length", str(ctx.exception))
+
+    def test_truncated_download_raises_on_pinned_size_mismatch_even_without_declared_length(
+        self,
+    ) -> None:
+        truncated = self.real_bytes[:-5]
+        with self._mock_fetch(data=truncated, declared_length=None):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("artifact_size_bytes", str(ctx.exception))
+
+    def test_padded_download_raises(self) -> None:
+        padded = self.real_bytes + b"\x00\x00\x00"
+        with self._mock_fetch(data=padded, declared_length=str(len(padded))):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("artifact_size_bytes", str(ctx.exception))
+
+    def test_oversized_response_raises(self) -> None:
+        oversized = b"x" * (evidence.MAX_BCPROV_DOWNLOAD_BYTES + 1)
+        with self._mock_fetch(data=oversized, declared_length=None):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("MAX_BCPROV_DOWNLOAD_BYTES", str(ctx.exception))
+
+    def test_url_error_is_wrapped_as_evidence_error(self) -> None:
+        with mock.patch.object(
+            evidence, "_fetch_url_bytes", side_effect=urllib.error.URLError("no route")
+        ):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("failed to fetch", str(ctx.exception))
+
+    def test_redirect_host_evidence_error_from_fetch_propagates_unwrapped(self) -> None:
+        with mock.patch.object(
+            evidence,
+            "_fetch_url_bytes",
+            side_effect=evidence.EvidenceError("refusing HTTP 302 redirect ... evil.example.com"),
+        ):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("evil.example.com", str(ctx.exception))
+
+    def test_sidecar_mismatch_raises_even_though_primary_hash_matched(self) -> None:
+        with mock.patch.object(
+            evidence,
+            "_fetch_url_bytes",
+            side_effect=[
+                (self.real_bytes, str(self.real_size)),
+                (b"0" * 64, None),
+            ],
+        ):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("disagrees", str(ctx.exception))
+
+    def test_sidecar_fetch_failure_is_best_effort_ignored(self) -> None:
+        def side_effect(url, **kwargs):  # noqa: ANN001
+            if url.endswith(".sha256"):
+                raise urllib.error.URLError("sidecar unavailable")
+            return self.real_bytes, str(self.real_size)
+
+        with mock.patch.object(evidence, "_fetch_url_bytes", side_effect=side_effect):
+            jar_path = evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertEqual(jar_path.read_bytes(), self.real_bytes)
+
+    def test_sidecar_matching_passes(self) -> None:
+        def side_effect(url, **kwargs):  # noqa: ANN001
+            if url.endswith(".sha256"):
+                return self.real_sha256.encode("ascii"), None
+            return self.real_bytes, str(self.real_size)
+
+        with mock.patch.object(evidence, "_fetch_url_bytes", side_effect=side_effect):
+            jar_path = evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertEqual(jar_path.read_bytes(), self.real_bytes)
 
 
 class ScopeBindingSealTests(unittest.TestCase):

@@ -11,9 +11,26 @@ writes plain, reviewable JSON and text reports under `docs/evidence/`.
 `--offline` means the local Cargo registry cache must already contain every
 locked crate before this script runs; CI bootstraps that cache once via an
 explicit `cargo fetch --locked` network call before ever invoking this
-script (see `.github/workflows/verify.yml`), so this script itself never
-touches the network and a generation run that unexpectedly needed to is a
-hard failure, not a silent re-fetch.
+script (see `.github/workflows/verify.yml`), so Cargo resolution itself
+never touches the network from inside this script and a generation run
+that unexpectedly needed to is a hard failure, not a silent re-fetch.
+
+This script has exactly one OTHER, separately pinned network dependency:
+`java_class_version_evidence()`'s live verification of the real
+`org.bouncycastle:bcprov-jdk18on:1.85.2` artifact bytes
+(`fetch_and_verify_bcprov_jar()`), used whenever no already-verified local
+copy is supplied via `--bcprov-jar` or the `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR`
+environment variable. A 2026-08-25 independent review found the prior
+design (a live re-scan against the local Gradle module cache only, treated
+as pure defense-in-depth) returns success with nothing actually checked at
+all on this repo's own legal-evidence-scan CI job, whose Gradle cache is
+always cold -- silently defeating the point of "live" evidence in exactly
+the environment it is supposed to be authoritative in. The fetch is pinned
+to Maven Central's own host, refuses any redirect elsewhere, and requires
+the downloaded bytes' whole-archive SHA-256 and size to match the
+committed, reviewed evidence before any member is scanned; a missing
+explicit path, a failed fetch, or any mismatch is a hard failure, never a
+silent skip.
 
 Determinism rules (checked by `scripts/check_release_evidence.py` and
 `scripts/tests/test_generate_legal_evidence.py`):
@@ -60,8 +77,12 @@ import re
 import struct
 import subprocess
 import sys
+import tempfile
 import tomllib
 import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -77,6 +98,16 @@ SETTINGS_GRADLE = REPO_ROOT / "settings.gradle.kts"
 
 GRADLE_USER_HOME = Path(os.environ.get("GRADLE_USER_HOME", str(Path.home() / ".gradle")))
 GRADLE_MODULES2 = GRADLE_USER_HOME / "caches" / "modules-2" / "files-2.1"
+
+# Explicit, non-silent override for `live_verify_java_class_version_evidence()`
+# -- an already-verified local bcprov-jdk18on .jar path, set by a human
+# (`--bcprov-jar`) or by CI after its own one-time fetch+verify bootstrap
+# step (see `.github/workflows/verify.yml` and `fetch_and_verify_bcprov_jar()`
+# below), so repeated invocations within one job reuse that SAME verified
+# copy instead of re-fetching from Maven Central every time. Never consulted
+# silently in place of a failure: an explicit path that does not exist, or
+# whose bytes do not match the pinned evidence, is still a hard error.
+BCPROV_JAR_PATH_ENV_VAR = "KARDANO_LEGAL_EVIDENCE_BCPROV_JAR"
 
 INCLUDE_RE = re.compile(r'include\(\s*"(:[^"]+)"\s*\)')
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -3402,23 +3433,36 @@ def bouncycastle_license_source_inventory() -> dict[str, Any]:
 # resolved `org.bouncycastle:bcprov-jdk18on` jar's real major_version 69
 # classes as this ceiling's evidence -- but a comment is prose, not
 # evidence a reviewer or a machine can independently verify. This section
-# instead commits the actual scan result, in the same
-# static-catalog-plus-live-cross-check shape `MAVEN_NATIVE_CARRIERS`/
-# `cross_check_maven_native_carriers_against_local_cache()` already use:
-# `JAVA_CLASS_VERSION_EVIDENCE` is a reviewed, static, committed snapshot
-# (so the evidence file's content is identical whether or not the local
-# Gradle module cache happens to be warm -- required for
-# `check_release_evidence.py`'s freshness check to pass on a cold-cache CI
-# runner exactly like every other cache-cross-checked evidence file), and
-# `cross_check_java_class_version_evidence_against_local_cache()` is the
-# live, defense-in-depth re-verification against the REAL resolved jar's
-# actual bytes, run every time `java_class_version_evidence()` is called
-# (from `run_generate()`, from `check_evidence_is_freshly_regenerable()`,
-# or directly) -- so a warm cache (a developer's own machine; this is
-# never true on this repo's own legal-evidence-scan CI job, which runs no
-# `./gradlew` task at all) always re-derives and requires an EXACT match
-# to the committed snapshot, and a cold cache safely no-ops, the same
-# tradeoff `find_local_maven_artifacts()` already documents.
+# instead commits the actual scan result: `JAVA_CLASS_VERSION_EVIDENCE` is
+# a reviewed, static, committed snapshot (so the evidence FILE's content is
+# byte-identical run to run, independent of network/cache timing), and
+# `live_verify_java_class_version_evidence()` is a MANDATORY re-verification
+# against the REAL resolved jar's actual bytes, run every time
+# `java_class_version_evidence()` is called (from `run_generate()`, from
+# `check_evidence_is_freshly_regenerable()`, or directly) -- with NO skip
+# branch at all.
+#
+# A 2026-08-25 independent review found the prior design -- re-scan the
+# local Gradle module cache and treat "nothing found" as a safe no-op, the
+# same tradeoff `find_local_maven_artifacts()` documents for
+# `MAVEN_NATIVE_CARRIERS` -- silently returns success with NOTHING checked
+# on this repo's own legal-evidence-scan CI job, whose Gradle cache is
+# always cold (that job runs no `./gradlew` task at all): exactly the
+# environment this "live" evidence is supposed to be authoritative in
+# never actually ran the check. `MAVEN_NATIVE_CARRIERS`' local-cache cross
+# check is deliberately left as pure defense-in-depth (its committed
+# snapshot is dated and re-verified by a documented manual `unzip`/hash
+# procedure instead -- see `docs/LEGAL_REVIEW.md` §13); this evidence gets
+# a different, stricter treatment because it is the sole basis for
+# `MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION`, a live-enforced parser ceiling.
+#
+# The fix: `live_verify_java_class_version_evidence()` always resolves an
+# ACTUAL jar to scan -- an explicit path (`--bcprov-jar`, or the
+# `BCPROV_JAR_PATH_ENV_VAR` environment variable CI sets once after its own
+# fetch+verify bootstrap step) if given, else `fetch_and_verify_bcprov_jar()`
+# downloads the exact pinned artifact from Maven Central into a fresh temp
+# directory. Either way, a missing/wrong-hash file is a hard `EvidenceError`
+# -- there is no longer a third "quietly skip" path.
 
 
 def _read_java_class_header_version(data: bytes) -> tuple[int, int] | None:
@@ -3426,8 +3470,8 @@ def _read_java_class_header_version(data: bytes) -> tuple[int, int] | None:
     version fields (JVMS §4.1's first 8 bytes) -- deliberately not the
     full structural walk `_validate_java_class_structure()` performs.
     This helper's one job is extracting the raw `(major, minor)` pair for
-    `cross_check_java_class_version_evidence_against_local_cache()`'s
-    max-observed-major scan across every member of a real resolved jar;
+    `_scan_and_verify_bcprov_jar_bytes()`'s max-observed-major scan across
+    every member of a real resolved jar;
     `_validate_java_class_structure()` is still run separately (and
     required to pass) against the SAME bytes, so the evidence this
     produces is backed by full validator agreement, not just a
@@ -3440,6 +3484,22 @@ def _read_java_class_header_version(data: bytes) -> tuple[int, int] | None:
     minor_version, major_version = struct.unpack(">HH", data[4:8])
     return major_version, minor_version
 
+
+# Maven Central's own canonical host -- `fetch_and_verify_bcprov_jar()`
+# refuses any HTTP redirect to a different host (see
+# `_PinnedHostRedirectHandler` below), and this evidence's own
+# `artifact_maven_central_url` field is required to already be an
+# `https://` URL on exactly this host (`_validate_sealed_java_class_version_evidence()`).
+BCPROV_MAVEN_CENTRAL_HOST = "repo1.maven.org"
+
+# Generous ceiling on the download -- the real artifact is ~9.8 MiB
+# (`artifact_size_bytes` below is the exact, pinned figure this bounds
+# a sanity check against); this constant only guards against an
+# unbounded read of a misbehaving/hostile response, never a legitimate
+# size check on its own.
+MAX_BCPROV_DOWNLOAD_BYTES = 64 * 1024 * 1024
+
+BCPROV_FETCH_TIMEOUT_SECONDS = 60.0
 
 # Reviewed 2026-08-24 against the actual resolved
 # `org.bouncycastle:bcprov-jdk18on:1.85.2` jar in the local Gradle module
@@ -3454,32 +3514,50 @@ def _read_java_class_header_version(data: bytes) -> tuple[int, int] | None:
 # (`MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION`) and this snapshot are REQUIRED
 # to move together -- `_validate_sealed_java_class_version_evidence()`
 # below fails closed at import time if they ever disagree, and
-# `cross_check_java_class_version_evidence_against_local_cache()` fails
-# generation/checking outright if a warm-cache re-scan of the real
-# artifact ever produces a different whole-archive hash, member count,
-# observed maximum, or member set at that maximum.
+# `live_verify_java_class_version_evidence()` (this section's module
+# comment above) fails generation/checking outright -- with NO skip branch
+# -- if a fresh scan of the real artifact (an explicit `--bcprov-jar` path,
+# an already-verified path from `BCPROV_JAR_PATH_ENV_VAR`, or a fresh
+# Maven-Central fetch+verify) ever produces a different whole-archive hash,
+# member count, observed maximum, or member set at that maximum.
+# `artifact_size_bytes`/`artifact_maven_central_url` were independently
+# confirmed 2026-08-25 against Maven Central's own directory listing and
+# its published `.jar.sha256` sidecar (`docs/DEPENDENCY_PROVENANCE.md`
+# already recorded this exact coordinate/URL/hash before this section
+# existed) -- both are asserted, not merely recorded, by
+# `fetch_and_verify_bcprov_jar()`.
 JAVA_CLASS_VERSION_EVIDENCE: dict[str, Any] = {
     "method": (
-        "Point-in-time inspection (2026-08-24) of the actual resolved "
-        "org.bouncycastle:bcprov-jdk18on:1.85.2 .jar in the local Gradle "
-        "module cache: Python `zipfile` for member discovery, this file's "
-        "own bounded 8-byte header read for each member's raw major/minor "
-        "version fields, and this file's own _validate_java_class_structure() "
-        "(full JVMS §4 structural walk, not just the magic bytes) required "
-        "to pass for every one of the 7163 scanned members. This table is "
-        "static; it is not re-derived from a live artifact fetch on every "
-        "run (see docs/LEGAL_REVIEW.md §8 for why), but "
-        "cross_check_java_class_version_evidence_against_local_cache() "
-        "independently re-verifies it byte-for-byte against the real "
-        "resolved artifact whenever a warm Gradle cache has it, and fails "
-        "generation/checking outright on any drift: wrong whole-archive "
-        "SHA-256, wrong member count, wrong observed maximum major_version, "
-        "or a different member set at that maximum. max_major_version is "
-        "exactly MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION -- the ceiling and "
-        "this evidence are reviewed and moved together, never independently."
+        "Point-in-time inspection (2026-08-24, re-verified 2026-08-25 via a "
+        "live Maven Central fetch) of the actual resolved "
+        "org.bouncycastle:bcprov-jdk18on:1.85.2 .jar: Python `zipfile` for "
+        "member discovery, this file's own bounded 8-byte header read for "
+        "each member's raw major/minor version fields, and this file's own "
+        "_validate_java_class_structure() (full JVMS §4 structural walk, "
+        "not just the magic bytes) required to pass for every one of the "
+        "7163 scanned members. This table is static; the evidence FILE's "
+        "content is not re-derived from a live fetch on every run (a fixed, "
+        "reviewed snapshot, not a moving target), but "
+        "live_verify_java_class_version_evidence() unconditionally "
+        "re-verifies it byte-for-byte against a real resolved jar -- an "
+        "explicit --bcprov-jar path, an already-verified path from the "
+        "KARDANO_LEGAL_EVIDENCE_BCPROV_JAR environment variable, or (the "
+        "default) a fresh pinned-host, SHA-256-and-size-verified download "
+        "from Maven Central -- every single time this function runs, with "
+        "no cold-cache/no-op skip branch. It fails generation/checking "
+        "outright on any drift: wrong whole-archive SHA-256, wrong member "
+        "count, wrong observed maximum major_version, or a different "
+        "member set at that maximum. max_major_version is exactly "
+        "MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION -- the ceiling and this "
+        "evidence are reviewed and moved together, never independently."
     ),
     "coordinate": "org.bouncycastle:bcprov-jdk18on:1.85.2",
+    "artifact_maven_central_url": (
+        "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/"
+        "1.85.2/bcprov-jdk18on-1.85.2.jar"
+    ),
     "artifact_sha256": "986b0fb92ec10e0c66b43e036ce0077e6150cfaecd1db9fb92b56672e157afe5",
+    "artifact_size_bytes": 10280518,
     "total_class_members_scanned": 7163,
     "max_major_version": 69,
     "members_at_max_major_version": (
@@ -3665,6 +3743,18 @@ def _validate_sealed_java_class_version_evidence(entry: dict[str, Any]) -> None:
             f"JAVA_CLASS_VERSION_EVIDENCE artifact_sha256 {entry['artifact_sha256']!r} "
             "is not a 64-hex-char sha256"
         )
+    if not isinstance(entry["artifact_size_bytes"], int) or entry["artifact_size_bytes"] <= 0:
+        raise EvidenceError(
+            f"JAVA_CLASS_VERSION_EVIDENCE artifact_size_bytes "
+            f"{entry['artifact_size_bytes']!r} is not a positive int"
+        )
+    parsed_url = urllib.parse.urlsplit(entry["artifact_maven_central_url"])
+    if parsed_url.scheme != "https" or parsed_url.hostname != BCPROV_MAVEN_CENTRAL_HOST:
+        raise EvidenceError(
+            f"JAVA_CLASS_VERSION_EVIDENCE artifact_maven_central_url "
+            f"{entry['artifact_maven_central_url']!r} is not an https:// URL on the "
+            f"pinned host {BCPROV_MAVEN_CENTRAL_HOST!r}"
+        )
     if entry["max_major_version"] != MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION:
         raise EvidenceError(
             "JAVA_CLASS_VERSION_EVIDENCE max_major_version "
@@ -3704,53 +3794,192 @@ def _validate_sealed_java_class_version_evidence(entry: dict[str, Any]) -> None:
 
 _validate_sealed_java_class_version_evidence(JAVA_CLASS_VERSION_EVIDENCE)
 
+# Convenience alias for the pinned coordinate's own reviewed URL -- the
+# `.sha256` sidecar this evidence's live verification best-effort-checks
+# lives at exactly this URL with a `.sha256` suffix (see Maven Central's
+# own directory-listing convention, independently confirmed 2026-08-25).
+BCPROV_MAVEN_CENTRAL_URL = JAVA_CLASS_VERSION_EVIDENCE["artifact_maven_central_url"]
 
-def cross_check_java_class_version_evidence_against_local_cache() -> None:
-    """Defense-in-depth: when the local Gradle module cache has the exact
-    resolved jar `JAVA_CLASS_VERSION_EVIDENCE` is pinned to, re-scan its
-    REAL bytes and require an exact match against that committed snapshot
-    -- whole-archive SHA-256 (checked BEFORE any member is inspected, same
+
+class _PinnedHostRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuses any HTTP redirect whose target host is not in
+    `_allowed_hosts` -- the one anomaly a plain `urllib.request.urlopen()`
+    call would otherwise follow silently. A hijacked mirror, a captive
+    portal, or a misconfigured proxy redirecting a Maven Central request
+    elsewhere is exactly what this exists to catch; a same-host redirect
+    (e.g. an `http://` request the server 301s to `https://` on the SAME
+    host) is still allowed, same as it always was.
+    """
+
+    def __init__(self, allowed_hosts: frozenset[str]) -> None:
+        super().__init__()
+        self._allowed_hosts = allowed_hosts
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        new_host = urllib.parse.urlsplit(newurl).hostname
+        if new_host not in self._allowed_hosts:
+            raise EvidenceError(
+                f"refusing HTTP {code} redirect from {req.full_url!r} to "
+                f"unexpected host {new_host!r} (allowed: {sorted(self._allowed_hosts)})"
+            )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _fetch_url_bytes(
+    url: str, *, allowed_hosts: frozenset[str], max_bytes: int, timeout: float
+) -> tuple[bytes, str | None]:
+    """The one function in this file that makes a real HTTP request --
+    kept this small and separate specifically so tests can monkeypatch
+    exactly this seam instead of exercising real network I/O. Every
+    redirect (including the initial request's own final response) is
+    required to land on a host in `allowed_hosts` (`_PinnedHostRedirectHandler`
+    covers redirects; the check on `response.url`'s own host below covers a
+    same-host non-redirect response that urllib itself never validates).
+    Returns `(body_bytes, declared_content_length_header_or_None)`; never
+    reads more than `max_bytes + 1` bytes, so an oversized response is
+    reported, not silently truncated into looking valid.
+    """
+    opener = urllib.request.build_opener(_PinnedHostRedirectHandler(allowed_hosts))
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "KardanoSDK-legal-evidence-fetch/1.0"}
+    )
+    with opener.open(request, timeout=timeout) as response:
+        final_host = urllib.parse.urlsplit(response.url).hostname
+        if final_host not in allowed_hosts:
+            raise EvidenceError(
+                f"{url}: final response host {final_host!r} is not in the allowed "
+                f"set {sorted(allowed_hosts)}"
+            )
+        declared_length = response.headers.get("Content-Length")
+        data = response.read(max_bytes + 1)
+    return data, declared_length
+
+
+def _best_effort_verify_bcprov_sha256_sidecar(actual_sha256: str) -> None:
+    """Maven Central publishes a `.jar.sha256` sidecar alongside the real
+    artifact -- fetched here as an OPTIONAL, best-effort SECOND signal,
+    never the mandatory check (`JAVA_CLASS_VERSION_EVIDENCE['artifact_sha256']`,
+    already verified by the caller before this runs, is that). A sidecar
+    fetch that fails outright (network hiccup, sidecar temporarily
+    unavailable) is silently ignored -- it is not required to be present.
+    A sidecar that WAS fetched successfully but disagrees with the
+    already-verified download IS treated as an error: a positively
+    disagreeing signal is never worth ignoring just because it was
+    optional to obtain.
+    """
+    try:
+        sidecar_bytes, _ = _fetch_url_bytes(
+            BCPROV_MAVEN_CENTRAL_URL + ".sha256",
+            allowed_hosts=frozenset({BCPROV_MAVEN_CENTRAL_HOST}),
+            max_bytes=4096,
+            timeout=BCPROV_FETCH_TIMEOUT_SECONDS,
+        )
+    except Exception:  # noqa: BLE001 -- best-effort only, never fails generation on its own
+        return
+    try:
+        sidecar_hex = sidecar_bytes.decode("ascii").strip().split()[0].lower()
+    except (UnicodeDecodeError, IndexError):
+        return  # unexpected sidecar format -- not worth failing generation over
+    if not SHA256_HEX_RE.match(sidecar_hex):
+        return
+    if sidecar_hex != actual_sha256:
+        raise EvidenceError(
+            f"{BCPROV_MAVEN_CENTRAL_URL}.sha256: publisher-provided sha256 "
+            f"{sidecar_hex} disagrees with the verified download's {actual_sha256}"
+        )
+
+
+def fetch_and_verify_bcprov_jar(dest_dir: Path) -> Path:
+    """Download the exact pinned `org.bouncycastle:bcprov-jdk18on:1.85.2`
+    `.jar` from Maven Central into `dest_dir` (caller-provided; expected to
+    be a fresh, disposable temporary directory -- see
+    `live_verify_java_class_version_evidence()`) and verify its whole-
+    archive SHA-256 AND size EXACTLY match `JAVA_CLASS_VERSION_EVIDENCE`
+    before returning its path. Independent of any local Gradle module
+    cache -- this is the fix for a 2026-08-25 independent review finding
+    that the prior Gradle-cache-only design silently no-ops (returns
+    success, checks nothing) on this repo's own always-cold-cache CI job.
+
+    Fails closed (`EvidenceError`) on: a symlinked `dest_dir`; any HTTP
+    error; a redirect to, or a final response from, a host other than
+    `BCPROV_MAVEN_CENTRAL_HOST`; a byte count that disagrees with either
+    the response's own declared `Content-Length` or the pinned
+    `artifact_size_bytes` (covers both a truncated download and one with
+    unexpected extra bytes); or a whole-archive SHA-256 mismatch. Also
+    best-effort verifies Maven Central's own published `.sha256` sidecar
+    (never mandatory on its own; see `_best_effort_verify_bcprov_sha256_sidecar()`).
+    """
+    if dest_dir.is_symlink():
+        raise EvidenceError(f"{dest_dir}: refusing a symlinked download destination directory")
+    allowed_hosts = frozenset({BCPROV_MAVEN_CENTRAL_HOST})
+    try:
+        data, declared_length = _fetch_url_bytes(
+            BCPROV_MAVEN_CENTRAL_URL,
+            allowed_hosts=allowed_hosts,
+            max_bytes=MAX_BCPROV_DOWNLOAD_BYTES,
+            timeout=BCPROV_FETCH_TIMEOUT_SECONDS,
+        )
+    except EvidenceError:
+        raise
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise EvidenceError(f"failed to fetch {BCPROV_MAVEN_CENTRAL_URL}: {exc}") from exc
+
+    if len(data) > MAX_BCPROV_DOWNLOAD_BYTES:
+        raise EvidenceError(
+            f"{BCPROV_MAVEN_CENTRAL_URL}: downloaded {len(data)} bytes exceeds "
+            f"MAX_BCPROV_DOWNLOAD_BYTES={MAX_BCPROV_DOWNLOAD_BYTES}"
+        )
+    expected_size = JAVA_CLASS_VERSION_EVIDENCE["artifact_size_bytes"]
+    if declared_length is not None and int(declared_length) != expected_size:
+        raise EvidenceError(
+            f"{BCPROV_MAVEN_CENTRAL_URL}: server declared Content-Length "
+            f"{declared_length} != pinned artifact_size_bytes {expected_size}"
+        )
+    if len(data) != expected_size:
+        raise EvidenceError(
+            f"{BCPROV_MAVEN_CENTRAL_URL}: downloaded {len(data)} bytes != pinned "
+            f"artifact_size_bytes {expected_size} (truncated or padded download)"
+        )
+    actual_sha256 = hashlib.sha256(data).hexdigest()
+    expected_sha256 = JAVA_CLASS_VERSION_EVIDENCE["artifact_sha256"]
+    if actual_sha256 != expected_sha256:
+        raise EvidenceError(
+            f"{BCPROV_MAVEN_CENTRAL_URL}: downloaded sha256 {actual_sha256} != "
+            f"pinned {expected_sha256} -- refusing to trust this download"
+        )
+
+    dest_path = dest_dir / "bcprov-jdk18on-1.85.2.jar"
+    dest_path.write_bytes(data)
+    if dest_path.is_symlink():
+        raise EvidenceError(f"{dest_path}: refusing a symlinked download destination file")
+
+    _best_effort_verify_bcprov_sha256_sidecar(actual_sha256)
+    return dest_path
+
+
+def _scan_and_verify_bcprov_jar_bytes(jar_path: Path) -> None:
+    """Shared scan core for `live_verify_java_class_version_evidence()`:
+    whole-archive SHA-256 (checked BEFORE any member is inspected, same
     ordering as `_verify_resolved_artifact_hashes()`), every real `.class`
     member's own JVMS structural validity (`_validate_java_class_structure()`
-    must pass for every one, not just the ones recorded below), the true
-    observed maximum `major_version`, and the exact member set recorded at
-    that maximum (path, SHA-256, size, minor_version).
-
-    A cold cache (no `./gradlew` task has ever run -- true for this repo's
-    own legal-evidence-scan CI job) finds nothing to check via
-    `find_local_maven_artifacts()` and is not an error, same tradeoff as
-    every other local-cache cross-check in this file. Returns `None`;
-    every disagreement raises `EvidenceError`.
+    must pass for every one, not just the ones recorded in
+    `JAVA_CLASS_VERSION_EVIDENCE`), the true observed maximum
+    `major_version`, and the exact member set recorded at that maximum
+    (path, SHA-256, size, minor_version). Raises `EvidenceError` on any
+    disagreement; `jar_path` must already exist (callers are responsible
+    for that -- see `live_verify_java_class_version_evidence()`).
     """
     coordinate = JAVA_CLASS_VERSION_EVIDENCE["coordinate"]
-    group, artifact, version = parse_gav(coordinate)
-    artifact_paths = [
-        p for p in find_local_maven_artifacts(group, artifact, version) if p.suffix.lower() == ".jar"
-    ]
-    if not artifact_paths:
-        return
-
-    digest_to_path: dict[str, Path] = {}
-    for path in artifact_paths:
-        digest_to_path[sha256_file(path)] = path
-    if len(digest_to_path) > 1:
-        raise EvidenceError(
-            f"{coordinate}: {len(digest_to_path)} different resolved .jar "
-            f"archives found in the local Gradle cache with different "
-            f"whole-archive SHA-256 values {sorted(digest_to_path)} -- "
-            "ambiguous which is the real resolved artifact, refusing to "
-            "inspect its members"
-        )
-    (actual_artifact_sha256, jar_path), = digest_to_path.items()
+    reject_symlink(jar_path)
+    actual_artifact_sha256 = sha256_file(jar_path)
     expected_artifact_sha256 = JAVA_CLASS_VERSION_EVIDENCE["artifact_sha256"]
     if actual_artifact_sha256 != expected_artifact_sha256:
         raise EvidenceError(
-            f"{coordinate}: resolved .jar {jar_path} whole-archive SHA-256 "
+            f"{coordinate}: {jar_path} whole-archive SHA-256 "
             f"{actual_artifact_sha256} does not match the pinned "
             f"{expected_artifact_sha256} in JAVA_CLASS_VERSION_EVIDENCE -- "
             "wrong/substituted artifact, refusing to inspect its members"
         )
-    reject_symlink(jar_path)
 
     max_major = -1
     members_at_max: list[dict[str, Any]] = []
@@ -3838,20 +4067,70 @@ def cross_check_java_class_version_evidence_against_local_cache() -> None:
         )
 
 
-def java_class_version_evidence() -> dict[str, Any]:
+def live_verify_java_class_version_evidence(explicit_jar_path: Path | None = None) -> None:
+    """Fail-closed, MANDATORY live verification of
+    `JAVA_CLASS_VERSION_EVIDENCE` against real resolved
+    `bcprov-jdk18on:1.85.2` bytes -- there is no skip branch:
+
+    - If `explicit_jar_path` is given (from `--bcprov-jar`), it MUST
+      already exist as a real, non-symlinked file -- a missing path is an
+      `EvidenceError`, never treated as "nothing to check".
+    - Else, if `BCPROV_JAR_PATH_ENV_VAR` is set in the environment (CI sets
+      this once, after its own fetch+verify bootstrap step -- see
+      `.github/workflows/verify.yml`), that path is used the same way.
+    - Else, `fetch_and_verify_bcprov_jar()` downloads the exact pinned
+      artifact from Maven Central into a fresh temporary directory.
+
+    Either way, `_scan_and_verify_bcprov_jar_bytes()` then requires an
+    exact match against the committed `JAVA_CLASS_VERSION_EVIDENCE`
+    snapshot: whole-archive SHA-256, every member's own JVMS structural
+    validity, the true observed maximum `major_version`, and the exact
+    member set at that maximum. This replaces the prior
+    `cross_check_java_class_version_evidence_against_local_cache()`, whose
+    "cold local Gradle cache is a safe no-op" tradeoff a 2026-08-25
+    independent review found meant this evidence was never actually
+    live-checked at all on this repo's own (always-cold-cache)
+    legal-evidence-scan CI job.
+    """
+    if explicit_jar_path is None:
+        env_value = os.environ.get(BCPROV_JAR_PATH_ENV_VAR)
+        if env_value:
+            explicit_jar_path = Path(env_value)
+
+    if explicit_jar_path is not None:
+        if not explicit_jar_path.is_file():
+            raise EvidenceError(
+                f"explicit bcprov jar path {explicit_jar_path} does not exist -- "
+                "an explicit path must be a real, already-verified artifact, "
+                "never treated as a cue to skip live verification"
+            )
+        _scan_and_verify_bcprov_jar_bytes(explicit_jar_path)
+        return
+
+    with tempfile.TemporaryDirectory(prefix="kardano-bcprov-fetch-") as tmp_dir:
+        jar_path = fetch_and_verify_bcprov_jar(Path(tmp_dir))
+        _scan_and_verify_bcprov_jar_bytes(jar_path)
+
+
+def java_class_version_evidence(bcprov_jar_path: Path | None = None) -> dict[str, Any]:
     """Committed Java class-file major-version evidence, derived from real
     resolved artifact bytes -- see this section's own module comment for
-    why the returned content is a static, reviewed snapshot rather than a
-    live scan result (a live-scan-only design could never pass on this
-    repo's own cold-cache CI runner), and
-    `cross_check_java_class_version_evidence_against_local_cache()` for the
-    independent live re-verification this function always runs first.
+    why the returned FILE content is a static, reviewed snapshot rather
+    than a live scan result (byte-identical run to run, independent of
+    network/cache timing), and `live_verify_java_class_version_evidence()`
+    for the MANDATORY live re-verification this function always runs
+    first -- with no skip branch. `bcprov_jar_path`, if given, is forwarded
+    as that call's `explicit_jar_path` (see `--bcprov-jar`); otherwise the
+    `BCPROV_JAR_PATH_ENV_VAR` environment variable, then a live Maven
+    Central fetch, are tried in that order.
     """
-    cross_check_java_class_version_evidence_against_local_cache()
+    live_verify_java_class_version_evidence(bcprov_jar_path)
     return {
         "method": JAVA_CLASS_VERSION_EVIDENCE["method"],
         "coordinate": JAVA_CLASS_VERSION_EVIDENCE["coordinate"],
+        "artifact_maven_central_url": JAVA_CLASS_VERSION_EVIDENCE["artifact_maven_central_url"],
         "artifact_sha256": JAVA_CLASS_VERSION_EVIDENCE["artifact_sha256"],
+        "artifact_size_bytes": JAVA_CLASS_VERSION_EVIDENCE["artifact_size_bytes"],
         "total_class_members_scanned": JAVA_CLASS_VERSION_EVIDENCE["total_class_members_scanned"],
         "max_major_version": JAVA_CLASS_VERSION_EVIDENCE["max_major_version"],
         "members_at_max_major_version": list(JAVA_CLASS_VERSION_EVIDENCE["members_at_max_major_version"]),
@@ -4273,7 +4552,7 @@ def write_digest_file(modules: tuple[str, ...], generated: dict[str, Path]) -> N
     )
 
 
-def run_generate() -> int:
+def run_generate(bcprov_jar_path: Path | None = None) -> int:
     outputs = evidence_output_files()
     try:
         modules = discover_gradle_modules()
@@ -4293,7 +4572,8 @@ def run_generate() -> int:
             outputs["bouncycastle_license_source.json"], bouncycastle_license_source_inventory()
         )
         write_json(
-            outputs["java_class_version_evidence.json"], java_class_version_evidence()
+            outputs["java_class_version_evidence.json"],
+            java_class_version_evidence(bcprov_jar_path),
         )
         write_digest_file(modules, outputs)
         # This run does not create, verify, or touch the seal itself (that is
@@ -4354,10 +4634,26 @@ def main() -> int:
             "'Scope binding' module docstring above."
         ),
     )
+    parser.add_argument(
+        "--bcprov-jar",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "An already-resolved, verified org.bouncycastle:bcprov-jdk18on:"
+            "1.85.2 .jar to live-scan for java_class_version_evidence.json "
+            "instead of fetching one from Maven Central (e.g. a local "
+            "Gradle-cache copy, for offline iteration). Must exist; a "
+            "missing path is an error, never a silent skip. Same effect as "
+            f"setting the {BCPROV_JAR_PATH_ENV_VAR} environment variable "
+            "(this flag takes precedence if both are set). Ignored by "
+            "--seal."
+        ),
+    )
     args = parser.parse_args()
     if args.seal:
         return run_seal()
-    return run_generate()
+    return run_generate(args.bcprov_jar)
 
 
 if __name__ == "__main__":

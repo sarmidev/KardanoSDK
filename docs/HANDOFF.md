@@ -286,6 +286,39 @@ Date: 2026-08-24
   existing per-Cargo-invocation `Cargo.lock` hash guard. This round still
   does not mark Prompt 7, the Windows candidate, or any release as GO, and
   does not start Prompt 8.
+- **Legal-evidence packet NO-GO fix: fail-closed live bcprov verification
+  (same branch, prior legal commits preserved as-is).** A 2026-08-25
+  independent review found `java_class_version_evidence.json`'s live
+  verifier used the same "cold local Gradle cache is a safe no-op" pattern
+  `maven_native_carriers_inventory()` uses, but this repo's own
+  legal-evidence-scan CI job never populates a Gradle cache at all -- so
+  the check silently returned success with nothing actually verified on
+  the one job it needed to be authoritative in. Fix:
+  `cross_check_java_class_version_evidence_against_local_cache()` is
+  replaced by `live_verify_java_class_version_evidence()`, which always
+  resolves an ACTUAL resolved jar to scan -- an explicit `--bcprov-jar`
+  path, the `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR` environment variable, or
+  (the default) `fetch_and_verify_bcprov_jar()`'s pinned-host
+  (`repo1.maven.org`, refuses any redirect elsewhere),
+  SHA-256-and-size-verified download from Maven Central -- no skip branch
+  remains. The pinned coordinate/URL/hash/size
+  (`org.bouncycastle:bcprov-jdk18on:1.85.2`, 10280518 bytes, sha256
+  `986b0fb92ec10e0c66b43e036ce0077e6150cfaecd1db9fb92b56672e157afe5`) is
+  independently confirmed against Maven Central's own directory listing
+  and published `.jar.sha256` sidecar, matching the value already recorded
+  in `docs/DEPENDENCY_PROVENANCE.md` before this fix. `verify.yml`'s
+  `legal-evidence-scan` job gains one new bootstrap step (immediately
+  after the existing Cargo `fetch --locked` step) that fetches+verifies
+  the jar once and exports its path via `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR`
+  for every later step in that job to reuse, so it is fetched from the
+  network exactly once per job despite the generator and checker each
+  running several times. New tests cover a missing explicit/env-var path,
+  a wrong sha256/size/redirect-host, a truncated/padded download, sidecar
+  agreement and best-effort-ignored sidecar failure, and an explicit
+  proof (mocked failing fetch, no explicit path, no env var) that there is
+  no silent-skip branch left at either the generator or the checker. This
+  fix still does not mark Prompt 7, the Windows candidate, or any release
+  as GO, and does not start Prompt 8.
 - **Gate 3 Windows x86-64 JVM (candidate-only) on
   `fix/native-build-and-platform-evidence`.** Linux promotion GO at
   `58f82a2`. JNA 5.19.1 resource is

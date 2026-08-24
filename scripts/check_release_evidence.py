@@ -39,7 +39,16 @@ Fails closed (either mode) on any of:
    nothing else -- an upstream Cargo/rustix build-script-cfg ambiguity, not a
    generator bug). On an actual linux/x86_64 host, and for every other byte
    of every evidence file on every host, comparison is always exact with no
-   exception.
+   exception. Regenerating docs/evidence/java_class_version_evidence.json
+   specifically also requires resolving an actual
+   org.bouncycastle:bcprov-jdk18on:1.85.2 .jar to live-scan -- either the
+   KARDANO_LEGAL_EVIDENCE_BCPROV_JAR environment variable (which CI sets
+   once, from its own pinned Maven Central fetch+verify bootstrap step; see
+   .github/workflows/verify.yml), or, if unset, a fresh pinned-host,
+   SHA-256-and-size-verified download from Maven Central performed by this
+   checker itself (see generate_legal_evidence.fetch_and_verify_bcprov_jar()).
+   There is no cold-cache/no-op skip branch for this one check: a missing
+   or unreachable jar is a hard failure here, not a silent pass.
 4. docs/evidence/LEGAL_EVIDENCE_DIGEST.txt's own named digests are
    byte-recomputed and compared, and its `licenses_files=`/
    `expected_evidence_files=` lines list exactly the files present on disk in

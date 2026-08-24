@@ -19,8 +19,41 @@ import check_release_evidence as checker  # noqa: E402
 import generate_legal_evidence as evidence  # noqa: E402
 
 
+def _find_real_local_bcprov_jar() -> Path | None:
+    """Best-effort local shortcut for tests that exercise the REAL,
+    unmocked JAVA_CLASS_VERSION_EVIDENCE snapshot end to end: if this
+    machine's own Gradle module cache already has the exact resolved
+    org.bouncycastle:bcprov-jdk18on:1.85.2 .jar (true on most dev machines
+    that have ever run ./gradlew), point KARDANO_LEGAL_EVIDENCE_BCPROV_JAR
+    at it for the duration of the test so it does not need the network.
+    Returns `None` if not found -- the test then falls back to
+    live_verify_java_class_version_evidence()'s own real Maven Central
+    fetch+verify, exactly the same code path CI itself exercises when its
+    own dedicated bootstrap step has not already set the env var.
+    """
+    coordinate = evidence.JAVA_CLASS_VERSION_EVIDENCE["coordinate"]
+    group, artifact, version = evidence.parse_gav(coordinate)
+    for path in evidence.find_local_maven_artifacts(group, artifact, version):
+        if path.suffix.lower() == ".jar":
+            return path
+    return None
+
+
 class RealTreeChecksTests(unittest.TestCase):
     """The current tracked tree must pass every check with zero errors."""
+
+    def setUp(self) -> None:
+        self._bcprov_env_patch = None
+        local_jar = _find_real_local_bcprov_jar()
+        if local_jar is not None:
+            self._bcprov_env_patch = mock.patch.dict(
+                os.environ, {evidence.BCPROV_JAR_PATH_ENV_VAR: str(local_jar)}
+            )
+            self._bcprov_env_patch.start()
+
+    def tearDown(self) -> None:
+        if self._bcprov_env_patch is not None:
+            self._bcprov_env_patch.stop()
 
     def test_no_symlinks(self) -> None:
         self.assertEqual(checker.check_no_symlinks(), [])
@@ -68,6 +101,43 @@ class RealTreeChecksTests(unittest.TestCase):
             self.assertEqual(checker.main(), 0)
 
     def test_main_fails_on_real_tree_release_mode(self) -> None:
+        with mock.patch.object(sys, "argv", ["check_release_evidence.py", "--mode", "release"]):
+            self.assertEqual(checker.main(), 1)
+
+
+class LiveBcprovVerificationNoSkipTests(unittest.TestCase):
+    """Gap: 'exact-tip CI uses an empty Gradle cache and the live bcprov
+    verifier currently returns success when the JAR is absent'. Proves the
+    checker itself -- not just generate_legal_evidence.py in isolation --
+    fails closed (never silently passes) when the real bcprov jar cannot be
+    resolved at all: no explicit path, no env var, and a failing fetch.
+    """
+
+    def setUp(self) -> None:
+        os.environ.pop(evidence.BCPROV_JAR_PATH_ENV_VAR, None)
+        self._fetch_patch = mock.patch.object(
+            evidence,
+            "fetch_and_verify_bcprov_jar",
+            side_effect=evidence.EvidenceError("no network in this test"),
+        )
+        self._fetch_patch.start()
+
+    def tearDown(self) -> None:
+        self._fetch_patch.stop()
+
+    def test_freshness_check_reports_an_error_not_an_empty_list(self) -> None:
+        errors = checker.check_evidence_is_freshly_regenerable()
+        self.assertTrue(errors, "expected at least one error, got an empty (silently-passing) list")
+        self.assertTrue(
+            any("java_class_version_evidence" in e for e in errors),
+            f"no error mentioned java_class_version_evidence.json: {errors}",
+        )
+
+    def test_main_fails_ci_structural_mode(self) -> None:
+        with mock.patch.object(sys, "argv", ["check_release_evidence.py"]):
+            self.assertEqual(checker.main(), 1)
+
+    def test_main_fails_release_mode(self) -> None:
         with mock.patch.object(sys, "argv", ["check_release_evidence.py", "--mode", "release"]):
             self.assertEqual(checker.main(), 1)
 

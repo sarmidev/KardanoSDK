@@ -173,6 +173,16 @@ python3 scripts/check_release_evidence.py     # fails closed on drift/placeholde
 python3 -m unittest discover -s scripts/tests -p "test_*.py"
 ```
 
+Both commands above resolve an actual `org.bouncycastle:bcprov-jdk18on:1.85.2`
+`.jar` to live-scan for `docs/evidence/java_class_version_evidence.json` --
+by default a fresh, pinned-host, SHA-256-and-size-verified download from
+Maven Central (no local Gradle cache required); an already-verified local
+copy can be supplied instead via `--bcprov-jar PATH` (generator only) or the
+`KARDANO_LEGAL_EVIDENCE_BCPROV_JAR` environment variable (both commands). A
+missing or unreachable jar is a hard failure, never a silent pass -- this
+is deliberate: the point of this evidence file is that it is live-verified
+against real resolved artifact bytes every time, not merely a static claim.
+
 The checker fails if: a `NOTICE`/`LICENSES/` reference is broken; the native
 inventory does not exactly match `crypto-signing-backend/CHECKSUMS.sha256`
 (9 rows); any `docs/evidence/*.json` file is stale relative to the current
