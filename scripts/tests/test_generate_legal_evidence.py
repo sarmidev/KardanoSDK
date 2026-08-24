@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -1474,18 +1475,77 @@ class JavaClassStructuralValidationTests(unittest.TestCase):
         self.assertFalse(evidence._validate_java_class_structure(b"\x00\x00\x00\x00" + b"\x00" * 20))
 
     def test_implausible_major_version_is_invalid(self) -> None:
-        for major in (0, 44, 101, 65535):
+        above_ceiling = evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION + 1
+        for major in (0, 44, above_ceiling, 101, 65535):
             with self.subTest(major=major):
                 data = bytearray(_build_java_class())
-                data[6:8] = major.to_bytes(2, "big")
+                data[6:8] = (major & 0xFFFF).to_bytes(2, "big")
                 self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
 
     def test_plausible_major_version_boundaries_are_valid(self) -> None:
-        for major in (45, 52, 61, 100):
+        # _build_java_class()'s default minor_version is 0, which is
+        # legal for every major in this list per JVMS §4.1 (45 permits
+        # 0-3; 46-55 requires 0; 56+ permits 0 or 65535).
+        for major in (45, 46, 52, 55, 56, 61, evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION):
             with self.subTest(major=major):
                 data = bytearray(_build_java_class())
                 data[6:8] = major.to_bytes(2, "big")
                 self.assertTrue(evidence._validate_java_class_structure(bytes(data)))
+
+    # -- JVMS §4.1 major/minor version combination rules ------------------
+
+    def test_major_45_permits_minor_0_through_3(self) -> None:
+        for minor in (0, 1, 2, 3):
+            with self.subTest(minor=minor):
+                self.assertTrue(evidence._is_supported_java_class_version(45, minor))
+
+    def test_major_45_rejects_minor_above_3(self) -> None:
+        for minor in (4, 5, 65535):
+            with self.subTest(minor=minor):
+                self.assertFalse(evidence._is_supported_java_class_version(45, minor))
+
+    def test_majors_46_through_55_require_minor_0(self) -> None:
+        for major in (46, 50, 55):
+            with self.subTest(major=major):
+                self.assertTrue(evidence._is_supported_java_class_version(major, 0))
+
+    def test_majors_46_through_55_reject_nonzero_minor(self) -> None:
+        for major, minor in ((46, 1), (50, 3), (55, 65535)):
+            with self.subTest(major=major, minor=minor):
+                self.assertFalse(evidence._is_supported_java_class_version(major, minor))
+
+    def test_majors_56_and_above_permit_minor_0_or_65535(self) -> None:
+        for major in (56, 60, evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION):
+            for minor in (0, 65535):
+                with self.subTest(major=major, minor=minor):
+                    self.assertTrue(evidence._is_supported_java_class_version(major, minor))
+
+    def test_majors_56_and_above_reject_any_other_minor(self) -> None:
+        for major, minor in ((56, 1), (60, 2), (evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION, 65534)):
+            with self.subTest(major=major, minor=minor):
+                self.assertFalse(evidence._is_supported_java_class_version(major, minor))
+
+    def test_major_above_supported_ceiling_is_rejected_regardless_of_minor(self) -> None:
+        above_ceiling = evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION + 1
+        for minor in (0, 65535):
+            with self.subTest(minor=minor):
+                self.assertFalse(evidence._is_supported_java_class_version(above_ceiling, minor))
+
+    def test_major_below_minimum_supported_is_rejected(self) -> None:
+        self.assertFalse(evidence._is_supported_java_class_version(44, 0))
+
+    def test_major_minor_boundary_end_to_end_through_full_class_validation(self) -> None:
+        # 55.0 legal, 55.1 illegal (minor must be 0 for 46-55); 56.0 and
+        # 56.65535 legal, 56.1 illegal (minor must be 0 or 65535 for
+        # 56+); the file's own major_version at offset 6:8 and
+        # minor_version at offset 4:6 drive this end-to-end, not just
+        # the standalone predicate above.
+        for major, minor, expected in ((55, 0, True), (55, 1, False), (56, 0, True), (56, 65535, True), (56, 1, False)):
+            with self.subTest(major=major, minor=minor):
+                data = bytearray(_build_java_class())
+                data[4:6] = minor.to_bytes(2, "big")
+                data[6:8] = major.to_bytes(2, "big")
+                self.assertEqual(evidence._validate_java_class_structure(bytes(data)), expected)
 
     def test_zero_constant_pool_count_is_invalid(self) -> None:
         data = bytearray(_build_java_class())
@@ -1946,11 +2006,13 @@ class JavaConstantPoolReferenceValidationTests(unittest.TestCase):
                 )
                 self.assertFalse(evidence._validate_java_class_structure(data))
 
-    def _method_handle_class(self, kind: int, target_ctor, major_version: int = 55) -> bytes:
+    def _method_handle_class(
+        self, kind: int, target_ctor, major_version: int = 55, method_name: bytes = b"x"
+    ) -> bytes:
         cp = [
             _utf8_entry(b"Foo"),  # 1
             _class_entry(1),  # 2
-            _utf8_entry(b"x"),  # 3
+            _utf8_entry(method_name),  # 3
             _utf8_entry(b"I"),  # 4
             _name_and_type_entry(3, 4),  # 5
         ]
@@ -1967,13 +2029,23 @@ class JavaConstantPoolReferenceValidationTests(unittest.TestCase):
                 )
 
     def test_method_handle_virtual_and_new_invoke_special_require_methodref_target(self) -> None:
-        for kind in (5, 8):
+        # Kind 5 (REF_invokeVirtual) has no name restriction other than
+        # "not <init>/<clinit>", so an ordinary name ("x") is valid; kind
+        # 8 (REF_newInvokeSpecial) specifically REQUIRES the name
+        # `<init>` (see the dedicated semantic-name tests below), so it
+        # is exercised here with that name to isolate the target-TAG
+        # check from the target-NAME check.
+        for kind, name in ((5, b"x"), (8, b"<init>")):
             with self.subTest(kind=kind):
                 self.assertTrue(
-                    evidence._validate_java_class_structure(self._method_handle_class(kind, _methodref_entry))
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(kind, _methodref_entry, method_name=name)
+                    )
                 )
                 self.assertFalse(
-                    evidence._validate_java_class_structure(self._method_handle_class(kind, _fieldref_entry))
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(kind, _fieldref_entry, method_name=name)
+                    )
                 )
 
     def test_method_handle_invoke_interface_requires_interface_methodref_target(self) -> None:
@@ -2007,6 +2079,97 @@ class JavaConstantPoolReferenceValidationTests(unittest.TestCase):
                 self.assertTrue(
                     evidence._validate_java_class_structure(
                         self._method_handle_class(kind, _methodref_entry, major_version=52)
+                    )
+                )
+
+    # -- CONSTANT_MethodHandle_info: resolved target method NAME semantics --
+    # JVMS §4.4.8: reference_kind 8 (REF_newInvokeSpecial) must target a
+    # Methodref method named exactly `<init>`; reference_kinds 5, 6, 7,
+    # and 9 must NOT target a method named `<init>` or `<clinit>`. Field
+    # kinds 1-4 carry no such restriction (already covered above by the
+    # plain Fieldref-target-tag tests).
+
+    def test_kind8_new_invoke_special_with_correct_init_name_is_valid(self) -> None:
+        self.assertTrue(
+            evidence._validate_java_class_structure(
+                self._method_handle_class(8, _methodref_entry, method_name=b"<init>")
+            )
+        )
+
+    def test_kind8_new_invoke_special_with_wrong_name_is_invalid(self) -> None:
+        for name in (b"x", b"init", b"<clinit>", b"<Init>"):
+            with self.subTest(name=name):
+                self.assertFalse(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(8, _methodref_entry, method_name=name)
+                    )
+                )
+
+    def test_kind8_new_invoke_special_targeting_interface_methodref_named_init_is_still_invalid(self) -> None:
+        # Kind 8 requires a Methodref target tag regardless of the
+        # method's name -- an InterfaceMethodref named exactly `<init>`
+        # still fails the target-TAG check (interfaces cannot declare
+        # instance-initialization methods in the first place).
+        self.assertFalse(
+            evidence._validate_java_class_structure(
+                self._method_handle_class(8, _interface_methodref_entry, method_name=b"<init>")
+            )
+        )
+
+    def test_invocation_kinds_targeting_init_or_clinit_are_invalid(self) -> None:
+        kind_ctors = (
+            (5, _methodref_entry),
+            (6, _methodref_entry),
+            (7, _methodref_entry),
+            (9, _interface_methodref_entry),
+        )
+        for kind, ctor in kind_ctors:
+            for name in (b"<init>", b"<clinit>"):
+                with self.subTest(kind=kind, name=name):
+                    self.assertFalse(
+                        evidence._validate_java_class_structure(
+                            self._method_handle_class(kind, ctor, method_name=name)
+                        )
+                    )
+
+    def test_invocation_kinds_targeting_ordinary_method_name_are_valid(self) -> None:
+        kind_ctors = (
+            (5, _methodref_entry),
+            (6, _methodref_entry),
+            (7, _methodref_entry),
+            (9, _interface_methodref_entry),
+        )
+        for kind, ctor in kind_ctors:
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(kind, ctor, method_name=b"doStuff")
+                    )
+                )
+
+    def test_kind6_and_7_interface_methodref_named_clinit_under_new_version_is_still_invalid(self) -> None:
+        # Combines the version-dependent target-tag allowance (kinds 6/7
+        # may target an InterfaceMethodref from major_version 52
+        # onward) with the name restriction: the allowance only widens
+        # which TAG is acceptable, never which NAME is acceptable.
+        for kind in (6, 7):
+            with self.subTest(kind=kind):
+                self.assertFalse(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(
+                            kind, _interface_methodref_entry, major_version=52, method_name=b"<clinit>"
+                        )
+                    )
+                )
+
+    def test_kind6_and_7_interface_methodref_named_ordinary_under_new_version_is_valid(self) -> None:
+        for kind in (6, 7):
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(
+                            kind, _interface_methodref_entry, major_version=52, method_name=b"doStuff"
+                        )
                     )
                 )
 
@@ -2121,20 +2284,56 @@ class JavaConstantPoolReferenceValidationTests(unittest.TestCase):
 
     # -- Long/Double terminal-entry and reserved-slot semantics --------------
 
-    def test_long_as_terminal_constant_pool_entry_is_valid(self) -> None:
-        # JVMS §4.4/§4.4.5: a constant_pool index is valid if it is
-        # greater than zero and less than constant_pool_count, "with the
-        # exception for constants of type long and double" -- i.e. a
-        # Long/Double's reserved successor slot at index
-        # constant_pool_count is EXPLICITLY sanctioned even though it
-        # falls outside the general range. A Long/Double may legally be
-        # the very last real entry in the pool.
+    def test_long_as_terminal_constant_pool_entry_with_natural_count_is_valid(self) -> None:
+        # JVMS §4.4.5: a Long/Double's reserved successor slot (index+1)
+        # "must be valid", and JVMS §4.1 defines a valid constant_pool
+        # index as greater than zero and less than constant_pool_count.
+        # When a Long/Double is the very last REAL entry and
+        # constant_pool_count correctly/naturally accounts for its
+        # phantom successor (as every real compiler's output does), the
+        # phantom slot's index is exactly constant_pool_count - 1, which
+        # IS a valid (in-range) index -- so this remains legal.
         data = _build_java_class_from_cp([_utf8_entry(b"Foo"), _class_entry(1), _long_entry()], this_class=2)
         self.assertTrue(evidence._validate_java_class_structure(data))
 
-    def test_double_as_terminal_constant_pool_entry_is_valid(self) -> None:
+    def test_double_as_terminal_constant_pool_entry_with_natural_count_is_valid(self) -> None:
         data = _build_java_class_from_cp([_utf8_entry(b"Foo"), _class_entry(1), _double_entry()], this_class=2)
         self.assertTrue(evidence._validate_java_class_structure(data))
+
+    def test_long_as_penultimate_constant_pool_entry_is_valid(self) -> None:
+        # The Long occupies indices 3 and 4, followed by one more real
+        # entry at index 5 (constant_pool_count naturally 6) -- ample
+        # room for the reserved slot plus a trailing entry.
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _long_entry(), _integer_entry(7)], this_class=2
+        )
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    def test_double_as_penultimate_constant_pool_entry_is_valid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _double_entry(), _integer_entry(7)], this_class=2
+        )
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    def test_long_with_constant_pool_count_clipping_reserved_slot_is_invalid(self) -> None:
+        # Boundary/malformed case: the Long is at index 3 (occupying 3
+        # and phantom 4), but constant_pool_count is declared as exactly
+        # 4 -- one less than the natural 5. A declared count of 4 means
+        # index 3 is the LAST valid index (count - 1); the reserved
+        # phantom slot at index 4 would equal constant_pool_count
+        # itself, which is never a valid index. No real compiler emits
+        # this shape (it under-declares its own required slot count), so
+        # it is rejected: `index + 1 >= constant_pool_count`, 4 >= 4.
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _long_entry()], this_class=2, constant_pool_count=4
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_double_with_constant_pool_count_clipping_reserved_slot_is_invalid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _double_entry()], this_class=2, constant_pool_count=4
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
 
     def test_reference_to_double_slot_phantom_index_is_invalid_via_string(self) -> None:
         # Additional coverage (beyond this_class, already covered in
@@ -2366,7 +2565,7 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         # even runs), not the cross-archive merge check further down.
         with self.assertRaises(evidence.EvidenceError) as ctx:
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
-        self.assertIn("normalize to the same path", str(ctx.exception))
+        self.assertIn("normalize to the same canonical path", str(ctx.exception))
 
     def test_java_class_resource_near_misses_do_not_trigger_a_false_positive(self) -> None:
         # A jar full of ordinary, structurally-valid .class files (CAFEBABE
@@ -2469,14 +2668,14 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         with self.assertRaises(evidence.EvidenceError) as ctx:
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
         self.assertIn(str(archive_path), str(ctx.exception))
-        self.assertIn("normalize to the same path", str(ctx.exception))
+        self.assertIn("normalize to the same canonical path", str(ctx.exception))
 
     def test_exact_duplicate_native_member_name_raises_before_classification(self) -> None:
         self._write_raw_zip("com.example", "dupnative", "1.0", ["libwidget.so", "libwidget.so"], self.ELF)
         gradle_report = self._gradle_report("com.example:dupnative:1.0")
         with self.assertRaises(evidence.EvidenceError) as ctx:
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
-        self.assertIn("normalize to the same path", str(ctx.exception))
+        self.assertIn("normalize to the same canonical path", str(ctx.exception))
 
     def test_duplicate_debug_probes_kt_bin_raises_even_though_reviewed(self) -> None:
         # A duplicate of the EXACT reviewed member (same coordinate,
@@ -2499,7 +2698,7 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         with mock.patch.object(evidence, "REVIEWED_NON_NATIVE_MEMBERS", reviewed):
             with self.assertRaises(evidence.EvidenceError) as ctx:
                 evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
-        self.assertIn("normalize to the same path", str(ctx.exception))
+        self.assertIn("normalize to the same canonical path", str(ctx.exception))
 
     def test_backslash_vs_forward_slash_member_names_collide(self) -> None:
         self._write_raw_zip("com.example", "dupslash", "1.0", ["a/b.txt", "a\\b.txt"], b"payload")
@@ -2740,55 +2939,163 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         self.assertIn("extension/content mismatch", str(ctx.exception))
 
 
-class ZipDuplicateMemberKeyTests(unittest.TestCase):
-    """`_normalized_zip_member_key()` / `_reject_duplicate_zip_members()`
+class ZipMemberPathCanonicalizationTests(unittest.TestCase):
+    """`_canonical_zip_member_path_or_none()` / `_reject_duplicate_zip_members()`
     unit-level coverage, independent of the full Maven-carrier scan.
     """
 
+    # -- pure canonicalization: equivalences ----------------------------
+
     def test_exact_duplicate_name_collides(self) -> None:
         self.assertEqual(
-            evidence._normalized_zip_member_key("a/b.txt"), evidence._normalized_zip_member_key("a/b.txt")
+            evidence._canonical_zip_member_path_or_none("a/b.txt"),
+            evidence._canonical_zip_member_path_or_none("a/b.txt"),
         )
 
-    def test_backslash_and_forward_slash_normalize_to_the_same_key(self) -> None:
+    def test_backslash_and_forward_slash_normalize_to_the_same_path(self) -> None:
         self.assertEqual(
-            evidence._normalized_zip_member_key("a\\b.txt"), evidence._normalized_zip_member_key("a/b.txt")
+            evidence._canonical_zip_member_path_or_none("a\\b.txt"),
+            evidence._canonical_zip_member_path_or_none("a/b.txt"),
         )
 
-    def test_directory_trailing_slash_and_file_normalize_to_the_same_key(self) -> None:
-        self.assertEqual(evidence._normalized_zip_member_key("foo/bar/"), evidence._normalized_zip_member_key("foo/bar"))
+    def test_directory_trailing_slash_and_file_normalize_to_the_same_path(self) -> None:
+        self.assertEqual(
+            evidence._canonical_zip_member_path_or_none("foo/bar/"),
+            evidence._canonical_zip_member_path_or_none("foo/bar"),
+        )
 
-    def test_case_differs_does_not_normalize_to_the_same_key(self) -> None:
+    def test_repeated_separators_collapse(self) -> None:
+        self.assertEqual(
+            evidence._canonical_zip_member_path_or_none("foo//bar"),
+            evidence._canonical_zip_member_path_or_none("foo/bar"),
+        )
+
+    def test_multiple_trailing_separators_all_stripped(self) -> None:
+        self.assertEqual(
+            evidence._canonical_zip_member_path_or_none("foo/bar///"),
+            evidence._canonical_zip_member_path_or_none("foo/bar"),
+        )
+
+    def test_mixed_backslash_and_repeated_forward_slash_normalize_together(self) -> None:
+        self.assertEqual(
+            evidence._canonical_zip_member_path_or_none("foo\\\\bar//baz\\"),
+            evidence._canonical_zip_member_path_or_none("foo/bar/baz"),
+        )
+
+    def test_nfc_and_nfd_forms_of_the_same_name_normalize_to_the_same_path(self) -> None:
+        # U+00E9 (LATIN SMALL LETTER E WITH ACUTE, precomposed/NFC) vs
+        # "e" (U+0065) + COMBINING ACUTE ACCENT (U+0301) (decomposed/NFD)
+        # -- visually and semantically the same filename, encoded
+        # differently.
+        nfc_name = "caf\u00e9.txt"
+        nfd_name = "cafe\u0301.txt"
+        self.assertNotEqual(nfc_name, nfd_name)  # distinct as raw str/bytes
+        self.assertEqual(
+            evidence._canonical_zip_member_path_or_none(nfc_name),
+            evidence._canonical_zip_member_path_or_none(nfd_name),
+        )
+        self.assertEqual(evidence._canonical_zip_member_path_or_none(nfd_name), nfc_name)
+
+    def test_case_differs_does_not_normalize_to_the_same_path(self) -> None:
         # Deliberate case-SENSITIVE policy -- see
-        # `_normalized_zip_member_key`'s docstring for the rationale.
-        self.assertNotEqual(evidence._normalized_zip_member_key("Foo.txt"), evidence._normalized_zip_member_key("foo.txt"))
+        # `_canonical_zip_member_path_or_none`'s docstring for the
+        # rationale (ZIP central directory and JVM resource-name
+        # resolution are both case-sensitive; folding case here would
+        # itself be a hidden false-positive collision).
+        self.assertNotEqual(
+            evidence._canonical_zip_member_path_or_none("Foo.txt"),
+            evidence._canonical_zip_member_path_or_none("foo.txt"),
+        )
+
+    # -- pure canonicalization: rejections (return None) -----------------
+
+    def test_empty_name_normalizes_to_none(self) -> None:
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none(""))
+
+    def test_bare_slash_root_normalizes_to_none(self) -> None:
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("/"))
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("///"))
+
+    def test_leading_slash_absolute_path_is_rejected(self) -> None:
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("/etc/passwd"))
+
+    def test_unc_style_leading_double_backslash_is_rejected(self) -> None:
+        # `\\server\share\x` folds to `//server/share/x`, which then
+        # collapses to `/server/share/x` -- caught by the absolute-path
+        # rejection, same as any other leading-slash form.
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("\\\\server\\share\\x"))
+
+    def test_windows_drive_letter_path_is_rejected(self) -> None:
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("C:/Windows/System32"))
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("C:\\Windows\\System32"))
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("z:bare"))
+
+    def test_dot_component_traversal_is_rejected(self) -> None:
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("foo/./bar"))
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("."))
+
+    def test_dot_dot_component_traversal_is_rejected(self) -> None:
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("foo/../bar"))
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("../etc/passwd"))
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none(".."))
+
+    def test_unpaired_surrogate_code_point_is_rejected(self) -> None:
+        # A lone UTF-16 surrogate cannot correspond to any well-formed
+        # decoded zip member name; constructible in-memory as a Python
+        # `str` even though it could never round-trip through strict
+        # UTF-8 encode/decode.
+        self.assertIsNone(evidence._canonical_zip_member_path_or_none("foo/\ud800bar"))
+
+    def test_canonical_zip_member_path_or_raise_raises_evidence_error_for_unsafe_name(self) -> None:
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._canonical_zip_member_path_or_raise(Path("/fake/archive.jar"), "../escape")
+
+    def test_canonical_zip_member_path_or_raise_returns_canonical_for_safe_name(self) -> None:
+        self.assertEqual(
+            evidence._canonical_zip_member_path_or_raise(Path("/fake/archive.jar"), "foo//bar/"), "foo/bar"
+        )
+
+    # -- `_reject_duplicate_zip_members`: collision detection ------------
 
     def test_reject_duplicate_zip_members_passes_on_all_unique_names(self) -> None:
-        import zipfile
-
         infos = [zipfile.ZipInfo("a.txt"), zipfile.ZipInfo("b.txt"), zipfile.ZipInfo("dir/")]
-        evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)  # no raise
+        canonical_by_raw = evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)  # no raise
+        self.assertEqual(canonical_by_raw["a.txt"], "a.txt")
+        self.assertEqual(canonical_by_raw["dir/"], "dir")
 
     def test_reject_duplicate_zip_members_raises_on_exact_duplicate(self) -> None:
-        import zipfile
-
         infos = [zipfile.ZipInfo("a.txt"), zipfile.ZipInfo("a.txt")]
         with self.assertRaises(evidence.EvidenceError):
             evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
 
     def test_reject_duplicate_zip_members_raises_on_backslash_variant(self) -> None:
-        import zipfile
-
         infos = [zipfile.ZipInfo("a/b.txt"), zipfile.ZipInfo("a\\b.txt")]
         with self.assertRaises(evidence.EvidenceError):
             evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
 
     def test_reject_duplicate_zip_members_raises_on_directory_file_collision(self) -> None:
-        import zipfile
-
         infos = [zipfile.ZipInfo("foo/bar/"), zipfile.ZipInfo("foo/bar")]
         with self.assertRaises(evidence.EvidenceError):
             evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
+
+    def test_reject_duplicate_zip_members_raises_on_repeated_separator_variant(self) -> None:
+        infos = [zipfile.ZipInfo("foo/bar"), zipfile.ZipInfo("foo//bar")]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
+
+    def test_reject_duplicate_zip_members_raises_on_nfc_nfd_variant(self) -> None:
+        infos = [zipfile.ZipInfo("caf\u00e9.txt"), zipfile.ZipInfo("cafe\u0301.txt")]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
+
+    def test_reject_duplicate_zip_members_raises_on_unsafe_member_name(self) -> None:
+        infos = [zipfile.ZipInfo("../escape.txt")]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
+
+    def test_reject_duplicate_zip_members_passes_on_case_distinct_names(self) -> None:
+        infos = [zipfile.ZipInfo("Foo.txt"), zipfile.ZipInfo("foo.txt")]
+        evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)  # no raise
 
 
 class ReviewedNonNativeMembersCatalogValidationTests(unittest.TestCase):
