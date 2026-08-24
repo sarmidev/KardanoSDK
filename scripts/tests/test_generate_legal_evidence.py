@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -735,6 +736,80 @@ def _build_pe(
     return data
 
 
+def _build_java_class(
+    major_version: int = 52,
+    minor_version: int = 0,
+    class_name: str = "Foo",
+    with_field: bool = False,
+    with_method: bool = False,
+    with_attribute: bool = False,
+    trailing_bytes: bytes = b"",
+) -> bytes:
+    """Build a minimal, structurally-valid Java `.class` file (JVMS §4):
+    magic/version, a small constant pool (a Utf8 class name, a Utf8
+    "V"/"()V" descriptor, a Class this_class, and -- if requested -- a
+    Utf8 attribute name), `this_class` referencing the Class entry,
+    `super_class=0`, zero interfaces, and an optional single trivial
+    field/method/attribute (each with zero attributes/body bytes of
+    their own) to exercise those code paths. `trailing_bytes` appended
+    after an otherwise-complete, valid class file simulates extra data
+    past the exact expected EOF.
+    """
+    name_bytes = class_name.encode("utf-8")
+
+    def utf8_entry(text: bytes) -> bytes:
+        return bytes([1]) + len(text).to_bytes(2, "big") + text
+
+    cp_entries = [utf8_entry(name_bytes)]  # index 1: class name
+    cp_entries.append(bytes([7]) + (1).to_bytes(2, "big"))  # index 2: Class -> name_index=1
+    descriptor_index = None
+    attr_name_index = None
+    if with_field or with_method:
+        cp_entries.append(utf8_entry(b"()V" if with_method else b"I"))  # index 3
+        descriptor_index = 3
+        cp_entries.append(utf8_entry(b"x"))  # index 4: member name
+        member_name_index = 4
+    if with_attribute:
+        cp_entries.append(utf8_entry(b"Deprecated"))
+        attr_name_index = len(cp_entries)
+
+    constant_pool_count = len(cp_entries) + 1
+    body = b"".join(cp_entries)
+    body += (0).to_bytes(2, "big")  # access_flags
+    body += (2).to_bytes(2, "big")  # this_class = 2
+    body += (0).to_bytes(2, "big")  # super_class = 0
+    body += (0).to_bytes(2, "big")  # interfaces_count
+
+    def member_table(present: bool) -> bytes:
+        if not present:
+            return (0).to_bytes(2, "big")
+        return (
+            (1).to_bytes(2, "big")  # count = 1
+            + (0).to_bytes(2, "big")  # access_flags
+            + member_name_index.to_bytes(2, "big")  # name_index
+            + descriptor_index.to_bytes(2, "big")  # descriptor_index
+            + (0).to_bytes(2, "big")  # attributes_count = 0
+        )
+
+    body += member_table(with_field)
+    body += member_table(with_method)
+    if with_attribute:
+        body += (1).to_bytes(2, "big")  # attributes_count = 1
+        body += attr_name_index.to_bytes(2, "big")
+        body += (0).to_bytes(4, "big")  # attribute_length = 0
+    else:
+        body += (0).to_bytes(2, "big")  # attributes_count = 0
+
+    return (
+        b"\xca\xfe\xba\xbe"
+        + minor_version.to_bytes(2, "big")
+        + major_version.to_bytes(2, "big")
+        + constant_pool_count.to_bytes(2, "big")
+        + body
+        + trailing_bytes
+    )
+
+
 def _build_xcoff(bits: int, nscns: int = 1, opthdr: int = 0, truncate_to: int | None = None) -> bytes:
     """Build a structurally-valid (unless deliberately perturbed) minimal
     XCOFF32/XCOFF64 fixture."""
@@ -789,11 +864,23 @@ class NativeMemberDetectionTests(unittest.TestCase):
             {"cputype": ARM64, "offset": 80, "size": 32, "align": 4},
         ],
     )
-    # Genuine Java .class file: CAFEBABE + minor_version=0 + major_version
-    # 52 (JDK 8) -- empirically matches androidx.annotation-jvm's real
-    # .class files. Major version is always far outside a plausible
-    # fat-arch count.
-    JAVA_CLASS = b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + b"\x00" * 8
+    # Genuine, structurally-valid Java .class file: CAFEBABE + a real
+    # (if minimal) constant pool/this_class/super_class/interfaces/
+    # fields/methods/attributes -- not just a plausible-looking magic +
+    # version prefix. A 2026-08-24 review found the prior version of
+    # this fixture (bare magic + version + zero padding, no real class
+    # structure at all) let ANY CAFEBABE-prefixed payload under ANY
+    # filename fall back to `not_native` purely because it failed the
+    # fat-Mach-O parse -- see `_validate_java_class_structure` and
+    # `_classify_by_magic` for the fix: the fallback now also requires
+    # this exact structural proof.
+    JAVA_CLASS = _build_java_class()
+    # Bare magic + version + zero padding -- LOOKS like it could be a
+    # class file (major_version=0x34=52 is plausible) but has no real
+    # constant pool/class structure at all. This is exactly the
+    # collision-payload shape a malicious/broken renamed fat-Mach-O
+    # could exploit if the fallback trusted magic+extension alone.
+    MALFORMED_CAFEBABE_PADDING = b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + b"\x00" * 8
 
     def test_known_extension_with_matching_magic_is_native(self) -> None:
         self.assertEqual(evidence.classify_native_member_signal("libfoo.so", self.ELF), "native")
@@ -872,13 +959,31 @@ class NativeMemberDetectionTests(unittest.TestCase):
         self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.XCOFF32), "native")
         self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.XCOFF64), "native")
 
-    def test_fat_macho_arch_count_outside_plausible_range_is_not_native(self) -> None:
-        # 0x63 = 99: far above MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT and also
-        # far above any real fat binary's slice count -- ambiguous with a
-        # ludicrously high-major-version class file, so this must not be
-        # guessed as native.
+    def test_fat_macho_arch_count_outside_plausible_range_under_non_class_name_is_malformed(self) -> None:
+        # 0x63 = 99: far above MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT. This is
+        # the exact High finding this test now guards against: a
+        # non-`.class`-named member must NEVER receive the Java-class
+        # collision fallback merely because it failed the fat-Mach-O
+        # parse -- it must fail generation instead.
         implausible = b"\xca\xfe\xba\xbe\x00\x00\x00\x63" + b"\x00" * 8
-        self.assertEqual(evidence.classify_native_member_signal("payload", implausible), "not_native")
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload", implausible), "malformed_native_magic"
+        )
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload.bin", implausible), "malformed_native_magic"
+        )
+
+    def test_fat_macho_arch_count_outside_plausible_range_under_class_name_but_invalid_structure_is_malformed(
+        self,
+    ) -> None:
+        # Even with the exact `.class` name, bare magic+version+padding
+        # (no real constant pool/class structure) must still fail --
+        # the fallback requires INDEPENDENT structural proof of a valid
+        # Java class file, not just the right extension.
+        self.assertEqual(
+            evidence.classify_native_member_signal("Foo.class", self.MALFORMED_CAFEBABE_PADDING),
+            "malformed_native_magic",
+        )
 
     def test_truncated_magic_prefix_is_not_native(self) -> None:
         self.assertEqual(evidence.classify_native_member_signal("payload", b"\xca\xfe"), "not_native")
@@ -931,19 +1036,25 @@ class NativeMemberDetectionTests(unittest.TestCase):
                     "malformed_native_magic",
                 )
 
-    def test_fat_macho_zero_arch_count_is_malformed_or_not_native(self) -> None:
+    def test_fat_macho_zero_arch_count_is_malformed(self) -> None:
+        # None of these fixtures is `.class`-named or a valid Java class
+        # payload, so ALL four magic variants -- including the
+        # CAFEBABE/Java-class-colliding one -- must fail generation, not
+        # fall back to `not_native`.
         for magic, bits, endian in self.FAT_MACHO_VARIANTS:
             with self.subTest(magic=magic.hex()):
                 data = magic + (0).to_bytes(4, endian) + b"\x00" * 16
-                expected = "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
-                self.assertEqual(evidence.classify_native_member_signal("payload", data), expected)
+                self.assertEqual(
+                    evidence.classify_native_member_signal("payload", data), "malformed_native_magic"
+                )
 
-    def test_fat_macho_excess_arch_count_is_malformed_or_not_native(self) -> None:
+    def test_fat_macho_excess_arch_count_is_malformed(self) -> None:
         for magic, bits, endian in self.FAT_MACHO_VARIANTS:
             with self.subTest(magic=magic.hex()):
                 data = magic + (99).to_bytes(4, endian) + b"\x00" * 16
-                expected = "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
-                self.assertEqual(evidence.classify_native_member_signal("payload", data), expected)
+                self.assertEqual(
+                    evidence.classify_native_member_signal("payload", data), "malformed_native_magic"
+                )
 
     def test_fat_macho_arch_table_extends_past_available_data_is_malformed(self) -> None:
         # nfat_arch claims 2 entries, but only enough bytes for the header
@@ -952,16 +1063,19 @@ class NativeMemberDetectionTests(unittest.TestCase):
         for magic, bits, endian in self.FAT_MACHO_VARIANTS:
             with self.subTest(magic=magic.hex()):
                 data = magic + (2).to_bytes(4, endian) + b"\x00" * 4
-                expected = "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
-                self.assertEqual(evidence.classify_native_member_signal("payload", data), expected)
+                self.assertEqual(
+                    evidence.classify_native_member_signal("payload", data), "malformed_native_magic"
+                )
 
     def _expected_signal_for_malformed_fat_macho(self, magic: bytes) -> str:
-        # Every fat-Mach-O variant except the exact Java-`.class`-colliding
-        # magic has no legitimate innocent explanation for a structurally
-        # invalid header, so it must fail generation outright; the
-        # colliding magic alone falls back to `not_native` (see
-        # `JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC`).
-        return "not_native" if magic == evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC else "malformed_native_magic"
+        # No fixture in this group is `.class`-named with a genuinely
+        # valid Java class payload, so every fat-Mach-O magic variant --
+        # including the CAFEBABE/Java-class-colliding one -- has no
+        # legitimate innocent explanation here and must fail generation
+        # outright (see `JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC` and
+        # `_classify_by_magic` for when the narrow fallback DOES apply).
+        del magic  # kept for call-site symmetry/documentation; always malformed here
+        return "malformed_native_magic"
 
     def test_fat_macho_arch_offset_size_out_of_bounds_is_malformed(self) -> None:
         for magic, bits, endian in self.FAT_MACHO_VARIANTS:
@@ -1029,16 +1143,19 @@ class NativeMemberDetectionTests(unittest.TestCase):
         )
         self.assertEqual(evidence.classify_native_member_signal("payload", data), "malformed_native_magic")
 
-    def test_fat_macho_wrong_endian_field_encoding_is_malformed_or_not_native(self) -> None:
+    def test_fat_macho_wrong_endian_field_encoding_is_malformed(self) -> None:
         # FAT_MAGIC (the exact Java-`.class`-colliding, 32-bit big-endian
         # variant) with `nfat_arch` encoded little-endian instead of the
-        # big-endian its own magic implies produces an implausible count
-        # and must fall back to the documented `not_native` collision
-        # outcome -- never silently accepted as `"native"`.
+        # big-endian its own magic implies produces an implausible count.
+        # Under a non-`.class` name, this must fail generation outright --
+        # never silently accepted as `"native"` OR absorbed as
+        # `"not_native"`.
         colliding = b"\xca\xfe\xba\xbe" + (2).to_bytes(4, "little") + b"\x00" * 16
-        self.assertEqual(evidence.classify_native_member_signal("payload", colliding), "not_native")
-        # FAT_MAGIC_64 (no legitimate collision) with the same mistake must
-        # fail generation outright.
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload", colliding), "malformed_native_magic"
+        )
+        # FAT_MAGIC_64 (no legitimate collision at all) with the same
+        # mistake must fail generation outright too.
         non_colliding = b"\xca\xfe\xba\xbf" + (2).to_bytes(4, "little") + b"\x00" * 32
         self.assertEqual(
             evidence.classify_native_member_signal("payload", non_colliding), "malformed_native_magic"
@@ -1166,6 +1283,308 @@ class NativeMemberDetectionTests(unittest.TestCase):
     def test_xcoff_renamed_with_misleading_extension_is_native(self) -> None:
         self.assertEqual(evidence.classify_native_member_signal("payload.dat", _build_xcoff(32)), "native")
         self.assertEqual(evidence.classify_native_member_signal("payload", _build_xcoff(64)), "native")
+
+    def test_valid_fat_macho_renamed_dot_class_is_still_native(self) -> None:
+        # The fat-Mach-O structural parse is always attempted FIRST,
+        # before any Java-class fallback consideration -- a genuinely
+        # valid fat Mach-O keeps being classified `"native"` no matter
+        # what its member name is, including a `.class` name that would
+        # otherwise be eligible for the Java-class fallback.
+        for magic, bits, endian in self.FAT_MACHO_VARIANTS:
+            with self.subTest(magic=magic.hex()):
+                data = _one_arch_fat_macho(magic, bits, endian, self.X86_64)
+                self.assertEqual(evidence.classify_native_member_signal("payload.class", data), "native")
+        self.assertEqual(evidence.classify_native_member_signal("libfoo.class", self.FAT_MACHO), "native")
+
+    def test_zero_byte_payload_under_dot_bin_and_dot_class_is_not_native(self) -> None:
+        # An empty member has no magic at all -- correctly `not_native`
+        # under any name, never confused with a malformed CAFEBABE claim.
+        self.assertEqual(evidence.classify_native_member_signal("payload.bin", b""), "not_native")
+        self.assertEqual(evidence.classify_native_member_signal("Foo.class", b""), "not_native")
+
+    def test_zero_length_cafebabe_prefixed_payload_under_dot_bin_and_dot_class_is_malformed(self) -> None:
+        # Exactly the 4-byte magic and nothing else -- too short for even
+        # the fat-Mach-O header, and (for `.class`) also too short for
+        # even the Java class file's own minor/major version fields.
+        # Neither name may fall back to `not_native`.
+        magic_only = evidence.JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC
+        self.assertEqual(evidence.classify_native_member_signal("payload.bin", magic_only), "malformed_native_magic")
+        self.assertEqual(evidence.classify_native_member_signal("Foo.class", magic_only), "malformed_native_magic")
+
+    def test_truncated_fat_macho_payload_under_dot_bin_and_dot_class_is_malformed(self) -> None:
+        # A real fat-Mach-O header (plausible nfat_arch=1) truncated right
+        # after the header, before the arch entry itself -- fails the fat
+        # parse, and is not a valid Java class file either.
+        truncated = b"\xca\xfe\xba\xbe" + (1).to_bytes(4, "big") + b"\x00" * 4
+        self.assertEqual(evidence.classify_native_member_signal("payload.bin", truncated), "malformed_native_magic")
+        self.assertEqual(evidence.classify_native_member_signal("Foo.class", truncated), "malformed_native_magic")
+
+
+class JavaClassStructuralValidationTests(unittest.TestCase):
+    """`_validate_java_class_structure()` / the CAFEBABE Java-class
+    collision fallback in `_classify_by_magic()` -- final 2026-08-24 High
+    finding: the fallback must require BOTH an exact-case `.class` member
+    name AND independent bounded structural proof of a genuine Java class
+    file, never magic+extension alone, and never magic+ANY filename.
+    """
+
+    def test_minimal_valid_class_is_structurally_valid(self) -> None:
+        self.assertTrue(evidence._validate_java_class_structure(_build_java_class()))
+
+    def test_minimal_valid_class_with_field_method_and_attribute_is_valid(self) -> None:
+        self.assertTrue(evidence._validate_java_class_structure(_build_java_class(with_field=True)))
+        self.assertTrue(evidence._validate_java_class_structure(_build_java_class(with_method=True)))
+        self.assertTrue(evidence._validate_java_class_structure(_build_java_class(with_attribute=True)))
+        self.assertTrue(
+            evidence._validate_java_class_structure(
+                _build_java_class(with_field=True, with_method=True, with_attribute=True)
+            )
+        )
+
+    def test_wrong_magic_is_invalid(self) -> None:
+        self.assertFalse(evidence._validate_java_class_structure(b"\x00\x00\x00\x00" + b"\x00" * 20))
+
+    def test_implausible_major_version_is_invalid(self) -> None:
+        for major in (0, 44, 101, 65535):
+            with self.subTest(major=major):
+                data = bytearray(_build_java_class())
+                data[6:8] = major.to_bytes(2, "big")
+                self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_plausible_major_version_boundaries_are_valid(self) -> None:
+        for major in (45, 52, 61, 100):
+            with self.subTest(major=major):
+                data = bytearray(_build_java_class())
+                data[6:8] = major.to_bytes(2, "big")
+                self.assertTrue(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_zero_constant_pool_count_is_invalid(self) -> None:
+        data = bytearray(_build_java_class())
+        data[8:10] = (0).to_bytes(2, "big")
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_unknown_constant_pool_tag_is_invalid(self) -> None:
+        data = bytearray(_build_java_class())
+        # Byte 10 is the first constant pool entry's tag (a Utf8, tag=1).
+        # 0xFF (255) is not a JVMS Table 4.4-A tag.
+        data[10] = 0xFF
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_utf8_length_extending_past_payload_is_invalid(self) -> None:
+        data = bytearray(_build_java_class())
+        # Bytes 11:13 are the first Utf8 entry's u2 length field.
+        data[11:13] = (60000).to_bytes(2, "big")
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_fixed_body_size_entry_truncated_is_invalid(self) -> None:
+        # A Class entry (tag=7, 2-byte body) with only 1 body byte
+        # present before the payload ends.
+        data = _build_java_class()
+        # Locate the Class entry's tag byte (index 2 in the constant
+        # pool, right after the "Foo" Utf8 entry: 1(tag)+2(len)+3("Foo")=6
+        # bytes, so the Class tag is at absolute offset 10+6=16).
+        class_tag_offset = 16
+        self.assertEqual(data[class_tag_offset], 7)
+        truncated = data[: class_tag_offset + 2]  # tag + 1 of 2 body bytes
+        self.assertFalse(evidence._validate_java_class_structure(truncated))
+
+    def test_double_slot_long_entry_is_valid_and_advances_index_by_two(self) -> None:
+        # Hand-built constant pool: index 1 = Long (tag=5, 8-byte body,
+        # occupies indices 1 AND 2), index 3 = Class -> name_index=4,
+        # index 4 = Utf8 "Foo". this_class=3. constant_pool_count=5
+        # (highest real index 4, +1).
+        cp = bytes([5]) + b"\x00" * 8  # index 1 (Long; index 2 is its phantom slot)
+        cp += bytes([7]) + (4).to_bytes(2, "big")  # index 3: Class -> name_index=4
+        cp += bytes([1]) + (3).to_bytes(2, "big") + b"Foo"  # index 4: Utf8 "Foo"
+        data = (
+            b"\xca\xfe\xba\xbe"
+            + (0).to_bytes(2, "big")
+            + (52).to_bytes(2, "big")
+            + (5).to_bytes(2, "big")  # constant_pool_count
+            + cp
+            + (0).to_bytes(2, "big")  # access_flags
+            + (3).to_bytes(2, "big")  # this_class = 3
+            + (0).to_bytes(2, "big")  # super_class = 0
+            + (0).to_bytes(2, "big")  # interfaces_count
+            + (0).to_bytes(2, "big")  # fields_count
+            + (0).to_bytes(2, "big")  # methods_count
+            + (0).to_bytes(2, "big")  # attributes_count
+        )
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    def test_reference_to_double_slot_phantom_index_is_invalid(self) -> None:
+        # Same layout as above, but this_class wrongly points at index 2
+        # -- the Long entry's phantom/unusable second slot -- which must
+        # never be treated as a valid Class entry.
+        cp = bytes([5]) + b"\x00" * 8  # index 1 (Long); index 2 is its phantom slot
+        cp += bytes([7]) + (4).to_bytes(2, "big")  # index 3: Class
+        cp += bytes([1]) + (3).to_bytes(2, "big") + b"Foo"  # index 4: Utf8
+        data = (
+            b"\xca\xfe\xba\xbe"
+            + (0).to_bytes(2, "big")
+            + (52).to_bytes(2, "big")
+            + (5).to_bytes(2, "big")
+            + cp
+            + (0).to_bytes(2, "big")  # access_flags
+            + (2).to_bytes(2, "big")  # this_class = 2 (the phantom slot!)
+            + (0).to_bytes(2, "big")
+            + (0).to_bytes(2, "big")
+            + (0).to_bytes(2, "big")
+            + (0).to_bytes(2, "big")
+            + (0).to_bytes(2, "big")
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_invalid_this_class_index_is_invalid(self) -> None:
+        data = bytearray(_build_java_class())
+        # this_class is at offset 10 + len(constant pool bytes) + 2
+        # (access_flags). For the default fixture: Utf8("Foo") = 6 bytes,
+        # Class = 3 bytes -> cp ends at 10+9=19; access_flags at 19:21;
+        # this_class at 21:23.
+        self.assertEqual(int.from_bytes(data[21:23], "big"), 2)
+        data[21:23] = (1).to_bytes(2, "big")  # index 1 is the Utf8, not a Class
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_invalid_super_class_index_is_invalid(self) -> None:
+        data = bytearray(_build_java_class())
+        # super_class is at offset 23:25 for the default fixture.
+        self.assertEqual(int.from_bytes(data[23:25], "big"), 0)
+        data[23:25] = (1).to_bytes(2, "big")  # index 1 is the Utf8, not a Class
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_invalid_interface_index_is_invalid(self) -> None:
+        data = bytearray(_build_java_class())
+        # interfaces_count is at offset 25:27; splice in one bogus entry.
+        self.assertEqual(int.from_bytes(data[25:27], "big"), 0)
+        patched = bytes(data[:25]) + (1).to_bytes(2, "big") + (99).to_bytes(2, "big") + bytes(data[27:])
+        self.assertFalse(evidence._validate_java_class_structure(patched))
+
+    def test_field_with_invalid_name_index_is_invalid(self) -> None:
+        data = bytearray(_build_java_class(with_field=True))
+        # Corrupt the field's name_index to reference a non-Utf8 entry
+        # (index 2, the Class entry). Layout: magic(4)+minor(2)+major(2)+
+        # cp_count(2) + Utf8"Foo"(6) + Class(3) + Utf8"I"(4) + Utf8"x"(4)
+        # + access_flags(2) + this_class(2) + super_class(2) +
+        # interfaces_count(2) + fields_count(2)=1 + field's
+        # access_flags(2) + name_index(2).
+        offset = 10 + 6 + 3 + 4 + 4 + 2 + 2 + 2 + 2 + 2 + 2
+        original_name_index = int.from_bytes(data[offset : offset + 2], "big")
+        self.assertEqual(original_name_index, 4)  # the Utf8 "x" member-name entry
+        data[offset : offset + 2] = (2).to_bytes(2, "big")  # index 2 is the Class entry
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_field_with_invalid_descriptor_index_is_invalid(self) -> None:
+        data = bytearray(_build_java_class(with_field=True))
+        offset = 10 + 6 + 3 + 4 + 4 + 2 + 2 + 2 + 2 + 2 + 2 + 2  # descriptor_index follows name_index
+        original_descriptor_index = int.from_bytes(data[offset : offset + 2], "big")
+        self.assertEqual(original_descriptor_index, 3)  # the Utf8 "I" descriptor entry
+        data[offset : offset + 2] = (2).to_bytes(2, "big")  # index 2 is the Class entry
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_truncated_in_fields_table_is_invalid(self) -> None:
+        data = _build_java_class(with_field=True)
+        self.assertFalse(evidence._validate_java_class_structure(data[:-1]))
+
+    def test_truncated_in_methods_table_is_invalid(self) -> None:
+        data = _build_java_class(with_method=True)
+        self.assertFalse(evidence._validate_java_class_structure(data[:-1]))
+
+    def test_attribute_with_invalid_name_index_is_invalid(self) -> None:
+        data = bytearray(_build_java_class(with_attribute=True))
+        # The tail of a with_attribute=True fixture is exactly
+        # attributes_count(2)=1 + attribute_name_index(2) +
+        # attribute_length(4)=0 -- 8 bytes total.
+        self.assertEqual(int.from_bytes(data[-8:-6], "big"), 1)  # attributes_count
+        original_attr_name_index = int.from_bytes(data[-6:-4], "big")
+        data[-6:-4] = (2).to_bytes(2, "big")  # index 2 is the Class entry, not Utf8
+        self.assertNotEqual(original_attr_name_index, 2)
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_attribute_length_extending_past_payload_is_invalid(self) -> None:
+        data = bytearray(_build_java_class(with_attribute=True))
+        data[-4:] = (60000).to_bytes(4, "big")  # attribute_length, way past EOF
+        self.assertFalse(evidence._validate_java_class_structure(bytes(data)))
+
+    def test_trailing_bytes_after_valid_class_is_invalid(self) -> None:
+        # Exact EOF is required -- extra bytes appended after an
+        # otherwise fully well-formed, valid class file must still fail.
+        data = _build_java_class(trailing_bytes=b"\x00")
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_truncated_valid_class_is_invalid(self) -> None:
+        data = _build_java_class()
+        self.assertFalse(evidence._validate_java_class_structure(data[:-1]))
+
+    # -- End-to-end classify_native_member_signal() coverage. ------------
+
+    def test_valid_class_under_dot_class_name_is_not_native(self) -> None:
+        self.assertEqual(
+            evidence.classify_native_member_signal("com/example/Foo.class", _build_java_class()),
+            "not_native",
+        )
+
+    def test_valid_class_bytes_renamed_dot_bin_is_malformed(self) -> None:
+        # Requirement: "Valid Java bytes renamed .bin/other extension ->
+        # malformed_native_magic (conservative)". The payload is a
+        # perfectly valid Java class file, but the fallback requires the
+        # exact `.class` name too -- a non-`.class` name must never
+        # receive the exemption regardless of how well-formed the
+        # payload independently is.
+        valid_class = _build_java_class()
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload.bin", valid_class), "malformed_native_magic"
+        )
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload", valid_class), "malformed_native_magic"
+        )
+        self.assertEqual(
+            evidence.classify_native_member_signal("payload.dat", valid_class), "malformed_native_magic"
+        )
+
+    def test_valid_class_under_wrong_case_class_suffix_is_malformed(self) -> None:
+        # Explicit case policy (JAVA_CLASS_MEMBER_SUFFIX): only the exact
+        # lowercase `.class` suffix qualifies, matching real javac/JAR
+        # tooling output -- `.CLASS`/`.Class` do not.
+        valid_class = _build_java_class()
+        self.assertEqual(
+            evidence.classify_native_member_signal("Foo.CLASS", valid_class), "malformed_native_magic"
+        )
+        self.assertEqual(
+            evidence.classify_native_member_signal("Foo.Class", valid_class), "malformed_native_magic"
+        )
+
+    def test_malformed_class_under_dot_class_name_is_malformed(self) -> None:
+        # Every malformed-structure case above, re-verified through the
+        # full classify_native_member_signal() entry point under the
+        # exact `.class` name it would otherwise qualify for.
+        cases = {
+            "unknown_tag": (lambda d: (d.__setitem__(10, 0xFF), bytes(d))[1])(bytearray(_build_java_class())),
+            "truncated": _build_java_class()[:-1],
+            "trailing_bytes": _build_java_class(trailing_bytes=b"\x00"),
+            "truncated_fields": _build_java_class(with_field=True)[:-1],
+            "truncated_methods": _build_java_class(with_method=True)[:-1],
+        }
+        for description, data in cases.items():
+            with self.subTest(case=description):
+                self.assertEqual(
+                    evidence.classify_native_member_signal("Foo.class", data), "malformed_native_magic"
+                )
+
+    def test_zero_and_truncated_fat_macho_under_dot_bin_and_dot_class_are_malformed(self) -> None:
+        # "zero/truncated malformed fat .bin and .class fail" -- explicit
+        # coverage under both extensions, for both a zero-arch-count claim
+        # and a truncated-header claim.
+        zero_arch = b"\xca\xfe\xba\xbe" + (0).to_bytes(4, "big") + b"\x00" * 8
+        truncated_header = b"\xca\xfe\xba\xbe" + (1).to_bytes(4, "big")
+        for name in ("payload.bin", "Foo.class"):
+            with self.subTest(name=name, case="zero_arch"):
+                self.assertEqual(
+                    evidence.classify_native_member_signal(name, zero_arch), "malformed_native_magic"
+                )
+            with self.subTest(name=name, case="truncated_header"):
+                self.assertEqual(
+                    evidence.classify_native_member_signal(name, truncated_header), "malformed_native_magic"
+                )
 
 
 class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
@@ -1361,17 +1780,84 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         self.assertIn("duplicate native", str(ctx.exception))
 
     def test_java_class_resource_near_misses_do_not_trigger_a_false_positive(self) -> None:
-        # A jar full of ordinary .class files (CAFEBABE magic, colliding
-        # with Mach-O fat-binary magic) must not be reported as carrying
-        # native members at all.
+        # A jar full of ordinary, structurally-valid .class files (CAFEBABE
+        # magic, colliding with Mach-O fat-binary magic) must not be
+        # reported as carrying native members at all. Uses a genuinely
+        # valid class file, not just a plausible-looking magic+version
+        # prefix -- see `_validate_java_class_structure`.
         self._write_jar(
             "com.example",
             "puretype",
             "1.0",
-            {"com/example/Foo.class": b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + b"rest-of-classfile"},
+            {"com/example/Foo.class": _build_java_class(class_name="com/example/Foo")},
         )
         gradle_report = self._gradle_report("com.example:puretype:1.0")
         evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
+
+    # -- REVIEWED_NON_NATIVE_MEMBERS: narrow, hash-pinned exception -------
+
+    def test_reviewed_non_native_member_exact_match_does_not_raise(self) -> None:
+        # A member whose (coordinate, path, sha256) exactly matches a
+        # human-reviewed entry is skipped entirely -- never reaches the
+        # "not present in MAVEN_NATIVE_CARRIERS" catalog check either,
+        # same as a genuinely `not_native` member would.
+        valid_class_renamed_bin = _build_java_class(class_name="Renamed")
+        digest = hashlib.sha256(valid_class_renamed_bin).hexdigest()
+        reviewed = (
+            {
+                "maven_coordinate": "com.example:reviewedbin:1.0",
+                "path": "SomeDebugProbes.bin",
+                "sha256": digest,
+            },
+        )
+        self._write_jar(
+            "com.example", "reviewedbin", "1.0", {"SomeDebugProbes.bin": valid_class_renamed_bin}
+        )
+        gradle_report = self._gradle_report("com.example:reviewedbin:1.0")
+        with mock.patch.object(evidence, "REVIEWED_NON_NATIVE_MEMBERS", reviewed):
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
+
+    def test_reviewed_non_native_member_wrong_content_still_raises(self) -> None:
+        # Same coordinate and path as the reviewed entry, but ONE byte of
+        # content differs -- the sha256 pin must not match, and this must
+        # still fail closed (never "close enough").
+        reviewed_bytes = _build_java_class(class_name="Renamed")
+        reviewed = (
+            {
+                "maven_coordinate": "com.example:reviewedbin:1.0",
+                "path": "SomeDebugProbes.bin",
+                "sha256": hashlib.sha256(reviewed_bytes).hexdigest(),
+            },
+        )
+        tampered_bytes = _build_java_class(class_name="Tampered")
+        self.assertNotEqual(reviewed_bytes, tampered_bytes)
+        self._write_jar("com.example", "reviewedbin", "1.0", {"SomeDebugProbes.bin": tampered_bytes})
+        gradle_report = self._gradle_report("com.example:reviewedbin:1.0")
+        with mock.patch.object(evidence, "REVIEWED_NON_NATIVE_MEMBERS", reviewed):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("failed this generator's bounded structural validation", str(ctx.exception))
+
+    def test_reviewed_non_native_member_wrong_coordinate_still_raises(self) -> None:
+        # Identical path and content, but resolved under a DIFFERENT
+        # coordinate than the one the reviewer actually pinned -- the
+        # exception must not transfer across coordinates.
+        valid_class_renamed_bin = _build_java_class(class_name="Renamed")
+        digest = hashlib.sha256(valid_class_renamed_bin).hexdigest()
+        reviewed = (
+            {
+                "maven_coordinate": "com.example:other-coordinate:9.9",
+                "path": "SomeDebugProbes.bin",
+                "sha256": digest,
+            },
+        )
+        self._write_jar(
+            "com.example", "reviewedbin", "1.0", {"SomeDebugProbes.bin": valid_class_renamed_bin}
+        )
+        gradle_report = self._gradle_report("com.example:reviewedbin:1.0")
+        with mock.patch.object(evidence, "REVIEWED_NON_NATIVE_MEMBERS", reviewed):
+            with self.assertRaises(evidence.EvidenceError):
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
 
     def test_two_artifacts_same_coordinate_merge_without_conflict(self) -> None:
         # Mirrors JNA 5.19.1's real shape: a .jar AND a separate .aar for

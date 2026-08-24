@@ -1757,6 +1757,20 @@ FAT_MACHO_ARCH_ENTRY_SIZE_64 = 32  # + 64-bit offset/size + a reserved u32
 # `.class` files have `major_version == 52` (JDK 8).
 JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC = b"\xca\xfe\xba\xbe"
 
+# Standard, exact-case `.class` suffix per the ZIP/JAR convention every
+# real Java toolchain (javac, the JVM's own class loaders, jar/zip
+# tooling) uses -- Java class-file member names are always emitted with
+# a lowercase `.class` extension, never `.Class`/`.CLASS`/mixed case.
+# This is a deliberate, explicit case policy: a member named with any
+# other casing does NOT get the Java-class collision fallback below, no
+# matter how well-formed its payload is, and instead fails closed as
+# `"malformed_native_magic"` if it also fails the fat-Mach-O structural
+# parse. This is intentionally the ONLY extension checked for the
+# fallback -- unlike native extensions, there is no "renamed .class"
+# concept to support here, since the whole point of the fallback is that
+# `.class` is this collision's one common, legitimate, well-known name.
+JAVA_CLASS_MEMBER_SUFFIX = ".class"
+
 MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT = 20
 
 # Real Apple Mach-O `cputype` values this generator has ever actually
@@ -1974,8 +1988,257 @@ def _member_has_native_extension(name: str) -> bool:
     return any(lower.endswith(ext) for ext in NATIVE_MEMBER_EXTENSIONS)
 
 
-def _classify_by_magic(data: bytes) -> str:
-    """Classify one archive member's content, independent of its filename.
+def _member_has_exact_java_class_suffix(name: str) -> bool:
+    """Exact-case `.class` check -- see `JAVA_CLASS_MEMBER_SUFFIX` for the
+    explicit case policy this deliberately enforces (never
+    case-insensitive, unlike `_member_has_native_extension`).
+    """
+    basename = name.rsplit("/", 1)[-1]
+    return basename.endswith(JAVA_CLASS_MEMBER_SUFFIX)
+
+
+class _JavaClassParseError(Exception):
+    """Internal-only control-flow signal for `_validate_java_class_structure`
+    -- never escapes this module; every raise site here corresponds to one
+    documented rejection reason (truncation, an unknown/malformed constant
+    pool tag, an out-of-range count, an invalid index, or trailing bytes).
+    """
+
+
+class _BoundedJavaClassReader:
+    """A strictly forward-only, bounds-checked cursor over one member's
+    full byte content. Every read method raises `_JavaClassParseError`
+    immediately if the requested field would extend past `data`'s actual
+    length -- this is the parser's ENTIRE truncation/overflow defense:
+    no length field is ever trusted to allocate or skip past what was
+    actually read, and `constant_pool_count`/`interfaces_count`/
+    `fields_count`/`methods_count`/`attributes_count`/`attribute_length`
+    are all bounded by this, not by a separate fixed constant, per their
+    own u2/u4 field width and the member's real remaining byte count.
+    """
+
+    __slots__ = ("data", "pos")
+
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+        self.pos = 0
+
+    def _remaining(self) -> int:
+        return len(self.data) - self.pos
+
+    def read_bytes(self, count: int) -> bytes:
+        if count < 0 or self._remaining() < count:
+            raise _JavaClassParseError("truncated")
+        chunk = self.data[self.pos : self.pos + count]
+        self.pos += count
+        return chunk
+
+    def read_u1(self) -> int:
+        return self.read_bytes(1)[0]
+
+    def read_u2(self) -> int:
+        return int.from_bytes(self.read_bytes(2), "big")
+
+    def read_u4(self) -> int:
+        return int.from_bytes(self.read_bytes(4), "big")
+
+    def skip(self, count: int) -> None:
+        self.read_bytes(count)
+
+    def at_exact_eof(self) -> bool:
+        return self._remaining() == 0
+
+
+# JVMS Table 4.4-A constant-pool tags this parser recognizes. Any tag
+# byte not in this set is an unknown/unsupported tag and fails parsing
+# immediately -- never guessed at or skipped with an assumed size.
+JAVA_CP_TAG_UTF8 = 1
+JAVA_CP_TAG_INTEGER = 3
+JAVA_CP_TAG_FLOAT = 4
+JAVA_CP_TAG_LONG = 5
+JAVA_CP_TAG_DOUBLE = 6
+JAVA_CP_TAG_CLASS = 7
+JAVA_CP_TAG_STRING = 8
+JAVA_CP_TAG_FIELDREF = 9
+JAVA_CP_TAG_METHODREF = 10
+JAVA_CP_TAG_INTERFACE_METHODREF = 11
+JAVA_CP_TAG_NAME_AND_TYPE = 12
+JAVA_CP_TAG_METHOD_HANDLE = 15
+JAVA_CP_TAG_METHOD_TYPE = 16
+JAVA_CP_TAG_DYNAMIC = 17
+JAVA_CP_TAG_INVOKE_DYNAMIC = 18
+JAVA_CP_TAG_MODULE = 19
+JAVA_CP_TAG_PACKAGE = 20
+
+# Fixed body size (in bytes, AFTER the 1-byte tag) for every tag whose
+# body is not variable-length; CONSTANT_Utf8 is handled separately since
+# its body length is itself a field (a u2 immediately after the tag).
+JAVA_CP_FIXED_BODY_SIZES: dict[int, int] = {
+    JAVA_CP_TAG_CLASS: 2,
+    JAVA_CP_TAG_FIELDREF: 4,
+    JAVA_CP_TAG_METHODREF: 4,
+    JAVA_CP_TAG_INTERFACE_METHODREF: 4,
+    JAVA_CP_TAG_STRING: 2,
+    JAVA_CP_TAG_INTEGER: 4,
+    JAVA_CP_TAG_FLOAT: 4,
+    JAVA_CP_TAG_LONG: 8,
+    JAVA_CP_TAG_DOUBLE: 8,
+    JAVA_CP_TAG_NAME_AND_TYPE: 4,
+    JAVA_CP_TAG_METHOD_HANDLE: 3,
+    JAVA_CP_TAG_METHOD_TYPE: 2,
+    JAVA_CP_TAG_DYNAMIC: 4,
+    JAVA_CP_TAG_INVOKE_DYNAMIC: 4,
+    JAVA_CP_TAG_MODULE: 2,
+    JAVA_CP_TAG_PACKAGE: 2,
+}
+# CONSTANT_Long/CONSTANT_Double each occupy TWO constant-pool indices
+# (JVMS §4.4.5): "the constant_pool index n+1 must be considered
+# invalid/unusable" for the entry directly after either -- this parser
+# enforces that by advancing the running index by 2 (never recording a
+# tag for the phantom second slot), so any later reference to that
+# phantom index correctly fails the class/UTF8 index checks below.
+JAVA_CP_DOUBLE_SLOT_TAGS = frozenset({JAVA_CP_TAG_LONG, JAVA_CP_TAG_DOUBLE})
+
+MIN_PLAUSIBLE_JAVA_CLASS_MAJOR_VERSION = 45  # JDK 1.1 (JVMS Table 4.1-A)
+MAX_PLAUSIBLE_JAVA_CLASS_MAJOR_VERSION = 100  # generous, future-proofed upper bound
+
+
+def _parse_java_class_constant_pool(
+    reader: _BoundedJavaClassReader, constant_pool_count: int
+) -> dict[int, int]:
+    """Parse every constant-pool entry, returning `{index: tag}` for
+    every OCCUPIED index (1-based; index 0 is always unused, and a
+    Long/Double's phantom second slot is deliberately never a key).
+    Raises `_JavaClassParseError` on an unknown tag or truncation --
+    never guesses a body size for a tag it does not recognize.
+    """
+    tags: dict[int, int] = {}
+    index = 1
+    while index < constant_pool_count:
+        tag = reader.read_u1()
+        if tag == JAVA_CP_TAG_UTF8:
+            length = reader.read_u2()
+            reader.skip(length)
+            tags[index] = tag
+            index += 1
+        elif tag in JAVA_CP_FIXED_BODY_SIZES:
+            reader.skip(JAVA_CP_FIXED_BODY_SIZES[tag])
+            tags[index] = tag
+            index += 2 if tag in JAVA_CP_DOUBLE_SLOT_TAGS else 1
+        else:
+            raise _JavaClassParseError(f"unknown constant pool tag {tag}")
+    return tags
+
+
+def _java_cp_index_has_tag(tags: dict[int, int], index: int, expected_tag: int) -> bool:
+    return index != 0 and tags.get(index) == expected_tag
+
+
+def _parse_java_class_member_list(reader: _BoundedJavaClassReader, tags: dict[int, int]) -> None:
+    """Parse one `fields[]` or `methods[]` table (JVMS §4.5/§4.6 --
+    identical shape: access_flags, name_index, descriptor_index,
+    attributes_count, attributes[]). `name_index`/`descriptor_index`
+    must each reference a CONSTANT_Utf8 entry. Raises
+    `_JavaClassParseError` on any violation.
+    """
+    count = reader.read_u2()
+    for _ in range(count):
+        reader.read_u2()  # access_flags -- accepted as-is, not further validated
+        name_index = reader.read_u2()
+        if not _java_cp_index_has_tag(tags, name_index, JAVA_CP_TAG_UTF8):
+            raise _JavaClassParseError("field/method name_index does not reference a Utf8 entry")
+        descriptor_index = reader.read_u2()
+        if not _java_cp_index_has_tag(tags, descriptor_index, JAVA_CP_TAG_UTF8):
+            raise _JavaClassParseError("field/method descriptor_index does not reference a Utf8 entry")
+        _parse_java_class_attribute_list(reader, tags)
+
+
+def _parse_java_class_attribute_list(reader: _BoundedJavaClassReader, tags: dict[int, int]) -> None:
+    """Parse one `attributes[]` table (JVMS §4.7): each entry is
+    `{u2 attribute_name_index; u4 attribute_length; u1 info[attribute_length]}`.
+    This parser does not interpret any attribute's own contents (Code,
+    ConstantValue, etc.) -- it bounds-checks and skips `attribute_length`
+    bytes, which is the exact same fail-closed contract as every other
+    unbounded-length field here: `attribute_length` is a u4 (up to ~4GB)
+    with NO fixed cap of its own, so the ONLY thing preventing an
+    over-read is `_BoundedJavaClassReader.skip()` checking it against
+    this member's actual remaining bytes.
+    """
+    count = reader.read_u2()
+    for _ in range(count):
+        attribute_name_index = reader.read_u2()
+        if not _java_cp_index_has_tag(tags, attribute_name_index, JAVA_CP_TAG_UTF8):
+            raise _JavaClassParseError("attribute_name_index does not reference a Utf8 entry")
+        attribute_length = reader.read_u4()
+        reader.skip(attribute_length)
+
+
+def _parse_java_class_structure(data: bytes) -> bool:
+    reader = _BoundedJavaClassReader(data)
+    if reader.read_bytes(4) != JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC:
+        return False
+    reader.read_u2()  # minor_version -- no plausibility bound of its own
+    major_version = reader.read_u2()
+    if not (MIN_PLAUSIBLE_JAVA_CLASS_MAJOR_VERSION <= major_version <= MAX_PLAUSIBLE_JAVA_CLASS_MAJOR_VERSION):
+        raise _JavaClassParseError(f"implausible major_version {major_version}")
+    constant_pool_count = reader.read_u2()
+    if constant_pool_count < 1:
+        raise _JavaClassParseError("constant_pool_count must be at least 1")
+    tags = _parse_java_class_constant_pool(reader, constant_pool_count)
+    reader.read_u2()  # access_flags -- accepted as-is, not further validated
+    this_class = reader.read_u2()
+    if not _java_cp_index_has_tag(tags, this_class, JAVA_CP_TAG_CLASS):
+        raise _JavaClassParseError("this_class does not reference a Class entry")
+    super_class = reader.read_u2()
+    if super_class != 0 and not _java_cp_index_has_tag(tags, super_class, JAVA_CP_TAG_CLASS):
+        raise _JavaClassParseError("super_class is neither 0 nor a Class entry")
+    interfaces_count = reader.read_u2()
+    for _ in range(interfaces_count):
+        interface_index = reader.read_u2()
+        if not _java_cp_index_has_tag(tags, interface_index, JAVA_CP_TAG_CLASS):
+            raise _JavaClassParseError("an interfaces[] entry does not reference a Class entry")
+    _parse_java_class_member_list(reader, tags)  # fields[]
+    _parse_java_class_member_list(reader, tags)  # methods[]
+    _parse_java_class_attribute_list(reader, tags)  # top-level attributes[]
+    return reader.at_exact_eof()
+
+
+def _validate_java_class_structure(data: bytes) -> bool:
+    """Structurally validate a Java `.class` file (JVMS §4), not just its
+    4-byte magic -- the ONLY thing that may exempt a member whose content
+    starts with the exact CAFEBABE fat-Mach-O magic
+    (`JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC`) from a hard
+    `"malformed_native_magic"` failure once it has already failed the fat
+    Mach-O structural parse (see `_classify_by_magic`).
+
+    Parses, in order, with every count/length bounds-checked against this
+    member's own actual remaining bytes (never a separately-trusted
+    length): magic, minor/major version (major version plausibility-
+    bounded), `constant_pool_count` and every constant-pool entry (known
+    tag, correct fixed body size or bounds-checked UTF8 length,
+    Long/Double double-slot indexing), access_flags, `this_class`/
+    `super_class` (must reference a Class entry, or 0 for super_class),
+    `interfaces[]` (each must reference a Class entry), `fields[]`/
+    `methods[]` (each member's name/descriptor index must reference a
+    Utf8 entry, each attribute bounds-checked and skipped), top-level
+    `attributes[]`, and finally requires EXACT end-of-member with zero
+    trailing bytes. Any violation (unknown tag, truncation, an
+    attribute/UTF8 length that overflows past the member's actual size,
+    an invalid this/super/interface/name/descriptor/attribute-name index,
+    or trailing bytes after the last attribute) returns `False`. Never
+    raises, and never invokes any external/unpinned class-file parser --
+    this bounded, dependency-free walk is the entire implementation.
+    """
+    try:
+        return _parse_java_class_structure(data)
+    except _JavaClassParseError:
+        return False
+
+
+def _classify_by_magic(name: str, data: bytes) -> str:
+    """Classify one archive member's content (using its name ONLY for the
+    narrow Java-`.class` collision fallback below, never for any other
+    magic family).
 
     Returns exactly one of:
     - `"native"`: a supported native-code format, positively confirmed --
@@ -1984,19 +2247,33 @@ def _classify_by_magic(data: bytes) -> str:
     - `"malformed_native_magic"`: the leading bytes matched a recognized
       native-format magic, but the structural parse for that format
       failed. This is a hard failure the caller must never silently
-      absorb as `"not_native"` -- with exactly one documented exception
-      (see `JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC`): the one fat-Mach-O
-      magic that is byte-identical to every Java `.class` file's own
-      magic falls back to `"not_native"` instead, since that specific
-      4-byte collision has an extremely common, completely legitimate
-      innocent explanation this generator already scans past constantly.
+      absorb as `"not_native"` -- with exactly one documented, narrow
+      exception (see `JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC`): a member
+      whose content starts with the exact CAFEBABE fat-Mach-O magic,
+      fails that structural parse, has an EXACT-CASE `.class` member
+      name (`JAVA_CLASS_MEMBER_SUFFIX`), AND whose full payload
+      independently passes `_validate_java_class_structure` falls back
+      to `"not_native"` instead. A 2026-08-24 review found the PRIOR
+      version of this fallback fired for ANY CAFEBABE-prefixed payload
+      under ANY filename purely because it failed the fat-Mach-O parse --
+      that let a renamed, malformed fat-Mach-O collision payload evade
+      review entirely. Fail-closed now requires BOTH the exact-case name
+      AND independent structural proof of a genuine Java class file
+      before granting the same exemption; anything else (wrong
+      extension, or a `.class`-named member whose payload does not
+      actually parse as a valid class file) is `"malformed_native_magic"`
+      like every other native-magic mismatch.
     - `"not_native"`: no recognized native-format magic matched at all.
     """
     prefix = data[:MAX_NATIVE_MAGIC_PREFIX_LEN]
     if data[:4] in FAT_MACHO_MAGIC_VARIANTS:
         if _validate_fat_macho_structure(data):
             return "native"
-        if data[:4] == JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC:
+        if (
+            data[:4] == JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC
+            and _member_has_exact_java_class_suffix(name)
+            and _validate_java_class_structure(data)
+        ):
             return "not_native"
         return "malformed_native_magic"
     if data[:2] == b"MZ":
@@ -2022,19 +2299,24 @@ def classify_native_member_signal(name: str, data: bytes) -> str:
     - `"malformed_native_magic"`: the member's leading bytes matched a
       recognized native-format magic (fat Mach-O/PE/XCOFF), but a full
       structural parse of that claimed format failed -- regardless of
-      the member's extension. Never silently accepted OR silently
-      ignored; the caller must fail closed and a human reviewer must
-      inspect this member.
+      the member's extension -- and (for the CAFEBABE/Java-`.class`
+      collision magic specifically) the member also failed to
+      independently qualify for the narrow Java-class fallback in
+      `_classify_by_magic` (wrong/non-exact extension, or a `.class`-
+      named member whose payload does not actually parse as a valid
+      Java class file). Never silently accepted OR silently ignored;
+      the caller must fail closed and a human reviewer must inspect
+      this member.
     - `"extension_magic_mismatch"`: the member's extension IS one of
       `NATIVE_MEMBER_EXTENSIONS`, but its content does not match any
       supported native magic signature at all (not even one that then
       failed structural validation -- that case is
       `"malformed_native_magic"` above). Never silently accepted OR
       silently ignored.
-    - `"not_native"`: none of the above; ordinary member (a `.class`
-      file, a resource, a POM, etc.).
+    - `"not_native"`: none of the above; ordinary member (a genuinely
+      structurally-valid `.class` file, a resource, a POM, etc.).
     """
-    magic_signal = _classify_by_magic(data)
+    magic_signal = _classify_by_magic(name, data)
     if magic_signal in ("native", "malformed_native_magic"):
         return magic_signal
     if _member_has_native_extension(name):
@@ -2069,7 +2351,55 @@ def find_local_maven_artifacts(group: str, artifact: str, version: str) -> list[
     return found
 
 
-def _scan_zip_for_native_members(archive_path: Path) -> list[dict[str, Any]]:
+# Individually human-reviewed archive members that legitimately match a
+# recognized native-code magic (or a native extension) but were each
+# confirmed, on inspection, to be genuine non-native content -- pinned by
+# the EXACT (maven_coordinate, member path, whole-member SHA-256) triple
+# so this is a narrow, auditable, single-file exception, never a general
+# "trust this filename/shape" bypass: any other member -- including this
+# exact coordinate+path with even one different content byte -- still
+# raises `EvidenceError` in `_scan_zip_for_native_members` below and
+# requires a fresh review. `classify_native_member_signal()` itself is
+# never modified by this list; the exception is applied only at the
+# point this scanner would otherwise raise.
+REVIEWED_NON_NATIVE_MEMBERS: tuple[dict[str, str], ...] = (
+    {
+        # kotlinx-coroutines-core-jvm ships its coroutine debug-probes
+        # bytecode as a resource literally named `DebugProbesKt.bin`
+        # (never `DebugProbesKt.class`) specifically so ordinary
+        # classloaders never load it automatically -- only the
+        # coroutines debug agent loads it explicitly, by resource name,
+        # when debug-probes mode is turned on. Confirmed 2026-08-24 by
+        # extracting this exact member and running it through
+        # `_validate_java_class_structure()`: genuine CAFEBABE magic,
+        # major_version 52 (JDK 8), a real (if small) constant pool/
+        # this_class/methods/attributes structure that fully validates
+        # -- an ordinary compiled Java class body, not a native payload
+        # evading detection under a misleading extension.
+        "maven_coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0",
+        "path": "DebugProbesKt.bin",
+        "sha256": "065bd792b8527764f33147188302af5bf9e2a8da40fde0830dc111ad26dae40e",
+    },
+    {
+        # Same upstream mechanism as above, resolved for a different
+        # coroutines version by a different module/source-set's own
+        # transitive dependency graph. Confirmed 2026-08-24 the same way.
+        "maven_coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.4",
+        "path": "DebugProbesKt.bin",
+        "sha256": "158a19eb94aa2f3e2f459db69ee10276c73b945dd6c5f8fc223cf2d85e2b5e33",
+    },
+)
+
+
+def _is_reviewed_non_native_member(gav: str, path: str, data: bytes) -> bool:
+    digest = hashlib.sha256(data).hexdigest()
+    return any(
+        entry["maven_coordinate"] == gav and entry["path"] == path and entry["sha256"] == digest
+        for entry in REVIEWED_NON_NATIVE_MEMBERS
+    )
+
+
+def _scan_zip_for_native_members(archive_path: Path, gav: str) -> list[dict[str, Any]]:
     reject_symlink(archive_path)
     members: list[dict[str, Any]] = []
     with zipfile.ZipFile(archive_path) as zf:
@@ -2091,6 +2421,10 @@ def _scan_zip_for_native_members(archive_path: Path) -> list[dict[str, Any]]:
             with zf.open(info) as fh:
                 data = fh.read()
             signal = classify_native_member_signal(info.filename, data)
+            if signal in ("malformed_native_magic", "extension_magic_mismatch") and _is_reviewed_non_native_member(
+                gav, info.filename, data
+            ):
+                continue
             if signal == "malformed_native_magic":
                 raise EvidenceError(
                     f"{archive_path}: member {info.filename!r} has leading "
@@ -2237,7 +2571,7 @@ def cross_check_maven_native_carriers_against_local_cache(
 
         discovered_by_path: dict[str, dict[str, Any]] = {}
         for artifact_path in artifact_paths:
-            discovered = _scan_zip_for_native_members(artifact_path)
+            discovered = _scan_zip_for_native_members(artifact_path, gav)
 
             # Duplicate-member-path detection within a single archive:
             # zipfile's infolist() can legitimately contain duplicate names
