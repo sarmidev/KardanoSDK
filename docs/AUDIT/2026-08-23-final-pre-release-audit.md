@@ -315,6 +315,8 @@ On `fix/native-build-and-platform-evidence`:
   lands. Versym indices resolve to unique `vna_other`/`vd_ndx`;
   ELF64 add/mul is `UINT64_MAX`-checked; raw known roots require a
   following `/`, path stop, or EOF. Versym 0 / dynsym 0 / globally
-  unique `vna_other` / fail-closed readelf corroboration. Runs
-  `32675120131` and `32675524925` are superseded.
+  unique `vna_other` / fail-closed readelf corroboration. Fresh Phase B
+  at `b59009d` is run `32676885035` (success; artifacts expire
+  2026-09-07; not downloaded). Runs `32675120131` and `32675524925`
+  are superseded.
   Linux ARM, musl, older glibc, and Windows remain out of scope.

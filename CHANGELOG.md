@@ -81,10 +81,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   require a following `/`, path stop, or EOF. Versym 0 is limited to
   the null dynsym entry, `STB_LOCAL`, and undefined `STB_WEAK`;
   `vna_other` is globally unique; `readelf` index maps and dynsym
-  sign records must match exactly. Runs `32675120131` and
-  `32675524925` are superseded. The ninth CHECKSUMS row is added only
-  after that re-review is GO. Linux ARM, musl, older glibc, and
-  Windows are out of scope.
+  sign records must match exactly. Fresh Phase B at `b59009d` is run
+  `32676885035` (success; artifacts expire 2026-09-07; not
+  downloaded). Runs `32675120131` and `32675524925` are superseded.
+  The ninth CHECKSUMS row is added only after that re-review is GO.
+  Linux ARM, musl, older glibc, and Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

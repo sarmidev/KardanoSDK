@@ -220,9 +220,12 @@ undefined weak import, fail-closed `readelf --version-info` and
 `--dyn-syms --wide` corroboration, `UINT64_MAX` checked add/mul, and a
 two-pass path scan. Permissions stay `contents: read`. Uploads use
 `if-no-files-found: error`. The job does not write CHECKSUMS or
-committed `src/`. ubuntu-24.04 artifacts and Linux runs `32675120131`
-and `32675524925` are superseded. A fresh Phase B at this verifier
-tip is required.
+committed `src/`. Fresh Phase B at `b59009d` is run `32676885035`
+(success; artifacts `linux-jvm-candidate-a` `9502949155`,
+`linux-jvm-candidate-b` `9502949717`, `linux-jvm-compare-report`
+`9502995719`, expire 2026-09-07; not downloaded, not promoted).
+Verify `32676885074` and native `32676885086` were green at that
+tip. Runs `32675120131` and `32675524925` are superseded.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

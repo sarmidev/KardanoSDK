@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Versym 0 / dynsym 0 / globally unique `vna_other` / fail-closed readelf corroboration. Runs `32675120131` and `32675524925` superseded. Not promoted. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM candidate rebuild on pinned `ubuntu-22.04` (glibc 2.35). Fresh Phase B at `b59009d` run `32676885035` succeeded (A/B + compare + JVM KAT). Artifacts expire 2026-09-07. Not promoted. Independent A/B re-review still required. Windows not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -124,7 +124,10 @@ Date: 2026-08-23
   re-review GO. Versym indices resolve uniquely; arithmetic is
   `UINT64_MAX`-checked; raw known roots use a following-byte boundary.
   Versym 0, canonical dynsym 0, globally unique `vna_other`, and
-  fail-closed readelf corroboration. Runs `32675120131` and
+  fail-closed `readelf --dyn-syms --wide` corroboration. Fresh Phase B
+  at `b59009d` is run `32676885035` (success; artifacts expire
+  2026-09-07; not downloaded). Verify `32676885074` and native
+  `32676885086` were green at that tip. Runs `32675120131` and
   `32675524925` are superseded.
   CHECKSUMS still has
   the eight committed artifacts. Device runtime remains historical
@@ -248,10 +251,9 @@ Do not use:
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase A/B re-review is the next gate (promotion
 only after two independent `ubuntu-22.04` hashes match **and** that
-re-review is GO). Runs `32675120131` and `32675524925` are superseded.
-Independent re-review is still required. A fresh Phase B at the
-current verifier tip is required. Do not promote. Do not start
-Windows until then. Residual owner work:
+re-review is GO). Fresh Phase B CI at `b59009d` is run `32676885035`
+(success, not promoted). Independent re-review is still required.
+Do not promote. Do not start Windows until then. Residual owner work:
 authenticated GitHub artifact download, secret-scanning / Dependabot,
 the manual accessibility walkthrough, and a post-replacement Android
 device `connectedAndroidDeviceTest`. Do not merge from an automated
