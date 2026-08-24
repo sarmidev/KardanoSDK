@@ -36,6 +36,32 @@ jobs:
         # path exclusions live in scripts/check_restricted_claims.py.
         run: python3 scripts/check_restricted_claims.py
 
+  legal-evidence-scan:
+    name: Legal-evidence packet (NOTICE/LICENSES/native/lock inventory)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust (pinned toolchain)
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal --no-self-update
+          rustup default 1.97.0
+      - name: Run legal-evidence regression tests
+        run: >-
+          python3 -m unittest
+          scripts.tests.test_generate_legal_evidence
+          scripts.tests.test_check_release_evidence
+      - name: Regenerate evidence twice and diff
+        run: |
+          python3 scripts/generate_legal_evidence.py
+          cp -r docs/evidence /tmp/legal-evidence-run1
+          python3 scripts/generate_legal_evidence.py
+          diff -rq /tmp/legal-evidence-run1 docs/evidence
+      - name: Fail on uncommitted evidence drift
+        run: git diff --exit-code -- docs/evidence
+      - name: Run the release-evidence checker
+        run: python3 scripts/check_release_evidence.py
+
   action-pin-scan:
     name: Action SHA-pin scan
     runs-on: ubuntu-latest
