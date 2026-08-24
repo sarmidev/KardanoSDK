@@ -37,6 +37,10 @@ RUSTUP_INIT_SHA256: dict[str, str] = {
     "aarch64-unknown-linux-gnu": (
         "9732d6c5e2a098d3521fca8145d826ae0aaa067ef2385ead08e6feac88fa5792"
     ),
+    # Copied from the official rustup-init.exe.sha256 (fetched 2026-08-24).
+    "x86_64-pc-windows-msvc": (
+        "86478e53f769379d7f0ebfa7c9aa97cb76ca92233f79aa2cc0dbee2efaac73c7"
+    ),
 }
 
 
@@ -55,7 +59,15 @@ def host_triple(system: str | None = None, machine: str | None = None) -> str:
         return "x86_64-unknown-linux-gnu"
     if system == "linux" and machine in {"arm64", "aarch64"}:
         return "aarch64-unknown-linux-gnu"
+    if system == "windows" and machine in {"x86_64", "amd64"}:
+        return "x86_64-pc-windows-msvc"
     raise InstallError(f"unsupported rustup-init host {system}/{machine}")
+
+
+def rustup_init_filename(triple: str) -> str:
+    if triple.endswith("-windows-msvc"):
+        return "rustup-init.exe"
+    return "rustup-init"
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -91,7 +103,7 @@ def install_rustup_init(dest: Path, triple: str) -> Path:
     expected = RUSTUP_INIT_SHA256.get(triple)
     if expected is None:
         raise InstallError(f"no pinned rustup-init SHA-256 for {triple}")
-    payload = download(f"{ARCHIVE_BASE}/{triple}/rustup-init")
+    payload = download(f"{ARCHIVE_BASE}/{triple}/{rustup_init_filename(triple)}")
     actual = sha256_bytes(payload)
     if actual != expected:
         raise InstallError(f"rustup-init {triple} SHA-256 {actual} != pinned {expected}")
@@ -100,7 +112,11 @@ def install_rustup_init(dest: Path, triple: str) -> Path:
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o755)
     try:
         os.write(fd, payload)
-        os.fchmod(fd, 0o755)
+        if hasattr(os, "fchmod"):
+            try:
+                os.fchmod(fd, 0o755)
+            except OSError:
+                pass
         os.close(fd)
         fd = None
         os.replace(str(tmp), str(dest))
@@ -109,7 +125,10 @@ def install_rustup_init(dest: Path, triple: str) -> Path:
             os.close(fd)
         if tmp.exists():
             tmp.unlink()
-    dest.chmod(dest.stat().st_mode | stat.S_IXUSR)
+    try:
+        dest.chmod(dest.stat().st_mode | stat.S_IXUSR)
+    except OSError:
+        pass
     return dest
 
 

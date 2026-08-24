@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--groups",
         default="",
-        help="Comma-separated groups: macos-jvm,android,ios,linux-jvm (default: committed catalog).",
+        help="Comma-separated groups: macos-jvm,android,ios,linux-jvm,windows-jvm (default: committed catalog).",
     )
     parser.add_argument(
         "--report",

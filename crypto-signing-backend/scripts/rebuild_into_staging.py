@@ -26,6 +26,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 import darwin_uuid_normalize as darwin_uuid  # noqa: E402
 import linux_elf_verify as linux_elf  # noqa: E402
+import windows_pe_verify as windows_pe  # noqa: E402
 import native_artifacts as natives  # noqa: E402
 import native_toolchain as toolchain  # noqa: E402
 
@@ -307,6 +308,8 @@ def collect_provenance(module_root: Path, env: dict[str, str]) -> dict[str, obje
         "documented_glibc_baseline": toolchain.EXPECTED_LINUX_GLIBC_LABEL,
         "linux_runs_on": toolchain.EXPECTED_LINUX_RUNS_ON,
         "linux_image_os": toolchain.EXPECTED_LINUX_IMAGE_OS,
+        "windows_runs_on": toolchain.EXPECTED_WINDOWS_RUNS_ON,
+        "windows_image_os": toolchain.EXPECTED_WINDOWS_IMAGE_OS,
         "rust_channel": toolchain.RUST_CHANNEL,
         "expected_xcode": {
             "version": toolchain.EXPECTED_XCODE_VERSION,
@@ -589,6 +592,70 @@ def rebuild_linux_jvm(
         raise RebuildError(f"{spec.artifact_id} ELF verify failed: {error}") from error
 
 
+def rebuild_windows_jvm(
+    module_root: Path,
+    staging: Path,
+    env: dict[str, str],
+    recorder: CommandRecorder,
+) -> None:
+    toolchain.require_native_windows_x86_64()
+    host = rustc_host(env=env, cwd=module_root)
+    if host != toolchain.WINDOWS_JVM_TARGET:
+        raise RebuildError(
+            f"windows-jvm requires rustc host {toolchain.WINDOWS_JVM_TARGET}; "
+            f"got {host!r} (macOS/Linux cross-builds are refused)"
+        )
+    spec = natives.WINDOWS_JVM_CANDIDATE_ARTIFACTS[0]
+    rust_target = spec.rust_target
+    if rust_target != toolchain.WINDOWS_JVM_TARGET:
+        raise RebuildError(f"unexpected windows rust target {rust_target}")
+    _ensure_target(rust_target, module_root=module_root, env=env, recorder=recorder)
+    target_dir = Path(env["CARGO_TARGET_DIR"])
+    output = target_dir / rust_target / "release" / spec.filename
+    started = time.monotonic()
+    recorder.run(
+        [
+            "cargo",
+            "rustc",
+            "--locked",
+            "--release",
+            "--lib",
+            "--target",
+            rust_target,
+            "--",
+            "-Cdebuginfo=0",
+            "-Cstrip=symbols",
+            "-Clink-arg=/Brepro",
+            "-Clink-arg=/DEBUG:NONE",
+            "-Clink-arg=/INCREMENTAL:NO",
+        ],
+        cwd=module_root,
+        env=env,
+        name=f"cargo-rustc-{rust_target}",
+        outputs=[output],
+    )
+    dest = copy_fresh_output(output, staging, spec.relative_path, started_monotonic=started)
+    record = natives.inspect_artifact(spec, dest)
+    natives.write_inspect_evidence(record, staging / "evidence")
+    _require_fatal_inspection(spec, record)
+    extra_roots = windows_pe.build_forbidden_roots(
+        module_root,
+        module_root.parent,
+        staging,
+        Path(env["CARGO_TARGET_DIR"]),
+        toolchain.cargo_home(),
+        toolchain.rustup_home(),
+    )
+    try:
+        windows_pe.verify_windows_x86_64_dll(
+            dest,
+            require_tools=True,
+            extra_forbidden_roots=extra_roots,
+        )
+    except windows_pe.PeError as error:
+        raise RebuildError(f"{spec.artifact_id} PE verify failed: {error}") from error
+
+
 def rebuild_ios(
     module_root: Path,
     staging: Path,
@@ -625,9 +692,9 @@ def rebuild_ios(
 
 
 def _require_fatal_inspection(spec: natives.ArtifactSpec, record: natives.ArtifactRecord) -> None:
-    # linux-so host-absolute path findings are fatal. Darwin/Android still
-    # record them as inspection notes without aborting the rebuild.
-    if spec.kind == "linux-so":
+    # linux-so / windows-dll host-absolute path findings are fatal.
+    # Darwin/Android still record them as inspection notes without aborting.
+    if spec.kind in {"linux-so", "windows-dll"}:
         fatal = list(record.inspection_errors)
     else:
         fatal = [
@@ -644,6 +711,7 @@ BUILDERS = {
     "android": rebuild_android,
     "ios": rebuild_ios,
     "linux-jvm": rebuild_linux_jvm,
+    "windows-jvm": rebuild_windows_jvm,
 }
 
 

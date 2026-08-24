@@ -66,6 +66,26 @@ class LinuxCatalogTests(unittest.TestCase):
         self.assertEqual(len(natives.EXISTING_ARTIFACTS), 9)
 
 
+class WindowsCatalogTests(unittest.TestCase):
+    def test_windows_is_candidate_only(self) -> None:
+        windows = natives.WINDOWS_JVM_CANDIDATE_ARTIFACTS[0]
+        self.assertEqual(windows.group, "windows-jvm")
+        self.assertEqual(
+            windows.relative_path,
+            "src/jvmMain/resources/win32-x86-64/kardano_ed25519_bip32_signing.dll",
+        )
+        self.assertNotIn(windows, natives.EXISTING_ARTIFACTS)
+        self.assertEqual(
+            [spec.artifact_id for spec in natives.artifacts_for_groups(("windows-jvm",))],
+            ["windows-jvm-x86_64"],
+        )
+        self.assertEqual(len(natives.EXISTING_ARTIFACTS), 9)
+        self.assertNotIn(
+            windows.relative_path,
+            {spec.relative_path for spec in natives.EXISTING_ARTIFACTS},
+        )
+
+
 class ManifestCoverageTests(unittest.TestCase):
     def test_missing_catalog_row_is_a_finding(self) -> None:
         checksums = {

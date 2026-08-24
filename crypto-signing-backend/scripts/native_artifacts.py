@@ -2,7 +2,8 @@
 
 This module does not rebuild binaries. It names the nine committed
 artifacts, including the Linux x86-64 JVM ``.so`` promoted from
-``ubuntu-22.04`` Phase C. Parses SHA-256 manifests, inspects staged
+``ubuntu-22.04`` Phase C. Windows x86-64 JVM is candidate-only and is
+not in this catalog. Parses SHA-256 manifests, inspects staged
 copies, and compares them against a manifest. Rebuilds must write
 only into staging.
 """
@@ -28,6 +29,12 @@ from linux_elf_verify import (
     require_exact_sign_nm,
 )
 from native_toolchain import STABLE_INSTALL_NAME
+from windows_pe_verify import (
+    JNA_RESOURCE_PREFIX as WINDOWS_JNA_PREFIX,
+    STABLE_DLL_NAME as WINDOWS_STABLE_DLL,
+    verify_windows_x86_64_dll,
+    PeError,
+)
 
 MODULE_ROOT = Path(__file__).resolve().parent.parent
 CHECKSUMS_NAME = "CHECKSUMS.sha256"
@@ -77,6 +84,12 @@ REQUIRED_EVIDENCE_SUFFIXES = {
         ".ar-tv.txt",
         ".members.json",
         ".path-scan.txt",
+    ),
+    "windows-dll": (
+        ".inspect.json",
+        ".path-scan.txt",
+        ".pe.json",
+        ".dumpbin.txt",
     ),
 }
 
@@ -192,7 +205,22 @@ LINUX_JVM_ARTIFACTS: tuple[ArtifactSpec, ...] = tuple(
     spec for spec in EXISTING_ARTIFACTS if spec.group == "linux-jvm"
 )
 
+# Candidate-only. Not in EXISTING_ARTIFACTS / CHECKSUMS until Phase C.
+WINDOWS_JVM_CANDIDATE_ARTIFACTS: tuple[ArtifactSpec, ...] = (
+    ArtifactSpec(
+        artifact_id="windows-jvm-x86_64",
+        relative_path=f"src/jvmMain/resources/{WINDOWS_JNA_PREFIX}/{WINDOWS_STABLE_DLL}",
+        group="windows-jvm",
+        filename=WINDOWS_STABLE_DLL,
+        kind="windows-dll",
+        expected_arch="x86-64",
+        expected_file_tokens=("PE32+", "x86-64"),
+        rust_target="x86_64-pc-windows-msvc",
+    ),
+)
+
 KNOWN_ARTIFACTS: tuple[ArtifactSpec, ...] = EXISTING_ARTIFACTS
+CANDIDATE_ONLY_ARTIFACTS: tuple[ArtifactSpec, ...] = WINDOWS_JVM_CANDIDATE_ARTIFACTS
 
 ARTIFACT_BY_ID: dict[str, ArtifactSpec] = {
     spec.artifact_id: spec for spec in KNOWN_ARTIFACTS
@@ -200,15 +228,16 @@ ARTIFACT_BY_ID: dict[str, ArtifactSpec] = {
 ARTIFACT_BY_RELATIVE: dict[str, ArtifactSpec] = {
     spec.relative_path: spec for spec in KNOWN_ARTIFACTS
 }
-GROUPS: tuple[str, ...] = ("macos-jvm", "android", "ios", "linux-jvm")
+GROUPS: tuple[str, ...] = ("macos-jvm", "android", "ios", "linux-jvm", "windows-jvm")
 
 
 def artifacts_for_groups(groups: tuple[str, ...] | None) -> list[ArtifactSpec]:
     if groups is None:
         return list(EXISTING_ARTIFACTS)
+    catalog = EXISTING_ARTIFACTS + CANDIDATE_ONLY_ARTIFACTS
     wanted: list[ArtifactSpec] = []
     for group in groups:
-        wanted.extend(spec for spec in EXISTING_ARTIFACTS if spec.group == group)
+        wanted.extend(spec for spec in catalog if spec.group == group)
     return wanted
 
 
@@ -262,6 +291,8 @@ class ArtifactRecord:
     elf_ok: bool | None = None
     readelf_version_text: str = ""
     glibc_requirements: list[str] = field(default_factory=list)
+    pe_ok: bool | None = None
+    dumpbin_text: str = ""
 
 
 _UNSET = object()
@@ -538,10 +569,10 @@ def inspect_artifact(
     record.size = path.stat().st_size
     record.sha256 = sha256_file(path)
 
-    file_bin = hooks.which("file")
-    if file_bin is None:
+    file_bin = None if spec.kind == "windows-dll" else hooks.which("file")
+    if spec.kind != "windows-dll" and file_bin is None:
         record.inspection_errors.append("file(1) is required")
-    else:
+    elif file_bin is not None:
         completed = hooks.run_command([file_bin, str(path)])
         record.file_returncode = completed.returncode
         record.file_output = ((completed.stdout or "") + (completed.stderr or "")).strip()
@@ -623,6 +654,21 @@ def inspect_artifact(
         except ElfError as error:
             record.elf_ok = False
             record.inspection_errors.append(str(error))
+    elif spec.kind == "windows-dll":
+        try:
+            pe_record = verify_windows_x86_64_dll(path, require_tools=require_inspection)
+            record.pe_ok = True
+            record.arch_ok = True
+            record.symbol_ok = True
+            record.needed = [item.name for item in pe_record.imports]
+            record.symbols = [item.name for item in pe_record.exports]
+            record.dumpbin_text = pe_record.dumpbin_text
+            record.embedded_paths = list(pe_record.forbidden_paths)
+        except PeError as error:
+            record.pe_ok = False
+            record.arch_ok = False
+            record.symbol_ok = False
+            record.inspection_errors.append(str(error))
     else:
         record.arch_ok = token_ok
         if not record.arch_ok:
@@ -630,8 +676,10 @@ def inspect_artifact(
                 f"file(1) did not confirm {spec.expected_file_tokens}: {file_text!r}"
             )
 
-    nm_command = _nm_command(spec, path, hooks)
-    if nm_command is None:
+    nm_command = None if spec.kind == "windows-dll" else _nm_command(spec, path, hooks)
+    if spec.kind == "windows-dll":
+        pass
+    elif nm_command is None:
         record.inspection_errors.append("nm/llvm-nm is required")
         record.symbol_ok = False
     else:
@@ -658,7 +706,8 @@ def inspect_artifact(
                 if not record.symbol_ok:
                     record.inspection_errors.append(f"{SIGN_SYMBOL} is not exported")
 
-    record.embedded_paths = scan_embedded_absolute_paths(path)
+    if spec.kind != "windows-dll":
+        record.embedded_paths = scan_embedded_absolute_paths(path)
     if record.embedded_paths:
         record.inspection_errors.append(
             "embedded host-absolute paths: " + "; ".join(record.embedded_paths[:8])
@@ -717,6 +766,7 @@ def write_inspect_evidence(record: ArtifactRecord, evidence_dir: Path) -> list[P
         "runpath": record.runpath,
         "elf_ok": record.elf_ok,
         "glibc_requirements": record.glibc_requirements,
+        "pe_ok": record.pe_ok,
     }
     import json
 
@@ -748,6 +798,22 @@ def write_inspect_evidence(record: ArtifactRecord, evidence_dir: Path) -> list[P
         )
         dump(".readelf-d.txt", (record.otool_output or "") + "\n")
         dump(".readelf-version.txt", (record.readelf_version_text or "") + "\n")
+    if record.spec.kind == "windows-dll":
+        dump(
+            ".pe.json",
+            json.dumps(
+                {
+                    "pe_ok": record.pe_ok,
+                    "symbol_ok": record.symbol_ok,
+                    "needed": record.needed,
+                    "sign_symbols": record.symbols,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+        )
+        dump(".dumpbin.txt", (record.dumpbin_text or "") + "\n")
     if record.spec.kind == "archive":
         dump(".ar-tv.txt", (record.ar_tv or "") + "\n")
         dump(

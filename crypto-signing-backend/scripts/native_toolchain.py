@@ -21,6 +21,9 @@ STABLE_LINUX_SONAME = f"{LIB_STEM}.so"
 LINUX_JVM_TARGET = "x86_64-unknown-linux-gnu"
 EXPECTED_LINUX_IMAGE_OS = "ubuntu22"
 EXPECTED_LINUX_RUNS_ON = "ubuntu-22.04"
+WINDOWS_JVM_TARGET = "x86_64-pc-windows-msvc"
+EXPECTED_WINDOWS_IMAGE_OS = "win22"
+EXPECTED_WINDOWS_RUNS_ON = "windows-2022"
 # Consumer/runtime floor is the pinned runner's glibc. Ubuntu 22.04 is 2.35.
 # Measured at rebuild time; do not assume. musl and older glibc are out of scope.
 EXPECTED_LINUX_GLIBC_BASELINE = (2, 35, 0)
@@ -75,6 +78,22 @@ def require_native_linux_x86_64() -> None:
         raise ToolchainError(
             "linux-jvm rebuilds require x86_64-unknown-linux-gnu; "
             f"host machine {machine} is refused (Linux ARM is out of scope)"
+        )
+
+
+def require_native_windows_x86_64() -> None:
+    """Refuse macOS/Linux cross-builds and Windows ARM hosts."""
+    system = platform.system()
+    machine = platform.machine().lower()
+    if system != "Windows":
+        raise ToolchainError(
+            "windows-jvm rebuilds require a native Windows x86-64 host; "
+            f"{system} cross-builds are refused"
+        )
+    if machine not in {"x86_64", "amd64"}:
+        raise ToolchainError(
+            "windows-jvm rebuilds require x86_64-pc-windows-msvc; "
+            f"host machine {machine} is refused (Windows ARM is out of scope)"
         )
 
 
@@ -253,6 +272,19 @@ def rustflags_linux_jvm(pairs: list[tuple[str, str]]) -> list[str]:
     ]
 
 
+def rustflags_windows_jvm(pairs: list[tuple[str, str]]) -> list[str]:
+    """Native x86_64-pc-windows-msvc flags. No macOS/Linux cross-link."""
+    return [
+        *rustflags_common(pairs),
+        "--remap-cwd-prefix=/kardano/crypto-signing-backend",
+        "-Cdebuginfo=0",
+        "-Cstrip=symbols",
+        "-Clink-arg=/Brepro",
+        "-Clink-arg=/DEBUG:NONE",
+        "-Clink-arg=/INCREMENTAL:NO",
+    ]
+
+
 def encode_rustflags(flags: list[str]) -> str:
     return "\x1f".join(flags)
 
@@ -272,12 +304,14 @@ def apply_rustflags(
     darwin = rustflags_darwin_jvm(pairs, linker=darwin_linker)
     android = rustflags_android(pairs)
     linux = rustflags_linux_jvm(pairs)
+    windows = rustflags_windows_jvm(pairs)
     env["RUSTFLAGS"] = " ".join(common)
     env["CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS"] = " ".join(darwin)
     env["CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS"] = " ".join(darwin)
     env["CARGO_TARGET_AARCH64_APPLE_IOS_RUSTFLAGS"] = " ".join(common)
     env["CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUSTFLAGS"] = " ".join(common)
     env["CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS"] = " ".join(linux)
+    env["CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS"] = " ".join(windows)
     for rust_target in ANDROID_TARGETS:
         key = f"CARGO_TARGET_{rust_target.upper().replace('-', '_')}_RUSTFLAGS"
         env[key] = " ".join(android)
@@ -289,6 +323,9 @@ def apply_rustflags(
         "linux_jvm_rustflags": linux,
         "linux_soname": STABLE_LINUX_SONAME,
         "linux_build_id": "none",
+        "windows_jvm_rustflags": windows,
+        "windows_link_repro": "/Brepro",
+        "windows_debug": "NONE",
         "ios_rustflags": common,
         "stable_install_name": STABLE_INSTALL_NAME,
         "darwin_linker": str(darwin_linker) if darwin_linker else None,
@@ -377,15 +414,25 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
 
     image_os = os.environ.get("ImageOS", "")
     needs_linux = "linux-jvm" in groups
-    if needs_apple and needs_linux:
+    needs_windows = "windows-jvm" in groups
+    exclusive = [name for name, flag in (
+        ("macos-jvm/ios", needs_apple),
+        ("linux-jvm", needs_linux),
+        ("windows-jvm", needs_windows),
+    ) if flag]
+    if len(exclusive) > 1:
         raise ToolchainError(
-            "macos-jvm/ios and linux-jvm cannot share one runner"
+            f"{' and '.join(exclusive)} cannot share one runner"
         )
     linux_os_release = ""
     linux_ldd = ""
     linux_cc = ""
     linux_ld = ""
     host_glibc = None
+    windows_os = ""
+    windows_cl = ""
+    windows_link = ""
+    windows_dumpbin = ""
     if needs_linux:
         require_native_linux_x86_64()
         os_release_path = Path("/etc/os-release")
@@ -409,12 +456,29 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
                 f"host glibc {host_glibc[0]}.{host_glibc[1]} is older than "
                 f"documented baseline {EXPECTED_LINUX_GLIBC_LABEL}"
             )
+    if needs_windows:
+        require_native_windows_x86_64()
+        windows_os = platform.platform()
+        windows_cl = _capture(["cl"])
+        windows_link = _capture(["link"])
+        from windows_pe_verify import find_dumpbin
+
+        dumpbin = find_dumpbin()
+        windows_dumpbin = _capture([dumpbin]) if dumpbin else ""
+        if not dumpbin:
+            raise ToolchainError("dumpbin is required on the Windows rebuild host")
     if os.environ.get("GITHUB_ACTIONS") == "true":
         if needs_linux:
             if image_os != EXPECTED_LINUX_IMAGE_OS:
                 raise ToolchainError(
                     f"GitHub ImageOS {image_os!r} != pinned {EXPECTED_LINUX_IMAGE_OS} "
                     f"(workflow must use runs-on: {EXPECTED_LINUX_RUNS_ON})"
+                )
+        elif needs_windows:
+            if image_os != EXPECTED_WINDOWS_IMAGE_OS:
+                raise ToolchainError(
+                    f"GitHub ImageOS {image_os!r} != pinned {EXPECTED_WINDOWS_IMAGE_OS} "
+                    f"(workflow must use runs-on: {EXPECTED_WINDOWS_RUNS_ON})"
                 )
         elif image_os != EXPECTED_GITHUB_IMAGE_OS:
             raise ToolchainError(
@@ -447,6 +511,12 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
         "linux_glibc_baseline_documented": EXPECTED_LINUX_GLIBC_LABEL,
         "linux_runs_on": EXPECTED_LINUX_RUNS_ON if needs_linux else "",
         "linux_image_os": EXPECTED_LINUX_IMAGE_OS if needs_linux else "",
+        "windows_os": windows_os,
+        "windows_cl": windows_cl,
+        "windows_link": windows_link,
+        "windows_dumpbin": windows_dumpbin,
+        "windows_runs_on": EXPECTED_WINDOWS_RUNS_ON if needs_windows else "",
+        "windows_image_os": EXPECTED_WINDOWS_IMAGE_OS if needs_windows else "",
     }
 
 
