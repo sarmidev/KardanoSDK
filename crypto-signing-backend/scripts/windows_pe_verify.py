@@ -1092,7 +1092,9 @@ def _is_allowed_remap(path: str) -> bool:
 def _consume_ascii_until_control(data: bytes, start: int) -> bytes:
     end = start
     while end < len(data) and end - start < MAX_PATH_CANDIDATE:
-        if data[end] < 32:
+        # Stop at control or non-ASCII adjacency; the bounded candidate
+        # itself must be printable ASCII.
+        if not (32 <= data[end] <= 126):
             break
         end += 1
     return data[start:end]
@@ -1101,10 +1103,7 @@ def _consume_ascii_until_control(data: bytes, start: int) -> bytes:
 def _consume_utf16le_until_control(data: bytes, start: int) -> bytes:
     end = start
     while end + 1 < len(data) and (end - start) // 2 < MAX_PATH_CANDIDATE:
-        code = data[end] | (data[end + 1] << 8)
-        if code < 32:
-            break
-        if data[end + 1] != 0:
+        if data[end + 1] != 0 or not (32 <= data[end] <= 126):
             break
         end += 2
     return data[start:end]
@@ -1168,7 +1167,11 @@ def _windows_runtime_allowed(text: str) -> bool:
 
 
 def _add_path_hit(hits: list[str], raw: bytes, *, wide: bool = False) -> None:
-    text = raw.decode("utf-16le" if wide else "ascii", errors="replace")[:MAX_PATH_DISPLAY]
+    encoding = "utf-16le" if wide else "ascii"
+    try:
+        text = raw.decode(encoding)[:MAX_PATH_DISPLAY]
+    except UnicodeDecodeError:
+        return
     if text and text not in hits and not _windows_runtime_allowed(text):
         hits.append(text)
 

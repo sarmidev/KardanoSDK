@@ -448,6 +448,8 @@ class AdversarialDebugCertPathTests(unittest.TestCase):
         pe.verify_windows_x86_64_dll(path, require_tools=False)
         path = _write(build_pe(embed=b"/\x01\xffA"))
         pe.verify_windows_x86_64_dll(path, require_tools=False)
+        path = _write(build_pe(embed=b"\\\xffJf\xffE"))
+        pe.verify_windows_x86_64_dll(path, require_tools=False)
 
     def test_wrong_filename_and_arm_prefix_are_rejected(self) -> None:
         root = Path(tempfile.mkdtemp())
@@ -704,6 +706,9 @@ class WindowsPathScanTests(unittest.TestCase):
         self.assertTrue(self._hits(b"C:\\Users\\x\x00more"))
         self.assertTrue(self._hits(b"C:\\Users\\x\x01more"))
         self.assertTrue(self._hits(b"C:\\Users\\\xff"))
+        # Binary "\\" plus non-ASCII is not a UNC (run 32718908858).
+        self.assertFalse(self._hits(b"\\\xffJf\xffE\xff\x00\xffBf"))
+        self.assertFalse(self._hits(b"\\\\\xffserver\\share"))
 
     def test_prefixes_and_near_misses(self) -> None:
         self.assertFalse(self._hits(b"C:Users\\x"))
