@@ -2070,27 +2070,6 @@ JAVA_CP_TAG_INVOKE_DYNAMIC = 18
 JAVA_CP_TAG_MODULE = 19
 JAVA_CP_TAG_PACKAGE = 20
 
-# Fixed body size (in bytes, AFTER the 1-byte tag) for every tag whose
-# body is not variable-length; CONSTANT_Utf8 is handled separately since
-# its body length is itself a field (a u2 immediately after the tag).
-JAVA_CP_FIXED_BODY_SIZES: dict[int, int] = {
-    JAVA_CP_TAG_CLASS: 2,
-    JAVA_CP_TAG_FIELDREF: 4,
-    JAVA_CP_TAG_METHODREF: 4,
-    JAVA_CP_TAG_INTERFACE_METHODREF: 4,
-    JAVA_CP_TAG_STRING: 2,
-    JAVA_CP_TAG_INTEGER: 4,
-    JAVA_CP_TAG_FLOAT: 4,
-    JAVA_CP_TAG_LONG: 8,
-    JAVA_CP_TAG_DOUBLE: 8,
-    JAVA_CP_TAG_NAME_AND_TYPE: 4,
-    JAVA_CP_TAG_METHOD_HANDLE: 3,
-    JAVA_CP_TAG_METHOD_TYPE: 2,
-    JAVA_CP_TAG_DYNAMIC: 4,
-    JAVA_CP_TAG_INVOKE_DYNAMIC: 4,
-    JAVA_CP_TAG_MODULE: 2,
-    JAVA_CP_TAG_PACKAGE: 2,
-}
 # CONSTANT_Long/CONSTANT_Double each occupy TWO constant-pool indices
 # (JVMS §4.4.5): "the constant_pool index n+1 must be considered
 # invalid/unusable" for the entry directly after either -- this parser
@@ -2102,36 +2081,292 @@ JAVA_CP_DOUBLE_SLOT_TAGS = frozenset({JAVA_CP_TAG_LONG, JAVA_CP_TAG_DOUBLE})
 MIN_PLAUSIBLE_JAVA_CLASS_MAJOR_VERSION = 45  # JDK 1.1 (JVMS Table 4.1-A)
 MAX_PLAUSIBLE_JAVA_CLASS_MAJOR_VERSION = 100  # generous, future-proofed upper bound
 
+# JVMS Table 4.4-B: the class-file-format version each tag was first
+# defined in. A tag not listed here (the 45.3-original ten: Utf8,
+# Integer, Float, Long, Double, Class, String, Fieldref, Methodref,
+# InterfaceMethodref, NameAndType) has no additional version floor
+# beyond this file's own MIN_PLAUSIBLE_JAVA_CLASS_MAJOR_VERSION. A class
+# file whose own major_version predates a tag it uses could never have
+# been produced by any real, spec-conforming compiler for that version.
+JAVA_CP_TAG_MIN_MAJOR_VERSION: dict[int, int] = {
+    JAVA_CP_TAG_METHOD_HANDLE: 51,
+    JAVA_CP_TAG_METHOD_TYPE: 51,
+    JAVA_CP_TAG_INVOKE_DYNAMIC: 51,
+    JAVA_CP_TAG_MODULE: 53,
+    JAVA_CP_TAG_PACKAGE: 53,
+    JAVA_CP_TAG_DYNAMIC: 55,
+}
+
+
+def _is_valid_modified_utf8(data: bytes) -> bool:
+    """Validate `data` as Modified UTF-8 per JVMS §4.4.7 -- deliberately
+    NOT ordinary UTF-8/CESU-8: this enforces every difference the spec
+    calls out explicitly (raw NUL forbidden -- code point 0 may ONLY
+    appear as the exact 2-byte overlong form `C0 80`; no byte may be in
+    `0xF0`-`0xFF` at all, i.e. the standard 4-byte lead-byte form is
+    never recognized -- supplementary characters instead use the
+    6-byte/two-surrogate form below), plus rejects every other overlong
+    encoding (a 2- or 3-byte sequence whose decoded value could have
+    used a shorter form is illegal, `C0 80` being the sole documented
+    exception), truncated sequences, and stray/malformed continuation
+    bytes. A 3-byte sequence decoding to a UTF-16 high surrogate
+    (U+D800-U+DBFF) must be immediately followed by another 3-byte
+    sequence decoding to a matching low surrogate (U+DC00-U+DFFF) --
+    exactly the "separately encoding the two surrogate code units"
+    6-byte supplementary-character form the spec describes; an unpaired
+    high or low surrogate is rejected as malformed rather than passed
+    through, since this generator treats any such ambiguity as
+    non-canonical input to reject, not normalize. Never raises; bounded
+    entirely by `len(data)` (no allocation from any decoded value).
+    """
+    i = 0
+    n = len(data)
+    while i < n:
+        b0 = data[i]
+        if b0 == 0x00:
+            return False  # raw NUL forbidden -- must be encoded as C0 80
+        if b0 <= 0x7F:
+            i += 1
+            continue
+        if 0x80 <= b0 <= 0xBF:
+            return False  # stray continuation byte used as a lead byte
+        if 0xC0 <= b0 <= 0xDF:
+            if i + 1 >= n:
+                return False  # truncated 2-byte sequence
+            b1 = data[i + 1]
+            if not (0x80 <= b1 <= 0xBF):
+                return False  # malformed continuation byte
+            value = ((b0 & 0x1F) << 6) | (b1 & 0x3F)
+            if 1 <= value <= 0x7F:
+                return False  # illegal overlong encoding of an ASCII code point
+            # value == 0 is reachable ONLY via the exact bytes C0 80
+            # (b0 & 0x1F == 0 forces b0 == 0xC0; b1 & 0x3F == 0 forces
+            # b1 == 0x80 given b1 is already constrained to 0x80-0xBF) --
+            # the documented NUL exception falls out of the arithmetic
+            # itself, needing no separate special case.
+            i += 2
+            continue
+        if 0xE0 <= b0 <= 0xEF:
+            if i + 2 >= n:
+                return False  # truncated 3-byte sequence
+            b1, b2 = data[i + 1], data[i + 2]
+            if not (0x80 <= b1 <= 0xBF and 0x80 <= b2 <= 0xBF):
+                return False  # malformed continuation byte(s)
+            value = ((b0 & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F)
+            if value < 0x800:
+                return False  # illegal overlong encoding
+            if 0xD800 <= value <= 0xDBFF:
+                # High surrogate: must be immediately followed by a
+                # matching low-surrogate 3-byte sequence (the spec's
+                # 6-byte supplementary-character form) -- an unpaired
+                # high surrogate is rejected, never passed through.
+                if i + 5 >= n:
+                    return False  # truncated surrogate pair
+                b3, b4, b5 = data[i + 3], data[i + 4], data[i + 5]
+                if not (0xE0 <= b3 <= 0xEF and 0x80 <= b4 <= 0xBF and 0x80 <= b5 <= 0xBF):
+                    return False
+                low = ((b3 & 0x0F) << 12) | ((b4 & 0x3F) << 6) | (b5 & 0x3F)
+                if not (0xDC00 <= low <= 0xDFFF):
+                    return False  # not a valid low surrogate -- unpaired high surrogate
+                i += 6
+                continue
+            if 0xDC00 <= value <= 0xDFFF:
+                return False  # unpaired low surrogate (no preceding matched high surrogate)
+            i += 3
+            continue
+        return False  # 0xF0-0xFF: never a valid lead byte in modified UTF-8
+    return True
+
 
 def _parse_java_class_constant_pool(
-    reader: _BoundedJavaClassReader, constant_pool_count: int
-) -> dict[int, int]:
-    """Parse every constant-pool entry, returning `{index: tag}` for
-    every OCCUPIED index (1-based; index 0 is always unused, and a
-    Long/Double's phantom second slot is deliberately never a key).
-    Raises `_JavaClassParseError` on an unknown tag or truncation --
-    never guesses a body size for a tag it does not recognize.
+    reader: _BoundedJavaClassReader, constant_pool_count: int, major_version: int
+) -> tuple[dict[int, int], dict[int, tuple[int, ...]]]:
+    """Parse every constant-pool entry.
+
+    Returns `(tags, refs)`: `tags` maps every OCCUPIED index (1-based;
+    index 0 is always unused, and a Long/Double's phantom second slot is
+    deliberately never a key) to its tag byte. `refs` maps every index
+    whose entry carries one or more constant-pool-index-valued fields to
+    the raw (unvalidated) tuple of those field values, in declaration
+    order -- see `_validate_java_cp_references` for what each tag's
+    tuple means and how it is cross-checked, which happens only AFTER
+    every entry has been parsed here (constant-pool references may
+    legally point forward to an entry not yet seen).
+
+    Raises `_JavaClassParseError` on an unknown tag, a tag whose
+    class-file-format version (JVMS Table 4.4-B, `JAVA_CP_TAG_MIN_MAJOR_VERSION`)
+    exceeds this class file's own `major_version`, invalid Modified
+    UTF-8 content in a Utf8 entry, or truncation -- never guesses a body
+    size for a tag it does not recognize.
     """
     tags: dict[int, int] = {}
+    refs: dict[int, tuple[int, ...]] = {}
     index = 1
     while index < constant_pool_count:
         tag = reader.read_u1()
+        min_version = JAVA_CP_TAG_MIN_MAJOR_VERSION.get(tag)
+        if min_version is not None and major_version < min_version:
+            raise _JavaClassParseError(
+                f"constant pool tag {tag} requires class file major_version >= "
+                f"{min_version}, but this class file declares {major_version}"
+            )
         if tag == JAVA_CP_TAG_UTF8:
             length = reader.read_u2()
-            reader.skip(length)
+            utf8_bytes = reader.read_bytes(length)
+            if not _is_valid_modified_utf8(utf8_bytes):
+                raise _JavaClassParseError(f"Utf8 entry {index} is not valid Modified UTF-8")
             tags[index] = tag
             index += 1
-        elif tag in JAVA_CP_FIXED_BODY_SIZES:
-            reader.skip(JAVA_CP_FIXED_BODY_SIZES[tag])
+        elif tag in (JAVA_CP_TAG_INTEGER, JAVA_CP_TAG_FLOAT):
+            reader.skip(4)
             tags[index] = tag
-            index += 2 if tag in JAVA_CP_DOUBLE_SLOT_TAGS else 1
+            index += 1
+        elif tag in JAVA_CP_DOUBLE_SLOT_TAGS:
+            reader.skip(8)
+            tags[index] = tag
+            index += 2
+        elif tag == JAVA_CP_TAG_CLASS:
+            refs[index] = (reader.read_u2(),)  # name_index
+            tags[index] = tag
+            index += 1
+        elif tag == JAVA_CP_TAG_STRING:
+            refs[index] = (reader.read_u2(),)  # string_index
+            tags[index] = tag
+            index += 1
+        elif tag in (JAVA_CP_TAG_FIELDREF, JAVA_CP_TAG_METHODREF, JAVA_CP_TAG_INTERFACE_METHODREF):
+            refs[index] = (reader.read_u2(), reader.read_u2())  # class_index, name_and_type_index
+            tags[index] = tag
+            index += 1
+        elif tag == JAVA_CP_TAG_NAME_AND_TYPE:
+            refs[index] = (reader.read_u2(), reader.read_u2())  # name_index, descriptor_index
+            tags[index] = tag
+            index += 1
+        elif tag == JAVA_CP_TAG_METHOD_HANDLE:
+            refs[index] = (reader.read_u1(), reader.read_u2())  # reference_kind, reference_index
+            tags[index] = tag
+            index += 1
+        elif tag == JAVA_CP_TAG_METHOD_TYPE:
+            refs[index] = (reader.read_u2(),)  # descriptor_index
+            tags[index] = tag
+            index += 1
+        elif tag in (JAVA_CP_TAG_DYNAMIC, JAVA_CP_TAG_INVOKE_DYNAMIC):
+            refs[index] = (reader.read_u2(), reader.read_u2())  # bootstrap_method_attr_index, name_and_type_index
+            tags[index] = tag
+            index += 1
+        elif tag in (JAVA_CP_TAG_MODULE, JAVA_CP_TAG_PACKAGE):
+            refs[index] = (reader.read_u2(),)  # name_index
+            tags[index] = tag
+            index += 1
         else:
             raise _JavaClassParseError(f"unknown constant pool tag {tag}")
-    return tags
+    return tags, refs
 
 
 def _java_cp_index_has_tag(tags: dict[int, int], index: int, expected_tag: int) -> bool:
     return index != 0 and tags.get(index) == expected_tag
+
+
+# JVMS §4.4.8: reference_kind values 1-4 (REF_getField/getStatic/
+# putField/putStatic) target a Fieldref; 5 (REF_invokeVirtual) and 8
+# (REF_newInvokeSpecial) target a Methodref; 9 (REF_invokeInterface)
+# targets an InterfaceMethodref. Kinds 6/7 (REF_invokeStatic/
+# REF_invokeSpecial) are handled separately below since their allowed
+# target tag(s) depend on this class file's own major_version.
+_JAVA_METHOD_HANDLE_FIXED_KIND_TARGET_TAGS: dict[int, tuple[int, ...]] = {
+    1: (JAVA_CP_TAG_FIELDREF,),
+    2: (JAVA_CP_TAG_FIELDREF,),
+    3: (JAVA_CP_TAG_FIELDREF,),
+    4: (JAVA_CP_TAG_FIELDREF,),
+    5: (JAVA_CP_TAG_METHODREF,),
+    8: (JAVA_CP_TAG_METHODREF,),
+    9: (JAVA_CP_TAG_INTERFACE_METHODREF,),
+}
+_JAVA_METHOD_HANDLE_VERSION_DEPENDENT_KINDS = frozenset({6, 7})
+_JAVA_METHOD_HANDLE_VERSION_DEPENDENT_MIN_MAJOR_VERSION_FOR_INTERFACE_TARGET = 52
+
+
+def _validate_java_method_handle_reference(
+    tags: dict[int, int], reference_kind: int, reference_index: int, major_version: int
+) -> None:
+    if not (1 <= reference_kind <= 9):
+        raise _JavaClassParseError(f"MethodHandle reference_kind {reference_kind} outside valid range 1..9")
+    if reference_kind in _JAVA_METHOD_HANDLE_VERSION_DEPENDENT_KINDS:
+        allowed_tags = (
+            (JAVA_CP_TAG_METHODREF,)
+            if major_version < _JAVA_METHOD_HANDLE_VERSION_DEPENDENT_MIN_MAJOR_VERSION_FOR_INTERFACE_TARGET
+            else (JAVA_CP_TAG_METHODREF, JAVA_CP_TAG_INTERFACE_METHODREF)
+        )
+    else:
+        allowed_tags = _JAVA_METHOD_HANDLE_FIXED_KIND_TARGET_TAGS[reference_kind]
+    if not any(_java_cp_index_has_tag(tags, reference_index, tag) for tag in allowed_tags):
+        raise _JavaClassParseError(
+            f"MethodHandle reference_index does not reference an entry with an "
+            f"allowed tag {allowed_tags} for reference_kind {reference_kind}"
+        )
+
+
+def _validate_java_cp_references(
+    tags: dict[int, int], refs: dict[int, tuple[int, ...]], major_version: int
+) -> None:
+    """Cross-check every constant-pool entry's own internal index
+    field(s) against the now-COMPLETE `tags` map (built by
+    `_parse_java_class_constant_pool`, which must run to completion
+    first since references may point forward). Every reference must be
+    nonzero, in range, and land on an entry with the exact tag JVMS §4.4
+    requires for that field -- `_java_cp_index_has_tag` already rejects
+    index 0, any out-of-range index, and any Long/Double's reserved
+    phantom slot (which is never a key in `tags`), so no separate bounds
+    check is needed here. Raises `_JavaClassParseError` on the first
+    violation found; never raises for any tag that has no `refs` entry
+    (Utf8/Integer/Float/Long/Double, which carry no cross-references).
+    """
+    for index, tag in tags.items():
+        if tag == JAVA_CP_TAG_CLASS:
+            (name_index,) = refs[index]
+            if not _java_cp_index_has_tag(tags, name_index, JAVA_CP_TAG_UTF8):
+                raise _JavaClassParseError(f"Class entry {index} name_index does not reference a Utf8 entry")
+        elif tag == JAVA_CP_TAG_STRING:
+            (string_index,) = refs[index]
+            if not _java_cp_index_has_tag(tags, string_index, JAVA_CP_TAG_UTF8):
+                raise _JavaClassParseError(f"String entry {index} string_index does not reference a Utf8 entry")
+        elif tag in (JAVA_CP_TAG_FIELDREF, JAVA_CP_TAG_METHODREF, JAVA_CP_TAG_INTERFACE_METHODREF):
+            class_index, name_and_type_index = refs[index]
+            if not _java_cp_index_has_tag(tags, class_index, JAVA_CP_TAG_CLASS):
+                raise _JavaClassParseError(f"ref entry {index} class_index does not reference a Class entry")
+            if not _java_cp_index_has_tag(tags, name_and_type_index, JAVA_CP_TAG_NAME_AND_TYPE):
+                raise _JavaClassParseError(
+                    f"ref entry {index} name_and_type_index does not reference a NameAndType entry"
+                )
+        elif tag == JAVA_CP_TAG_NAME_AND_TYPE:
+            name_index, descriptor_index = refs[index]
+            if not _java_cp_index_has_tag(tags, name_index, JAVA_CP_TAG_UTF8):
+                raise _JavaClassParseError(f"NameAndType entry {index} name_index does not reference a Utf8 entry")
+            if not _java_cp_index_has_tag(tags, descriptor_index, JAVA_CP_TAG_UTF8):
+                raise _JavaClassParseError(
+                    f"NameAndType entry {index} descriptor_index does not reference a Utf8 entry"
+                )
+        elif tag == JAVA_CP_TAG_METHOD_HANDLE:
+            reference_kind, reference_index = refs[index]
+            _validate_java_method_handle_reference(tags, reference_kind, reference_index, major_version)
+        elif tag == JAVA_CP_TAG_METHOD_TYPE:
+            (descriptor_index,) = refs[index]
+            if not _java_cp_index_has_tag(tags, descriptor_index, JAVA_CP_TAG_UTF8):
+                raise _JavaClassParseError(f"MethodType entry {index} descriptor_index does not reference a Utf8 entry")
+        elif tag in (JAVA_CP_TAG_DYNAMIC, JAVA_CP_TAG_INVOKE_DYNAMIC):
+            # bootstrap_method_attr_index indexes the BootstrapMethods
+            # attribute's own table, not the constant pool -- this
+            # parser does not parse that attribute (see
+            # `_parse_java_class_attribute_list`), so only the
+            # constant-pool-indexed field is cross-checked here.
+            _bootstrap_method_attr_index, name_and_type_index = refs[index]
+            if not _java_cp_index_has_tag(tags, name_and_type_index, JAVA_CP_TAG_NAME_AND_TYPE):
+                raise _JavaClassParseError(
+                    f"Dynamic/InvokeDynamic entry {index} name_and_type_index does not reference a NameAndType entry"
+                )
+        elif tag in (JAVA_CP_TAG_MODULE, JAVA_CP_TAG_PACKAGE):
+            (name_index,) = refs[index]
+            if not _java_cp_index_has_tag(tags, name_index, JAVA_CP_TAG_UTF8):
+                raise _JavaClassParseError(f"Module/Package entry {index} name_index does not reference a Utf8 entry")
 
 
 def _parse_java_class_member_list(reader: _BoundedJavaClassReader, tags: dict[int, int]) -> None:
@@ -2184,7 +2419,8 @@ def _parse_java_class_structure(data: bytes) -> bool:
     constant_pool_count = reader.read_u2()
     if constant_pool_count < 1:
         raise _JavaClassParseError("constant_pool_count must be at least 1")
-    tags = _parse_java_class_constant_pool(reader, constant_pool_count)
+    tags, refs = _parse_java_class_constant_pool(reader, constant_pool_count, major_version)
+    _validate_java_cp_references(tags, refs, major_version)
     reader.read_u2()  # access_flags -- accepted as-is, not further validated
     this_class = reader.read_u2()
     if not _java_cp_index_has_tag(tags, this_class, JAVA_CP_TAG_CLASS):
@@ -2215,19 +2451,29 @@ def _validate_java_class_structure(data: bytes) -> bool:
     member's own actual remaining bytes (never a separately-trusted
     length): magic, minor/major version (major version plausibility-
     bounded), `constant_pool_count` and every constant-pool entry (known
-    tag, correct fixed body size or bounds-checked UTF8 length,
-    Long/Double double-slot indexing), access_flags, `this_class`/
+    tag approved for this class file's own major_version, correct fixed
+    body size or bounds-checked+Modified-UTF8-validated Utf8 length,
+    Long/Double double-slot indexing), every entry's OWN internal
+    constant-pool reference field(s) cross-checked against the now-
+    complete tag map for the exact target tag JVMS §4.4 requires
+    (Class/String->Utf8; Field/Method/InterfaceMethodref->Class+
+    NameAndType; NameAndType->Utf8+Utf8; MethodHandle->reference_kind in
+    1..9 with a version-dependent allowed target tag; MethodType->Utf8;
+    Dynamic/InvokeDynamic->NameAndType; Module/Package->Utf8 -- every
+    such reference must be nonzero, in range, and never land on a
+    Long/Double's reserved phantom slot), access_flags, `this_class`/
     `super_class` (must reference a Class entry, or 0 for super_class),
     `interfaces[]` (each must reference a Class entry), `fields[]`/
     `methods[]` (each member's name/descriptor index must reference a
     Utf8 entry, each attribute bounds-checked and skipped), top-level
     `attributes[]`, and finally requires EXACT end-of-member with zero
-    trailing bytes. Any violation (unknown tag, truncation, an
-    attribute/UTF8 length that overflows past the member's actual size,
-    an invalid this/super/interface/name/descriptor/attribute-name index,
-    or trailing bytes after the last attribute) returns `False`. Never
-    raises, and never invokes any external/unpinned class-file parser --
-    this bounded, dependency-free walk is the entire implementation.
+    trailing bytes. Any violation (unknown tag, a tag used before its
+    own class-file-format version, invalid Modified UTF-8, truncation,
+    an attribute/UTF8 length that overflows past the member's actual
+    size, any invalid cross-reference described above, or trailing bytes
+    after the last attribute) returns `False`. Never raises, and never
+    invokes any external/unpinned class-file parser -- this bounded,
+    dependency-free walk is the entire implementation.
     """
     try:
         return _parse_java_class_structure(data)
@@ -2391,12 +2637,87 @@ REVIEWED_NON_NATIVE_MEMBERS: tuple[dict[str, str], ...] = (
 )
 
 
+def _validate_reviewed_non_native_members_catalog(entries: tuple[dict[str, str], ...]) -> None:
+    """Fail closed on a malformed `REVIEWED_NON_NATIVE_MEMBERS` catalog
+    itself, before it is ever consulted: every entry's
+    `(maven_coordinate, path)` pair must be UNIQUE across the whole
+    catalog. Two entries sharing a coordinate+path -- whether they agree
+    on `sha256` (a pointless exact duplicate) or disagree (a genuinely
+    conflicting exception for the same member) -- both indicate a
+    catalog authoring error, not a real narrow single-file exception,
+    and both are rejected the same way. Called once at module import
+    ("startup") against the real catalog below, and independently
+    callable/tested with any other tuple.
+    """
+    seen: dict[tuple[str, str], str] = {}
+    for entry in entries:
+        key = (entry["maven_coordinate"], entry["path"])
+        if key in seen:
+            raise EvidenceError(
+                "REVIEWED_NON_NATIVE_MEMBERS catalog has more than one entry for "
+                f"maven_coordinate={key[0]!r} path={key[1]!r} (sha256 "
+                f"{seen[key]!r} vs {entry['sha256']!r}) -- each reviewed member "
+                "exception must be unique by coordinate+path; refusing to start"
+            )
+        seen[key] = entry["sha256"]
+
+
+_validate_reviewed_non_native_members_catalog(REVIEWED_NON_NATIVE_MEMBERS)
+
+
 def _is_reviewed_non_native_member(gav: str, path: str, data: bytes) -> bool:
     digest = hashlib.sha256(data).hexdigest()
     return any(
         entry["maven_coordinate"] == gav and entry["path"] == path and entry["sha256"] == digest
         for entry in REVIEWED_NON_NATIVE_MEMBERS
     )
+
+
+def _normalized_zip_member_key(name: str) -> str:
+    """Normalize one archive member's raw central-directory name for
+    duplicate/collision detection ONLY (never used for classification or
+    extraction): backslashes are folded to forward slashes (some
+    non-canonical zip writers emit `\\`-separated paths; two members
+    differing only by that separator would otherwise silently collide
+    against any consumer that treats both as the same path on
+    extraction) and a single trailing slash (the directory-entry marker)
+    is stripped, so a directory entry and a same-named file entry
+    normalize to the same key and are caught as a collision. Comparison
+    is deliberately CASE-SENSITIVE: that is the real behavior of the ZIP
+    central directory itself and of JVM/JLS resource-name resolution
+    (case-insensitive matching is a property of some FILESYSTEMS, not of
+    ZIP/JAR semantics, so this generator does not fold case here).
+    """
+    normalized = name.replace("\\", "/")
+    if normalized.endswith("/"):
+        normalized = normalized[:-1]
+    return normalized
+
+
+def _reject_duplicate_zip_members(archive_path: Path, infos: list[zipfile.ZipInfo]) -> None:
+    """Enumerate every raw archive member (including directory entries)
+    and fail closed on any two whose `_normalized_zip_member_key` values
+    collide -- exact duplicate names, slash-vs-backslash variants of the
+    same path, and directory/file collisions are all the same failure
+    here. This runs BEFORE any per-member classification or
+    `REVIEWED_NON_NATIVE_MEMBERS` lookup in `_scan_zip_for_native_members`,
+    and does not consult that exception catalog at all: a hash-pinned
+    reviewed exception for one member's CONTENT can never excuse the
+    archive itself from carrying two members that collide by name, since
+    that ambiguity affects every consumer of the archive (build tool,
+    classloader, extractor), not just this generator's own scan.
+    """
+    seen: dict[str, str] = {}
+    for info in infos:
+        key = _normalized_zip_member_key(info.filename)
+        if key in seen:
+            raise EvidenceError(
+                f"{archive_path}: members {seen[key]!r} and {info.filename!r} "
+                f"both normalize to the same path {key!r} (exact duplicate, "
+                "backslash/forward-slash variant, or directory/file collision) "
+                "-- malformed/adversarial zip, refusing to scan"
+            )
+        seen[key] = info.filename
 
 
 def _scan_zip_for_native_members(archive_path: Path, gav: str) -> list[dict[str, Any]]:
@@ -2409,6 +2730,7 @@ def _scan_zip_for_native_members(archive_path: Path, gav: str) -> list[dict[str,
                 f"{archive_path}: {len(infos)} zip members exceeds "
                 f"MAX_ZIP_MEMBERS_SCANNED={MAX_ZIP_MEMBERS_SCANNED} (refusing to scan)"
             )
+        _reject_duplicate_zip_members(archive_path, infos)
         for info in infos:
             if info.is_dir():
                 continue

@@ -810,6 +810,135 @@ def _build_java_class(
     )
 
 
+def _u1(n: int) -> bytes:
+    return bytes([n])
+
+
+def _u2(n: int) -> bytes:
+    return n.to_bytes(2, "big")
+
+
+def _u4(n: int) -> bytes:
+    return n.to_bytes(4, "big")
+
+
+def _cp_entry(tag: int, body: bytes) -> bytes:
+    return _u1(tag) + body
+
+
+def _utf8_entry(text: bytes) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_UTF8, _u2(len(text)) + text)
+
+
+def _class_entry(name_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_CLASS, _u2(name_index))
+
+
+def _string_entry(string_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_STRING, _u2(string_index))
+
+
+def _integer_entry(value: int = 0) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_INTEGER, _u4(value & 0xFFFFFFFF))
+
+
+def _long_entry() -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_LONG, b"\x00" * 8)
+
+
+def _double_entry() -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_DOUBLE, b"\x00" * 8)
+
+
+def _fieldref_entry(class_index: int, name_and_type_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_FIELDREF, _u2(class_index) + _u2(name_and_type_index))
+
+
+def _methodref_entry(class_index: int, name_and_type_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_METHODREF, _u2(class_index) + _u2(name_and_type_index))
+
+
+def _interface_methodref_entry(class_index: int, name_and_type_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_INTERFACE_METHODREF, _u2(class_index) + _u2(name_and_type_index))
+
+
+def _name_and_type_entry(name_index: int, descriptor_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_NAME_AND_TYPE, _u2(name_index) + _u2(descriptor_index))
+
+
+def _method_handle_entry(reference_kind: int, reference_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_METHOD_HANDLE, _u1(reference_kind) + _u2(reference_index))
+
+
+def _method_type_entry(descriptor_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_METHOD_TYPE, _u2(descriptor_index))
+
+
+def _dynamic_entry(bootstrap_method_attr_index: int, name_and_type_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_DYNAMIC, _u2(bootstrap_method_attr_index) + _u2(name_and_type_index))
+
+
+def _invoke_dynamic_entry(bootstrap_method_attr_index: int, name_and_type_index: int) -> bytes:
+    return _cp_entry(
+        evidence.JAVA_CP_TAG_INVOKE_DYNAMIC, _u2(bootstrap_method_attr_index) + _u2(name_and_type_index)
+    )
+
+
+def _module_entry(name_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_MODULE, _u2(name_index))
+
+
+def _package_entry(name_index: int) -> bytes:
+    return _cp_entry(evidence.JAVA_CP_TAG_PACKAGE, _u2(name_index))
+
+
+def _build_java_class_from_cp(
+    cp_entries: list[bytes],
+    major_version: int = 52,
+    minor_version: int = 0,
+    this_class: int = 1,
+    super_class: int = 0,
+    interfaces: tuple[int, ...] = (),
+    fields: bytes | None = None,
+    methods: bytes | None = None,
+    attributes: bytes | None = None,
+    constant_pool_count: int | None = None,
+    trailing_bytes: bytes = b"",
+) -> bytes:
+    """Build a Java `.class` file from an explicit, caller-controlled list
+    of already-encoded constant-pool entries (see the `_*_entry` helpers
+    above) -- used only to exercise the constant-pool cross-reference
+    validator (`_validate_java_cp_references`) directly, with full
+    control over indices, tags, and `major_version`, rather than the
+    fixed shape `_build_java_class` produces. `constant_pool_count` is
+    computed automatically from `cp_entries` (accounting for the
+    Long/Double double-slot rule) unless overridden.
+    """
+    if constant_pool_count is None:
+        count = 1
+        for entry in cp_entries:
+            count += 2 if entry[0] in evidence.JAVA_CP_DOUBLE_SLOT_TAGS else 1
+        constant_pool_count = count
+    body = b"".join(cp_entries)
+    body += _u2(0)  # access_flags
+    body += _u2(this_class)
+    body += _u2(super_class)
+    body += _u2(len(interfaces))
+    for interface_index in interfaces:
+        body += _u2(interface_index)
+    body += fields if fields is not None else _u2(0)
+    body += methods if methods is not None else _u2(0)
+    body += attributes if attributes is not None else _u2(0)
+    return (
+        b"\xca\xfe\xba\xbe"
+        + _u2(minor_version)
+        + _u2(major_version)
+        + _u2(constant_pool_count)
+        + body
+        + trailing_bytes
+    )
+
+
 def _build_xcoff(bits: int, nscns: int = 1, opthdr: int = 0, truncate_to: int | None = None) -> bytes:
     """Build a structurally-valid (unless deliberately perturbed) minimal
     XCOFF32/XCOFF64 fixture."""
@@ -1587,6 +1716,463 @@ class JavaClassStructuralValidationTests(unittest.TestCase):
                 )
 
 
+class ModifiedUtf8ValidationTests(unittest.TestCase):
+    """`_is_valid_modified_utf8()` -- JVMS §4.4.7. Modified UTF-8 is
+    deliberately NOT ordinary UTF-8: raw NUL is forbidden (code point 0
+    may ONLY appear as the exact overlong `C0 80` form), every OTHER
+    overlong encoding is illegal, the standard 4-byte lead-byte form
+    (and every byte 0xF0-0xFF) is never recognized, and supplementary
+    characters (> U+FFFF) are represented as a paired 6-byte
+    high+low-surrogate encoding rather than any 4-byte form.
+    """
+
+    def test_empty_is_valid(self) -> None:
+        self.assertTrue(evidence._is_valid_modified_utf8(b""))
+
+    def test_plain_ascii_is_valid(self) -> None:
+        self.assertTrue(evidence._is_valid_modified_utf8(b"Hello, World! 123"))
+
+    def test_raw_nul_byte_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"abc\x00def"))
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\x00"))
+
+    def test_encoded_nul_c0_80_is_valid(self) -> None:
+        # The documented sole exception to "no overlong encodings":
+        # code point 0 is represented as the 2-byte overlong pair C0 80.
+        self.assertTrue(evidence._is_valid_modified_utf8(b"\xc0\x80"))
+        self.assertTrue(evidence._is_valid_modified_utf8(b"a\xc0\x80b"))
+
+    def test_two_byte_range_boundaries_are_valid(self) -> None:
+        self.assertTrue(evidence._is_valid_modified_utf8(b"\xc2\x80"))  # U+0080 (min)
+        self.assertTrue(evidence._is_valid_modified_utf8(b"\xdf\xbf"))  # U+07FF (max)
+
+    def test_three_byte_range_boundaries_are_valid(self) -> None:
+        self.assertTrue(evidence._is_valid_modified_utf8(b"\xe0\xa0\x80"))  # U+0800 (min)
+        self.assertTrue(evidence._is_valid_modified_utf8(b"\xef\xbf\xbd"))  # U+FFFD (non-surrogate)
+
+    def test_overlong_two_byte_encoding_of_ascii_is_invalid(self) -> None:
+        # C1 81 decodes to U+0041 ('A'), which must use the 1-byte form.
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xc1\x81"))
+
+    def test_overlong_three_byte_encoding_is_invalid(self) -> None:
+        # E0 81 81 decodes to U+0041 ('A'), which must use the 1-byte form.
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xe0\x81\x81"))
+        # E0 80 80 decodes to U+0000, which must use the exact C0 80 form.
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xe0\x80\x80"))
+
+    def test_unsupported_standard_four_byte_lead_is_invalid(self) -> None:
+        # F0 90 80 80 is the standard-UTF-8 4-byte encoding of U+10000 --
+        # never recognized by modified UTF-8, which uses the 6-byte
+        # surrogate-pair form instead.
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xf0\x90\x80\x80"))
+
+    def test_byte_in_reserved_high_range_is_invalid(self) -> None:
+        for byte in (0xF0, 0xF7, 0xF8, 0xFF):
+            with self.subTest(byte=hex(byte)):
+                self.assertFalse(evidence._is_valid_modified_utf8(bytes([byte])))
+
+    def test_malformed_continuation_after_two_byte_lead_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xc2A"))
+
+    def test_malformed_continuation_after_three_byte_lead_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xe0\xa0A"))
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xe0A\x80"))
+
+    def test_truncated_two_byte_sequence_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xc2"))
+
+    def test_truncated_three_byte_sequence_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xe0\xa0"))
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xe0"))
+
+    def test_stray_continuation_byte_as_lead_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\x80"))
+        self.assertFalse(evidence._is_valid_modified_utf8(b"a\xbfb"))
+
+    def test_valid_supplementary_surrogate_pair_is_valid(self) -> None:
+        # U+10437 (DESERET CAPITAL LETTER YEE), the standard worked
+        # example for CESU-8/modified-UTF8 surrogate-pair encoding:
+        # high surrogate U+D801 -> ED A0 81, low surrogate U+DC37 -> ED B0 B7.
+        self.assertTrue(evidence._is_valid_modified_utf8(b"\xed\xa0\x81\xed\xb0\xb7"))
+        self.assertTrue(evidence._is_valid_modified_utf8(b"a\xed\xa0\x81\xed\xb0\xb7b"))
+
+    def test_unpaired_high_surrogate_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xed\xa0\x81"))
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xed\xa0\x81abc"))
+
+    def test_unpaired_low_surrogate_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xed\xb0\xb7"))
+
+    def test_high_surrogate_followed_by_non_surrogate_three_byte_is_invalid(self) -> None:
+        # High surrogate (ED A0 81, U+D801) followed by a structurally
+        # valid but non-low-surrogate 3-byte sequence (E0 A0 80, U+0800).
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xed\xa0\x81\xe0\xa0\x80"))
+
+    def test_truncated_surrogate_pair_is_invalid(self) -> None:
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xed\xa0\x81\xe0\xa0"))
+        self.assertFalse(evidence._is_valid_modified_utf8(b"\xed\xa0\x81\xed"))
+
+    def test_class_with_encoded_nul_and_supplementary_utf8_is_valid(self) -> None:
+        # End-to-end: a real class file whose class-name Utf8 entry
+        # contains the encoded-NUL and supplementary-character forms
+        # still passes full structural validation.
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"a\xc0\x80\xed\xa0\x81\xed\xb0\xb7b"), _class_entry(1)],
+            this_class=2,
+        )
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    def test_class_with_raw_nul_in_utf8_entry_is_invalid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"a\x00b"), _class_entry(1)],
+            this_class=2,
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+
+class JavaConstantPoolReferenceValidationTests(unittest.TestCase):
+    """Full JVMS §4.4 constant-pool cross-reference validation: every
+    entry's own internal constant-pool-index field(s) must be nonzero,
+    in range, target the exact tag the spec requires, and (for the
+    version-gated tags MethodHandle/MethodType/InvokeDynamic/Dynamic/
+    Module/Package) only be used at or after the class-file-format
+    version that introduced them.
+    """
+
+    # -- CONSTANT_Class_info.name_index -----------------------------------
+
+    def test_class_name_index_zero_is_invalid(self) -> None:
+        data = _build_java_class_from_cp([_class_entry(0)])
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_class_name_index_wrong_tag_is_invalid(self) -> None:
+        data = _build_java_class_from_cp([_integer_entry(), _class_entry(1)])
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_class_name_index_out_of_range_is_invalid(self) -> None:
+        data = _build_java_class_from_cp([_utf8_entry(b"Foo"), _class_entry(99)])
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_class_name_index_targeting_reserved_double_slot_is_invalid(self) -> None:
+        data = _build_java_class_from_cp([_long_entry(), _class_entry(2)])
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_class_name_index_valid_utf8_target_is_valid(self) -> None:
+        data = _build_java_class_from_cp([_utf8_entry(b"Foo"), _class_entry(1)], this_class=2)
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    # -- CONSTANT_String_info.string_index --------------------------------
+
+    def test_string_string_index_wrong_tag_is_invalid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _integer_entry(), _string_entry(3)], this_class=2
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_string_string_index_valid_utf8_target_is_valid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _utf8_entry(b"hi"), _string_entry(3)], this_class=2
+        )
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    # -- CONSTANT_{Field,Method,InterfaceMethod}ref_info -------------------
+
+    def test_ref_entry_class_index_wrong_tag_for_every_ref_kind(self) -> None:
+        for ctor in (_fieldref_entry, _methodref_entry, _interface_methodref_entry):
+            with self.subTest(ctor=ctor.__name__):
+                # index1=Utf8 (wrong target for class_index), index2=NameAndType(1,1).
+                data = _build_java_class_from_cp(
+                    [_utf8_entry(b"x"), _name_and_type_entry(1, 1), ctor(1, 2)]
+                )
+                self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_ref_entry_name_and_type_index_wrong_tag_for_every_ref_kind(self) -> None:
+        for ctor in (_fieldref_entry, _methodref_entry, _interface_methodref_entry):
+            with self.subTest(ctor=ctor.__name__):
+                # index1=Utf8, index2=Class(1) (valid class_index target),
+                # name_and_type_index=1 wrongly targets the Utf8 entry.
+                data = _build_java_class_from_cp([_utf8_entry(b"x"), _class_entry(1), ctor(2, 1)])
+                self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_ref_entry_valid_targets_for_every_ref_kind_is_valid(self) -> None:
+        for ctor in (_fieldref_entry, _methodref_entry, _interface_methodref_entry):
+            with self.subTest(ctor=ctor.__name__):
+                data = _build_java_class_from_cp(
+                    [
+                        _utf8_entry(b"Foo"),
+                        _class_entry(1),
+                        _utf8_entry(b"x"),
+                        _utf8_entry(b"I"),
+                        _name_and_type_entry(3, 4),
+                        ctor(2, 5),
+                    ],
+                    this_class=2,
+                )
+                self.assertTrue(evidence._validate_java_class_structure(data))
+
+    # -- CONSTANT_NameAndType_info ------------------------------------------
+
+    def test_name_and_type_name_index_wrong_tag_is_invalid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _utf8_entry(b"I"), _name_and_type_entry(2, 3)],
+            this_class=2,
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_name_and_type_descriptor_index_wrong_tag_is_invalid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _utf8_entry(b"x"), _name_and_type_entry(3, 2)],
+            this_class=2,
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    # -- CONSTANT_MethodHandle_info -----------------------------------------
+
+    def test_method_handle_reference_kind_out_of_range_is_invalid(self) -> None:
+        for kind in (0, 10, 255):
+            with self.subTest(kind=kind):
+                data = _build_java_class_from_cp(
+                    [
+                        _utf8_entry(b"Foo"),
+                        _class_entry(1),
+                        _utf8_entry(b"x"),
+                        _utf8_entry(b"I"),
+                        _name_and_type_entry(3, 4),
+                        _fieldref_entry(2, 5),
+                        _method_handle_entry(kind, 6),
+                    ],
+                    this_class=2,
+                    major_version=55,
+                )
+                self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def _method_handle_class(self, kind: int, target_ctor, major_version: int = 55) -> bytes:
+        cp = [
+            _utf8_entry(b"Foo"),  # 1
+            _class_entry(1),  # 2
+            _utf8_entry(b"x"),  # 3
+            _utf8_entry(b"I"),  # 4
+            _name_and_type_entry(3, 4),  # 5
+        ]
+        cp.append(target_ctor(2, 5))  # 6: the reference target (Field/Method/InterfaceMethodref)
+        cp.append(_method_handle_entry(kind, 6))  # 7
+        return _build_java_class_from_cp(cp, this_class=2, major_version=major_version)
+
+    def test_method_handle_field_kinds_require_fieldref_target(self) -> None:
+        for kind in (1, 2, 3, 4):
+            with self.subTest(kind=kind):
+                self.assertTrue(evidence._validate_java_class_structure(self._method_handle_class(kind, _fieldref_entry)))
+                self.assertFalse(
+                    evidence._validate_java_class_structure(self._method_handle_class(kind, _methodref_entry))
+                )
+
+    def test_method_handle_virtual_and_new_invoke_special_require_methodref_target(self) -> None:
+        for kind in (5, 8):
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    evidence._validate_java_class_structure(self._method_handle_class(kind, _methodref_entry))
+                )
+                self.assertFalse(
+                    evidence._validate_java_class_structure(self._method_handle_class(kind, _fieldref_entry))
+                )
+
+    def test_method_handle_invoke_interface_requires_interface_methodref_target(self) -> None:
+        self.assertTrue(
+            evidence._validate_java_class_structure(self._method_handle_class(9, _interface_methodref_entry))
+        )
+        self.assertFalse(evidence._validate_java_class_structure(self._method_handle_class(9, _methodref_entry)))
+
+    def test_method_handle_invoke_static_or_special_under_old_version_rejects_interface_target(self) -> None:
+        for kind in (6, 7):
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(kind, _methodref_entry, major_version=51)
+                    )
+                )
+                self.assertFalse(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(kind, _interface_methodref_entry, major_version=51)
+                    )
+                )
+
+    def test_method_handle_invoke_static_or_special_under_new_version_allows_interface_target(self) -> None:
+        for kind in (6, 7):
+            with self.subTest(kind=kind):
+                self.assertTrue(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(kind, _interface_methodref_entry, major_version=52)
+                    )
+                )
+                self.assertTrue(
+                    evidence._validate_java_class_structure(
+                        self._method_handle_class(kind, _methodref_entry, major_version=52)
+                    )
+                )
+
+    # -- CONSTANT_MethodType_info --------------------------------------------
+
+    def test_method_type_descriptor_index_wrong_tag_is_invalid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _class_entry(1), _method_type_entry(3)],
+            this_class=2,
+            major_version=51,
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_method_type_descriptor_index_valid_target_is_valid(self) -> None:
+        data = _build_java_class_from_cp(
+            [_utf8_entry(b"Foo"), _class_entry(1), _utf8_entry(b"()V"), _method_type_entry(3)],
+            this_class=2,
+            major_version=51,
+        )
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    # -- CONSTANT_Dynamic_info / CONSTANT_InvokeDynamic_info -----------------
+
+    def test_dynamic_and_invoke_dynamic_name_and_type_index_wrong_tag_is_invalid(self) -> None:
+        for ctor, version in ((_dynamic_entry, 55), (_invoke_dynamic_entry, 51)):
+            with self.subTest(ctor=ctor.__name__):
+                data = _build_java_class_from_cp(
+                    [_utf8_entry(b"Foo"), _class_entry(1), ctor(0, 1)],
+                    this_class=2,
+                    major_version=version,
+                )
+                self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_dynamic_and_invoke_dynamic_valid_target_is_valid(self) -> None:
+        for ctor, version in ((_dynamic_entry, 55), (_invoke_dynamic_entry, 51)):
+            with self.subTest(ctor=ctor.__name__):
+                data = _build_java_class_from_cp(
+                    [
+                        _utf8_entry(b"Foo"),
+                        _class_entry(1),
+                        _utf8_entry(b"x"),
+                        _utf8_entry(b"I"),
+                        _name_and_type_entry(3, 4),
+                        ctor(0, 5),
+                    ],
+                    this_class=2,
+                    major_version=version,
+                )
+                self.assertTrue(evidence._validate_java_class_structure(data))
+
+    # -- CONSTANT_Module_info / CONSTANT_Package_info ------------------------
+
+    def test_module_and_package_name_index_wrong_tag_is_invalid(self) -> None:
+        for ctor in (_module_entry, _package_entry):
+            with self.subTest(ctor=ctor.__name__):
+                data = _build_java_class_from_cp(
+                    [_utf8_entry(b"Foo"), _class_entry(1), _class_entry(1), ctor(3)],
+                    this_class=2,
+                    major_version=53,
+                )
+                self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_module_and_package_name_index_valid_target_is_valid(self) -> None:
+        for ctor in (_module_entry, _package_entry):
+            with self.subTest(ctor=ctor.__name__):
+                data = _build_java_class_from_cp(
+                    [_utf8_entry(b"Foo"), _class_entry(1), _utf8_entry(b"mymodule"), ctor(3)],
+                    this_class=2,
+                    major_version=53,
+                )
+                self.assertTrue(evidence._validate_java_class_structure(data))
+
+    # -- Class-file-version floor for newer tags -----------------------------
+
+    def test_newer_tags_under_too_old_a_version_are_invalid(self) -> None:
+        cases = [
+            (evidence.JAVA_CP_TAG_METHOD_HANDLE, _method_handle_entry(1, 2), 50),
+            (evidence.JAVA_CP_TAG_METHOD_TYPE, _method_type_entry(1), 50),
+            (evidence.JAVA_CP_TAG_INVOKE_DYNAMIC, _invoke_dynamic_entry(0, 1), 50),
+            (evidence.JAVA_CP_TAG_DYNAMIC, _dynamic_entry(0, 1), 54),
+            (evidence.JAVA_CP_TAG_MODULE, _module_entry(1), 52),
+            (evidence.JAVA_CP_TAG_PACKAGE, _package_entry(1), 52),
+        ]
+        for tag, entry, version in cases:
+            with self.subTest(tag=tag):
+                data = _build_java_class_from_cp([_utf8_entry(b"x"), entry], major_version=version)
+                self.assertFalse(evidence._validate_java_class_structure(data))
+
+    def test_newer_tags_at_exact_minimum_version_pass_the_version_check(self) -> None:
+        # `_parse_java_class_constant_pool` (pass 1) is exactly where the
+        # version gate lives, and it does not itself validate any
+        # cross-reference (that is pass 2, `_validate_java_cp_references`)
+        # -- so a single bare entry with an arbitrary index-1 reference
+        # is sufficient here to isolate the version check from
+        # reference-target correctness, which is covered separately above.
+        entry_by_tag = {
+            evidence.JAVA_CP_TAG_METHOD_HANDLE: _method_handle_entry(1, 1),
+            evidence.JAVA_CP_TAG_METHOD_TYPE: _method_type_entry(1),
+            evidence.JAVA_CP_TAG_INVOKE_DYNAMIC: _invoke_dynamic_entry(0, 1),
+            evidence.JAVA_CP_TAG_DYNAMIC: _dynamic_entry(0, 1),
+            evidence.JAVA_CP_TAG_MODULE: _module_entry(1),
+            evidence.JAVA_CP_TAG_PACKAGE: _package_entry(1),
+        }
+        for tag, min_version in evidence.JAVA_CP_TAG_MIN_MAJOR_VERSION.items():
+            with self.subTest(tag=tag, version=min_version):
+                reader = evidence._BoundedJavaClassReader(entry_by_tag[tag])
+                evidence._parse_java_class_constant_pool(reader, 2, min_version)  # must not raise
+            with self.subTest(tag=tag, version=min_version - 1):
+                reader = evidence._BoundedJavaClassReader(entry_by_tag[tag])
+                with self.assertRaises(evidence._JavaClassParseError):
+                    evidence._parse_java_class_constant_pool(reader, 2, min_version - 1)
+
+    # -- Long/Double terminal-entry and reserved-slot semantics --------------
+
+    def test_long_as_terminal_constant_pool_entry_is_valid(self) -> None:
+        # JVMS §4.4/§4.4.5: a constant_pool index is valid if it is
+        # greater than zero and less than constant_pool_count, "with the
+        # exception for constants of type long and double" -- i.e. a
+        # Long/Double's reserved successor slot at index
+        # constant_pool_count is EXPLICITLY sanctioned even though it
+        # falls outside the general range. A Long/Double may legally be
+        # the very last real entry in the pool.
+        data = _build_java_class_from_cp([_utf8_entry(b"Foo"), _class_entry(1), _long_entry()], this_class=2)
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    def test_double_as_terminal_constant_pool_entry_is_valid(self) -> None:
+        data = _build_java_class_from_cp([_utf8_entry(b"Foo"), _class_entry(1), _double_entry()], this_class=2)
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+    def test_reference_to_double_slot_phantom_index_is_invalid_via_string(self) -> None:
+        # Additional coverage (beyond this_class, already covered in
+        # JavaClassStructuralValidationTests) of the same reserved-slot
+        # rule through an ordinary CONSTANT_String_info reference: index
+        # 1 is a Long (occupying slots 1 and 2), index 3 is a valid
+        # Class, and the String entry's string_index=2 illegally targets
+        # the Long's reserved/phantom slot 2.
+        data = _build_java_class_from_cp(
+            [_long_entry(), _utf8_entry(b"Foo"), _class_entry(3), _string_entry(2)], this_class=4
+        )
+        self.assertFalse(evidence._validate_java_class_structure(data))
+
+    # -- Representative valid class using every newer tag together -----------
+
+    def test_representative_valid_class_using_every_newer_cp_tag(self) -> None:
+        cp = [
+            _utf8_entry(b"Foo"),  # 1
+            _class_entry(1),  # 2: this_class
+            _utf8_entry(b"x"),  # 3
+            _utf8_entry(b"I"),  # 4
+            _name_and_type_entry(3, 4),  # 5
+            _fieldref_entry(2, 5),  # 6
+            _method_handle_entry(1, 6),  # 7: REF_getField -> Fieldref
+            _utf8_entry(b"()V"),  # 8
+            _method_type_entry(8),  # 9
+            _invoke_dynamic_entry(0, 5),  # 10
+            _dynamic_entry(0, 5),  # 11
+            _utf8_entry(b"mymodule"),  # 12
+            _module_entry(12),  # 13
+            _utf8_entry(b"mypackage"),  # 14
+            _package_entry(14),  # 15
+            _long_entry(),  # 16 (terminal double-slot entry)
+        ]
+        data = _build_java_class_from_cp(cp, this_class=2, major_version=55)
+        self.assertTrue(evidence._validate_java_class_structure(data))
+
+
 class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
     """`cross_check_maven_native_carriers_against_local_cache()` -- Gap 7,
     extended for Gap 3 (whole-archive hash verification before member
@@ -1775,9 +2361,12 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
             zf.writestr("libwidget.so", self.ELF + b"first-copy")
             zf.writestr("libwidget.so", self.ELF + b"second-copy-different-bytes")
         gradle_report = self._gradle_report("com.example:widget:1.0")
+        # Caught by the earlier, more general zip-level duplicate-member
+        # check in `_scan_zip_for_native_members` (before classification
+        # even runs), not the cross-archive merge check further down.
         with self.assertRaises(evidence.EvidenceError) as ctx:
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
-        self.assertIn("duplicate native", str(ctx.exception))
+        self.assertIn("normalize to the same path", str(ctx.exception))
 
     def test_java_class_resource_near_misses_do_not_trigger_a_false_positive(self) -> None:
         # A jar full of ordinary, structurally-valid .class files (CAFEBABE
@@ -1858,6 +2447,104 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         with mock.patch.object(evidence, "REVIEWED_NON_NATIVE_MEMBERS", reviewed):
             with self.assertRaises(evidence.EvidenceError):
                 evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+
+    # -- Zip-level duplicate-member fail-closed, BEFORE classification -----
+
+    def _write_raw_zip(self, group: str, artifact: str, version: str, raw_names: list[str], data: bytes) -> Path:
+        import zipfile
+
+        base = evidence.GRADLE_MODULES2 / group / artifact / version / "deadbeef"
+        base.mkdir(parents=True, exist_ok=True)
+        archive_path = base / f"{artifact}-{version}.jar"
+        with zipfile.ZipFile(archive_path, "w") as zf:
+            for name in raw_names:
+                zf.writestr(name, data)
+        return archive_path
+
+    def test_exact_duplicate_ordinary_member_name_raises_before_classification(self) -> None:
+        archive_path = self._write_raw_zip(
+            "com.example", "dupordinary", "1.0", ["NOTICE.txt", "NOTICE.txt"], b"same text twice"
+        )
+        gradle_report = self._gradle_report("com.example:dupordinary:1.0")
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn(str(archive_path), str(ctx.exception))
+        self.assertIn("normalize to the same path", str(ctx.exception))
+
+    def test_exact_duplicate_native_member_name_raises_before_classification(self) -> None:
+        self._write_raw_zip("com.example", "dupnative", "1.0", ["libwidget.so", "libwidget.so"], self.ELF)
+        gradle_report = self._gradle_report("com.example:dupnative:1.0")
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("normalize to the same path", str(ctx.exception))
+
+    def test_duplicate_debug_probes_kt_bin_raises_even_though_reviewed(self) -> None:
+        # A duplicate of the EXACT reviewed member (same coordinate,
+        # path, and content as a real REVIEWED_NON_NATIVE_MEMBERS entry)
+        # must still fail closed on the duplicate-name check itself --
+        # the hash-pinned exception is consulted per-member only AFTER
+        # duplicate detection, and never bypasses it.
+        valid_class = _build_java_class(class_name="DebugProbesKt")
+        reviewed = (
+            {
+                "maven_coordinate": "com.example:dupreviewed:1.0",
+                "path": "DebugProbesKt.bin",
+                "sha256": hashlib.sha256(valid_class).hexdigest(),
+            },
+        )
+        self._write_raw_zip(
+            "com.example", "dupreviewed", "1.0", ["DebugProbesKt.bin", "DebugProbesKt.bin"], valid_class
+        )
+        gradle_report = self._gradle_report("com.example:dupreviewed:1.0")
+        with mock.patch.object(evidence, "REVIEWED_NON_NATIVE_MEMBERS", reviewed):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("normalize to the same path", str(ctx.exception))
+
+    def test_backslash_vs_forward_slash_member_names_collide(self) -> None:
+        self._write_raw_zip("com.example", "dupslash", "1.0", ["a/b.txt", "a\\b.txt"], b"payload")
+        gradle_report = self._gradle_report("com.example:dupslash:1.0")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+
+    def test_directory_and_same_named_file_entry_collide(self) -> None:
+        self._write_raw_zip("com.example", "dupdirfile", "1.0", ["foo/bar/", "foo/bar"], b"payload")
+        gradle_report = self._gradle_report("com.example:dupdirfile:1.0")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+
+    def test_case_distinct_member_names_do_not_collide(self) -> None:
+        # Deliberate, documented case policy: ZIP/JAR member-name
+        # comparison is case-SENSITIVE (matching the real central
+        # directory and JVM/JLS resource-name resolution semantics), so
+        # two members differing only by case are NOT a collision.
+        self._write_jar(
+            "com.example",
+            "casedistinct",
+            "1.0",
+            {"Foo.txt": b"one", "foo.txt": b"two"},
+        )
+        gradle_report = self._gradle_report("com.example:casedistinct:1.0")
+        evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
+
+    def test_one_exact_reviewed_member_without_any_duplicate_is_valid(self) -> None:
+        # Sanity check that ordinary (non-duplicated) reviewed-member
+        # handling is unaffected by the new duplicate-detection pass.
+        valid_class_renamed_bin = _build_java_class(class_name="Solo")
+        digest = hashlib.sha256(valid_class_renamed_bin).hexdigest()
+        reviewed = (
+            {
+                "maven_coordinate": "com.example:soloreviewed:1.0",
+                "path": "SomeDebugProbes.bin",
+                "sha256": digest,
+            },
+        )
+        self._write_jar(
+            "com.example", "soloreviewed", "1.0", {"SomeDebugProbes.bin": valid_class_renamed_bin}
+        )
+        gradle_report = self._gradle_report("com.example:soloreviewed:1.0")
+        with mock.patch.object(evidence, "REVIEWED_NON_NATIVE_MEMBERS", reviewed):
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
 
     def test_two_artifacts_same_coordinate_merge_without_conflict(self) -> None:
         # Mirrors JNA 5.19.1's real shape: a .jar AND a separate .aar for
@@ -2051,6 +2738,92 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         with self.assertRaises(evidence.EvidenceError) as ctx:
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
         self.assertIn("extension/content mismatch", str(ctx.exception))
+
+
+class ZipDuplicateMemberKeyTests(unittest.TestCase):
+    """`_normalized_zip_member_key()` / `_reject_duplicate_zip_members()`
+    unit-level coverage, independent of the full Maven-carrier scan.
+    """
+
+    def test_exact_duplicate_name_collides(self) -> None:
+        self.assertEqual(
+            evidence._normalized_zip_member_key("a/b.txt"), evidence._normalized_zip_member_key("a/b.txt")
+        )
+
+    def test_backslash_and_forward_slash_normalize_to_the_same_key(self) -> None:
+        self.assertEqual(
+            evidence._normalized_zip_member_key("a\\b.txt"), evidence._normalized_zip_member_key("a/b.txt")
+        )
+
+    def test_directory_trailing_slash_and_file_normalize_to_the_same_key(self) -> None:
+        self.assertEqual(evidence._normalized_zip_member_key("foo/bar/"), evidence._normalized_zip_member_key("foo/bar"))
+
+    def test_case_differs_does_not_normalize_to_the_same_key(self) -> None:
+        # Deliberate case-SENSITIVE policy -- see
+        # `_normalized_zip_member_key`'s docstring for the rationale.
+        self.assertNotEqual(evidence._normalized_zip_member_key("Foo.txt"), evidence._normalized_zip_member_key("foo.txt"))
+
+    def test_reject_duplicate_zip_members_passes_on_all_unique_names(self) -> None:
+        import zipfile
+
+        infos = [zipfile.ZipInfo("a.txt"), zipfile.ZipInfo("b.txt"), zipfile.ZipInfo("dir/")]
+        evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)  # no raise
+
+    def test_reject_duplicate_zip_members_raises_on_exact_duplicate(self) -> None:
+        import zipfile
+
+        infos = [zipfile.ZipInfo("a.txt"), zipfile.ZipInfo("a.txt")]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
+
+    def test_reject_duplicate_zip_members_raises_on_backslash_variant(self) -> None:
+        import zipfile
+
+        infos = [zipfile.ZipInfo("a/b.txt"), zipfile.ZipInfo("a\\b.txt")]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
+
+    def test_reject_duplicate_zip_members_raises_on_directory_file_collision(self) -> None:
+        import zipfile
+
+        infos = [zipfile.ZipInfo("foo/bar/"), zipfile.ZipInfo("foo/bar")]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._reject_duplicate_zip_members(Path("/fake/archive.jar"), infos)
+
+
+class ReviewedNonNativeMembersCatalogValidationTests(unittest.TestCase):
+    """`_validate_reviewed_non_native_members_catalog()` -- the real
+    `REVIEWED_NON_NATIVE_MEMBERS` catalog must pass this at module import
+    ("startup"); this exercises the validator directly against
+    deliberately-broken catalogs too.
+    """
+
+    def test_real_catalog_is_already_valid(self) -> None:
+        evidence._validate_reviewed_non_native_members_catalog(evidence.REVIEWED_NON_NATIVE_MEMBERS)  # no raise
+
+    def test_unique_coordinate_and_path_entries_pass(self) -> None:
+        entries = (
+            {"maven_coordinate": "g:a:1.0", "path": "Foo.bin", "sha256": "a" * 64},
+            {"maven_coordinate": "g:a:1.0", "path": "Bar.bin", "sha256": "b" * 64},
+            {"maven_coordinate": "g:b:1.0", "path": "Foo.bin", "sha256": "c" * 64},
+        )
+        evidence._validate_reviewed_non_native_members_catalog(entries)  # no raise
+
+    def test_exact_duplicate_coordinate_and_path_and_hash_raises(self) -> None:
+        entries = (
+            {"maven_coordinate": "g:a:1.0", "path": "Foo.bin", "sha256": "a" * 64},
+            {"maven_coordinate": "g:a:1.0", "path": "Foo.bin", "sha256": "a" * 64},
+        )
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._validate_reviewed_non_native_members_catalog(entries)
+
+    def test_conflicting_hash_for_the_same_coordinate_and_path_raises(self) -> None:
+        entries = (
+            {"maven_coordinate": "g:a:1.0", "path": "Foo.bin", "sha256": "a" * 64},
+            {"maven_coordinate": "g:a:1.0", "path": "Foo.bin", "sha256": "b" * 64},
+        )
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._validate_reviewed_non_native_members_catalog(entries)
 
 
 class MavenCarrierSchemaValidationTests(unittest.TestCase):
