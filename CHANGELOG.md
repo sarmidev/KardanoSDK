@@ -103,7 +103,9 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   drive-root plus UNC path scanning. Phase B run `32715104620` at
   `04c52dc` produced byte-identical candidates (SHA-256
   `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`);
-  not promoted. A later PE-policy rerun is the re-review artifact.
+  not promoted. PE-policy rerun `32719231997` at `7f2cc78` reproduced
+  the same SHA-256 (artifacts A `9517151698` / B `9517151682` /
+  report `9517246164`, expire 2026-09-07).
   `:crypto-signing-backend:jvmTest` is the Windows KAT in this
   workflow; `:crypto`/`:wallet` JVM tests still need the identus
   derivation wrapper's missing Windows native.
