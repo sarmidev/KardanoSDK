@@ -71,19 +71,6 @@ jobs:
           cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/before.hash
           sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/after.hash
           diff /tmp/before.hash /tmp/after.hash
-      - name: DEBUG-TEMP regenerate and upload canonical cargo_dependency_inventory.json
-        env:
-          CARGO_NET_OFFLINE: "true"
-        run: |
-          python3 scripts/generate_legal_evidence.py || true
-          cp docs/evidence/cargo_dependency_inventory.json /tmp/canonical_cargo_dependency_inventory.json
-          git checkout -- docs/evidence
-      - name: DEBUG-TEMP upload canonical cargo_dependency_inventory.json artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: canonical-cargo-dependency-inventory
-          path: /tmp/canonical_cargo_dependency_inventory.json
-          retention-days: 1
       - name: Run legal-evidence regression tests
         env:
           CARGO_NET_OFFLINE: "true"
