@@ -47,12 +47,20 @@ Fails closed (either mode) on any of:
    "open"/"pending" that is not one of `ALLOWED_OPEN_GATE_MARKERS` exactly,
    and no unsupported claim of "approved" outside a "not approved"/"not ...
    approval" disclaimer sentence.
+8. docs/evidence/scope_binding.json's two-commit seal is independently
+   verified against git history (not by regeneration): evidence_commit and
+   subject_commit exist, subject_commit is evidence_commit's exact
+   immediate parent, evidence_commit is an ancestor of current HEAD, and
+   every sealed evidence file's current bytes match both the recorded
+   digest and the actual bytes committed at evidence_commit's tree.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -102,6 +110,24 @@ def run_git(*args: str) -> str:
 
     result = subprocess.run(
         ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+    )
+    return result.stdout
+
+
+def run_git_ok(*args: str) -> bool:
+    import subprocess
+
+    result = subprocess.run(
+        ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True
+    )
+    return result.returncode == 0
+
+
+def run_git_bytes(*args: str) -> bytes:
+    import subprocess
+
+    result = subprocess.run(
+        ["git", *args], cwd=REPO_ROOT, capture_output=True, check=True
     )
     return result.stdout
 
@@ -157,6 +183,11 @@ def check_notice_license_references() -> list[str]:
     existing = {p.name for p in LICENSES_DIR.glob("*.txt")}
     if not existing:
         errors.append("LICENSES/ contains no *.txt license files")
+    readme_path = LICENSES_DIR / "README.md"
+    if not readme_path.is_file():
+        errors.append("LICENSES/README.md is required and is missing")
+    elif readme_path.is_symlink():
+        errors.append("LICENSES/README.md must not be a symlink")
 
     for source_path in (NOTICE_PATH, LICENSES_DIR / "README.md"):
         if not source_path.is_file():
@@ -241,6 +272,16 @@ def check_native_inventory_matches_checksums() -> list[str]:
     return errors
 
 
+# scope_binding.json is deliberately NOT regenerated/compared here: its
+# whole point is to bind an IMMUTABLE historical evidence_commit/
+# subject_commit pair, which would be destroyed by silently rewriting it to
+# whatever HEAD happens to be during a later check run. It is verified
+# independently by check_scope_binding_seal() (git ancestry + byte-for-byte
+# cross-check against `git show <evidence_commit>:<path>`), not by
+# regeneration equality.
+KNOWN_NON_REGENERABLE_EVIDENCE_FILES = {"scope_binding.json"}
+
+
 def check_evidence_is_freshly_regenerable() -> list[str]:
     errors: list[str] = []
     generators = {
@@ -251,7 +292,6 @@ def check_evidence_is_freshly_regenerable() -> list[str]:
         "native_artifacts_inventory.json": evidence.native_artifacts_inventory,
         "maven_native_carriers_inventory.json": evidence.maven_native_carriers_inventory,
         "bouncycastle_license_source.json": evidence.bouncycastle_license_source_inventory,
-        "scope_binding.json": evidence.scope_binding,
     }
 
     def gradle_license_generator() -> dict:
@@ -262,13 +302,25 @@ def check_evidence_is_freshly_regenerable() -> list[str]:
     generators["cargo_dependency_inventory.json"] = evidence.cargo_dependency_inventory_per_target
 
     committed_files = {p.name for p in EVIDENCE_DIR.glob("*.json")}
-    expected_files = set(generators)
+    expected_files = set(generators) | KNOWN_NON_REGENERABLE_EVIDENCE_FILES
     for extra in sorted(committed_files - expected_files):
         errors.append(
             f"docs/evidence/{extra} exists but is not one of this checker's "
             "known generators; either the generator forgot to write it, or an "
             "uninventoried file was added by hand"
         )
+
+    for filename in KNOWN_NON_REGENERABLE_EVIDENCE_FILES:
+        committed_path = EVIDENCE_DIR / filename
+        if not committed_path.is_file():
+            continue
+        try:
+            json.loads(
+                committed_path.read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_duplicate_keys,
+            )
+        except ValueError as exc:
+            errors.append(f"docs/evidence/{filename}: {exc}")
 
     for filename, generator in sorted(generators.items()):
         committed_path = EVIDENCE_DIR / filename
@@ -290,14 +342,6 @@ def check_evidence_is_freshly_regenerable() -> list[str]:
             errors.append(f"{filename}: regeneration raised {exc!r}")
             continue
         fresh_text = json.dumps(fresh_payload, indent=2, sort_keys=True, ensure_ascii=True) + "\n"
-        if filename == "scope_binding.json":
-            # subject_commit legitimately changes with HEAD; only structural
-            # shape (keys) is checked, not the moving commit/tree values.
-            fresh_obj = json.loads(fresh_text)
-            committed_obj = json.loads(committed_text)
-            if set(fresh_obj) != set(committed_obj):
-                errors.append("docs/evidence/scope_binding.json: unexpected key set")
-            continue
         if fresh_text != committed_text:
             errors.append(
                 f"docs/evidence/{filename} is stale: regenerating it from the "
@@ -308,6 +352,226 @@ def check_evidence_is_freshly_regenerable() -> list[str]:
     digest_path = EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt"
     if not digest_path.is_file():
         errors.append("docs/evidence/LEGAL_EVIDENCE_DIGEST.txt is missing")
+    return errors
+
+
+def check_evidence_tree_exact() -> list[str]:
+    """Recursively enumerate the entire tracked docs/evidence/ tree.
+
+    A 2026-08-24 independent review found the freshness check only globbed
+    `docs/evidence/*.json` (non-recursive) plus the digest file by name --
+    a stray extra file anywhere under a nested directory (e.g.
+    docs/evidence/license-sources/) would be silently invisible. This walks
+    every file under EVIDENCE_DIR, rejects any symlink (file or directory)
+    anywhere in the tree, and compares the discovered set exactly against
+    the one hand-maintained list of expected non-JSON evidence files below
+    (the JSON files themselves are already checked file-by-file elsewhere).
+    """
+    errors: list[str] = []
+    if not EVIDENCE_DIR.is_dir():
+        return ["docs/evidence/ directory is missing"]
+
+    expected_extra_files = {
+        "license-sources/bouncycastle-licence-2026-08-24.html",
+    }
+
+    discovered: set[str] = set()
+    for root, dirnames, filenames in os.walk(EVIDENCE_DIR):
+        root_path = Path(root)
+        for dirname in dirnames:
+            if (root_path / dirname).is_symlink():
+                errors.append(
+                    f"docs/evidence/{(root_path / dirname).relative_to(EVIDENCE_DIR)}: "
+                    "symlinked directory is not allowed under docs/evidence/"
+                )
+        for filename in filenames:
+            file_path = root_path / filename
+            rel = str(file_path.relative_to(EVIDENCE_DIR)).replace("\\", "/")
+            if file_path.is_symlink():
+                errors.append(f"docs/evidence/{rel}: symlink is not allowed under docs/evidence/")
+                continue
+            discovered.add(rel)
+
+    expected_top_level = {"LEGAL_EVIDENCE_DIGEST.txt"} | {
+        p.name for p in EVIDENCE_DIR.glob("*.json")
+    }
+    expected = expected_top_level | expected_extra_files
+    extras = sorted(discovered - expected)
+    missing = sorted(expected_extra_files - discovered)
+    for path in extras:
+        errors.append(
+            f"docs/evidence/{path}: untracked/unexpected file under docs/evidence/ "
+            "(nested extras fail the same as top-level extras)"
+        )
+    for path in missing:
+        errors.append(f"docs/evidence/{path}: expected evidence file is missing")
+    return errors
+
+
+GIT_SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
+SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
+SCOPE_BINDING_REQUIRED_KEYS = {
+    "note",
+    "evidence_commit",
+    "evidence_tree",
+    "subject_commit",
+    "subject_tree",
+    "sealed_evidence_digests",
+}
+
+
+def check_scope_binding_seal() -> list[str]:
+    """Verify the two-commit seal independently of regeneration.
+
+    Unlike every other evidence file, `scope_binding.json` is NOT
+    byte-compared against a fresh regeneration (that would always trivially
+    "pass" by rewriting the binding to whatever HEAD is right now, defeating
+    the point of a seal). Instead this checks, purely from already-committed
+    git history plus current worktree bytes:
+
+    - `evidence_commit`/`subject_commit` are real, existing commit objects.
+    - `evidence_tree`/`subject_tree` are exactly those commits' own trees.
+    - `subject_commit` is EXACTLY `evidence_commit`'s immediate parent (not
+      merely some ancestor -- the evidence-content commit must directly
+      follow the subject-source commit it inventories, with no intervening
+      commit that could have silently changed the inventoried state).
+    - `evidence_commit` is an ancestor of (or equal to) current HEAD (the
+      seal cannot point at a commit not yet reachable from here).
+    - Every sealed evidence file's CURRENT on-disk bytes match both the
+      recorded `sealed_evidence_digests` entry AND the actual bytes
+      committed at `evidence_commit`'s tree (`git show
+      <evidence_commit>:docs/evidence/<name>`) -- so a later commit that
+      edited an already-sealed evidence file without a re-seal is caught
+      even though regeneration-equality checks elsewhere only ever compare
+      against the CURRENT tracked tree, not the sealed historical one.
+    """
+    errors: list[str] = []
+    path = EVIDENCE_DIR / "scope_binding.json"
+    if not path.is_file():
+        return ["docs/evidence/scope_binding.json is missing"]
+    if path.is_symlink():
+        return ["docs/evidence/scope_binding.json is a symlink, not a regular file"]
+
+    try:
+        binding = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_reject_duplicate_keys)
+    except ValueError as exc:
+        return [f"docs/evidence/scope_binding.json: {exc}"]
+    if not isinstance(binding, dict):
+        return ["docs/evidence/scope_binding.json: top level is not a JSON object"]
+
+    if set(binding) != SCOPE_BINDING_REQUIRED_KEYS:
+        return [
+            "docs/evidence/scope_binding.json: unexpected key set "
+            f"{sorted(binding)} (expected exactly {sorted(SCOPE_BINDING_REQUIRED_KEYS)})"
+        ]
+
+    for field in ("evidence_commit", "evidence_tree", "subject_commit", "subject_tree"):
+        value = binding[field]
+        if not isinstance(value, str) or not GIT_SHA1_RE.match(value):
+            errors.append(
+                f"docs/evidence/scope_binding.json: {field!r} is not a "
+                f"40-hex-char git object id: {value!r}"
+            )
+    if errors:
+        return errors
+
+    evidence_commit = binding["evidence_commit"]
+    evidence_tree = binding["evidence_tree"]
+    subject_commit = binding["subject_commit"]
+    subject_tree = binding["subject_tree"]
+
+    for label, oid in (("evidence_commit", evidence_commit), ("subject_commit", subject_commit)):
+        if not run_git_ok("cat-file", "-e", f"{oid}^{{commit}}"):
+            errors.append(
+                f"docs/evidence/scope_binding.json: {label} {oid} does not "
+                "exist as a commit object in this repository"
+            )
+    if errors:
+        return errors
+
+    actual_evidence_tree = run_git("rev-parse", f"{evidence_commit}^{{tree}}").strip()
+    if actual_evidence_tree != evidence_tree:
+        errors.append(
+            "docs/evidence/scope_binding.json: evidence_tree "
+            f"{evidence_tree!r} does not match evidence_commit {evidence_commit}'s "
+            f"actual tree {actual_evidence_tree!r}"
+        )
+    actual_subject_tree = run_git("rev-parse", f"{subject_commit}^{{tree}}").strip()
+    if actual_subject_tree != subject_tree:
+        errors.append(
+            "docs/evidence/scope_binding.json: subject_tree "
+            f"{subject_tree!r} does not match subject_commit {subject_commit}'s "
+            f"actual tree {actual_subject_tree!r}"
+        )
+
+    if run_git_ok("rev-parse", "--verify", f"{evidence_commit}^"):
+        actual_parent = run_git("rev-parse", f"{evidence_commit}^").strip()
+    else:
+        actual_parent = None
+    if actual_parent != subject_commit:
+        errors.append(
+            "docs/evidence/scope_binding.json: subject_commit "
+            f"{subject_commit!r} is not evidence_commit {evidence_commit}'s "
+            f"immediate parent (actual parent: {actual_parent!r}) -- the "
+            "evidence-content commit must directly follow the exact "
+            "subject-source commit it inventories"
+        )
+
+    head = run_git("rev-parse", "HEAD").strip()
+    if not run_git_ok("merge-base", "--is-ancestor", evidence_commit, head):
+        errors.append(
+            f"docs/evidence/scope_binding.json: evidence_commit {evidence_commit} "
+            f"is not an ancestor of (or equal to) current HEAD {head}"
+        )
+
+    digests = binding["sealed_evidence_digests"]
+    if not isinstance(digests, dict):
+        return errors + [
+            "docs/evidence/scope_binding.json: sealed_evidence_digests is not an object"
+        ]
+    expected_names = set(evidence.evidence_output_files())
+    actual_names = set(digests)
+    if actual_names != expected_names:
+        errors.append(
+            "docs/evidence/scope_binding.json: sealed_evidence_digests key set "
+            f"{sorted(actual_names)} != expected {sorted(expected_names)}"
+        )
+
+    for name in sorted(expected_names & actual_names):
+        digest = digests[name]
+        if not isinstance(digest, str) or not SHA256_HEX_RE.match(digest):
+            errors.append(
+                f"docs/evidence/scope_binding.json: sealed_evidence_digests"
+                f"[{name!r}] is not a 64-hex-char sha256: {digest!r}"
+            )
+            continue
+        current_path = EVIDENCE_DIR / name
+        if not current_path.is_file():
+            errors.append(f"docs/evidence/{name} is missing (required by the sealed binding)")
+            continue
+        current_digest = evidence.sha256_file(current_path)
+        if current_digest != digest:
+            errors.append(
+                f"docs/evidence/{name}: current bytes (sha256 {current_digest}) "
+                f"do not match the sealed digest {digest} in scope_binding.json "
+                "-- evidence content drifted after the seal without a re-seal"
+            )
+        try:
+            committed_bytes = run_git_bytes("show", f"{evidence_commit}:docs/evidence/{name}")
+        except Exception:  # noqa: BLE001
+            errors.append(
+                f"docs/evidence/{name}: not found at evidence_commit "
+                f"{evidence_commit}'s tree (git show failed)"
+            )
+            continue
+        committed_digest = hashlib.sha256(committed_bytes).hexdigest()
+        if committed_digest != digest:
+            errors.append(
+                f"docs/evidence/{name}: sha256 at evidence_commit "
+                f"({committed_digest}) does not match the sealed digest "
+                f"{digest} in scope_binding.json"
+            )
+
     return errors
 
 
@@ -395,8 +659,6 @@ def check_digest_file_exact() -> list[str]:
         key = f"{name}_sha256"
         expected = evidence.sha256_file(EVIDENCE_DIR / name)
         actual = fields.get(key)
-        if name == "scope_binding.json":
-            continue  # legitimately moves with HEAD; not a stale-evidence signal
         if actual != expected:
             errors.append(
                 f"docs/evidence/LEGAL_EVIDENCE_DIGEST.txt: {key}={actual!r} does "
@@ -429,6 +691,74 @@ def check_uniffi_and_native_scope_has_no_orphans() -> list[str]:
                 f"{entry.name}/gradle.lockfile exists but '{entry.name}' is not "
                 "included in settings.gradle.kts (or discovery missed it)"
             )
+    return errors
+
+
+ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+VALID_ELECTION_STATUSES = ("OPEN", "ACCEPTED", "NOT_APPLICABLE")
+
+
+def check_cargo_license_elections(mode: str) -> list[str]:
+    """Schema-validate every Cargo license-election row; gate `release` mode.
+
+    Every row's `status` must be an exact member of `VALID_ELECTION_STATUSES`
+    -- an arbitrary string like "Approved" is rejected the same way the
+    markdown-table placeholder scan rejects it, because this is the same
+    "no unsupported claim without an exact accepted enum" requirement applied
+    to generated JSON instead of hand-written prose. A mandatory
+    (target-linked) row with `status == "ACCEPTED"` must also carry a
+    non-empty `reviewer` and an ISO-8601 `review_date`; `release` mode
+    additionally fails while `all_mandatory_elections_accepted` is not
+    exactly `True`.
+    """
+    errors: list[str] = []
+    try:
+        report = evidence.cargo_dependency_inventory_per_target()
+    except Exception as exc:  # noqa: BLE001
+        return [f"could not evaluate cargo license elections: {exc!r}"]
+
+    elections = report.get("license_elections")
+    if elections is None:
+        return ["cargo_dependency_inventory.json has no 'license_elections' section"]
+
+    for row in elections["rows"]:
+        label = f"{row['name']}@{row['version']}"
+        status = row.get("status")
+        if status not in VALID_ELECTION_STATUSES:
+            errors.append(
+                f"cargo license election {label}: status {status!r} is not one "
+                f"of {VALID_ELECTION_STATUSES} (no unsupported claim without an "
+                "exact accepted enum)"
+            )
+            continue
+        if status == "ACCEPTED":
+            if not row.get("reviewer"):
+                errors.append(
+                    f"cargo license election {label}: status ACCEPTED but "
+                    "reviewer is empty"
+                )
+            review_date = row.get("review_date")
+            if not review_date or not ISO_DATE_RE.match(review_date):
+                errors.append(
+                    f"cargo license election {label}: status ACCEPTED but "
+                    f"review_date {review_date!r} is not an ISO-8601 date"
+                )
+        elif row["linked_in_any_target"] and status not in ("OPEN", "ACCEPTED"):
+            errors.append(
+                f"cargo license election {label}: target-linked row has "
+                f"unexpected status {status!r} (expected OPEN or ACCEPTED)"
+            )
+
+    if mode == "release" and not elections["all_mandatory_elections_accepted"]:
+        open_rows = sorted(
+            f"{r['name']}@{r['version']}"
+            for r in elections["rows"]
+            if r["linked_in_any_target"] and r["status"] != "ACCEPTED"
+        )
+        errors.append(
+            "release mode: not every mandatory Cargo license election is "
+            f"ACCEPTED: {open_rows}"
+        )
     return errors
 
 
@@ -475,9 +805,15 @@ def check_legal_review_placeholders(mode: str) -> list[str]:
         if len(cells) < 2:
             continue  # not a data row (rare malformed table edge, ignored)
         for cell in cells:
-            if cell == "" or cell == "---":
-                continue
             if re.fullmatch(r"-{2,}", cell):
+                continue
+            if cell == "":
+                errors.append(
+                    f"docs/LEGAL_REVIEW.md:{lineno}: blank required table cell "
+                    "(use an em dash '—' for 'not applicable', or one of "
+                    "ALLOWED_OPEN_GATE_MARKERS for a deliberately open field -- "
+                    "never leave a cell truly empty)"
+                )
                 continue
             has_open_or_pending = re.search(r"\b(open|pending)\b", cell, re.IGNORECASE)
             if has_open_or_pending and cell not in ALLOWED_OPEN_GATE_MARKERS:
@@ -517,8 +853,14 @@ def main() -> int:
         ("NOTICE / LICENSES cross-reference", check_notice_license_references),
         ("native inventory vs CHECKSUMS.sha256", check_native_inventory_matches_checksums),
         ("evidence freshness (deterministic regeneration)", check_evidence_is_freshly_regenerable),
+        ("docs/evidence/ recursive tree has no extra/missing/symlinked files", check_evidence_tree_exact),
         ("LEGAL_EVIDENCE_DIGEST.txt exact recomputation", check_digest_file_exact),
+        ("scope_binding.json two-commit seal (ancestry + byte cross-check)", check_scope_binding_seal),
         ("no uninventoried UniFFI/module scope drift", check_uniffi_and_native_scope_has_no_orphans),
+        (
+            f"Cargo license elections ({args.mode} mode)",
+            lambda: check_cargo_license_elections(args.mode),
+        ),
         (
             f"LEGAL_REVIEW.md placeholder scan ({args.mode} mode)",
             lambda: check_legal_review_placeholders(args.mode),

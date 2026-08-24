@@ -22,7 +22,12 @@ matched by `group:artifact` (any version), unless a specific
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import license_catalog_harvested  # noqa: E402
 
 # group:artifact (or group:artifact:version) -> catalog entry.
 GRADLE_LICENSE_CATALOG: dict[str, dict[str, Any]] = {
@@ -194,11 +199,47 @@ GRADLE_LICENSE_CATALOG: dict[str, dict[str, Any]] = {
         "source": "https://android.googlesource.com/platform/frameworks/support/+/androidx-main/LICENSE.txt",
         "note": "Test-only (androidx.test.*); never shipped.",
     },
+    "com.google.guava:listenablefuture:1.0": {
+        "licenses": ["The Apache Software License, Version 2.0"],
+        "election": None,
+        "source": (
+            "https://repo1.maven.org/maven2/com/google/guava/guava-parent/"
+            "26.0-android/guava-parent-26.0-android.pom"
+        ),
+        "note": (
+            "listenablefuture-1.0.pom itself carries no <licenses> block; the "
+            "license is declared only on its Maven parent POM "
+            "(com.google.guava:guava-parent:26.0-android), confirmed by fetching "
+            "that parent POM directly on 2026-08-24. This script's own POM "
+            "parser does not implement Maven parent-POM inheritance generally -- "
+            "this single coordinate is hand-resolved here for exactly that "
+            "reason, not mechanically harvested like the rest of "
+            "scripts/license_catalog_harvested.py."
+        ),
+    },
 }
 
 
 def lookup(group: str, artifact: str, version: str) -> dict[str, Any] | None:
+    """Hand-curated entries always win over harvested ones for the same key.
+
+    Only an exact `group:artifact:version` key is checked in the harvested
+    catalog (it is a mechanical, single-license-only extraction with no
+    group-prefix generalization -- see `scripts/license_catalog_harvested.py`
+    and the harvest script's docstring for why).
+    """
     for key in (f"{group}:{artifact}:{version}", f"{group}:{artifact}", group):
         if key in GRADLE_LICENSE_CATALOG:
-            return GRADLE_LICENSE_CATALOG[key]
+            entry = dict(GRADLE_LICENSE_CATALOG[key])
+            entry.setdefault("resolution_method", "curated-catalog")
+            return entry
+    exact_key = f"{group}:{artifact}:{version}"
+    if exact_key in license_catalog_harvested.HARVESTED_POM_LICENSE_CATALOG:
+        entry = license_catalog_harvested.HARVESTED_POM_LICENSE_CATALOG[exact_key]
+        return {
+            "licenses": entry["licenses"],
+            "election": None,
+            "source": entry.get("source"),
+            "resolution_method": "harvested-pom-catalog",
+        }
     return None

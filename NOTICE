@@ -110,6 +110,19 @@ Unicode License v3 (see LICENSES/Unicode-3.0.txt)
   determination.
 
 ================================================================================
+The Unlicense (see LICENSES/Unlicense.txt)
+================================================================================
+
+- memchr (Rust crate, 2.8.3). Dual-licensed `Unlicense OR MIT` per its own
+  Cargo.toml; linked into all nine committed crypto-signing-backend native
+  artifacts (see docs/evidence/cargo_dependency_inventory.json
+  "license_elections" for the full per-target membership). No election is
+  made here between Unlicense and MIT — status OPEN, see
+  docs/LEGAL_REVIEW.md §5a and scripts/cargo_election_catalog.py. This text
+  is committed and cited specifically so it is present unless/until a
+  reviewer explicitly accepts an MIT election for this package.
+
+================================================================================
 Mozilla Public License, Version 2.0 (see LICENSES/MPL-2.0.txt)
 ================================================================================
 

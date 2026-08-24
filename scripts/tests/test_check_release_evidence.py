@@ -39,6 +39,18 @@ class RealTreeChecksTests(unittest.TestCase):
     def test_no_uninventoried_scope_drift(self) -> None:
         self.assertEqual(checker.check_uniffi_and_native_scope_has_no_orphans(), [])
 
+    def test_evidence_tree_exact_passes(self) -> None:
+        self.assertEqual(checker.check_evidence_tree_exact(), [])
+
+    def test_cargo_license_elections_ci_structural_passes(self) -> None:
+        self.assertEqual(checker.check_cargo_license_elections("ci-structural"), [])
+
+    def test_cargo_license_elections_release_mode_lists_every_open_row(self) -> None:
+        errors = checker.check_cargo_license_elections("release")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("memchr@2.8.3", errors[0])
+        self.assertIn("anyhow@1.0.103", errors[0])
+
     def test_legal_review_has_no_placeholders_ci_structural(self) -> None:
         self.assertEqual(checker.check_legal_review_placeholders("ci-structural"), [])
 
@@ -106,6 +118,79 @@ class DigestFileParsingTests(unittest.TestCase):
             self.assertTrue(any("symlink" in e for e in errors))
 
 
+class EvidenceTreeExactTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.evidence_dir = Path(self._tmp.name) / "evidence"
+        import shutil
+
+        shutil.copytree(checker.EVIDENCE_DIR, self.evidence_dir)
+        self._patch = mock.patch.object(checker, "EVIDENCE_DIR", self.evidence_dir)
+        self._patch.start()
+
+    def tearDown(self) -> None:
+        self._patch.stop()
+        self._tmp.cleanup()
+
+    def test_nested_extra_file_is_rejected(self) -> None:
+        extra = self.evidence_dir / "license-sources" / "unexpected-extra.txt"
+        extra.write_text("surprise\n", encoding="utf-8")
+        errors = checker.check_evidence_tree_exact()
+        self.assertTrue(any("unexpected-extra.txt" in e for e in errors))
+
+    def test_top_level_extra_directory_is_rejected(self) -> None:
+        extra_dir = self.evidence_dir / "unexpected-dir"
+        extra_dir.mkdir()
+        (extra_dir / "file.txt").write_text("x\n", encoding="utf-8")
+        errors = checker.check_evidence_tree_exact()
+        self.assertTrue(any("unexpected-dir/file.txt" in e for e in errors))
+
+    def test_missing_nested_expected_file_is_rejected(self) -> None:
+        (self.evidence_dir / "license-sources" / "bouncycastle-licence-2026-08-24.html").unlink()
+        errors = checker.check_evidence_tree_exact()
+        self.assertTrue(any("expected evidence file is missing" in e for e in errors))
+
+    def test_nested_symlink_is_rejected(self) -> None:
+        target = self.evidence_dir / "scope_binding.json"
+        link = self.evidence_dir / "license-sources" / "sneaky-link.html"
+        os.symlink(target, link)
+        errors = checker.check_evidence_tree_exact()
+        self.assertTrue(any("sneaky-link.html" in e and "symlink" in e for e in errors))
+
+
+class LicensesReadmeRequiredTests(unittest.TestCase):
+    def test_missing_readme_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            licenses_dir = Path(tmp) / "LICENSES"
+            licenses_dir.mkdir()
+            (licenses_dir / "MIT.txt").write_text("MIT text\n", encoding="utf-8")
+            notice_path = Path(tmp) / "NOTICE"
+            notice_path.write_text("LICENSES/MIT.txt\n", encoding="utf-8")
+            with mock.patch.object(checker, "LICENSES_DIR", licenses_dir), mock.patch.object(
+                checker, "NOTICE_PATH", notice_path
+            ), mock.patch.object(
+                evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+            ), mock.patch.object(
+                evidence,
+                "gradle_license_inventory",
+                lambda report: {"mit_only_coordinates": []},
+            ), mock.patch.object(
+                evidence,
+                "cargo_dependency_inventory_per_target",
+                lambda: {"mit_only_linked_packages": []},
+            ):
+                errors = checker.check_notice_license_references()
+            self.assertTrue(any("LICENSES/README.md is required" in e for e in errors))
+
+    def test_present_readme_passes_that_specific_check(self) -> None:
+        self.assertFalse(
+            any(
+                "LICENSES/README.md is required" in e
+                for e in checker.check_notice_license_references()
+            )
+        )
+
+
 class PlaceholderDetectionTests(unittest.TestCase):
     def test_detects_generic_placeholder_token(self) -> None:
         with mock.patch.object(
@@ -147,15 +232,20 @@ class PlaceholderDetectionTests(unittest.TestCase):
             errors = checker.check_legal_review_placeholders("ci-structural")
         self.assertTrue(any("open" in e.lower() and "ALLOWED_OPEN_GATE_MARKERS" in e for e in errors))
 
-    def test_blank_table_cell_is_rejected_as_placeholder_free_but_reported_elsewhere(self) -> None:
-        # A literally-empty cell doesn't match any GENERIC_PLACEHOLDERS token
-        # and isn't a bare open/pending word, so this check alone won't flag
-        # it -- but it also must not silently look "clean": prove the cell
-        # passes through this check untouched, documenting the boundary.
+    def test_blank_table_cell_is_rejected(self) -> None:
         with mock.patch.object(
             checker,
             "LEGAL_REVIEW_PATH",
             _write_temp_markdown("| Field | Value |\n|---|---|\n| Counsel reviewer |  |\n"),
+        ):
+            errors = checker.check_legal_review_placeholders("ci-structural")
+        self.assertTrue(any("blank required table cell" in e for e in errors))
+
+    def test_em_dash_cell_is_allowed_for_not_applicable(self) -> None:
+        with mock.patch.object(
+            checker,
+            "LEGAL_REVIEW_PATH",
+            _write_temp_markdown("| Field | Value |\n|---|---|\n| AND-required | — |\n"),
         ):
             errors = checker.check_legal_review_placeholders("ci-structural")
         self.assertEqual(errors, [])
@@ -199,6 +289,153 @@ class PlaceholderDetectionTests(unittest.TestCase):
         ):
             errors = checker.check_legal_review_placeholders("release")
         self.assertEqual(errors, [])
+
+
+class CargoElectionSchemaTests(unittest.TestCase):
+    def _report(self, rows: list[dict], mandatory_count: int, accepted_count: int) -> dict:
+        return {
+            "license_elections": {
+                "rows": rows,
+                "mandatory_row_count": mandatory_count,
+                "accepted_count": accepted_count,
+                "all_mandatory_elections_accepted": accepted_count == mandatory_count
+                and mandatory_count > 0,
+            }
+        }
+
+    def test_open_status_is_valid_in_ci_structural(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "anyhow",
+                    "version": "1.0.103",
+                    "status": "OPEN",
+                    "reviewer": None,
+                    "review_date": None,
+                    "linked_in_any_target": True,
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=0,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            self.assertEqual(checker.check_cargo_license_elections("ci-structural"), [])
+
+    def test_unsupported_approved_string_is_rejected(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "anyhow",
+                    "version": "1.0.103",
+                    "status": "Approved",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=0,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("ci-structural")
+        self.assertTrue(any("Approved" in e and "not one of" in e for e in errors))
+
+    def test_accepted_without_reviewer_is_rejected(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "anyhow",
+                    "version": "1.0.103",
+                    "status": "ACCEPTED",
+                    "reviewer": None,
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("ci-structural")
+        self.assertTrue(any("reviewer is empty" in e for e in errors))
+
+    def test_accepted_without_iso_date_is_rejected(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "anyhow",
+                    "version": "1.0.103",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "08/24/2026",
+                    "linked_in_any_target": True,
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("ci-structural")
+        self.assertTrue(any("not an ISO-8601 date" in e for e in errors))
+
+    def test_fully_accepted_report_passes_release_mode(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "anyhow",
+                    "version": "1.0.103",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            self.assertEqual(checker.check_cargo_license_elections("release"), [])
+
+    def test_partially_accepted_report_fails_release_mode(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "anyhow",
+                    "version": "1.0.103",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                },
+                {
+                    "name": "memchr",
+                    "version": "2.8.3",
+                    "status": "OPEN",
+                    "reviewer": None,
+                    "review_date": None,
+                    "linked_in_any_target": True,
+                },
+            ],
+            mandatory_count=2,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("release")
+        self.assertEqual(len(errors), 1)
+        self.assertIn("memchr@2.8.3", errors[0])
+        self.assertNotIn("anyhow@1.0.103", errors[0])
 
 
 def _write_temp_markdown(text: str) -> Path:
@@ -290,6 +527,195 @@ class FixtureRepoTests(unittest.TestCase):
             with mock.patch.object(checker, "REPO_ROOT", root):
                 symlinks = checker.git_symlinked_files("LICENSES", "NOTICE")
             self.assertEqual(symlinks, [])
+
+
+class ScopeBindingSealCheckTests(unittest.TestCase):
+    """Exercise check_scope_binding_seal() against a disposable temp git repo.
+
+    Builds a real two-commit (subject -> evidence) history, seals it with
+    generate_legal_evidence.seal_scope_binding(), then mutates the resulting
+    scope_binding.json / worktree in each test to prove every named failure
+    mode (nonancestor, wrong parent, changed evidence after seal, missing
+    digest key, bad hex, evidence_commit not reachable from HEAD) is
+    actually caught -- and that the untouched, correctly-sealed history
+    passes with zero errors.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name)
+        _git(self.repo, "init", "-q")
+        _git(self.repo, "config", "user.email", "test@example.invalid")
+        _git(self.repo, "config", "user.name", "Test")
+
+        self._patches = [
+            mock.patch.object(checker, "REPO_ROOT", self.repo),
+            mock.patch.object(checker, "EVIDENCE_DIR", self.repo / "docs" / "evidence"),
+            mock.patch.object(evidence, "REPO_ROOT", self.repo),
+            mock.patch.object(evidence, "EVIDENCE_DIR", self.repo / "docs" / "evidence"),
+        ]
+        for patch in self._patches:
+            patch.start()
+        (self.repo / "docs" / "evidence").mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        for patch in reversed(self._patches):
+            patch.stop()
+        self._tmp.cleanup()
+
+    def _write_outputs(self) -> None:
+        for name in evidence.evidence_output_files():
+            (evidence.EVIDENCE_DIR / name).write_text(
+                json.dumps({"name": name}) + "\n", encoding="utf-8"
+            )
+
+    def _seal(self) -> None:
+        (self.repo / "SOURCE.txt").write_text("subject source\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "subject commit")
+        self.main_branch = _git_output(self.repo, "symbolic-ref", "--short", "HEAD")
+
+        self._write_outputs()
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "evidence commit")
+
+        binding = evidence.seal_scope_binding()
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "seal commit")
+
+    def test_correctly_sealed_history_passes(self) -> None:
+        self._seal()
+        self.assertEqual(checker.check_scope_binding_seal(), [])
+
+    def test_missing_scope_binding_is_rejected(self) -> None:
+        self._seal()
+        (evidence.EVIDENCE_DIR / "scope_binding.json").unlink()
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("is missing" in e for e in errors))
+
+    def test_unexpected_key_set_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        del binding["subject_tree"]
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("unexpected key set" in e for e in errors))
+
+    def test_nonexistent_commit_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        binding["subject_commit"] = "a" * 40
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("does not exist as a commit object" in e for e in errors))
+
+    def test_wrong_evidence_tree_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        binding["evidence_tree"] = "b" * 40
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("does not match evidence_commit" in e for e in errors))
+
+    def test_non_immediate_parent_is_rejected(self) -> None:
+        self._seal()
+        # Point subject_commit at HEAD's grandparent instead of parent --
+        # simulates an extra intervening commit between subject and evidence.
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        # Fabricate an unrelated, ancestor-less commit to use as a wrong,
+        # non-parent subject_commit value.
+        _git(self.repo, "checkout", "-q", "--orphan", "unrelated")
+        (self.repo / "UNRELATED.txt").write_text("x\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "unrelated root")
+        unrelated_commit = _git_output(self.repo, "rev-parse", "HEAD")
+        _git(self.repo, "checkout", "-q", self.main_branch)
+        binding["subject_commit"] = unrelated_commit
+        binding["subject_tree"] = _git_output(self.repo, "rev-parse", f"{unrelated_commit}^{{tree}}")
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("is not evidence_commit" in e and "immediate parent" in e for e in errors))
+
+    def test_evidence_commit_not_ancestor_of_head_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        _git(self.repo, "checkout", "-q", "--orphan", "unrelated2")
+        (self.repo / "UNRELATED2.txt").write_text("x\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "unrelated root 2")
+        # Now HEAD is this unrelated commit; the sealed evidence_commit is
+        # unreachable from it.
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(
+            any("is not an ancestor of (or equal to) current HEAD" in e for e in errors)
+        )
+
+    def test_evidence_changed_after_seal_is_rejected(self) -> None:
+        self._seal()
+        any_name = next(iter(evidence.evidence_output_files()))
+        (evidence.EVIDENCE_DIR / any_name).write_text('{"tampered": true}\n', encoding="utf-8")
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("evidence content drifted after the seal" in e for e in errors))
+
+    def test_extra_commit_touching_evidence_is_rejected(self) -> None:
+        self._seal()
+        any_name = next(iter(evidence.evidence_output_files()))
+        (evidence.EVIDENCE_DIR / any_name).write_text('{"tampered": true}\n', encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "sneaky extra commit touching evidence")
+        errors = checker.check_scope_binding_seal()
+        # Current bytes now match the sneaky commit (not the seal's digest),
+        # so this is caught the same way as any post-seal drift -- an extra
+        # commit is not a special case, it is just another way to drift.
+        self.assertTrue(any("evidence content drifted after the seal" in e for e in errors))
+
+    def test_missing_sealed_digest_key_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        any_key = next(iter(binding["sealed_evidence_digests"]))
+        del binding["sealed_evidence_digests"][any_key]
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("sealed_evidence_digests key set" in e for e in errors))
+
+    def test_malformed_digest_hex_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        any_key = next(iter(binding["sealed_evidence_digests"]))
+        binding["sealed_evidence_digests"][any_key] = "not-a-hex-digest"
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("is not a 64-hex-char sha256" in e for e in errors))
+
+    def test_duplicate_json_key_is_rejected(self) -> None:
+        self._seal()
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            '{"note": "a", "note": "b"}\n', encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("duplicate" in e for e in errors))
+
+
+def _git_output(cwd: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True
+    )
+    return result.stdout.strip()
 
 
 if __name__ == "__main__":

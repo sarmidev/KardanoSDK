@@ -3,10 +3,17 @@
 
 This script never asserts a legal conclusion. It reads already-locked build
 state (Gradle `*/gradle.lockfile`, `crypto-signing-backend/Cargo.lock` via
-`cargo metadata --locked`, the committed UniFFI-generated Kotlin bindings,
+`cargo metadata --locked --offline` / `cargo tree --locked --offline`, the
+committed UniFFI-generated Kotlin bindings,
 `crypto-signing-backend/CHECKSUMS.sha256`, and -- for the Gradle license and
 native-carrier inventories -- the local Gradle module cache when present) and
 writes plain, reviewable JSON and text reports under `docs/evidence/`.
+`--offline` means the local Cargo registry cache must already contain every
+locked crate before this script runs; CI bootstraps that cache once via an
+explicit `cargo fetch --locked` network call before ever invoking this
+script (see `.github/workflows/verify.yml`), so this script itself never
+touches the network and a generation run that unexpectedly needed to is a
+hard failure, not a silent re-fetch.
 
 Determinism rules (checked by `scripts/check_release_evidence.py` and
 `scripts/tests/test_generate_legal_evidence.py`):
@@ -44,6 +51,7 @@ it is not a license or legal classification. See `CONFIG_RULES` below.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -55,6 +63,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cargo_election_catalog  # noqa: E402
 import license_catalog  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -300,9 +309,18 @@ def gradle_license_inventory(gradle_report: dict[str, Any]) -> dict[str, Any]:
                 "licenses": licenses,
                 "election": catalog_entry.get("election"),
                 "source": catalog_entry.get("source"),
-                "resolution_method": "curated-catalog",
+                "resolution_method": catalog_entry.get("resolution_method", "curated-catalog"),
             }
         else:
+            # Defense-in-depth only: a genuinely new coordinate that has not
+            # yet been added to scripts/license_catalog.py or harvested into
+            # scripts/license_catalog_harvested.py (see
+            # scripts/harvest_gradle_pom_licenses.py) still resolves here IF
+            # this machine happens to have it in its local Gradle cache, but
+            # this path is never required for a clean/CI resolution -- the
+            # two catalogs above are complete for every coordinate currently
+            # in any */gradle.lockfile (see the cold-cache tests in
+            # scripts/tests/test_generate_legal_evidence.py).
             pom_path = find_local_pom(group, artifact, version)
             if pom_path is None:
                 unresolved.append(gav)
@@ -315,7 +333,7 @@ def gradle_license_inventory(gradle_report: dict[str, Any]) -> dict[str, Any]:
                 "licenses": licenses,
                 "election": licenses[0] if len(licenses) > 1 else None,
                 "source": None,
-                "resolution_method": "local-gradle-pom-cache",
+                "resolution_method": "live-local-gradle-pom-cache",
             }
         if len(resolved[gav]["licenses"]) == 1 and resolved[gav]["licenses"][0] in (
             "MIT",
@@ -323,17 +341,35 @@ def gradle_license_inventory(gradle_report: dict[str, Any]) -> dict[str, Any]:
         ):
             mit_only.append(gav)
 
+    if unresolved:
+        raise EvidenceError(
+            "gradle_license_inventory: "
+            f"{len(unresolved)} runtime coordinate(s) have no resolvable "
+            "license from scripts/license_catalog.py (curated or harvested) "
+            "and no local Gradle POM cache entry either -- add them to "
+            "scripts/license_catalog.py or re-run "
+            "scripts/harvest_gradle_pom_licenses.py, then regenerate. This "
+            f"generator never silently ships an unresolved coordinate: {sorted(unresolved)}"
+        )
+
     return {
         "method": (
-            "Every coordinate is looked up first in scripts/license_catalog.py "
-            "(a curated, dated review of the coordinate's own POM), then in the "
-            "local Gradle module cache's copy of that coordinate's POM "
-            "(GRADLE_USER_HOME/caches/modules-2/files-2.1), parsing every "
-            "<license><name> entry (an OR list when more than one is present). "
-            "This is NOT reproducible on a machine whose Gradle cache does not "
-            "already have that POM resolved -- see docs/LEGAL_REVIEW.md \u00a78. "
-            "Unresolved coordinates are listed explicitly with an exact count, "
-            "never silently dropped or assumed permissive."
+            "Every coordinate is looked up first in "
+            "scripts/license_catalog.GRADLE_LICENSE_CATALOG (a curated, dated, "
+            "hand-reviewed catalog -- the only place a multi-license/election "
+            "entry may live), then in "
+            "scripts/license_catalog_harvested.HARVESTED_POM_LICENSE_CATALOG (a "
+            "mechanically harvested, always-single-license catalog committed "
+            "by scripts/harvest_gradle_pom_licenses.py so this generator does "
+            "not need a pre-populated local Gradle cache to reproduce this "
+            "report -- see docs/LEGAL_REVIEW.md \u00a71 and "
+            "scripts/tests/test_generate_legal_evidence.py's cold-cache tests). "
+            "A coordinate in neither catalog falls back to a live read of the "
+            "local Gradle module cache "
+            "(GRADLE_USER_HOME/caches/modules-2/files-2.1) as defense in depth "
+            "only; this generator FAILS CLOSED (raises, does not write any "
+            "evidence file) if any runtime coordinate is unresolved by all "
+            "three paths -- it never records a silent 'unresolved' entry."
         ),
         "runtime_coordinate_count": len(all_runtime_gavs),
         "resolved_count": len(resolved),
@@ -374,10 +410,30 @@ def cargo_lock_checksums() -> dict[tuple[str, str], str | None]:
 
 
 def run_cargo_metadata_for_triple(triple: str) -> dict[str, Any]:
+    """Run `cargo metadata` against the already-fetched, already-locked registry cache.
+
+    `--locked` refuses to re-resolve if Cargo.lock and Cargo.toml disagree;
+    `--offline` additionally refuses to touch the network at all, so this
+    call can only succeed against packages already present in the local
+    registry cache (populated once, deliberately, by an explicit
+    `cargo fetch --locked` bootstrap step -- see `.github/workflows/verify.yml`
+    and docs/LEGAL_REVIEW.md's network-requirement note). A generation run
+    that unexpectedly needed network access fails loudly here instead of
+    silently fetching new data mid-generation.
+    """
     lock_path = SIGNING_BACKEND / "Cargo.lock"
     before = sha256_file(lock_path)
     result = subprocess.run(
-        ["cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", triple],
+        [
+            "cargo",
+            "metadata",
+            "--locked",
+            "--offline",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            triple,
+        ],
         cwd=SIGNING_BACKEND,
         capture_output=True,
         text=True,
@@ -386,7 +442,7 @@ def run_cargo_metadata_for_triple(triple: str) -> dict[str, Any]:
     after = sha256_file(lock_path)
     if before != after:
         raise EvidenceError(
-            "cargo metadata --locked mutated Cargo.lock "
+            "cargo metadata --locked --offline mutated Cargo.lock "
             f"(before={before} after={after}); refusing generated evidence"
         )
     return json.loads(result.stdout)
@@ -414,7 +470,18 @@ def run_cargo_tree_name_versions(triple: str, edges: str) -> set[tuple[str, str]
     lock_path = SIGNING_BACKEND / "Cargo.lock"
     before = sha256_file(lock_path)
     result = subprocess.run(
-        ["cargo", "tree", "--locked", "--target", triple, "-e", edges, "--prefix", "none"],
+        [
+            "cargo",
+            "tree",
+            "--locked",
+            "--offline",
+            "--target",
+            triple,
+            "-e",
+            edges,
+            "--prefix",
+            "none",
+        ],
         cwd=SIGNING_BACKEND,
         capture_output=True,
         text=True,
@@ -423,7 +490,7 @@ def run_cargo_tree_name_versions(triple: str, edges: str) -> set[tuple[str, str]
     after = sha256_file(lock_path)
     if before != after:
         raise EvidenceError(
-            "cargo tree --locked mutated Cargo.lock "
+            "cargo tree --locked --offline mutated Cargo.lock "
             f"(before={before} after={after}); refusing generated evidence"
         )
     out: set[tuple[str, str]] = set()
@@ -609,15 +676,16 @@ def cargo_dependency_inventory_per_target() -> dict[str, Any]:
         for p in linked_in_any
         if p["license"] in ("MIT",)
     )
+    elections = cargo_license_elections(packages_report)
 
     return {
         "method": (
             "Two tools per rustc target triple that produces one of the 9 "
             "committed native artifacts (a separate graph for each, not one "
-            "merged closure): `cargo metadata --locked --filter-platform <triple>` "
-            "supplies per-package facts (license/version/source/targets), and "
-            "`cargo tree --locked --target <triple> -e <edges> --prefix none` "
-            "supplies the ACTUAL feature-activation-correct reachable set for "
+            "merged closure): `cargo metadata --locked --offline --filter-platform "
+            "<triple>` supplies per-package facts (license/version/source/targets), "
+            "and `cargo tree --locked --offline --target <triple> -e <edges> "
+            "--prefix none` supplies the ACTUAL feature-activation-correct reachable set for "
             "'normal' and 'normal,build' edges. `cargo metadata`'s own "
             "`resolve.nodes[].deps` is not used as the reachability source: it "
             "unconditionally lists every dependency edge declared in Cargo.toml, "
@@ -626,7 +694,12 @@ def cargo_dependency_inventory_per_target() -> dict[str, Any]:
             "chain, `uniffi_bindgen`/`askama`/`goblin`/`nom`/`weedle2`/`textwrap`/"
             "`smawk`/`clap`, appeared as metadata edges despite the feature that "
             "would enable them never being active for this crate's actual build; "
-            "`cargo tree` correctly omits all of them). Cargo.lock's own SHA-256 "
+            "`cargo tree` correctly omits all of them). `--offline` means both "
+            "commands only ever read the local registry cache that an explicit, "
+            "separate `cargo fetch --locked` network bootstrap step already "
+            "populated (see docs/LEGAL_REVIEW.md's network-requirement note); "
+            "neither command run by this script ever touches the network itself. "
+            "Cargo.lock's own SHA-256 "
             "is hashed before and after every `cargo metadata`/`cargo tree` "
             "invocation; a mismatch fails generation. Each package records its "
             "Cargo.lock checksum (the crates.io tarball digest Cargo itself "
@@ -649,6 +722,169 @@ def cargo_dependency_inventory_per_target() -> dict[str, Any]:
         "linked_in_any_target_count": len(linked_in_any),
         "mit_only_linked_packages": mit_only_linked,
         "packages": packages_report,
+        "license_elections": elections,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Cargo license-expression parsing and per-package election table
+# ---------------------------------------------------------------------------
+
+
+def parse_spdx_expression(expression: str) -> list[dict[str, Any]]:
+    """Split a Cargo.toml `license` SPDX-ish expression into AND-components.
+
+    Every AND-component is independently mandatory (an `AND`ed license, e.g.
+    Unicode-3.0, is required regardless of any `OR` election made elsewhere
+    in the expression). Within one AND-component, an `OR` makes it a real
+    disjunctive election among its options; a lone value with no `OR` is a
+    single mandatory license (no election to make). A `WITH <exception>`
+    clause stays attached to its own option string (e.g. "Apache-2.0 WITH
+    LLVM-exception") rather than being torn apart, because it names one
+    specific licensing term, not a separate top-level requirement.
+
+    Also accepts the legacy pre-SPDX Cargo `license = "MIT/Apache-2.0"` slash
+    syntax (crates.io still permits it; `cryptoxide`, `fs-err`, `siphasher`,
+    and `toml` in this graph all use it), treating `/` as equivalent to
+    ` OR ` when no explicit `OR`/`AND`/`WITH` keyword is present -- a slash
+    string is NOT single-license just because it lacks those keywords.
+
+    This is a minimal parser for the actual expressions observed in this
+    crate's dependency graph on 2026-08-24 (`OR`, `AND`, `WITH`, `/`, parens
+    wrapping one AND-component) -- not a general SPDX-expression grammar. An
+    expression this parser cannot make sense of raises rather than guessing.
+    """
+    if not expression or not expression.strip():
+        raise EvidenceError(f"empty or missing SPDX license expression: {expression!r}")
+    text = expression.strip()
+    if "/" in text and " OR " not in text and " AND " not in text and " WITH " not in text:
+        options = [o.strip() for o in text.split("/")]
+        if any(not o for o in options):
+            raise EvidenceError(
+                f"empty slash-separated option in license expression: {expression!r}"
+            )
+        return [{"type": "or", "options": options}]
+    and_parts = [p.strip() for p in text.split(" AND ")]
+    components: list[dict[str, Any]] = []
+    for part in and_parts:
+        stripped = part
+        if stripped.startswith("(") and stripped.endswith(")"):
+            stripped = stripped[1:-1].strip()
+        elif "(" in stripped or ")" in stripped:
+            raise EvidenceError(f"unbalanced/unsupported parens in SPDX expression: {expression!r}")
+        if " OR " in stripped:
+            options = [o.strip() for o in stripped.split(" OR ")]
+            if any(not o for o in options):
+                raise EvidenceError(f"empty OR option in SPDX expression: {expression!r}")
+            components.append({"type": "or", "options": options})
+        else:
+            if not stripped:
+                raise EvidenceError(f"empty AND component in SPDX expression: {expression!r}")
+            components.append({"type": "single", "value": stripped})
+    return components
+
+
+def is_single_license_expression(expression: str | None) -> bool:
+    """True only for a bare single license with no OR/AND/WITH ambiguity."""
+    if not expression:
+        return False
+    components = parse_spdx_expression(expression)
+    return len(components) == 1 and components[0]["type"] == "single"
+
+
+def cargo_license_elections(packages_report: list[dict[str, Any]]) -> dict[str, Any]:
+    """Every non-single-license package gets an explicit, catalog-backed row.
+
+    A 2026-08-24 independent review found this packet only recorded an
+    election for 3 hand-picked dual-license crates (JNA is Gradle, not
+    Cargo, but the same gap applied here) while leaving ~26 other
+    OR/AND/WITH-expression target-linked crates with no election record at
+    all -- silently treated as if some other election "covered" them. Every
+    row here comes from `scripts/cargo_election_catalog.py`
+    (`CARGO_ELECTION_CATALOG`), a hand-reviewed, per-package table; this
+    function never invents a "blanket" default election for a package
+    missing from that catalog -- a target-linked package with a non-single
+    expression and no catalog row fails generation.
+    """
+    rows: list[dict[str, Any]] = []
+    missing_catalog_entries: list[str] = []
+    accepted_count = 0
+    mandatory_count = 0
+
+    for pkg in packages_report:
+        expression = pkg.get("license")
+        if expression and is_single_license_expression(expression):
+            continue
+        key = f"{pkg['name']}@{pkg['version']}"
+        components = parse_spdx_expression(expression) if expression else None
+        catalog_entry = cargo_election_catalog.lookup(pkg["name"], pkg["version"])
+        linked = bool(pkg["linked_in_any_target"])
+        if linked:
+            mandatory_count += 1
+            if catalog_entry is None:
+                missing_catalog_entries.append(key)
+                continue
+        elif catalog_entry is None:
+            catalog_entry = {
+                "proposed_election": None,
+                "status": "NOT_APPLICABLE",
+                "reviewer": None,
+                "review_date": None,
+                "note": (
+                    "Not linked into any of the 9 committed native artifacts "
+                    "(build-dependency-only or proc-macro-and-support-closure "
+                    "only); no election is required for this release's "
+                    "distributed binaries, but the expression is still "
+                    "recorded for completeness."
+                ),
+            }
+        and_required = [
+            c["value"] for c in (components or []) if c["type"] == "single"
+        ]
+        or_groups = [c["options"] for c in (components or []) if c["type"] == "or"]
+        row = {
+            "name": pkg["name"],
+            "version": pkg["version"],
+            "expression": expression,
+            "linked_in_any_target": linked,
+            "target_membership": pkg["membership"],
+            "and_required_components": and_required,
+            "or_election_options": or_groups[0] if or_groups else [],
+            "proposed_election": catalog_entry.get("proposed_election"),
+            "status": catalog_entry.get("status"),
+            "reviewer": catalog_entry.get("reviewer"),
+            "review_date": catalog_entry.get("review_date"),
+            "note": catalog_entry.get("note"),
+        }
+        if row["status"] == "ACCEPTED":
+            accepted_count += 1
+        rows.append(row)
+
+    if missing_catalog_entries:
+        raise EvidenceError(
+            "cargo_license_elections: target-linked package(s) with a "
+            "non-single-license SPDX expression have no row in "
+            "scripts/cargo_election_catalog.CARGO_ELECTION_CATALOG (no "
+            f"blanket election is ever assumed): {sorted(missing_catalog_entries)}"
+        )
+
+    rows.sort(key=lambda r: (r["name"], r["version"]))
+    return {
+        "method": (
+            "Every package whose Cargo.toml `license` field is not a single "
+            "unambiguous SPDX license (i.e. contains OR, AND, or WITH, or is "
+            "missing) gets one row here. AND-components are always mandatory "
+            "regardless of any OR election elsewhere in the same expression "
+            "(unicode-ident's Unicode-3.0 AND-component, for example, is not "
+            "satisfied by electing either side of its (MIT OR Apache-2.0) "
+            "OR-component). A target-linked package with no catalog row "
+            "fails generation rather than being silently treated as covered "
+            "by some other package's election."
+        ),
+        "mandatory_row_count": mandatory_count,
+        "accepted_count": accepted_count,
+        "all_mandatory_elections_accepted": accepted_count == mandatory_count and mandatory_count > 0,
+        "rows": rows,
     }
 
 
@@ -888,26 +1124,71 @@ def native_artifacts_inventory() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 # Dated 2026-08-24 inspection of the actual resolved artifact bytes in the
-# local Gradle module cache (unzip -l + per-entry SHA-256), the same method
-# THIRD_PARTY_NOTICES.md has used since 2026-08-23. This is a point-in-time
-# fact about specific artifact bytes, not a live re-derivation: rerunning
-# generate_legal_evidence.py on a machine without these exact artifacts
-# resolved reproduces the *catalog* (this static table) but cannot
-# independently re-confirm the embedded-file hashes without the artifact
-# present. See docs/LEGAL_REVIEW.md \u00a78.
+# local Gradle module cache (Python zipfile, per-entry SHA-256 and size read
+# directly from the archive, not narrated by hand) -- the same method
+# THIRD_PARTY_NOTICES.md has used since 2026-08-23, now including every
+# embedded native member's own SHA-256 and inferred platform/arch, not just
+# path and size. This is a point-in-time fact about specific artifact bytes,
+# not a live re-derivation: rerunning generate_legal_evidence.py on a machine
+# without these exact artifacts resolved reproduces the *catalog* (this
+# static table) but cannot independently re-confirm the embedded-file hashes
+# without the artifact present. See docs/LEGAL_REVIEW.md \u00a78.
+#
+# `distribution_status` is one of:
+#   - "redistributed_by_kardano": this carrier's own artifact bytes (and
+#     therefore its embedded native members) end up inside a Kardano-built
+#     APK/AAR/JAR that Kardano SDK distributes.
+#   - "transitively_available": resolved in the dependency graph and
+#     reachable, but not itself redistributed by Kardano in this release.
+#   - "not_in_first_release_scope": resolved by Gradle (present in a
+#     lockfile) but the distribution channel that would ship it (e.g. a
+#     Desktop installer) is not built/distributed in this release -- see
+#     docs/LEGAL_REVIEW.md \u00a71a.
+#   - "resolved_runtime_dependency": a real runtime dependency of a
+#     distributed module, used here only where neither of the above two
+#     more specific labels applies.
+# A 2026-08-24 independent review found JNA's own catalog entry claimed "25"
+# embedded natives; the real count, enumerated here, is 27 (aix-ppc/
+# aix-ppc64 were previously missed).
 MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
     {
         "maven_coordinate": "org.hyperledger.identus:bip32-ed25519-android:1.8.8",
         "carrier_kind": "Android .aar",
         "license": "Apache-2.0 (wrapper POM); embedded native's own obligations OPEN",
+        "distribution_status": "redistributed_by_kardano",
         "distributed_by_kardano": True,
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
+        "artifact_sha256": "65f047d39bf88991892daf685f1bfeda644e2195d803857909cc7672c6aa09d8",
         "embedded_natives": [
-            {"path": "jni/arm64-v8a/libuniffi_ed25519_bip32_wrapper.so", "size_bytes": 696072},
-            {"path": "jni/armeabi-v7a/libuniffi_ed25519_bip32_wrapper.so", "size_bytes": 523692},
-            {"path": "jni/x86/libuniffi_ed25519_bip32_wrapper.so", "size_bytes": 708316},
-            {"path": "jni/x86_64/libuniffi_ed25519_bip32_wrapper.so", "size_bytes": 668632},
+            {
+                "path": "jni/arm64-v8a/libuniffi_ed25519_bip32_wrapper.so",
+                "size_bytes": 696072,
+                "sha256": "ca75e1042e62c61fd4382b0d8cbe5d86dd1d41e7d58f1f1a89b153ea0d1efc5a",
+                "platform": "Android",
+                "arch": "arm64-v8a",
+            },
+            {
+                "path": "jni/armeabi-v7a/libuniffi_ed25519_bip32_wrapper.so",
+                "size_bytes": 523692,
+                "sha256": "ebb3f562f7c7ad0a2d6a320fec510f993c7526500d59db9b96bb95fa6109a922",
+                "platform": "Android",
+                "arch": "armeabi-v7a",
+            },
+            {
+                "path": "jni/x86/libuniffi_ed25519_bip32_wrapper.so",
+                "size_bytes": 708316,
+                "sha256": "1d43aedf4eb0af8a75f192a6471f99ec2f388d204d03d1200d522cceed7bc2e2",
+                "platform": "Android",
+                "arch": "x86",
+            },
+            {
+                "path": "jni/x86_64/libuniffi_ed25519_bip32_wrapper.so",
+                "size_bytes": 668632,
+                "sha256": "8850debc71aa6aa6313e4e0dc730d99a0d0993d714041b2360d277ac37e91e88",
+                "platform": "Android",
+                "arch": "x86_64",
+            },
         ],
         "note": (
             "Upstream has not published a win32-x86-64 build "
@@ -923,14 +1204,40 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "maven_coordinate": "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5",
         "carrier_kind": "JVM .jar",
         "license": "Apache-2.0 (wrapper) + ISC (bundled libsodium binaries)",
+        "distribution_status": "redistributed_by_kardano",
         "distributed_by_kardano": True,
         "windows_native_available_upstream": True,
         "inspected_2026_08_24": True,
+        "artifact_sha256": "63d7b2ea35c6fa57636931977f25929d4f2cac9513411f16337a244b7ddc239b",
         "embedded_natives": [
-            {"path": "libdynamic-linux-arm64-libsodium.so", "size_bytes": 358168},
-            {"path": "libdynamic-linux-x86-64-libsodium.so", "size_bytes": 524432},
-            {"path": "libdynamic-macos.dylib", "size_bytes": 829200},
-            {"path": "libdynamic-msvc-x86-64-libsodium.dll", "size_bytes": 346624},
+            {
+                "path": "libdynamic-linux-arm64-libsodium.so",
+                "size_bytes": 358168,
+                "sha256": "b35408a78e348bc173f3aac3c87c4a6beff9a9b6dfbb932ec7aa54485dc50569",
+                "platform": "Linux",
+                "arch": "arm64",
+            },
+            {
+                "path": "libdynamic-linux-x86-64-libsodium.so",
+                "size_bytes": 524432,
+                "sha256": "0e8b1a9f0cad585f4bf87c6b40815eafb00b63f55dc93bf3bb033790c939f918",
+                "platform": "Linux",
+                "arch": "x86-64",
+            },
+            {
+                "path": "libdynamic-macos.dylib",
+                "size_bytes": 829200,
+                "sha256": "ccbf9230dd12f84c5b1e1a6e5cb493210cee49c1026aafe1e7634e331bd1f60e",
+                "platform": "macOS",
+                "arch": "universal (arm64+x86-64 fat binary; not separately hashed per slice)",
+            },
+            {
+                "path": "libdynamic-msvc-x86-64-libsodium.dll",
+                "size_bytes": 346624,
+                "sha256": "3ee699dcd60528a96d25a7a585a1388e127b01a2f45a51a134cb8ce667b2348e",
+                "platform": "Windows",
+                "arch": "x86-64",
+            },
         ],
         "note": (
             "Windows libsodium .dll ships inside this jar; distinct from the "
@@ -941,14 +1248,40 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "maven_coordinate": "com.goterl:lazysodium-android:5.2.0",
         "carrier_kind": "Android .aar",
         "license": "MPL-2.0 (wrapper, file-level obligation OPEN) + ISC (bundled libsodium binaries)",
+        "distribution_status": "redistributed_by_kardano",
         "distributed_by_kardano": True,
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
+        "artifact_sha256": "b5378c1d9db2573d61b304e89cf83db187a05c3e4ff081d9b2ef3d0bb00ca314",
         "embedded_natives": [
-            {"path": "jni/arm64-v8a/libsodium.so", "size_bytes": 332824},
-            {"path": "jni/armeabi-v7a/libsodium.so", "size_bytes": 341648},
-            {"path": "jni/x86/libsodium.so", "size_bytes": 467596},
-            {"path": "jni/x86_64/libsodium.so", "size_bytes": 427312},
+            {
+                "path": "jni/arm64-v8a/libsodium.so",
+                "size_bytes": 332824,
+                "sha256": "4ecfcb35a3b9349914b877139e5ff483b27898b6ec276478d8cc76d28af581e7",
+                "platform": "Android",
+                "arch": "arm64-v8a",
+            },
+            {
+                "path": "jni/armeabi-v7a/libsodium.so",
+                "size_bytes": 341648,
+                "sha256": "0a6f026dc74f7eb6355100ca280e647e250d449e4b4538aeb987728f272a7105",
+                "platform": "Android",
+                "arch": "armeabi-v7a",
+            },
+            {
+                "path": "jni/x86/libsodium.so",
+                "size_bytes": 467596,
+                "sha256": "78cf8c1f9221732975b2d1adf895620a65a87492d62a20be365a467af777071c",
+                "platform": "Android",
+                "arch": "x86",
+            },
+            {
+                "path": "jni/x86_64/libsodium.so",
+                "size_bytes": 427312,
+                "sha256": "fa59aee46baccf8b76ed4d9c92a45b9e50a5c45fe0da97ff12feb2be911241e9",
+                "platform": "Android",
+                "arch": "x86_64",
+            },
         ],
         "note": "Android-only carrier; no Windows binary is bundled.",
     },
@@ -956,16 +1289,37 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "maven_coordinate": "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6",
         "carrier_kind": "JVM .jar (Desktop app runtime classpath)",
         "license": "Apache-2.0",
-        "distributed_by_kardano": True,
+        # Desktop MSI/DEB/DMG installers are not built or distributed in this
+        # release (docs/LEGAL_REVIEW.md \u00a71a) even though desktopApp/
+        # build.gradle.kts can configure them -- this coordinate is resolved
+        # (real, locked) but not shipped to any end user in this release, so
+        # it is NOT "redistributed_by_kardano" despite `distributed_by_kardano`
+        # historically (incorrectly) implying that.
+        "distribution_status": "not_in_first_release_scope",
+        "distributed_by_kardano": False,
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
+        "artifact_sha256": "aec37b44e8dabf4de620068146769655748be3971bf868614e5ec6b240b2ac35",
         "embedded_natives": [
-            {"path": "libskiko-macos-arm64.dylib", "size_bytes": 21455568},
-            {"path": "libskiko-macos-x64.dylib", "size_bytes": 22206704},
+            {
+                "path": "libskiko-macos-arm64.dylib",
+                "size_bytes": 21455568,
+                "sha256": "f7676395835316696f9b2a762705c307cbdd703545a02fc1b1154a13df96fb64",
+                "platform": "macOS",
+                "arch": "arm64",
+            },
+            {
+                "path": "libskiko-macos-x64.dylib",
+                "size_bytes": 22206704,
+                "sha256": "27cce35c02a7465aca33e6fe2e63823fc49a5faf860304f5a1295d1187c9de6a",
+                "platform": "macOS",
+                "arch": "x86-64",
+            },
         ],
         "note": (
             "Compose Multiplatform/Skia native renderer for the desktopApp "
-            "sample only; not part of any SDK module. Only the macOS-arm64 "
+            "sample only; not part of any SDK module, and no Desktop installer "
+            "is built or distributed in this release. Only the macOS-arm64 "
             "runtime variant is currently resolved in this repository's "
             "desktopApp/gradle.lockfile; other Skiko OS/arch variants are not "
             "reviewed here."
@@ -975,33 +1329,95 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "maven_coordinate": "net.java.dev.jna:jna:5.19.1",
         "carrier_kind": "JVM/Android jar (also used directly by crypto-signing-backend)",
         "license": "Apache-2.0 OR LGPL-2.1-or-later (Kardano SDK elects Apache-2.0)",
+        "distribution_status": "redistributed_by_kardano",
         "distributed_by_kardano": True,
         "windows_native_available_upstream": True,
         "inspected_2026_08_24": True,
-        "embedded_native_count": 25,
-        "embedded_natives_note": (
-            "25 platform-specific libjnidispatch native binaries bundled inside "
-            "the single jna-5.19.1.jar (com/sun/jna/<platform>/libjnidispatch.*); "
-            "see docs/DECISIONS or re-run `unzip -l jna-5.19.1.jar` to enumerate "
-            "them all. Only one loads at runtime per host; the jar as distributed "
-            "contains all 25. Do not classify JNA as a source-only dependency."
+        "artifact_sha256": "4fb141dd8ef6b0585ffceea4bc49602fbc6312fa977e2c488794ea3e6aafecae",
+        "embedded_native_count": 27,
+        "embedded_natives": [
+            {"path": "com/sun/jna/aix-ppc/libjnidispatch.a", "size_bytes": 613721, "sha256": "f33d3b4c2ca35fac8befc502b408e5b5851f8850c397d59f0094459fe455d0c1", "platform": "AIX", "arch": "ppc"},
+            {"path": "com/sun/jna/aix-ppc64/libjnidispatch.a", "size_bytes": 657335, "sha256": "be8a1c6a282c637cf0ce217c331ee82a3643c59ef166fdbaabf1f27c3d7fd0dc", "platform": "AIX", "arch": "ppc64"},
+            {"path": "com/sun/jna/darwin-aarch64/libjnidispatch.jnilib", "size_bytes": 159800, "sha256": "70c9af22ba3ce12128881b4654422ce69a6f96fc238333731cf718601b536245", "platform": "macOS", "arch": "aarch64"},
+            {"path": "com/sun/jna/darwin-x86-64/libjnidispatch.jnilib", "size_bytes": 109824, "sha256": "69cca8bbe2f0ff3fc412481e73333d5b49fc3a1ba2ff564a0af9495d7e6b531d", "platform": "macOS", "arch": "x86-64"},
+            {"path": "com/sun/jna/dragonflybsd-x86-64/libjnidispatch.so", "size_bytes": 116880, "sha256": "c0c6e64b476d726d86e996af1397491bbff9ccadcba1e0c4639a8f1ae5454062", "platform": "DragonFlyBSD", "arch": "x86-64"},
+            {"path": "com/sun/jna/freebsd-aarch64/libjnidispatch.so", "size_bytes": 116008, "sha256": "bca4aece4b834fd04301d5896482f657d06d6860e2d03089c0cc78eea65dd492", "platform": "FreeBSD", "arch": "aarch64"},
+            {"path": "com/sun/jna/freebsd-x86-64/libjnidispatch.so", "size_bytes": 121040, "sha256": "3c4d14c74bb6798c76b43cad4395b8bdaa9181a7991e160a376f87bb1ab13ced", "platform": "FreeBSD", "arch": "x86-64"},
+            {"path": "com/sun/jna/freebsd-x86/libjnidispatch.so", "size_bytes": 105372, "sha256": "784b2a955b1504dec96fa8b87972bcb2815ecfa818fe5c2e57ed9073cab0592c", "platform": "FreeBSD", "arch": "x86"},
+            {"path": "com/sun/jna/linux-aarch64/libjnidispatch.so", "size_bytes": 162288, "sha256": "f18fa2c973b2b9ea2dfa6d36d397e0bb743aa2aa09876e2a3b8c87a5e67bf8b6", "platform": "Linux", "arch": "aarch64"},
+            {"path": "com/sun/jna/linux-arm/libjnidispatch.so", "size_bytes": 130788, "sha256": "b2a32135dea251fde4027f536345420001bc921e21baf82b2e01ce2753da2097", "platform": "Linux", "arch": "arm"},
+            {"path": "com/sun/jna/linux-armel/libjnidispatch.so", "size_bytes": 139472, "sha256": "d9db010b0336cdbf643c38921c1c04519f811bee0f45824b6872661a25d64ed2", "platform": "Linux", "arch": "armel"},
+            {"path": "com/sun/jna/linux-loongarch64/libjnidispatch.so", "size_bytes": 341968, "sha256": "6c55d9ec3efaaee1843795648246b3fe52de09d3990984c5b8a580cc803c6bc9", "platform": "Linux", "arch": "loongarch64"},
+            {"path": "com/sun/jna/linux-mips64el/libjnidispatch.so", "size_bytes": 144056, "sha256": "0025cd4345faec5a7d9fc8c88f187016dbaf4a6ef411cd6c8907e199d952528d", "platform": "Linux", "arch": "mips64el"},
+            {"path": "com/sun/jna/linux-ppc/libjnidispatch.so", "size_bytes": 127724, "sha256": "fbde8c5b108934e75c7008562e95b209535bf4996b3bc246ec5e425a0757a903", "platform": "Linux", "arch": "ppc"},
+            {"path": "com/sun/jna/linux-ppc64le/libjnidispatch.so", "size_bytes": 145072, "sha256": "aaa31a2220e270f69259d930540c5682b1bd662a6d774918605e62cd562d5d11", "platform": "Linux", "arch": "ppc64le"},
+            {"path": "com/sun/jna/linux-riscv64/libjnidispatch.so", "size_bytes": 100064, "sha256": "f817ac611184e31fd84ac2d223ff8f9312300fbc025adfb5cadbfefb8d1a2c13", "platform": "Linux", "arch": "riscv64"},
+            {"path": "com/sun/jna/linux-s390x/libjnidispatch.so", "size_bytes": 136976, "sha256": "b31df7050aa22907e5caae2ef81db83e2900b7b6e683080f6f5681373a71e400", "platform": "Linux", "arch": "s390x"},
+            {"path": "com/sun/jna/linux-x86-64/libjnidispatch.so", "size_bytes": 134447, "sha256": "ca07953d595210082339753d9e818a1fdb40509a17a41914d9a2cb0d2df6b6af", "platform": "Linux", "arch": "x86-64"},
+            {"path": "com/sun/jna/linux-x86/libjnidispatch.so", "size_bytes": 123384, "sha256": "546ec7cc6548de411cc52a1069295301308437080be014cda2346ccd0f99bf55", "platform": "Linux", "arch": "x86"},
+            {"path": "com/sun/jna/openbsd-x86-64/libjnidispatch.so", "size_bytes": 98728, "sha256": "ee3b7bfa0887b7388ad598dea98281ae40907bafa8cf56b406427aecd3d2ecdd", "platform": "OpenBSD", "arch": "x86-64"},
+            {"path": "com/sun/jna/sunos-sparc/libjnidispatch.so", "size_bytes": 231108, "sha256": "5ae26c1d50dd6836d0bafb1af2a6c39eb4084be42f0a05da0645d31feed1efad", "platform": "Solaris", "arch": "sparc"},
+            {"path": "com/sun/jna/sunos-sparcv9/libjnidispatch.so", "size_bytes": 166976, "sha256": "ccd720895968a885d423facf63615c7f16490f94d946ecb5fefdd4951c62297c", "platform": "Solaris", "arch": "sparcv9"},
+            {"path": "com/sun/jna/sunos-x86-64/libjnidispatch.so", "size_bytes": 169992, "sha256": "4a0b0b11369d4f88437700e8ee3557cb518ec017bfe2df3bd49faf82e60e8f8e", "platform": "Solaris", "arch": "x86-64"},
+            {"path": "com/sun/jna/sunos-x86/libjnidispatch.so", "size_bytes": 153152, "sha256": "fdba3f2f4220fb407c7841b2f49efd4fe1c06dca26c9768513e13461ed1520c5", "platform": "Solaris", "arch": "x86"},
+            {"path": "com/sun/jna/win32-aarch64/jnidispatch.dll", "size_bytes": 274432, "sha256": "b8f98be314234cf12b5b46c29652f70c0f6abb93ae19b63d3fe2692062aa699d", "platform": "Windows", "arch": "aarch64"},
+            {"path": "com/sun/jna/win32-x86-64/jnidispatch.dll", "size_bytes": 273408, "sha256": "5a7ff949f6d93d86491eb5b26b1cfc60051168a60622650224b89995ac420023", "platform": "Windows", "arch": "x86-64"},
+            {"path": "com/sun/jna/win32-x86/jnidispatch.dll", "size_bytes": 226304, "sha256": "752d597cee7e95cb517327146bf42f124c0d6c0bc48b3ecc3b1b3b0531a52f44", "platform": "Windows", "arch": "x86"},
+        ],
+        "note": (
+            "JNA is both a direct SDK dependency and its own native carrier. "
+            "Only one of these 27 platform-specific libjnidispatch binaries "
+            "loads at runtime per host; the jar as distributed contains all "
+            "27. A prior version of this catalog said 25 -- aix-ppc and "
+            "aix-ppc64 were missed; corrected here after a full zip-member "
+            "enumeration. Do not classify JNA as a source-only dependency."
         ),
-        "note": "JNA is both a direct SDK dependency and its own native carrier.",
     },
+)
+
+VALID_CARRIER_DISTRIBUTION_STATUSES = (
+    "resolved_runtime_dependency",
+    "transitively_available",
+    "redistributed_by_kardano",
+    "not_in_first_release_scope",
 )
 
 
 def maven_native_carriers_inventory() -> dict[str, Any]:
+    for carrier in MAVEN_NATIVE_CARRIERS:
+        status = carrier.get("distribution_status")
+        if status not in VALID_CARRIER_DISTRIBUTION_STATUSES:
+            raise EvidenceError(
+                f"{carrier['maven_coordinate']}: distribution_status {status!r} "
+                f"is not one of {VALID_CARRIER_DISTRIBUTION_STATUSES}"
+            )
+        for member in carrier["embedded_natives"]:
+            for field in ("path", "size_bytes", "sha256", "platform", "arch"):
+                if field not in member:
+                    raise EvidenceError(
+                        f"{carrier['maven_coordinate']}: embedded native "
+                        f"{member.get('path')!r} is missing required field {field!r}"
+                    )
+        count = carrier.get("embedded_native_count")
+        if count is not None and count != len(carrier["embedded_natives"]):
+            raise EvidenceError(
+                f"{carrier['maven_coordinate']}: embedded_native_count {count} != "
+                f"len(embedded_natives) {len(carrier['embedded_natives'])}"
+            )
     return {
         "method": (
             "Point-in-time inspection (2026-08-24) of the actual resolved "
-            "artifact bytes in the local Gradle module cache: unzip -l for the "
-            "embedded native member list, sizes read directly from the archive "
-            "directory. This table is static; it is not re-derived from a live "
-            "artifact fetch on every run (see docs/LEGAL_REVIEW.md \u00a78 for why, "
-            "and the re-verification command). Distinct from "
+            "artifact bytes in the local Gradle module cache: Python `zipfile` "
+            "for the embedded native member list, with size and SHA-256 read "
+            "directly from each archive member's own extracted bytes (not "
+            "estimated, not copied from any upstream release notes). This "
+            "table is static; it is not re-derived from a live artifact fetch "
+            "on every run (see docs/LEGAL_REVIEW.md \u00a78 for why, and the "
+            "re-verification command). Distinct from "
             "crypto-signing-backend/CHECKSUMS.sha256, which lists only "
-            "first-party binaries built from this repository's own Rust crate."
+            "first-party binaries built from this repository's own Rust crate. "
+            "`distribution_status` is one of "
+            f"{VALID_CARRIER_DISTRIBUTION_STATUSES}."
         ),
         "carriers": list(MAVEN_NATIVE_CARRIERS),
     }
@@ -1045,8 +1461,47 @@ def bouncycastle_license_source_inventory() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Scope binding (subject tree vs evidence-packet tree)
+# Scope binding: two-commit seal (evidence-content commit -> seal commit)
 # ---------------------------------------------------------------------------
+#
+# A single self-generated `scope_binding.json` written in the SAME commit as
+# the evidence it describes cannot prove anything: it would just be this
+# script's own unverified claim about "whatever HEAD happens to be right
+# now", re-derived fresh on every run, with no independent way to detect
+# later drift (e.g. a later commit quietly editing an already-sealed
+# evidence file). A 2026-08-24 independent review named this gap explicitly.
+#
+# The two-commit pattern this module implements instead:
+#
+# 1. Evidence-content commit ("commit A"): `python3 generate_legal_evidence.py`
+#    (no flag) writes every file in `evidence_output_files()` -- NOT
+#    including `scope_binding.json` -- against the CURRENT worktree/lock
+#    state, and computes `LEGAL_EVIDENCE_DIGEST.txt` over exactly those
+#    files. This is committed as a normal commit; its parent is the
+#    immutable "subject-source commit" (the actual code/lock state that was
+#    inventoried -- crypto-signing-backend/Cargo.lock, every
+#    */gradle.lockfile, CHECKSUMS.sha256, NOTICE, LICENSES/*.txt).
+# 2. Seal commit ("commit B"): `python3 generate_legal_evidence.py --seal`,
+#    run with a clean worktree at commit A, reads back commit A's own hash
+#    (`git rev-parse HEAD`) and commit A's parent (the subject-source
+#    commit), records a SHA-256 of every evidence-content file's bytes
+#    (`sealed_evidence_digests`), and writes `scope_binding.json`. It then
+#    rewrites `LEGAL_EVIDENCE_DIGEST.txt` to add a `scope_binding.json_sha256=`
+#    line -- the manifest now covers the seal file's own bytes, but (per the
+#    same self-reference argument above) does not attempt to hash itself.
+#
+# `scripts/check_release_evidence.py`'s `check_scope_binding_seal()` verifies
+# this binding independently of regeneration: it confirms `evidence_commit`
+# and `subject_commit` exist as real git objects, that `subject_commit` is
+# EXACTLY `evidence_commit`'s immediate parent, that `evidence_commit` is an
+# ancestor of (or equal to) current HEAD, and that every evidence file's
+# CURRENT bytes match both the digest recorded here AND the actual bytes
+# committed at `evidence_commit`'s tree (`git show <evidence_commit>:<path>`)
+# -- so an evidence file edited by some later commit without a re-seal is
+# caught even though `check_evidence_is_freshly_regenerable()` would not
+# itself notice (regeneration only compares against the CURRENT tracked
+# tree, which is exactly the self-reference this two-commit design avoids
+# relying on for the seal itself).
 
 
 def git(*args: str) -> str:
@@ -1056,23 +1511,89 @@ def git(*args: str) -> str:
     return result.stdout.strip()
 
 
-def scope_binding() -> dict[str, Any]:
-    # This is the commit/tree the generator ran against -- necessarily the
-    # PARENT of whatever commit later carries these generated files, since a
-    # commit cannot record its own resulting tree hash. See "binding design"
-    # in docs/LEGAL_REVIEW.md \u00a76 for why this is not, and cannot be, made
-    # self-referential.
+def evidence_output_files() -> dict[str, Path]:
+    """The evidence-content files sealed by `scope_binding.json`.
+
+    Deliberately excludes `scope_binding.json` itself (written only by
+    `--seal`, in a later commit) and `LEGAL_EVIDENCE_DIGEST.txt` (rewritten
+    by `--seal` to add the seal file's own digest line, so its bytes
+    legitimately differ between the evidence-content commit and every
+    commit from the seal commit onward).
+    """
+    return {
+        "gradle_dependency_inventory.json": EVIDENCE_DIR / "gradle_dependency_inventory.json",
+        "gradle_license_inventory.json": EVIDENCE_DIR / "gradle_license_inventory.json",
+        "cargo_dependency_inventory.json": EVIDENCE_DIR / "cargo_dependency_inventory.json",
+        "uniffi_bindings_inventory.json": EVIDENCE_DIR / "uniffi_bindings_inventory.json",
+        "native_artifacts_inventory.json": EVIDENCE_DIR / "native_artifacts_inventory.json",
+        "maven_native_carriers_inventory.json": EVIDENCE_DIR / "maven_native_carriers_inventory.json",
+        "bouncycastle_license_source.json": EVIDENCE_DIR / "bouncycastle_license_source.json",
+    }
+
+
+def seal_scope_binding() -> dict[str, Any]:
+    """Build `scope_binding.json`'s content. Caller (`main --seal`) must run
+    this with a clean worktree at the evidence-content commit; see the
+    module docstring above for the two-commit design this implements."""
+    status = git("status", "--porcelain")
+    if status:
+        raise EvidenceError(
+            "--seal requires a clean worktree at the already-committed "
+            "evidence-content commit (git status --porcelain is non-empty):\n"
+            f"{status}"
+        )
+    scope_binding_path = EVIDENCE_DIR / "scope_binding.json"
+    if scope_binding_path.exists():
+        raise EvidenceError(
+            "docs/evidence/scope_binding.json already exists -- HEAD is "
+            "already sealed. Delete it (and reseal after committing new "
+            "evidence content) if this is meant to re-seal, rather than "
+            "sealing a second time in place."
+        )
+    outputs = evidence_output_files()
+    missing = [name for name, path in sorted(outputs.items()) if not path.is_file()]
+    if missing:
+        raise EvidenceError(
+            f"--seal: expected evidence file(s) missing, run generate_legal_evidence.py "
+            f"(without --seal) first: {missing}"
+        )
+
+    evidence_commit = git("rev-parse", "HEAD")
+    evidence_tree = git("rev-parse", "HEAD^{tree}")
+    try:
+        subject_commit = git("rev-parse", "HEAD^")
+        subject_tree = git("rev-parse", "HEAD^^{tree}")
+    except subprocess.CalledProcessError as exc:
+        raise EvidenceError(
+            "--seal: HEAD has no parent commit to bind as the subject-source "
+            "commit (is this the repository's very first commit?)"
+        ) from exc
+
     return {
         "note": (
-            "subject_commit/subject_tree are the repository HEAD at generation "
-            "time (the parent of whatever commit carries this evidence). They "
-            "are NOT the hash of the commit that will contain this file -- a "
-            "commit cannot know its own resulting tree hash in advance. Compare "
-            "against `git log -1 --format=%H` / `%T` on the commit BEFORE the "
-            "one that added/updated docs/evidence/ to confirm this binding."
+            "Two-commit seal (see scripts/generate_legal_evidence.py's module "
+            "docstring 'Scope binding'). evidence_commit/evidence_tree are "
+            "the commit/tree that carried the evidence-content files listed "
+            "in sealed_evidence_digests (this commit's own hash, read back "
+            "via `git rev-parse HEAD` while sealing). subject_commit/"
+            "subject_tree are that commit's immediate parent -- the "
+            "immutable subject-source commit actually inventoried "
+            "(crypto-signing-backend/Cargo.lock, every */gradle.lockfile, "
+            "CHECKSUMS.sha256, NOTICE, LICENSES/*.txt as they existed there). "
+            "sealed_evidence_digests is the SHA-256 of each evidence file's "
+            "bytes as committed at evidence_commit; "
+            "scripts/check_release_evidence.py's check_scope_binding_seal() "
+            "independently recomputes these from both the current worktree "
+            "and `git show <evidence_commit>:<path>` and fails on any "
+            "mismatch, ancestry violation, or non-immediate-parent binding."
         ),
-        "subject_commit": git("rev-parse", "HEAD"),
-        "subject_tree": git("rev-parse", "HEAD^{tree}"),
+        "evidence_commit": evidence_commit,
+        "evidence_tree": evidence_tree,
+        "subject_commit": subject_commit,
+        "subject_tree": subject_tree,
+        "sealed_evidence_digests": {
+            name: sha256_file(path) for name, path in sorted(outputs.items())
+        },
     }
 
 
@@ -1124,17 +1645,8 @@ def write_digest_file(modules: tuple[str, ...], generated: dict[str, Path]) -> N
     )
 
 
-def main() -> int:
-    outputs = {
-        "gradle_dependency_inventory.json": EVIDENCE_DIR / "gradle_dependency_inventory.json",
-        "gradle_license_inventory.json": EVIDENCE_DIR / "gradle_license_inventory.json",
-        "cargo_dependency_inventory.json": EVIDENCE_DIR / "cargo_dependency_inventory.json",
-        "uniffi_bindings_inventory.json": EVIDENCE_DIR / "uniffi_bindings_inventory.json",
-        "native_artifacts_inventory.json": EVIDENCE_DIR / "native_artifacts_inventory.json",
-        "maven_native_carriers_inventory.json": EVIDENCE_DIR / "maven_native_carriers_inventory.json",
-        "bouncycastle_license_source.json": EVIDENCE_DIR / "bouncycastle_license_source.json",
-        "scope_binding.json": EVIDENCE_DIR / "scope_binding.json",
-    }
+def run_generate() -> int:
+    outputs = evidence_output_files()
     try:
         modules = discover_gradle_modules()
         gradle_report = gradle_dependency_inventory(modules)
@@ -1151,13 +1663,60 @@ def main() -> int:
         write_json(
             outputs["bouncycastle_license_source.json"], bouncycastle_license_source_inventory()
         )
-        write_json(outputs["scope_binding.json"], scope_binding())
         write_digest_file(modules, outputs)
     except (EvidenceError, FileNotFoundError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"legal evidence generation failed: {exc}", file=sys.stderr)
         return 1
     print(f"legal evidence written to {EVIDENCE_DIR.relative_to(REPO_ROOT)}/")
+    print(
+        "NOTE: docs/evidence/scope_binding.json is not written by this "
+        "command. Commit the files above first, then run "
+        "'python3 scripts/generate_legal_evidence.py --seal' against that "
+        "clean commit -- see the 'Scope binding' module docstring above."
+    )
     return 0
+
+
+def run_seal() -> int:
+    outputs = evidence_output_files()
+    scope_binding_path = EVIDENCE_DIR / "scope_binding.json"
+    try:
+        binding = seal_scope_binding()
+        write_json(scope_binding_path, binding)
+        sealed_outputs = dict(outputs)
+        sealed_outputs["scope_binding.json"] = scope_binding_path
+        write_digest_file(discover_gradle_modules(), sealed_outputs)
+    except (EvidenceError, FileNotFoundError, ValueError, subprocess.CalledProcessError) as exc:
+        print(f"legal evidence seal failed: {exc}", file=sys.stderr)
+        return 1
+    print(
+        f"docs/evidence/scope_binding.json sealed: evidence_commit="
+        f"{binding['evidence_commit']} subject_commit={binding['subject_commit']}"
+    )
+    print(
+        "Commit docs/evidence/scope_binding.json and the updated "
+        "LEGAL_EVIDENCE_DIGEST.txt as the seal commit."
+    )
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--seal",
+        action="store_true",
+        help=(
+            "Write docs/evidence/scope_binding.json binding the current, "
+            "already-committed, clean HEAD (as 'evidence_commit') to its "
+            "immediate parent commit (as 'subject_commit'). Run this AFTER "
+            "committing the output of a normal (non---seal) run. See the "
+            "'Scope binding' module docstring above."
+        ),
+    )
+    args = parser.parse_args()
+    if args.seal:
+        return run_seal()
+    return run_generate()
 
 
 if __name__ == "__main__":

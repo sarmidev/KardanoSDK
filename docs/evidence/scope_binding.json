@@ -1,5 +1,0 @@
-{
-  "note": "subject_commit/subject_tree are the repository HEAD at generation time (the parent of whatever commit carries this evidence). They are NOT the hash of the commit that will contain this file -- a commit cannot know its own resulting tree hash in advance. Compare against `git log -1 --format=%H` / `%T` on the commit BEFORE the one that added/updated docs/evidence/ to confirm this binding.",
-  "subject_commit": "f0b538fb032855ccf792685655ffcd51f4c7ef13",
-  "subject_tree": "9c45fbf5d881b57d37144f4e9c1de2fe7f4c15e9"
-}

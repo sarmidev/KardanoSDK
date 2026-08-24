@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -408,6 +410,29 @@ class RealTreeGenerationTests(unittest.TestCase):
                 return
         self.fail("unicode-ident not found in cargo dependency inventory")
 
+    def test_maven_native_carriers_have_valid_distribution_status(self) -> None:
+        report = evidence.maven_native_carriers_inventory()
+        for carrier in report["carriers"]:
+            self.assertIn(
+                carrier["distribution_status"], evidence.VALID_CARRIER_DISTRIBUTION_STATUSES
+            )
+
+    def test_jna_carrier_has_27_embedded_natives_with_full_fields(self) -> None:
+        report = evidence.maven_native_carriers_inventory()
+        jna = next(
+            c for c in report["carriers"] if c["maven_coordinate"].startswith("net.java.dev.jna")
+        )
+        self.assertEqual(len(jna["embedded_natives"]), 27)
+        for member in jna["embedded_natives"]:
+            for field in ("path", "size_bytes", "sha256", "platform", "arch"):
+                self.assertIn(field, member)
+                self.assertTrue(member[field])
+
+    def test_skiko_carrier_is_not_marked_redistributed(self) -> None:
+        report = evidence.maven_native_carriers_inventory()
+        skiko = next(c for c in report["carriers"] if "skiko" in c["maven_coordinate"])
+        self.assertEqual(skiko["distribution_status"], "not_in_first_release_scope")
+
     def test_uniffi_bindings_inventory_lists_discovered_files(self) -> None:
         report = evidence.uniffi_bindings_inventory()
         self.assertEqual(
@@ -421,6 +446,12 @@ class RealTreeGenerationTests(unittest.TestCase):
         self.assertTrue(
             any(gav.startswith("org.slf4j:slf4j-api:") for gav in report["mit_only_coordinates"])
         )
+
+    def test_gradle_license_inventory_has_zero_unresolved(self) -> None:
+        gradle_report = evidence.gradle_dependency_inventory(self.modules)
+        report = evidence.gradle_license_inventory(gradle_report)
+        self.assertEqual(report["unresolved_count"], 0)
+        self.assertEqual(report["unresolved"], [])
 
     def test_generation_is_deterministic_across_two_runs(self) -> None:
         gradle_report = evidence.gradle_dependency_inventory(self.modules)
@@ -445,11 +476,344 @@ class RealTreeGenerationTests(unittest.TestCase):
             evidence.native_artifacts_inventory(),
             evidence.maven_native_carriers_inventory(),
             evidence.bouncycastle_license_source_inventory(),
-            evidence.scope_binding(),
         ):
             text = json.dumps(report)
             self.assertNotIn(absolute_marker, text)
             self.assertNotIn(str(Path.home()), text)
+
+
+class SpdxExpressionParsingTests(unittest.TestCase):
+    def test_single_license_is_not_an_election(self) -> None:
+        self.assertTrue(evidence.is_single_license_expression("MIT"))
+        self.assertTrue(evidence.is_single_license_expression("Apache-2.0"))
+
+    def test_or_expression_needs_election(self) -> None:
+        self.assertFalse(evidence.is_single_license_expression("MIT OR Apache-2.0"))
+        components = evidence.parse_spdx_expression("MIT OR Apache-2.0")
+        self.assertEqual(components, [{"type": "or", "options": ["MIT", "Apache-2.0"]}])
+
+    def test_legacy_slash_syntax_is_an_or_election(self) -> None:
+        self.assertFalse(evidence.is_single_license_expression("MIT/Apache-2.0"))
+        components = evidence.parse_spdx_expression("MIT/Apache-2.0")
+        self.assertEqual(components, [{"type": "or", "options": ["MIT", "Apache-2.0"]}])
+
+    def test_and_component_with_or_election(self) -> None:
+        components = evidence.parse_spdx_expression("(MIT OR Apache-2.0) AND Unicode-3.0")
+        self.assertEqual(
+            components,
+            [
+                {"type": "or", "options": ["MIT", "Apache-2.0"]},
+                {"type": "single", "value": "Unicode-3.0"},
+            ],
+        )
+        self.assertFalse(evidence.is_single_license_expression("(MIT OR Apache-2.0) AND Unicode-3.0"))
+
+    def test_with_exception_stays_attached_to_its_option(self) -> None:
+        components = evidence.parse_spdx_expression(
+            "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
+        )
+        self.assertEqual(len(components), 1)
+        self.assertEqual(
+            components[0]["options"],
+            ["Apache-2.0 WITH LLVM-exception", "Apache-2.0", "MIT"],
+        )
+
+    def test_empty_expression_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.parse_spdx_expression("")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.parse_spdx_expression(None)  # type: ignore[arg-type]
+
+    def test_unbalanced_parens_raise(self) -> None:
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.parse_spdx_expression("(MIT OR Apache-2.0 AND Unicode-3.0")
+
+
+class CargoLicenseElectionTests(unittest.TestCase):
+    def _pkg(self, name: str, version: str, license_expr: str | None, linked: bool) -> dict:
+        return {
+            "name": name,
+            "version": version,
+            "license": license_expr,
+            "linked_in_any_target": linked,
+            "membership": {"x86_64-unknown-linux-gnu": ["linked_into_compiled_artifact"]}
+            if linked
+            else {},
+        }
+
+    def test_single_license_package_produces_no_row(self) -> None:
+        packages = [self._pkg("bytes", "1.12.1", "MIT", True)]
+        report = evidence.cargo_license_elections(packages)
+        self.assertEqual(report["rows"], [])
+        self.assertEqual(report["mandatory_row_count"], 0)
+
+    def test_known_dual_license_linked_package_uses_catalog_row(self) -> None:
+        packages = [self._pkg("anyhow", "1.0.103", "MIT OR Apache-2.0", True)]
+        report = evidence.cargo_license_elections(packages)
+        self.assertEqual(len(report["rows"]), 1)
+        row = report["rows"][0]
+        self.assertEqual(row["status"], "OPEN")
+        self.assertEqual(row["proposed_election"], "Apache-2.0")
+        self.assertEqual(row["or_election_options"], ["MIT", "Apache-2.0"])
+
+    def test_unknown_linked_package_with_or_expression_raises(self) -> None:
+        packages = [self._pkg("brand-new-crate", "0.1.0", "MIT OR Apache-2.0", True)]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.cargo_license_elections(packages)
+
+    def test_unknown_non_linked_package_gets_not_applicable_row(self) -> None:
+        packages = [self._pkg("brand-new-build-tool", "0.1.0", "MIT OR Apache-2.0", False)]
+        report = evidence.cargo_license_elections(packages)
+        self.assertEqual(len(report["rows"]), 1)
+        self.assertEqual(report["rows"][0]["status"], "NOT_APPLICABLE")
+        self.assertEqual(report["mandatory_row_count"], 0)
+
+    def test_and_component_stays_mandatory_regardless_of_or_election(self) -> None:
+        packages = [
+            self._pkg("unicode-ident", "1.0.24", "(MIT OR Apache-2.0) AND Unicode-3.0", False)
+        ]
+        report = evidence.cargo_license_elections(packages)
+        row = report["rows"][0]
+        self.assertEqual(row["and_required_components"], ["Unicode-3.0"])
+        self.assertEqual(row["or_election_options"], ["MIT", "Apache-2.0"])
+
+    def test_missing_license_expression_still_gets_a_row_when_linked(self) -> None:
+        packages = [self._pkg("mystery-crate", "0.0.1", None, True)]
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.cargo_license_elections(packages)
+
+    def test_all_mandatory_elections_accepted_is_false_while_any_open(self) -> None:
+        report = evidence.cargo_dependency_inventory_per_target()
+        elections = report["license_elections"]
+        self.assertGreater(elections["mandatory_row_count"], 0)
+        self.assertFalse(elections["all_mandatory_elections_accepted"])
+        for row in elections["rows"]:
+            if row["linked_in_any_target"]:
+                self.assertEqual(row["status"], "OPEN")
+
+    def test_memchr_has_no_proposed_election(self) -> None:
+        report = evidence.cargo_dependency_inventory_per_target()
+        for row in report["license_elections"]["rows"]:
+            if row["name"] == "memchr":
+                self.assertIsNone(row["proposed_election"])
+                return
+        self.fail("memchr not found in license_elections rows")
+
+    def test_real_tree_has_no_duplicate_election_rows(self) -> None:
+        report = evidence.cargo_dependency_inventory_per_target()
+        keys = [
+            (r["name"], r["version"]) for r in report["license_elections"]["rows"]
+        ]
+        self.assertEqual(len(keys), len(set(keys)))
+
+
+class NativeCarrierValidationTests(unittest.TestCase):
+    def _base_carrier(self, **overrides) -> dict:
+        carrier = {
+            "maven_coordinate": "com.example:fake:1.0",
+            "carrier_kind": "JVM .jar",
+            "license": "MIT",
+            "distribution_status": "redistributed_by_kardano",
+            "distributed_by_kardano": True,
+            "windows_native_available_upstream": False,
+            "inspected_2026_08_24": True,
+            "artifact_sha256": "0" * 64,
+            "embedded_natives": [
+                {
+                    "path": "libfake.so",
+                    "size_bytes": 1,
+                    "sha256": "0" * 64,
+                    "platform": "Linux",
+                    "arch": "x86-64",
+                }
+            ],
+            "note": None,
+        }
+        carrier.update(overrides)
+        return carrier
+
+    def test_invalid_distribution_status_raises(self) -> None:
+        carriers = (self._base_carrier(distribution_status="totally_shipped"),)
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", carriers):
+            with self.assertRaises(evidence.EvidenceError):
+                evidence.maven_native_carriers_inventory()
+
+    def test_missing_member_field_raises(self) -> None:
+        carrier = self._base_carrier()
+        del carrier["embedded_natives"][0]["sha256"]
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError):
+                evidence.maven_native_carriers_inventory()
+
+    def test_embedded_native_count_mismatch_raises(self) -> None:
+        carrier = self._base_carrier(embedded_native_count=99)
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError):
+                evidence.maven_native_carriers_inventory()
+
+    def test_valid_carrier_passes(self) -> None:
+        carrier = self._base_carrier(embedded_native_count=1)
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            report = evidence.maven_native_carriers_inventory()
+        self.assertEqual(len(report["carriers"]), 1)
+
+
+class ColdGradleCacheTests(unittest.TestCase):
+    """Prove gradle_license_inventory() needs no pre-populated Gradle cache.
+
+    A 2026-08-24 independent review found the committed
+    docs/evidence/gradle_license_inventory.json was only reproducible on a
+    machine whose local Gradle module cache already had every coordinate's
+    POM resolved -- a clean CI container has none of that. This class points
+    GRADLE_USER_HOME at a brand-new empty temporary directory (never ran a
+    single Gradle task) and requires byte-identical resolution, proving the
+    curated + harvested catalogs (scripts/license_catalog.py,
+    scripts/license_catalog_harvested.py) are complete for every coordinate
+    in the currently tracked lockfiles, with zero live-cache fallback needed.
+    """
+
+    def setUp(self) -> None:
+        self.modules = evidence.discover_gradle_modules()
+        self._orig_home = evidence.GRADLE_USER_HOME
+        self._orig_modules2 = evidence.GRADLE_MODULES2
+        self._tmp = tempfile.TemporaryDirectory()
+        evidence.GRADLE_USER_HOME = Path(self._tmp.name)
+        evidence.GRADLE_MODULES2 = evidence.GRADLE_USER_HOME / "caches" / "modules-2" / "files-2.1"
+
+    def tearDown(self) -> None:
+        evidence.GRADLE_USER_HOME = self._orig_home
+        evidence.GRADLE_MODULES2 = self._orig_modules2
+        self._tmp.cleanup()
+
+    def test_cold_cache_resolves_every_coordinate(self) -> None:
+        self.assertFalse(evidence.GRADLE_MODULES2.exists())
+        gradle_report = evidence.gradle_dependency_inventory(self.modules)
+        report = evidence.gradle_license_inventory(gradle_report)
+        self.assertEqual(report["unresolved_count"], 0)
+        self.assertEqual(report["unresolved"], [])
+        self.assertEqual(report["resolved_count"], report["runtime_coordinate_count"])
+        self.assertGreater(report["resolved_count"], 250)
+
+    def test_cold_cache_output_matches_warm_cache_output_byte_for_byte(self) -> None:
+        gradle_report = evidence.gradle_dependency_inventory(self.modules)
+        cold = json.dumps(evidence.gradle_license_inventory(gradle_report), sort_keys=True)
+
+        evidence.GRADLE_USER_HOME = self._orig_home
+        evidence.GRADLE_MODULES2 = self._orig_modules2
+        warm = json.dumps(evidence.gradle_license_inventory(gradle_report), sort_keys=True)
+        self.assertEqual(cold, warm)
+
+    def test_cold_cache_raises_if_a_new_coordinate_is_uncataloged(self) -> None:
+        gradle_report = {
+            "modules": {
+                "fake": {
+                    "coordinates": {"runtime": ["com.example.brand-new:widget:9.9.9"]},
+                }
+            }
+        }
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.gradle_license_inventory(gradle_report)
+
+
+class ScopeBindingSealTests(unittest.TestCase):
+    """Exercise seal_scope_binding() against a disposable temp git repo.
+
+    A real seal always runs against THIS repository's actual history; these
+    tests instead build a minimal two-commit history from scratch (subject
+    commit, then evidence commit) in an isolated temp git repo, so the
+    various failure modes (dirty tree, already sealed, missing file, no
+    parent commit) can be exercised without touching real git state.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name)
+        subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.invalid"], cwd=self.repo, check=True
+        )
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=self.repo, check=True)
+
+        self._orig_repo_root = evidence.REPO_ROOT
+        self._orig_evidence_dir = evidence.EVIDENCE_DIR
+        evidence.REPO_ROOT = self.repo
+        evidence.EVIDENCE_DIR = self.repo / "docs" / "evidence"
+        evidence.EVIDENCE_DIR.mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        evidence.REPO_ROOT = self._orig_repo_root
+        evidence.EVIDENCE_DIR = self._orig_evidence_dir
+        self._tmp.cleanup()
+
+    def _git(self, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=self.repo, check=True, capture_output=True, text=True
+        )
+        return result.stdout.strip()
+
+    def _write_outputs(self) -> None:
+        for name in evidence.evidence_output_files():
+            (evidence.EVIDENCE_DIR / name).write_text(
+                json.dumps({"name": name}) + "\n", encoding="utf-8"
+            )
+
+    def _commit_subject(self) -> str:
+        (self.repo / "SOURCE.txt").write_text("subject source\n", encoding="utf-8")
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "subject commit")
+        return self._git("rev-parse", "HEAD")
+
+    def _commit_evidence(self) -> str:
+        self._write_outputs()
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "evidence commit")
+        return self._git("rev-parse", "HEAD")
+
+    def test_seal_binds_evidence_commit_to_its_immediate_parent(self) -> None:
+        subject_commit = self._commit_subject()
+        evidence_commit = self._commit_evidence()
+        binding = evidence.seal_scope_binding()
+        self.assertEqual(binding["evidence_commit"], evidence_commit)
+        self.assertEqual(binding["subject_commit"], subject_commit)
+        self.assertEqual(
+            set(binding["sealed_evidence_digests"]), set(evidence.evidence_output_files())
+        )
+
+    def test_seal_raises_on_dirty_worktree(self) -> None:
+        self._commit_subject()
+        self._commit_evidence()
+        any_output = next(iter(evidence.evidence_output_files()))
+        (evidence.EVIDENCE_DIR / any_output).write_text("dirty\n", encoding="utf-8")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.seal_scope_binding()
+
+    def test_seal_raises_if_already_sealed(self) -> None:
+        self._commit_subject()
+        self._commit_evidence()
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text("{}\n", encoding="utf-8")
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "already sealed")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.seal_scope_binding()
+
+    def test_seal_raises_if_an_evidence_file_is_missing(self) -> None:
+        self._commit_subject()
+        self._write_outputs()
+        first = next(iter(evidence.evidence_output_files()))
+        (evidence.EVIDENCE_DIR / first).unlink()
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "evidence commit missing one file")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.seal_scope_binding()
+
+    def test_seal_raises_on_repo_root_commit_with_no_parent(self) -> None:
+        # The evidence commit IS the repo's first commit -- no subject commit
+        # exists to bind to.
+        self._write_outputs()
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "only commit")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.seal_scope_binding()
 
 
 if __name__ == "__main__":

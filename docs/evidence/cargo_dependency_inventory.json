@@ -1,4 +1,1669 @@
 {
+  "license_elections": {
+    "accepted_count": 0,
+    "all_mandatory_elections_accepted": false,
+    "mandatory_row_count": 27,
+    "method": "Every package whose Cargo.toml `license` field is not a single unambiguous SPDX license (i.e. contains OR, AND, or WITH, or is missing) gets one row here. AND-components are always mandatory regardless of any OR election elsewhere in the same expression (unicode-ident's Unicode-3.0 AND-component, for example, is not satisfied by electing either side of its (MIT OR Apache-2.0) OR-component). A target-linked package with no catalog row fails generation rather than being silently treated as covered by some other package's election.",
+    "rows": [
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "anyhow",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.103"
+      },
+      {
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": false,
+        "name": "autocfg",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "host_build_dependency_only"
+          ],
+          "aarch64-apple-ios": [
+            "host_build_dependency_only"
+          ],
+          "aarch64-apple-ios-sim": [
+            "host_build_dependency_only"
+          ],
+          "aarch64-linux-android": [
+            "host_build_dependency_only"
+          ],
+          "armv7-linux-androideabi": [
+            "host_build_dependency_only"
+          ],
+          "i686-linux-android": [
+            "host_build_dependency_only"
+          ],
+          "x86_64-apple-darwin": [
+            "host_build_dependency_only"
+          ],
+          "x86_64-linux-android": [
+            "host_build_dependency_only"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "host_build_dependency_only"
+          ]
+        },
+        "version": "1.5.1"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "bitflags",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.13.0"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "camino",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.2.4"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "cargo-platform",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.1.9"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "cfg-if",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.4"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "cryptoxide",
+        "note": "Uses the legacy pre-SPDX Cargo `license = \"MIT/Apache-2.0\"` slash syntax, parsed by parse_spdx_expression() as equivalent to `MIT OR Apache-2.0`.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.5.3"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "ed25519-bip32",
+        "note": "Direct dependency of crypto-signing-backend.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.4.2"
+      },
+      {
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "equivalent",
+        "note": null,
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.2"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "errno",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.3.14"
+      },
+      {
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "fastrand",
+        "note": null,
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.4.1"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "fs-err",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "2.11.0"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "getrandom",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.4.3"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "hashbrown",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.17.1"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "heck",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.5.0"
+      },
+      {
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "indexmap",
+        "note": null,
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.14.0"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "itoa",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.18"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "libc",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.2.186"
+      },
+      {
+        "and_required_components": [],
+        "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "linux-raw-sys",
+        "note": "Three-way expression `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; the proposed election is the plain Apache-2.0 branch (neither the LLVM-exception variant nor MIT).",
+        "or_election_options": [
+          "Apache-2.0 WITH LLVM-exception",
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.12.1"
+      },
+      {
+        "and_required_components": [],
+        "expression": "Unlicense OR MIT",
+        "linked_in_any_target": true,
+        "name": "memchr",
+        "note": "Unlicense OR MIT. No election is proposed here; LICENSES/Unlicense.txt is committed and referenced in NOTICE alongside LICENSES/MIT.txt so the Unlicense text is present unless/until a reviewer explicitly accepts an MIT election for this specific package.",
+        "or_election_options": [
+          "Unlicense",
+          "MIT"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.8.3"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "once_cell",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.21.4"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "proc-macro2",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.106"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "quote",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.46"
+      },
+      {
+        "and_required_components": [],
+        "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "rustix",
+        "note": "Three-way expression `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; the proposed election is the plain Apache-2.0 branch (neither the LLVM-exception variant nor MIT).",
+        "or_election_options": [
+          "Apache-2.0 WITH LLVM-exception",
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.1.4"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "semver",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.28"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "serde",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.228"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "serde_core",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.228"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "serde_derive",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.228"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "serde_json",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.150"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "siphasher",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "0.3.11"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "static_assertions",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.1.0"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "syn",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "2.0.118"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "tempfile",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "3.27.0"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "thiserror",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.0.18"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "thiserror-impl",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "2.0.18"
+      },
+      {
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "toml",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "0.5.11"
+      },
+      {
+        "and_required_components": [
+          "Unicode-3.0"
+        ],
+        "expression": "(MIT OR Apache-2.0) AND Unicode-3.0",
+        "linked_in_any_target": false,
+        "name": "unicode-ident",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.24"
+      }
+    ]
+  },
   "linked_in_any_target_count": 33,
   "membership_by_target": {
     "aarch64-apple-darwin": {
@@ -502,7 +2167,7 @@
       ]
     }
   },
-  "method": "Two tools per rustc target triple that produces one of the 9 committed native artifacts (a separate graph for each, not one merged closure): `cargo metadata --locked --filter-platform <triple>` supplies per-package facts (license/version/source/targets), and `cargo tree --locked --target <triple> -e <edges> --prefix none` supplies the ACTUAL feature-activation-correct reachable set for 'normal' and 'normal,build' edges. `cargo metadata`'s own `resolve.nodes[].deps` is not used as the reachability source: it unconditionally lists every dependency edge declared in Cargo.toml, including optional dependencies gated behind an inactive feature (confirmed 2026-08-24 -- `uniffi`'s optional bindgen-CLI dependency chain, `uniffi_bindgen`/`askama`/`goblin`/`nom`/`weedle2`/`textwrap`/`smawk`/`clap`, appeared as metadata edges despite the feature that would enable them never being active for this crate's actual build; `cargo tree` correctly omits all of them). Cargo.lock's own SHA-256 is hashed before and after every `cargo metadata`/`cargo tree` invocation; a mismatch fails generation. Each package records its Cargo.lock checksum (the crates.io tarball digest Cargo itself pins), not a digest invented by this script. A package is 'linked_into_compiled_artifact' for a target only if it is in the real normal-edge set AND reachable from the crate root without passing through a proc-macro crate's own dependency edges -- proc-macro crates and everything reachable only from them run on the host compiler and are not embedded in the cdylib/staticlib/so this crate produces. 'host_build_dependency_only' is the real normal+build set minus the real normal set (e.g. `autocfg`, used only by `fs-err`'s build.rs). 'dev_dependency_only' is always empty: this crate declares no [dev-dependencies], and Cargo never activates a dependency's own dev-dependencies when it is built as a library dependency of another crate.",
+  "method": "Two tools per rustc target triple that produces one of the 9 committed native artifacts (a separate graph for each, not one merged closure): `cargo metadata --locked --offline --filter-platform <triple>` supplies per-package facts (license/version/source/targets), and `cargo tree --locked --offline --target <triple> -e <edges> --prefix none` supplies the ACTUAL feature-activation-correct reachable set for 'normal' and 'normal,build' edges. `cargo metadata`'s own `resolve.nodes[].deps` is not used as the reachability source: it unconditionally lists every dependency edge declared in Cargo.toml, including optional dependencies gated behind an inactive feature (confirmed 2026-08-24 -- `uniffi`'s optional bindgen-CLI dependency chain, `uniffi_bindgen`/`askama`/`goblin`/`nom`/`weedle2`/`textwrap`/`smawk`/`clap`, appeared as metadata edges despite the feature that would enable them never being active for this crate's actual build; `cargo tree` correctly omits all of them). `--offline` means both commands only ever read the local registry cache that an explicit, separate `cargo fetch --locked` network bootstrap step already populated (see docs/LEGAL_REVIEW.md's network-requirement note); neither command run by this script ever touches the network itself. Cargo.lock's own SHA-256 is hashed before and after every `cargo metadata`/`cargo tree` invocation; a mismatch fails generation. Each package records its Cargo.lock checksum (the crates.io tarball digest Cargo itself pins), not a digest invented by this script. A package is 'linked_into_compiled_artifact' for a target only if it is in the real normal-edge set AND reachable from the crate root without passing through a proc-macro crate's own dependency edges -- proc-macro crates and everything reachable only from them run on the host compiler and are not embedded in the cdylib/staticlib/so this crate produces. 'host_build_dependency_only' is the real normal+build set minus the real normal set (e.g. `autocfg`, used only by `fs-err`'s build.rs). 'dev_dependency_only' is always empty: this crate declares no [dev-dependencies], and Cargo never activates a dependency's own dev-dependencies when it is built as a library dependency of another crate.",
   "mit_only_linked_packages": [
     "bytes@1.12.1",
     "cargo_metadata@0.19.2",
