@@ -57,8 +57,12 @@ does not invent a second loader path.
   Jobs pin MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe`
   Version `14.44.35228.0` and Windows SDK `10.0.26100.0` (fail on
   drift until reviewed) and record `ImageVersion` without claiming the
-  hosted image is immutable. Not in `CHECKSUMS.sha256`. Windows ARM is
-  out of scope.
+  hosted image is immutable. Its independent PE (native-artifact
+  structural) technical review is complete (commit `c65a20a`); it remains
+  not in `CHECKSUMS.sha256` and unpromoted solely because of the still-open
+  upstream Identus issue #226 (plus any separate manual/release decision) --
+  PE technical-review completion is not a legal approval and does not mean
+  this DLL is distributed. Windows ARM is out of scope.
 
 ## Verified (ADR-0016 §7d / §9f) — legs against this real module
 

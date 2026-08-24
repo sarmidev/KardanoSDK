@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Legal-evidence packet | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`. Phase C is NO-GO pending PE re-review and Identus #226. Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
+| 7 | `fix/native-build-and-platform-evidence` | Legal-evidence packet | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`; independent PE technical review is COMPLETE at `c65a20a`. Phase C remains NO-GO solely pending Identus #226 (PE re-review is no longer a blocking gate). Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -493,8 +493,10 @@ Do not use:
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase C promotion from run `32678079715` is on
 the branch (ninth CHECKSUMS row). Gate 3 Windows x86-64 JVM is
-candidate-only: PE re-review is still NO-GO and Identus #226 still
-blocks `:crypto`/`:wallet` JVM tests. The non-counsel legal-evidence
+candidate-only: independent PE technical review is COMPLETE at `c65a20a`,
+but Identus #226 still blocks `:crypto`/`:wallet` JVM tests and promotion
+(PE technical-review completion does not promote the candidate or imply
+DLL distribution). The non-counsel legal-evidence
 packet on this same branch has been through two independent-review
 NO-GO rounds (see "Recent Sessions" above); a reviewer should check
 whether a third round finds further engineering gaps before treating the

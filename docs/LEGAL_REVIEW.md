@@ -93,15 +93,15 @@ the files present on disk (no extra, no missing).
 | Gradle lock digest (all Gradle modules discovered from `settings.gradle.kts`, concatenated in sorted module-name order) | `4339a9ed4fb19ba4aae22eb4dae1abc8334d557ba4a2f3c2278acc6b92ad007e` |
 | Cargo.lock digest (`crypto-signing-backend/Cargo.lock`) | `855373baa265413f3929a85bb90aa83f137674fe58c6324b5d4de3cce2f93d8e` |
 | Native CHECKSUMS digest (`crypto-signing-backend/CHECKSUMS.sha256`) | `55c3b131434372528c1f824fee35ab2df2092e6261f8e496e2b0b128110393d9` |
-| NOTICE digest | `13e9343f0da90b29538ad5f1b95b0218d6c1d5f141f85e00cbf90cda5dc7a3c6` |
-| LICENSES digest (all `LICENSES/*.txt`, concatenated in sorted filename order) | `d6512311a2d960e173f2f02963291b4dbc69e4d43e67e4cfebd2771f73a81857` |
+| NOTICE digest | `99f67c0bb0ba4386bf697815b9613e1e811ce3fb74eccb10b60e41940dd9971d` |
+| LICENSES digest (all `LICENSES/*.txt`, concatenated in sorted filename order) | `3553cfb8536b72b63824e4248751e1c9057b5a449dce6e3a79523dd330de9c26` |
 
 ## 4. NOTICE / LICENSES inventory
 
 | Field | Value |
 |---|---|
 | Root NOTICE | `NOTICE` (repo root) |
-| License texts committed | `LICENSES/Apache-2.0.txt`, `LICENSES/MPL-2.0.txt`, `LICENSES/ISC-libsodium.txt`, `LICENSES/MIT.txt`, `LICENSES/Unicode-3.0.txt`, `LICENSES/BouncyCastle.txt` (see `LICENSES/README.md` for source/method and SHA-256 of each) |
+| License texts committed | `LICENSES/Apache-2.0.txt`, `LICENSES/MPL-2.0.txt`, `LICENSES/ISC-libsodium.txt`, `LICENSES/MIT.txt`, `LICENSES/Unicode-3.0.txt`, `LICENSES/Unlicense.txt`, `LICENSES/BouncyCastle.txt` (see `LICENSES/README.md` for source/method and SHA-256 of each) |
 | MIT-only components found | `org.slf4j:slf4j-api` (Gradle, real runtime dep), `com.goterl:resource-loader` (Gradle, transitive), `bytes`/`cargo_metadata`/`zmij` (Cargo, linked into all 9 native artifacts) — see `docs/evidence/gradle_license_inventory.json` `mit_only_coordinates` and `docs/evidence/cargo_dependency_inventory.json` `mit_only_linked_packages` |
 | Unicode-3.0 component found | `unicode-ident` (Cargo; compound `(MIT OR Apache-2.0) AND Unicode-3.0`; proc-macro-support-only per §9, not in any target's linked set) |
 | Cross-check | `scripts/check_release_evidence.py` fails if NOTICE cites a `LICENSES/*.txt` file that does not exist, if a committed `LICENSES/*.txt` file is never cited by NOTICE, or if either inventory above is non-empty while `LICENSES/MIT.txt` is missing |
@@ -218,34 +218,42 @@ to be released under MPL-2.0; that legal conclusion is removed here.
 `org.hyperledger.identus:bip32-ed25519-android` 1.8.8's own POM declares
 Apache-2.0. Its `.aar` also bundles a compiled native library per Android ABI
 (`libuniffi_ed25519_bip32_wrapper.so`; see
-`docs/evidence/maven_native_carriers_inventory.json`). This repository has
-**not** obtained that native library's own source or build-time dependency
-graph, and does **not** claim an exact source-to-binary mapping for it. Given
-the library name (`libuniffi_...`), it plausibly links a UniFFI runtime the
-same way this repo's own `crypto-signing-backend` does — which would carry
-the same MPL-2.0 file-level question as §6 — but this is stated as a
-plausible, unverified structural similarity, not a fact. Whether the
-Apache-2.0 wrapper license covers the whole distributed `.so`, and whether an
-embedded MPL-2.0 (or other) component changes that, is an **OPEN counsel
-determination**, tracked separately from — and not resolved by — upstream
-`hyperledger-identus/apollo` issue #226 (which is about the missing
-`win32-x86-64` build, a distribution-availability gap, not a license
-question).
+`docs/evidence/maven_native_carriers_inventory.json`). A separate
+JVM-classified artifact of the same upstream project,
+`org.hyperledger.identus:bip32-ed25519-jvm` 1.8.8 (found by this generator's
+dynamic native-carrier discovery, 2026-08-24 — see §8), bundles its own
+compiled natives (macOS/Linux `.dylib`/`.so`/`.a`, no Windows build at all)
+under the identical `libuniffi_ed25519_bip32_wrapper` name and raises the
+exact same question below. This repository has **not** obtained either
+native library's own source or build-time dependency graph, and does **not**
+claim an exact source-to-binary mapping for either. Given the library name
+(`libuniffi_...`), both plausibly link a UniFFI runtime the same way this
+repo's own `crypto-signing-backend` does — which would carry the same
+MPL-2.0 file-level question as §6 — but this is stated as a plausible,
+unverified structural similarity, not a fact. Whether the Apache-2.0 wrapper
+license covers the whole distributed binary, and whether an embedded
+MPL-2.0 (or other) component changes that, is an **OPEN counsel
+determination** for both artifacts, tracked separately from — and not
+resolved by — upstream `hyperledger-identus/apollo` issue #226 (which is
+about the missing `win32-x86-64` build for the Android artifact, a
+distribution-availability gap, not a license question; the JVM artifact has
+no Windows build at all, an even narrower gap not itself tracked as #226).
 
-| Field | Value |
-|---|---|
-| Wrapper POM license | Apache-2.0 |
-| Embedded native's own license/source graph | Not obtained; not reviewed |
-| Structural similarity to this repo's own MPL-2.0 exposure (§6) | Plausible (same generator family), unverified |
-| Windows build availability | Not published upstream (issue #226) — a distribution gap, not this license question |
-| Determination | OPEN — pending owner/counsel review |
+| Field | Value (Android `.aar`) | Value (JVM `.jar`) |
+|---|---|---|
+| Wrapper POM license | Apache-2.0 | Apache-2.0 |
+| Embedded native's own license/source graph | Not obtained; not reviewed | Not obtained; not reviewed |
+| Structural similarity to this repo's own MPL-2.0 exposure (§6) | Plausible (same generator family), unverified | Plausible (same generator family), unverified |
+| Windows build availability | Not published upstream (issue #226) — a distribution gap, not this license question | Not published upstream at all (no tracked issue) |
+| Redistributed by Kardano in this release? | Yes | No — Kardano SDK does not publish Maven/JVM artifacts yet (`docs/RELEASING.md`) |
+| Determination | OPEN — pending owner/counsel review | OPEN — pending owner/counsel review |
 
 ## 7. Bouncy Castle — transcription vs. source-HTML hash
 
 `LICENSES/BouncyCastle.txt` is a **manual transcription** of the license
 paragraphs rendered at `https://www.bouncycastle.org/licence.html`, typed on
 2026-08-24 — it is **not** the fetched HTML bytes, and its SHA-256 cannot be
-reproduced by re-fetching that URL the way the other five `LICENSES/*.txt`
+reproduced by re-fetching that URL the way the other six `LICENSES/*.txt`
 files can. `docs/evidence/bouncycastle_license_source.json` records both
 hashes as independently verifiable facts:
 
@@ -278,15 +286,24 @@ the coordinate is genuinely resolved in `desktopApp/gradle.lockfile`.
 
 | Coordinate | Carrier kind | Embedded natives | `distribution_status` | Windows build upstream? |
 |---|---|---|---|---|
-| `net.java.dev.jna:jna:5.19.1` | JVM/Android jar | 27 platform-specific `libjnidispatch` binaries (all bundled in the one jar; only one loads per host — a prior version of this evidence said 25, missing the two AIX variants; corrected by a full zip-member enumeration) | `redistributed_by_kardano` | Yes (`win32-x86-64`, `win32-aarch64`) |
+| `net.java.dev.jna:jna:5.19.1` | JVM `.jar` **and** a separate Android `.aar` Gradle Module Metadata variant of the same coordinate | 34 total: 27 platform-specific `libjnidispatch` binaries in the `.jar` (only one loads per host — a prior version of this evidence said 25, missing the two AIX variants; corrected by a full zip-member enumeration) **plus** 7 more (`jni/<abi>/libjnidispatch.so`) in the separate `.aar`, found by this generator's dynamic local-cache cross-check (2026-08-24) | `redistributed_by_kardano` | Yes (`win32-x86-64`, `win32-aarch64`) |
 | `org.hyperledger.identus:bip32-ed25519-android:1.8.8` | Android `.aar` | 4 (`libuniffi_ed25519_bip32_wrapper.so` per ABI) | `redistributed_by_kardano` | No (issue #226; see §6b) |
+| `org.hyperledger.identus:bip32-ed25519-jvm:1.8.8` | JVM `.jar` (separate artifact of the same upstream project, found by this generator's dynamic local-cache cross-check, 2026-08-24) | 8 (`libuniffi_ed25519_bip32_wrapper` `.dylib`/`.so` + `.a` for macOS arm64/x86-64 and Linux aarch64/x86-64) | `transitively_available` (Kardano SDK does not publish Maven/JVM artifacts yet; see `docs/RELEASING.md`) | No (no Windows build published for this JVM artifact at all — narrower than issue #226) |
 | `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5` | JVM `.jar` | 4 (libsodium per OS/arch, including a Windows `.dll`) | `redistributed_by_kardano` | Yes |
 | `com.goterl:lazysodium-android:5.2.0` | Android `.aar` | 4 (`libsodium.so` per ABI) | `redistributed_by_kardano` | No (Android-only carrier) |
+| `androidx.graphics:graphics-path:1.0.1` | Android `.aar` (found by this generator's dynamic local-cache cross-check, 2026-08-24) | 4 (`libandroidx.graphics.path.so` per ABI) | `redistributed_by_kardano` | No (Android-only carrier) |
 | `org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6` | JVM `.jar` (desktopApp sample only) | 2 (macOS Skia `.dylib`, arm64 + x64) | `not_in_first_release_scope` | No (only macOS-arm64 variant resolved in this repo's lockfiles) |
 
 Do not classify JNA as source-only (§5's election table is about the
 *source* license; this table is about the *separate* fact that the same jar
-also carries compiled binaries).
+also carries compiled binaries). The `org.hyperledger.identus:bip32-ed25519-jvm`
+and `androidx.graphics:graphics-path` rows above were found only after this
+2026-08-24 independent review added `generate_legal_evidence.py`'s dynamic
+Maven native-carrier discovery (a live cross-check against the actual
+resolved `.jar`/`.aar` bytes in a warm local Gradle module cache, which fails
+generation closed on any undeclared native-carrying coordinate) — neither
+had been reviewed by hand before, illustrating why this table is generated
+and cross-checked rather than curated purely by manual inspection.
 
 ## 9. Cargo per-target-triple inventory (9 separate graphs)
 
@@ -353,8 +370,9 @@ under `crypto-signing-backend/src/`, by `scripts/check_release_evidence.py`
 
 | Item | Status | Detail |
 |---|---|---|
-| Windows x86-64 JVM signing-backend candidate DLL | Not distributed | Technical GO on native-artifact PE evidence; withheld until the two named gates in §14 are resolved (independent PE re-review; upstream issue #226) |
+| Windows x86-64 JVM signing-backend candidate DLL | Not distributed | Independent PE technical review is complete (`c65a20a`; see §14); withheld solely because of the remaining named gate in §14 (upstream issue #226), plus any separate manual/release decision — completion of the PE technical review does not promote this candidate or imply any DLL is distributed |
 | Identus `apollo` Android derivation-backend native library, Windows build | Not distributed by Kardano SDK | Upstream (`hyperledger-identus/apollo`) has not published a `win32-x86-64` build; Kardano SDK cannot distribute what upstream has not built — tracked as upstream issue #226 |
+| `org.hyperledger.identus:bip32-ed25519-jvm:1.8.8` (JVM artifact, all platforms) | Not distributed by Kardano SDK | Kardano SDK does not publish Maven/JVM artifacts through any channel yet (`docs/RELEASING.md`); resolved/reachable for JVM tests only — see §6b/§8 |
 
 ## 12. Scope binding: two-commit seal (evidence-content commit + seal commit)
 
@@ -485,21 +503,26 @@ legal-evidence job.
 |---|---|---|
 | Counsel review | OPEN — pending owner/counsel review | Every §2/§5a/§6/§6b/§7 field naming this marker |
 | Upstream Identus win32-x86-64 build | OPEN — pending upstream hyperledger-identus/apollo issue #226 | §6b, §11 |
-| Windows signing-backend PE re-review | OPEN — pending independent PE re-review | §11 |
-| Per-election reviewer acceptance | OPEN — pending per-election reviewer acceptance | §5a (27 mandatory target-linked election rows, one per non-single-license Cargo package) |
+| Windows signing-backend independent PE technical review | COMPLETE at `c65a20a` (this is a technical structural review, not a legal or counsel determination) | §11 |
+| Per-election reviewer acceptance | OPEN — pending per-election reviewer acceptance | §5a/§5b (mandatory target-linked Cargo election rows plus mandatory Gradle election rows, one per non-single-license coordinate) |
 | Release / tag decision | Not made in this packet | This packet prepares evidence only; it does not recommend, schedule, or make a release decision |
 
 ## 15. Gate cross-references
 
-- Independent PE re-review gate: see `docs/HANDOFF.md` Branch-Stack Status
+- Independent PE technical review: COMPLETE at `c65a20a` (native-artifact
+  PE-structure evidence only — see `docs/HANDOFF.md` Branch-Stack Status
   (Prompt 7) and `crypto-signing-backend/README.md` "Windows x86-64 —
-  candidate-only".
-- Upstream Identus issue #226: see `docs/HANDOFF.md` "Next Recommended Task"
-  and `docs/DEPENDENCY_PROVENANCE.md`.
+  candidate-only"). This closes ONLY the technical-review gate; it is not a
+  legal approval and does not promote the Windows candidate or imply a DLL
+  is distributed. The Windows candidate remains unpromoted/not-distributed
+  because the upstream Identus issue #226 gate below (and any separate
+  manual/release decision) is still open.
+- Upstream Identus issue #226: still OPEN; see `docs/HANDOFF.md` "Next
+  Recommended Task" and `docs/DEPENDENCY_PROVENANCE.md`.
 - MPL-2.0/Identus-embedded-native counsel determinations: §6/§6b above; not
   restated with different wording anywhere else.
-- This packet does not change any of these gates' status. All remain open
-  after this change.
+- This packet closes only the PE technical-review gate above; every other
+  gate's status is unchanged by this change.
 
 ## Regeneration and verification
 

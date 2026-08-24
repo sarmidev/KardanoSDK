@@ -59,6 +59,7 @@ import re
 import subprocess
 import sys
 import tomllib
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +76,7 @@ GRADLE_USER_HOME = Path(os.environ.get("GRADLE_USER_HOME", str(Path.home() / ".g
 GRADLE_MODULES2 = GRADLE_USER_HOME / "caches" / "modules-2" / "files-2.1"
 
 INCLUDE_RE = re.compile(r'include\(\s*"(:[^"]+)"\s*\)')
+SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class EvidenceError(RuntimeError):
@@ -310,6 +312,9 @@ def gradle_license_inventory(gradle_report: dict[str, Any]) -> dict[str, Any]:
                 "election": catalog_entry.get("election"),
                 "source": catalog_entry.get("source"),
                 "resolution_method": catalog_entry.get("resolution_method", "curated-catalog"),
+                "election_status": catalog_entry.get("election_status"),
+                "election_reviewer": catalog_entry.get("election_reviewer"),
+                "election_review_date": catalog_entry.get("election_review_date"),
             }
         else:
             # Defense-in-depth only: a genuinely new coordinate that has not
@@ -377,6 +382,64 @@ def gradle_license_inventory(gradle_report: dict[str, Any]) -> dict[str, Any]:
         "resolved": resolved,
         "unresolved": sorted(unresolved),
         "mit_only_coordinates": sorted(mit_only),
+        "license_elections": gradle_license_elections(resolved),
+    }
+
+
+def gradle_license_elections(resolved: dict[str, Any]) -> dict[str, Any]:
+    """Every Gradle-runtime coordinate with more than one resolved license
+    (a real disjunctive OR choice, e.g. `net.java.dev.jna:jna`) gets an
+    explicit, catalog-backed election row here -- generated dynamically
+    from whatever `resolved` (already-runtime-scoped, already-license-
+    resolved) contains, not a hand-maintained count. A single-license
+    coordinate has no election to make and never appears here (mirrors
+    `scripts/generate_legal_evidence.py`'s `cargo_license_elections()` on
+    the Cargo side, and the same 2026-08-24 independent-review finding that
+    JNA's own election had a proposed value but no status/reviewer/date
+    schema at all).
+    """
+    rows: list[dict[str, Any]] = []
+    mandatory_count = 0
+    accepted_count = 0
+    for gav in sorted(resolved):
+        entry = resolved[gav]
+        licenses = entry["licenses"]
+        if len(licenses) <= 1:
+            continue
+        mandatory_count += 1
+        status = entry.get("election_status")
+        if status == "ACCEPTED":
+            accepted_count += 1
+        rows.append(
+            {
+                "coordinate": gav,
+                "licenses": list(licenses),
+                "or_election_options": list(licenses),
+                "proposed_election": entry.get("election"),
+                "status": status,
+                "reviewer": entry.get("election_reviewer"),
+                "review_date": entry.get("election_review_date"),
+            }
+        )
+    return {
+        "method": (
+            "Every resolved Gradle-runtime coordinate whose own POM lists more "
+            "than one <license> (a real disjunctive choice, not a compound AND "
+            "expression -- Maven POMs do not express AND-required licenses the "
+            "way Cargo.toml's SPDX `license` field can) gets one row here, "
+            "sourced from scripts/license_catalog.GRADLE_LICENSE_CATALOG's "
+            "election_status/election_reviewer/election_review_date fields. "
+            "status only ever becomes ACCEPTED by a human editing that catalog; "
+            "this generator never sets it itself, and "
+            "scripts/check_release_evidence.py's release mode fails while any "
+            "row here is not ACCEPTED with a non-empty reviewer, an ISO-8601 "
+            "review_date, and a proposed_election that is exactly one of the "
+            "row's own or_election_options."
+        ),
+        "mandatory_row_count": mandatory_count,
+        "accepted_count": accepted_count,
+        "all_mandatory_elections_accepted": accepted_count == mandatory_count and mandatory_count > 0,
+        "rows": rows,
     }
 
 
@@ -805,6 +868,18 @@ def cargo_license_elections(packages_report: list[dict[str, Any]]) -> dict[str, 
     function never invents a "blanket" default election for a package
     missing from that catalog -- a target-linked package with a non-single
     expression and no catalog row fails generation.
+
+    A row's `status`/`reviewer`/`review_date` cover only its OR election
+    (`or_election_options`); each of its `and_required_components` (always
+    mandatory when the row is target-linked, regardless of the OR election)
+    gets its OWN row in `and_component_acceptance`, sourced from the
+    catalog entry's optional `and_component_acceptance` mapping
+    (component name -> {status, reviewer, review_date}) or defaulted to
+    `OPEN`/`NOT_APPLICABLE` the same way the row-level status defaults --
+    accepting the OR side of an expression never implicitly accepts its
+    AND-required component, so `scripts/check_release_evidence.py` checks
+    both independently and `release` mode requires both to be `ACCEPTED`
+    for every target-linked row.
     """
     rows: list[dict[str, Any]] = []
     missing_catalog_entries: list[str] = []
@@ -842,6 +917,17 @@ def cargo_license_elections(packages_report: list[dict[str, Any]]) -> dict[str, 
             c["value"] for c in (components or []) if c["type"] == "single"
         ]
         or_groups = [c["options"] for c in (components or []) if c["type"] == "or"]
+        catalog_and_acceptance = catalog_entry.get("and_component_acceptance") or {}
+        and_component_acceptance = []
+        for component in and_required:
+            component_entry = catalog_and_acceptance.get(component)
+            if component_entry is None:
+                component_entry = {
+                    "status": "OPEN" if linked else "NOT_APPLICABLE",
+                    "reviewer": None,
+                    "review_date": None,
+                }
+            and_component_acceptance.append({"component": component, **component_entry})
         row = {
             "name": pkg["name"],
             "version": pkg["version"],
@@ -849,6 +935,7 @@ def cargo_license_elections(packages_report: list[dict[str, Any]]) -> dict[str, 
             "linked_in_any_target": linked,
             "target_membership": pkg["membership"],
             "and_required_components": and_required,
+            "and_component_acceptance": and_component_acceptance,
             "or_election_options": or_groups[0] if or_groups else [],
             "proposed_election": catalog_entry.get("proposed_election"),
             "status": catalog_entry.get("status"),
@@ -869,6 +956,19 @@ def cargo_license_elections(packages_report: list[dict[str, Any]]) -> dict[str, 
         )
 
     rows.sort(key=lambda r: (r["name"], r["version"]))
+    mandatory_and_component_count = sum(
+        1 for r in rows if r["linked_in_any_target"] for _ in r["and_component_acceptance"]
+    )
+    accepted_and_component_count = sum(
+        1
+        for r in rows
+        if r["linked_in_any_target"]
+        for c in r["and_component_acceptance"]
+        if c["status"] == "ACCEPTED"
+    )
+    all_and_components_accepted = (
+        accepted_and_component_count == mandatory_and_component_count
+    )
     return {
         "method": (
             "Every package whose Cargo.toml `license` field is not a single "
@@ -877,13 +977,22 @@ def cargo_license_elections(packages_report: list[dict[str, Any]]) -> dict[str, 
             "regardless of any OR election elsewhere in the same expression "
             "(unicode-ident's Unicode-3.0 AND-component, for example, is not "
             "satisfied by electing either side of its (MIT OR Apache-2.0) "
-            "OR-component). A target-linked package with no catalog row "
-            "fails generation rather than being silently treated as covered "
-            "by some other package's election."
+            "OR-component) and carry their OWN `and_component_acceptance` "
+            "status/reviewer/review_date entry, separate from the row's OR "
+            "election -- accepting the OR side never implicitly accepts an "
+            "AND-required component, and vice versa. A target-linked package "
+            "with no catalog row fails generation rather than being silently "
+            "treated as covered by some other package's election."
         ),
         "mandatory_row_count": mandatory_count,
         "accepted_count": accepted_count,
-        "all_mandatory_elections_accepted": accepted_count == mandatory_count and mandatory_count > 0,
+        "mandatory_and_component_count": mandatory_and_component_count,
+        "accepted_and_component_count": accepted_and_component_count,
+        "all_mandatory_elections_accepted": (
+            accepted_count == mandatory_count
+            and mandatory_count > 0
+            and all_and_components_accepted
+        ),
         "rows": rows,
     }
 
@@ -1050,10 +1159,14 @@ NATIVE_ARTIFACT_CATALOG: dict[str, dict[str, str]] = {
 
 WINDOWS_CANDIDATE_NOTE = (
     "win32-x86-64/kardano_ed25519_bip32_signing.dll has a technical GO on "
-    "PE-structure evidence (windows-jvm-rebuild-evidence.yml) but remains "
-    "unpromoted: not in crypto-signing-backend/CHECKSUMS.sha256, not in this "
-    "catalog, and not distributed, pending independent PE re-review and "
-    "upstream hyperledger-identus/apollo issue #226."
+    "PE-structure evidence (windows-jvm-rebuild-evidence.yml). Its "
+    "independent PE technical review is complete (commit c65a20a), which "
+    "closes ONLY that technical-review gate -- it is not a legal approval "
+    "and does not promote this candidate or mean any DLL is distributed. "
+    "It remains unpromoted: not in crypto-signing-backend/CHECKSUMS.sha256, "
+    "not in this catalog, and not distributed, solely because of the "
+    "still-open upstream hyperledger-identus/apollo issue #226 (and any "
+    "separate manual/release decision)."
 )
 
 
@@ -1201,6 +1314,99 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         ),
     },
     {
+        # Found by cross_check_maven_native_carriers_against_local_cache()'s
+        # dynamic discovery (2026-08-24 independent review, Gap 7): a
+        # separate JVM-classified artifact of the SAME upstream Identus
+        # project, resolved by crypto/shared/wallet/desktopApp/androidApp's
+        # JVM source sets, previously entirely absent from this catalog.
+        "maven_coordinate": "org.hyperledger.identus:bip32-ed25519-jvm:1.8.8",
+        "carrier_kind": "JVM .jar",
+        "license": "Apache-2.0 (wrapper POM); embedded native's own obligations OPEN",
+        # Kardano SDK does not publish Maven/JVM artifacts yet (see
+        # docs/RELEASING.md), and no Desktop installer is built/distributed
+        # in this release (docs/LEGAL_REVIEW.md \u00a71a) -- so this
+        # coordinate's JVM jar is resolved and reachable (JVM tests across
+        # crypto/shared/wallet/desktopApp/androidApp depend on it) but is not
+        # itself redistributed by Kardano through any channel in this
+        # release.
+        "distribution_status": "transitively_available",
+        "distributed_by_kardano": False,
+        "windows_native_available_upstream": False,
+        "inspected_2026_08_24": True,
+        "artifact_sha256": "4db0135006f5ecbcc445f9ec8800101ab40438e5a9daa083c5ccab85cc661d3a",
+        "embedded_natives": [
+            {
+                "path": "darwin-aarch64/libuniffi_ed25519_bip32_wrapper.dylib",
+                "size_bytes": 561744,
+                "sha256": "35644b7fe8eac8347c9e51f50d64bcba79eb0a39240009bc5f68a057c4fbd309",
+                "platform": "macOS",
+                "arch": "arm64",
+            },
+            {
+                "path": "darwin-aarch64/libuniffi_ed25519_bip32_wrapper.a",
+                "size_bytes": 28805776,
+                "sha256": "6aeb164932970ba0b57f9c6447b5c18c1a48e0cb4178e5c5ba90dc3d9f72937e",
+                "platform": "macOS",
+                "arch": "arm64",
+            },
+            {
+                "path": "darwin-x86-64/libuniffi_ed25519_bip32_wrapper.dylib",
+                "size_bytes": 551808,
+                "sha256": "719b7ddbd23ace7da3744ccc21477d804d5f0372d9c4387bf589ba9c1b4023c3",
+                "platform": "macOS",
+                "arch": "x86-64",
+            },
+            {
+                "path": "darwin-x86-64/libuniffi_ed25519_bip32_wrapper.a",
+                "size_bytes": 28778240,
+                "sha256": "fb7c79708a983112ed93fc3e2759dc7e862aac39131730025ca613d20acf1bfc",
+                "platform": "macOS",
+                "arch": "x86-64",
+            },
+            {
+                "path": "linux-aarch64/libuniffi_ed25519_bip32_wrapper.so",
+                "size_bytes": 659056,
+                "sha256": "c977c2bdaeea541449b30e4e14b0aa405d005e78a7a8e6ae5efec812dd911690",
+                "platform": "Linux",
+                "arch": "aarch64",
+            },
+            {
+                "path": "linux-aarch64/libuniffi_ed25519_bip32_wrapper.a",
+                "size_bytes": 39509386,
+                "sha256": "404b66ca22b2a2156c64c5ff48ebca68104441c48208081d81923b98d77778f8",
+                "platform": "Linux",
+                "arch": "aarch64",
+            },
+            {
+                "path": "linux-x86-64/libuniffi_ed25519_bip32_wrapper.so",
+                "size_bytes": 631304,
+                "sha256": "81f41f32d0e678f30ae1329baeeaae061630eb0ce435ed84750fe18aade9eb1c",
+                "platform": "Linux",
+                "arch": "x86-64",
+            },
+            {
+                "path": "linux-x86-64/libuniffi_ed25519_bip32_wrapper.a",
+                "size_bytes": 38550120,
+                "sha256": "c75e8f4b4b7ef07b35374373ccc69399895811d563dbd1b73cffeb6119824709",
+                "platform": "Linux",
+                "arch": "x86-64",
+            },
+        ],
+        "note": (
+            "No win32-x86-64 (or any Windows) build is published upstream for "
+            "this JVM-classified artifact at all -- a strictly narrower gap "
+            "than the Android variant's (hyperledger-identus/apollo issue "
+            "#226), since Windows is not attempted here even conditionally. "
+            "This repository has not independently reproduced these "
+            "binaries from source and does not claim an exact "
+            "source-to-binary mapping; whether this build embeds an "
+            "MPL-2.0 UniFFI runtime (as this repo's own "
+            "crypto-signing-backend does) is an OPEN counsel determination, "
+            "the same unresolved question as the Android variant above -- "
+            "not concluded 'satisfied' or 'no obligation' here."
+        ),
+    },
+    {
         "maven_coordinate": "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5",
         "carrier_kind": "JVM .jar",
         "license": "Apache-2.0 (wrapper) + ISC (bundled libsodium binaries)",
@@ -1286,6 +1492,57 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "note": "Android-only carrier; no Windows binary is bundled.",
     },
     {
+        # Found by cross_check_maven_native_carriers_against_local_cache()'s
+        # dynamic discovery (2026-08-24 independent review, Gap 7): a real
+        # runtime dependency of `shared`/`androidApp` that was previously
+        # entirely absent from this catalog despite bundling per-ABI native
+        # code, an omission this generator now fails closed on rather than
+        # silently missing again.
+        "maven_coordinate": "androidx.graphics:graphics-path:1.0.1",
+        "carrier_kind": "Android .aar",
+        "license": "Apache-2.0",
+        "distribution_status": "redistributed_by_kardano",
+        "distributed_by_kardano": True,
+        "windows_native_available_upstream": False,
+        "inspected_2026_08_24": True,
+        "artifact_sha256": "8ca4032b6d79b351f0b59ad4b580eddbb9423e1652f7c958830687f1eee2ec03",
+        "embedded_natives": [
+            {
+                "path": "jni/arm64-v8a/libandroidx.graphics.path.so",
+                "size_bytes": 10096,
+                "sha256": "41e9a793c43a0f4fddb19e33f346bace464f30f888ba7b9eaf96294ea115bfb6",
+                "platform": "Android",
+                "arch": "arm64-v8a",
+            },
+            {
+                "path": "jni/armeabi-v7a/libandroidx.graphics.path.so",
+                "size_bytes": 7252,
+                "sha256": "41399eba6fc2a60f6f14642375c1824f3cf25eb8fec7397d753730a3ceda3e2b",
+                "platform": "Android",
+                "arch": "armeabi-v7a",
+            },
+            {
+                "path": "jni/x86/libandroidx.graphics.path.so",
+                "size_bytes": 9284,
+                "sha256": "eb0570b41fd3bff25d8204a967c03bd7550719e768b791f680cc40cbe35f29af",
+                "platform": "Android",
+                "arch": "x86",
+            },
+            {
+                "path": "jni/x86_64/libandroidx.graphics.path.so",
+                "size_bytes": 10760,
+                "sha256": "4e56c996f13670e70082658de7880c4020eabf4f25e43387f88ed78a713fc9f0",
+                "platform": "Android",
+                "arch": "x86_64",
+            },
+        ],
+        "note": (
+            "AndroidX Graphics Path (`shared`/`androidApp` runtime dependency, "
+            "resolved via Compose UI graphics support). Android-only carrier; "
+            "no Windows binary is bundled."
+        ),
+    },
+    {
         "maven_coordinate": "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6",
         "carrier_kind": "JVM .jar (Desktop app runtime classpath)",
         "license": "Apache-2.0",
@@ -1334,7 +1591,28 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "windows_native_available_upstream": True,
         "inspected_2026_08_24": True,
         "artifact_sha256": "4fb141dd8ef6b0585ffceea4bc49602fbc6312fa977e2c488794ea3e6aafecae",
-        "embedded_native_count": 27,
+        # JNA 5.19.1 publishes Gradle Module Metadata with a SEPARATE Android
+        # `.aar` variant (distinct file from the `.jar` above, same GAV) --
+        # found by cross_check_maven_native_carriers_against_local_cache()'s
+        # dynamic discovery (2026-08-24 independent review, Gap 7). Android
+        # source sets (this repo's `androidApp`) resolve the `.aar`, whose
+        # bundled natives are a DIFFERENT, smaller 7-file set (standard
+        # Android ABI directory names, not JNA's own os-arch naming) than
+        # the 27 in the `.jar` above -- both are recorded here since both
+        # are real, resolved artifacts of this one coordinate.
+        "additional_artifacts": [
+            {
+                "kind": "aar",
+                "artifact_sha256": "b57125cb7d16253f0d65a80f7d3a4c3664effa711b8bdbb7f87fb572ce1624ed",
+                "note": (
+                    "Android Gradle Module Metadata variant of this same "
+                    "coordinate; contains only the 7 embedded_natives rows "
+                    "below whose path starts with 'jni/' (Android ABI "
+                    "directory names), not the 27 'com/sun/jna/...' rows."
+                ),
+            }
+        ],
+        "embedded_native_count": 34,
         "embedded_natives": [
             {"path": "com/sun/jna/aix-ppc/libjnidispatch.a", "size_bytes": 613721, "sha256": "f33d3b4c2ca35fac8befc502b408e5b5851f8850c397d59f0094459fe455d0c1", "platform": "AIX", "arch": "ppc"},
             {"path": "com/sun/jna/aix-ppc64/libjnidispatch.a", "size_bytes": 657335, "sha256": "be8a1c6a282c637cf0ce217c331ee82a3643c59ef166fdbaabf1f27c3d7fd0dc", "platform": "AIX", "arch": "ppc64"},
@@ -1363,13 +1641,25 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
             {"path": "com/sun/jna/win32-aarch64/jnidispatch.dll", "size_bytes": 274432, "sha256": "b8f98be314234cf12b5b46c29652f70c0f6abb93ae19b63d3fe2692062aa699d", "platform": "Windows", "arch": "aarch64"},
             {"path": "com/sun/jna/win32-x86-64/jnidispatch.dll", "size_bytes": 273408, "sha256": "5a7ff949f6d93d86491eb5b26b1cfc60051168a60622650224b89995ac420023", "platform": "Windows", "arch": "x86-64"},
             {"path": "com/sun/jna/win32-x86/jnidispatch.dll", "size_bytes": 226304, "sha256": "752d597cee7e95cb517327146bf42f124c0d6c0bc48b3ecc3b1b3b0531a52f44", "platform": "Windows", "arch": "x86"},
+            {"path": "jni/arm64-v8a/libjnidispatch.so", "size_bytes": 176520, "sha256": "abc26e994517bcaa3309acdb0a27373864086c7569c89d3087b8626fada9ef06", "platform": "Android", "arch": "arm64-v8a"},
+            {"path": "jni/armeabi-v7a/libjnidispatch.so", "size_bytes": 126496, "sha256": "9652282ef31834281229370a354d56c1522fe36e93625169df99b3e346f76092", "platform": "Android", "arch": "armeabi-v7a"},
+            {"path": "jni/armeabi/libjnidispatch.so", "size_bytes": 126980, "sha256": "101daa2222382f3727800c0c49731346c5c4f81f1ecf1fde85ebcea64b151901", "platform": "Android", "arch": "armeabi"},
+            {"path": "jni/mips/libjnidispatch.so", "size_bytes": 130556, "sha256": "eb549d34eb17b394f4ba74c21c51f41340d8b049aa90cc9feaef734695890402", "platform": "Android", "arch": "mips"},
+            {"path": "jni/mips64/libjnidispatch.so", "size_bytes": 150256, "sha256": "93f5b0bec919b95160db0bf35c5ed6904d4d48f282501f0ff4a85f6511f3e44d", "platform": "Android", "arch": "mips64"},
+            {"path": "jni/x86/libjnidispatch.so", "size_bytes": 124380, "sha256": "d10fcc75029621a88fa6020807e7ba82ff434a01ead396cf0e36c50e6c393118", "platform": "Android", "arch": "x86"},
+            {"path": "jni/x86_64/libjnidispatch.so", "size_bytes": 126912, "sha256": "3809247e9b804a05ed8377b87d545cf5b5e97f960f75e725bc8497b40260e417", "platform": "Android", "arch": "x86_64"},
         ],
         "note": (
             "JNA is both a direct SDK dependency and its own native carrier. "
-            "Only one of these 27 platform-specific libjnidispatch binaries "
-            "loads at runtime per host; the jar as distributed contains all "
-            "27. A prior version of this catalog said 25 -- aix-ppc and "
-            "aix-ppc64 were missed; corrected here after a full zip-member "
+            "Only one of the 27 `.jar`-packaged platform-specific "
+            "libjnidispatch binaries loads at runtime per host; a JVM-only "
+            "consumer's jar as distributed contains all 27. Android "
+            "consumers instead resolve the separate `.aar` variant (see "
+            "additional_artifacts above), which bundles only the 7 "
+            "Android-ABI-named binaries also listed here -- 34 total rows, "
+            "not 27, once both real, resolved artifacts of this coordinate "
+            "are counted. A prior version of this catalog said 25 -- aix-ppc "
+            "and aix-ppc64 were missed; corrected here after a full zip-member "
             "enumeration. Do not classify JNA as a source-only dependency."
         ),
     },
@@ -1382,15 +1672,252 @@ VALID_CARRIER_DISTRIBUTION_STATUSES = (
     "not_in_first_release_scope",
 )
 
+# Archive member extensions treated as "native code" for discovery purposes.
+# `.a` is included because JNA ships AIX static archives inside its jar
+# (see the JNA carrier above); a bare static archive is still native object
+# code subject to the same review requirement as a shared library.
+NATIVE_MEMBER_EXTENSIONS = (".so", ".dll", ".dylib", ".jnilib", ".a")
 
-def maven_native_carriers_inventory() -> dict[str, Any]:
+# Magic-byte sniffing as a defense-in-depth backstop for a native member
+# that was (deliberately or accidentally) packaged WITHOUT one of the
+# extensions above -- e.g. a renamed/extensionless shared object. Checked
+# only on members that did NOT already match NATIVE_MEMBER_EXTENSIONS, so a
+# real native payload cannot silently evade discovery merely by omitting or
+# changing its filename extension.
+NATIVE_MAGIC_SIGNATURES: tuple[bytes, ...] = (
+    b"\x7fELF",  # ELF (Linux/BSD/Solaris shared objects and executables)
+    b"\xfe\xed\xfa\xce",  # Mach-O 32-bit
+    b"\xfe\xed\xfa\xcf",  # Mach-O 64-bit
+    b"\xcf\xfa\xed\xfe",  # Mach-O 64-bit, reversed byte order
+    b"\xce\xfa\xed\xfe",  # Mach-O 32-bit, reversed byte order
+    b"\xca\xfe\xba\xbe",  # Mach-O universal/fat binary
+    b"MZ",  # PE/COFF (Windows DLL/EXE) DOS stub header
+    b"!<arch>\n",  # Unix ar archive (static library container, e.g. .a)
+)
+MAX_NATIVE_MAGIC_PREFIX_LEN = max(len(sig) for sig in NATIVE_MAGIC_SIGNATURES)
+
+MAX_ZIP_MEMBERS_SCANNED = 20_000
+MAX_ZIP_MEMBER_BYTES_READ = 512 * 1024 * 1024
+
+
+def _looks_like_native_member(name: str, prefix: bytes) -> bool:
+    """True if `name`/`prefix` looks like a native code member.
+
+    Extension is checked first and is authoritative when present -- this
+    matters because magic-byte sniffing alone is NOT reliable here: a Java
+    `.class` file's own magic number (`CAFEBABE`) is byte-identical to a
+    Mach-O universal/fat binary's magic number, and a jar full of ordinary
+    `.class` files would otherwise be misreported as carrying dozens of
+    "native" members (a real false-positive this function was found to
+    produce against `androidx.annotation:annotation-jvm`, a pure-Kotlin/
+    Java artifact with zero native code). Magic sniffing is therefore only
+    consulted for a member with NO filename extension at all -- no
+    legitimately embedded native library in any carrier reviewed in
+    MAVEN_NATIVE_CARRIERS omits its extension, so this loses no real
+    coverage while eliminating the `.class`/Mach-O collision (and any other
+    extension's own magic-byte coincidence).
+    """
+    basename = name.rsplit("/", 1)[-1]
+    lower = basename.lower()
+    if any(lower.endswith(ext) for ext in NATIVE_MEMBER_EXTENSIONS):
+        return True
+    if "." in basename:
+        return False
+    return any(prefix.startswith(sig) for sig in NATIVE_MAGIC_SIGNATURES)
+
+
+def find_local_maven_artifacts(group: str, artifact: str, version: str) -> list[Path]:
+    """Locate every resolved .jar/.aar for one coordinate in the local
+    Gradle module cache -- there can legitimately be BOTH for one GAV (e.g.
+    `net.java.dev.jna:jna:5.19.1` publishes Gradle Module Metadata with a
+    separate Android `.aar` variant, distinct from its main `.jar`, and
+    different consuming source sets/modules resolve different files for
+    the exact same coordinate). Returns an empty list (never raises) when
+    the cache is cold/absent for this coordinate, so callers can treat this
+    purely as defense-in-depth, same as the POM live-fallback in
+    `gradle_license_inventory()` -- this generator's core determinism never
+    depends on this function finding anything.
+    """
+    base = GRADLE_MODULES2 / group / artifact / version
+    if not base.is_dir():
+        return []
+    found: list[Path] = []
+    for ext in (".aar", ".jar"):
+        for candidate in sorted(base.glob(f"*/{artifact}-{version}{ext}")):
+            if not candidate.is_symlink():
+                found.append(candidate)
+    return found
+
+
+def _scan_zip_for_native_members(archive_path: Path) -> list[dict[str, Any]]:
+    reject_symlink(archive_path)
+    members: list[dict[str, Any]] = []
+    with zipfile.ZipFile(archive_path) as zf:
+        infos = zf.infolist()
+        if len(infos) > MAX_ZIP_MEMBERS_SCANNED:
+            raise EvidenceError(
+                f"{archive_path}: {len(infos)} zip members exceeds "
+                f"MAX_ZIP_MEMBERS_SCANNED={MAX_ZIP_MEMBERS_SCANNED} (refusing to scan)"
+            )
+        for info in infos:
+            if info.is_dir():
+                continue
+            if info.file_size > MAX_ZIP_MEMBER_BYTES_READ:
+                raise EvidenceError(
+                    f"{archive_path}: member {info.filename!r} declares "
+                    f"{info.file_size} bytes, exceeding "
+                    f"MAX_ZIP_MEMBER_BYTES_READ={MAX_ZIP_MEMBER_BYTES_READ}"
+                )
+            with zf.open(info) as fh:
+                prefix = fh.read(MAX_NATIVE_MAGIC_PREFIX_LEN)
+                rest = fh.read()
+            data = prefix + rest
+            if not _looks_like_native_member(info.filename, prefix):
+                continue
+            members.append(
+                {
+                    "path": info.filename,
+                    "size_bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                }
+            )
+    return members
+
+
+def cross_check_maven_native_carriers_against_local_cache(
+    gradle_report: dict[str, Any],
+) -> None:
+    """Defense-in-depth: on a warm Gradle cache, scan every resolved runtime
+    coordinate's actual .jar/.aar for native-looking members and require the
+    result to exactly match `MAVEN_NATIVE_CARRIERS` above.
+
+    Like `find_local_pom()`'s live-cache fallback, this needs no
+    pre-populated cache to pass (a cold cache simply finds nothing to check,
+    since `find_local_maven_artifacts()` returns an empty list for every
+    coordinate and this function never raises for a coordinate whose
+    artifacts it could not locate) -- but when the cache IS warm, this
+    generator FAILS CLOSED
+    rather than silently omitting a native member: a native-carrying
+    coordinate absent from the static catalog, an unreviewed extra member
+    on a known carrier, or a hash/size mismatch on an already-catalogued
+    member all raise `EvidenceError` and abort generation.
+    """
+    catalog_by_coordinate = {c["maven_coordinate"]: c for c in MAVEN_NATIVE_CARRIERS}
+
+    all_runtime_gavs: set[str] = set()
+    for module_data in gradle_report["modules"].values():
+        all_runtime_gavs.update(module_data["coordinates"]["runtime"])
+
+    for gav in sorted(all_runtime_gavs):
+        group, artifact, version = parse_gav(gav)
+        artifact_paths = find_local_maven_artifacts(group, artifact, version)
+        if not artifact_paths:
+            continue  # cold cache for this coordinate -- nothing to cross-check
+
+        discovered_by_path: dict[str, dict[str, Any]] = {}
+        for artifact_path in artifact_paths:
+            discovered = _scan_zip_for_native_members(artifact_path)
+
+            # Duplicate-member-path detection within a single archive:
+            # zipfile's infolist() can legitimately contain duplicate names
+            # for a malformed/adversarial zip, and each would silently
+            # overwrite the last-scanned entry in a naive dict build below
+            # -- guard explicitly, before merging across artifacts.
+            discovered_paths_seen: list[str] = [m["path"] for m in discovered]
+            if len(discovered_paths_seen) != len(set(discovered_paths_seen)):
+                dupes = sorted(
+                    {p for p in discovered_paths_seen if discovered_paths_seen.count(p) > 1}
+                )
+                raise EvidenceError(
+                    f"{gav}: archive {artifact_path} contains duplicate native "
+                    f"member path(s) {dupes} -- malformed/adversarial zip, refusing"
+                )
+            for member in discovered:
+                existing_member = discovered_by_path.get(member["path"])
+                if existing_member is not None and existing_member["sha256"] != member["sha256"]:
+                    raise EvidenceError(
+                        f"{gav}: member path {member['path']!r} appears with "
+                        "two different SHA-256 values across this "
+                        "coordinate's own resolved artifacts (e.g. its .jar "
+                        "vs its .aar) -- ambiguous, refusing"
+                    )
+                discovered_by_path[member["path"]] = member
+
+        if not discovered_by_path:
+            continue
+
+        catalog_entry = catalog_by_coordinate.get(gav)
+        if catalog_entry is None:
+            raise EvidenceError(
+                f"{gav}: local Gradle cache artifact(s) "
+                f"{[str(p) for p in artifact_paths]} carry "
+                f"{len(discovered_by_path)} native-looking member(s) "
+                f"{sorted(discovered_by_path)} not present in "
+                "MAVEN_NATIVE_CARRIERS -- a new native-carrying coordinate "
+                "must be added to that catalog (with reviewed "
+                "distribution_status) before this generator will proceed; "
+                "it is never silently omitted"
+            )
+
+        catalog_by_path = {m["path"]: m for m in catalog_entry["embedded_natives"]}
+        extra = sorted(set(discovered_by_path) - set(catalog_by_path))
+        if extra:
+            raise EvidenceError(
+                f"{gav}: local cache artifact(s) {[str(p) for p in artifact_paths]} "
+                f"carry unreviewed native member path(s) {extra} not present "
+                f"in MAVEN_NATIVE_CARRIERS[{gav!r}]['embedded_natives'] -- "
+                "archive drift since the catalog was last reviewed"
+            )
+        missing = sorted(set(catalog_by_path) - set(discovered_by_path))
+        if missing:
+            raise EvidenceError(
+                f"{gav}: MAVEN_NATIVE_CARRIERS[{gav!r}] declares native "
+                f"member path(s) {missing} that local cache artifact(s) "
+                f"{[str(p) for p in artifact_paths]} no longer contain -- "
+                "archive drift, review and update the catalog"
+            )
+        for path, discovered_member in discovered_by_path.items():
+            catalog_member = catalog_by_path[path]
+            if discovered_member["sha256"] != catalog_member["sha256"]:
+                raise EvidenceError(
+                    f"{gav}: member {path!r} sha256 "
+                    f"{discovered_member['sha256']} does not match catalogued "
+                    f"{catalog_member['sha256']} -- archive/hash drift"
+                )
+            if discovered_member["size_bytes"] != catalog_member["size_bytes"]:
+                raise EvidenceError(
+                    f"{gav}: member {path!r} size {discovered_member['size_bytes']} "
+                    f"does not match catalogued {catalog_member['size_bytes']}"
+                )
+
+
+def maven_native_carriers_inventory(gradle_report: dict[str, Any] | None = None) -> dict[str, Any]:
+    seen_coordinates: set[str] = set()
     for carrier in MAVEN_NATIVE_CARRIERS:
+        coordinate = carrier["maven_coordinate"]
+        if coordinate in seen_coordinates:
+            raise EvidenceError(f"duplicate maven_coordinate in MAVEN_NATIVE_CARRIERS: {coordinate}")
+        seen_coordinates.add(coordinate)
         status = carrier.get("distribution_status")
         if status not in VALID_CARRIER_DISTRIBUTION_STATUSES:
             raise EvidenceError(
                 f"{carrier['maven_coordinate']}: distribution_status {status!r} "
                 f"is not one of {VALID_CARRIER_DISTRIBUTION_STATUSES}"
             )
+        if not SHA256_HEX_RE.match(carrier.get("artifact_sha256", "")):
+            raise EvidenceError(
+                f"{carrier['maven_coordinate']}: artifact_sha256 "
+                f"{carrier.get('artifact_sha256')!r} is not a 64-hex-char sha256"
+            )
+        for extra_artifact in carrier.get("additional_artifacts", []):
+            if not SHA256_HEX_RE.match(extra_artifact.get("artifact_sha256", "")):
+                raise EvidenceError(
+                    f"{carrier['maven_coordinate']}: additional_artifacts entry "
+                    f"{extra_artifact.get('kind')!r} artifact_sha256 "
+                    f"{extra_artifact.get('artifact_sha256')!r} is not a "
+                    "64-hex-char sha256"
+                )
+        seen_member_paths: set[str] = set()
         for member in carrier["embedded_natives"]:
             for field in ("path", "size_bytes", "sha256", "platform", "arch"):
                 if field not in member:
@@ -1398,12 +1925,34 @@ def maven_native_carriers_inventory() -> dict[str, Any]:
                         f"{carrier['maven_coordinate']}: embedded native "
                         f"{member.get('path')!r} is missing required field {field!r}"
                     )
+            if member["path"] in seen_member_paths:
+                raise EvidenceError(
+                    f"{carrier['maven_coordinate']}: duplicate embedded native "
+                    f"member path {member['path']!r}"
+                )
+            seen_member_paths.add(member["path"])
+            if not SHA256_HEX_RE.match(member["sha256"]):
+                raise EvidenceError(
+                    f"{carrier['maven_coordinate']}: embedded native "
+                    f"{member['path']!r} sha256 {member['sha256']!r} is not a "
+                    "64-hex-char sha256"
+                )
+            if not isinstance(member["size_bytes"], int) or member["size_bytes"] <= 0:
+                raise EvidenceError(
+                    f"{carrier['maven_coordinate']}: embedded native "
+                    f"{member['path']!r} size_bytes {member['size_bytes']!r} "
+                    "is not a positive integer"
+                )
         count = carrier.get("embedded_native_count")
         if count is not None and count != len(carrier["embedded_natives"]):
             raise EvidenceError(
                 f"{carrier['maven_coordinate']}: embedded_native_count {count} != "
                 f"len(embedded_natives) {len(carrier['embedded_natives'])}"
             )
+
+    if gradle_report is not None:
+        cross_check_maven_native_carriers_against_local_cache(gradle_report)
+
     return {
         "method": (
             "Point-in-time inspection (2026-08-24) of the actual resolved "
@@ -1417,7 +1966,16 @@ def maven_native_carriers_inventory() -> dict[str, Any]:
             "crypto-signing-backend/CHECKSUMS.sha256, which lists only "
             "first-party binaries built from this repository's own Rust crate. "
             "`distribution_status` is one of "
-            f"{VALID_CARRIER_DISTRIBUTION_STATUSES}."
+            f"{VALID_CARRIER_DISTRIBUTION_STATUSES}. Defense-in-depth: when "
+            "generation runs with a warm local Gradle module cache, every "
+            "resolved runtime coordinate's actual .jar/.aar is scanned "
+            f"(extensions {NATIVE_MEMBER_EXTENSIONS} plus ELF/Mach-O/PE/ar "
+            "magic-byte sniffing for extensionless members) via "
+            "cross_check_maven_native_carriers_against_local_cache(), which "
+            "fails generation on any undeclared native-carrying coordinate, "
+            "unreviewed extra/missing member, or member hash/size drift "
+            "against this table; a cold cache (as in CI) skips this specific "
+            "cross-check without weakening any other check in this file."
         ),
         "carriers": list(MAVEN_NATIVE_CARRIERS),
     }
@@ -1638,21 +2196,41 @@ def concat_sha256(paths: list[Path]) -> str:
     return digest.hexdigest()
 
 
-def write_digest_file(modules: tuple[str, ...], generated: dict[str, Path]) -> None:
+# The exact, fixed comment/header lines `digest_file_lines()` always emits
+# before any `key=value` line -- part of this file's "exact schema" contract
+# with `scripts/check_release_evidence.py`'s `check_digest_file_exact()`,
+# which rejects any OTHER comment line, in any position, as an unrecognized
+# addition (no ad hoc notes/comments are permitted in a committed digest
+# file, even though this parser could technically tolerate them).
+DIGEST_FILE_HEADER_LINES: tuple[str, ...] = (
+    "# Legal Evidence Digest",
+    "#",
+    "# Deterministic SHA-256 digests over locked/committed inputs and the",
+    "# evidence files this script generates. Regenerate with",
+    "# `python3 scripts/generate_legal_evidence.py` and diff against this",
+    "# file; a clean regeneration must produce byte-identical output for the",
+    "# tracked-tree-derived fields. See docs/LEGAL_REVIEW.md \u00a78 for the",
+    "# Gradle-license/native-carrier fields, which depend on the local",
+    "# Gradle module cache and are not tracked-tree-derived.",
+    "",
+)
+
+
+def digest_file_lines(modules: tuple[str, ...], generated: dict[str, Path]) -> list[str]:
+    """Pure builder for `LEGAL_EVIDENCE_DIGEST.txt`'s exact line sequence.
+
+    Used by both `write_digest_file()` (this module) and
+    `scripts/check_release_evidence.py`'s `check_digest_file_exact()`, so
+    the committed file's exact key SET, key ORDER, and every value are all
+    recomputed from a single source of truth instead of two independently
+    hand-maintained implementations that could silently drift apart from
+    each other.
+    """
     lockfiles = [REPO_ROOT / m / "gradle.lockfile" for m in modules]
     licenses = sorted((REPO_ROOT / "LICENSES").glob("*.txt"))
-    lines = [
-        "# Legal Evidence Digest",
-        "#",
-        "# Deterministic SHA-256 digests over locked/committed inputs and the",
-        "# evidence files this script generates. Regenerate with",
-        "# `python3 scripts/generate_legal_evidence.py` and diff against this",
-        "# file; a clean regeneration must produce byte-identical output for the",
-        "# tracked-tree-derived fields. See docs/LEGAL_REVIEW.md \u00a78 for the",
-        "# Gradle-license/native-carrier fields, which depend on the local",
-        "# Gradle module cache and are not tracked-tree-derived.",
-        "",
-        f"gradle_modules={','.join(modules)}",
+    lines = list(DIGEST_FILE_HEADER_LINES)
+    lines += [
+        f"gradle_modules={','.join(sorted(modules))}",
         f"gradle_lockfiles_sha256={concat_sha256(lockfiles)}",
         f"cargo_lock_sha256={sha256_file(SIGNING_BACKEND / 'Cargo.lock')}",
         f"native_checksums_sha256={sha256_file(SIGNING_BACKEND / 'CHECKSUMS.sha256')}",
@@ -1663,6 +2241,11 @@ def write_digest_file(modules: tuple[str, ...], generated: dict[str, Path]) -> N
     for name, path in sorted(generated.items()):
         lines.append(f"{name}_sha256={sha256_file(path)}")
     lines.append(f"expected_evidence_files={','.join(sorted(generated.keys()))}")
+    return lines
+
+
+def write_digest_file(modules: tuple[str, ...], generated: dict[str, Path]) -> None:
+    lines = digest_file_lines(modules, generated)
     (EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt").write_text(
         "\n".join(lines) + "\n", encoding="utf-8"
     )
@@ -1681,7 +2264,8 @@ def run_generate() -> int:
         write_json(outputs["uniffi_bindings_inventory.json"], uniffi_bindings_inventory())
         write_json(outputs["native_artifacts_inventory.json"], native_artifacts_inventory())
         write_json(
-            outputs["maven_native_carriers_inventory.json"], maven_native_carriers_inventory()
+            outputs["maven_native_carriers_inventory.json"],
+            maven_native_carriers_inventory(gradle_report),
         )
         write_json(
             outputs["bouncycastle_license_source.json"], bouncycastle_license_source_inventory()

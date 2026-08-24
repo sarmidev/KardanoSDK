@@ -18,6 +18,22 @@ artifact).
 normalized), so a reviewer can trace it back to the source. Coordinates are
 matched by `group:artifact` (any version), unless a specific
 `group:artifact:version` key is present, which takes precedence.
+
+Any entry with more than one `licenses` value (a real disjunctive OR choice)
+MUST also carry `election_status` (one of `"OPEN"`/`"ACCEPTED"`, matching
+`scripts/check_release_evidence.py`'s `VALID_ELECTION_STATUSES`),
+`election_reviewer`, and `election_review_date` -- the same
+"no reviewer has actually accepted this yet" schema
+`scripts/cargo_election_catalog.py` uses on the Cargo side, generated
+dynamically (one row per multi-license coordinate, not a hand-maintained
+count) into `docs/evidence/gradle_license_inventory.json`'s
+`license_elections` section by
+`scripts/generate_legal_evidence.py`'s `gradle_license_elections()`.
+`election_status` only ever becomes `"ACCEPTED"` by a human editing this
+file to also fill in `election_reviewer`/`election_review_date` (ISO 8601)
+-- this script never sets it itself, and `release` mode fails while any
+such row is not `"ACCEPTED"`. `net.java.dev.jna:jna` is currently the only
+Gradle coordinate in this catalog with more than one license.
 """
 
 from __future__ import annotations
@@ -156,14 +172,19 @@ GRADLE_LICENSE_CATALOG: dict[str, dict[str, Any]] = {
     "net.java.dev.jna:jna": {
         "licenses": ["LGPL-2.1-or-later", "Apache-2.0"],
         "election": "Apache-2.0",
+        "election_status": "OPEN",
+        "election_reviewer": None,
+        "election_review_date": None,
         "source": "https://github.com/java-native-access/jna/blob/master/LICENSE",
         "note": (
             "The POM lists LGPL-2.1-or-later first, Apache-2.0 second, both under "
             "<distribution>repo</distribution> as a real disjunctive choice (confirmed from the "
-            "artifact's own POM, not assumed). Kardano SDK elects Apache-2.0. Ships a jar that "
-            "itself bundles 25 platform-specific libjnidispatch native binaries; see "
-            "docs/evidence/maven_native_carriers_inventory.json. Do not classify JNA as source-only: "
-            "it is source-plus-embedded-native-carrier."
+            "artifact's own POM, not assumed). Kardano SDK proposes electing Apache-2.0, but "
+            "election_status is OPEN -- no reviewer has actually accepted this election yet (see "
+            "docs/evidence/gradle_license_inventory.json 'license_elections' and "
+            "docs/LEGAL_REVIEW.md \u00a75a). Ships a jar that itself bundles 27 platform-specific "
+            "libjnidispatch native binaries; see docs/evidence/maven_native_carriers_inventory.json. "
+            "Do not classify JNA as source-only: it is source-plus-embedded-native-carrier."
         ),
     },
     "org.slf4j:slf4j-api": {

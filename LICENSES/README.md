@@ -25,6 +25,7 @@ rendered by an HTML page, not a fetched file — see the dedicated row and
 | `ISC-libsodium.txt` | ISC License (as published by the `libsodium` project) | Fetched 2026-08-24: https://raw.githubusercontent.com/jedisct1/libsodium/master/LICENSE | `508a76d186356c0dd807a670ef510964f8724557024796a2c426c6c0e19ab683` |
 | `MIT.txt` | MIT License | Fetched 2026-08-24: https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt (SPDX license-list-data, the canonical machine-readable MIT template) | `b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5` |
 | `Unicode-3.0.txt` | Unicode License v3 | Fetched 2026-08-24: https://raw.githubusercontent.com/spdx/license-list-data/main/text/Unicode-3.0.txt | `f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1` |
+| `Unlicense.txt` | The Unlicense | Fetched 2026-08-24: https://raw.githubusercontent.com/spdx/license-list-data/main/text/Unlicense.txt (SPDX license-list-data, the canonical machine-readable Unlicense template) | `0bdebfeda07d45dada625ae1317c6f833186e798b171d0db640bcf32e92a8240` |
 | `BouncyCastle.txt` | Bouncy Castle License (upstream describes it as "read in the same way as the MIT license"; it is **not** the generic SPDX `MIT` template, and this file is **not** the fetched HTML bytes — see below) | Manually transcribed 2026-08-24 from https://www.bouncycastle.org/licence.html | `3216ec8f5e256138322eb8d7adb2c7d176af83e29193e38041a62a83ab55fd63` (SHA-256 of the transcription; does **not** match a hash of the source page) |
 
 ## Bouncy Castle: transcription, not a fetched file
@@ -132,5 +133,12 @@ Evaluated against the locked Gradle/Cargo dependency graph as of 2026-08-24:
   counsel determination, not asserted dispositive by this script.
 - **Bouncy Castle License** — applies to `org.bouncycastle:bcprov-jdk18on`,
   its own permissive license text, not the generic MIT template (see above).
+- **The Unlicense** — the `memchr` Rust crate (`2.8.3`, target-linked, per its
+  own Cargo.toml `Unlicense OR MIT` expression) offers this as one of its two
+  OR branches. No election is proposed here between `Unlicense` and `MIT` —
+  see `docs/LEGAL_REVIEW.md` §5a, an explicit
+  **OPEN — pending per-election reviewer acceptance** field. This file is
+  committed so both branches of that unresolved OR are independently
+  reviewable, not just the one this repository might eventually elect.
 
 This evaluation is a factual dependency-graph finding, not legal advice.

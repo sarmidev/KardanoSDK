@@ -118,6 +118,114 @@ class DigestFileParsingTests(unittest.TestCase):
                 errors = checker.check_digest_file_exact()
             self.assertTrue(any("symlink" in e for e in errors))
 
+    def test_unrecognized_comment_line_is_rejected_as_byte_mismatch(self) -> None:
+        # `digest_file_lines()` never emits any comment line beyond the
+        # fixed `DIGEST_FILE_HEADER_LINES` block; a stray extra comment
+        # anywhere (even a well-intentioned human note) must fail the
+        # final byte-exact recomputation check rather than being silently
+        # tolerated by the line-parsing loop that skips `#`-prefixed lines.
+        # Uses a full copy of the real evidence tree (not just the digest
+        # text file in isolation) so every OTHER field still recomputes
+        # cleanly and only the injected comment line trips a failure.
+        import shutil
+
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence_dir = Path(tmp) / "evidence"
+            shutil.copytree(checker.EVIDENCE_DIR, evidence_dir)
+            digest_path = evidence_dir / "LEGAL_EVIDENCE_DIGEST.txt"
+            real_bytes = digest_path.read_bytes()
+            digest_path.write_bytes(real_bytes.replace(b"\n\n", b"\n# ad hoc note\n\n", 1))
+            with mock.patch.object(checker, "EVIDENCE_DIR", evidence_dir):
+                errors = checker.check_digest_file_exact()
+            self.assertTrue(any("do not exactly match deterministic recomputation" in e for e in errors))
+
+    def test_trailing_junk_after_last_key_is_rejected(self) -> None:
+        real_bytes = (checker.EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            digest_dir = Path(tmp)
+            digest_path = digest_dir / "LEGAL_EVIDENCE_DIGEST.txt"
+            digest_path.write_bytes(real_bytes.rstrip(b"\n") + b"\ntrailing_junk_not_a_real_key=1\n")
+            with mock.patch.object(checker, "EVIDENCE_DIR", digest_dir):
+                errors = checker.check_digest_file_exact()
+            self.assertTrue(any("unexpected/extra key" in e and "trailing_junk_not_a_real_key" in e for e in errors))
+
+    def test_missing_expected_key_is_rejected(self) -> None:
+        real_bytes = (checker.EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt").read_bytes()
+        lines = real_bytes.decode("utf-8").split("\n")
+        filtered = [ln for ln in lines if not ln.startswith("notice_sha256=")]
+        with tempfile.TemporaryDirectory() as tmp:
+            digest_dir = Path(tmp)
+            digest_path = digest_dir / "LEGAL_EVIDENCE_DIGEST.txt"
+            digest_path.write_text("\n".join(filtered), encoding="utf-8")
+            with mock.patch.object(checker, "EVIDENCE_DIR", digest_dir):
+                errors = checker.check_digest_file_exact()
+            self.assertTrue(any("missing expected key" in e and "notice_sha256" in e for e in errors))
+
+    def test_extra_ad_hoc_key_is_rejected(self) -> None:
+        real_bytes = (checker.EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            digest_dir = Path(tmp)
+            digest_path = digest_dir / "LEGAL_EVIDENCE_DIGEST.txt"
+            digest_path.write_bytes(real_bytes.rstrip(b"\n") + b"\nsome_ad_hoc_field=deadbeef\n")
+            with mock.patch.object(checker, "EVIDENCE_DIR", digest_dir):
+                errors = checker.check_digest_file_exact()
+            self.assertTrue(
+                any(
+                    "unexpected/extra key" in e and "some_ad_hoc_field" in e
+                    for e in errors
+                )
+            )
+
+    def test_duplicate_evidence_sha256_key_is_rejected(self) -> None:
+        real_bytes = (checker.EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt").read_bytes()
+        lines = real_bytes.decode("utf-8").split("\n")
+        target = next(ln for ln in lines if ln.startswith("notice_sha256="))
+        insert_at = lines.index(target) + 1
+        lines.insert(insert_at, target)
+        with tempfile.TemporaryDirectory() as tmp:
+            digest_dir = Path(tmp)
+            digest_path = digest_dir / "LEGAL_EVIDENCE_DIGEST.txt"
+            digest_path.write_text("\n".join(lines), encoding="utf-8")
+            with mock.patch.object(checker, "EVIDENCE_DIR", digest_dir):
+                errors = checker.check_digest_file_exact()
+            self.assertTrue(any("duplicate key" in e and "notice_sha256" in e for e in errors))
+
+    def test_gradle_modules_mismatch_against_dynamic_discovery_is_rejected(self) -> None:
+        real_bytes = (checker.EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt").read_bytes()
+        lines = real_bytes.decode("utf-8").split("\n")
+        replaced = [
+            "gradle_modules=totally-made-up-module,another-fake-module" if ln.startswith("gradle_modules=") else ln
+            for ln in lines
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            digest_dir = Path(tmp)
+            digest_path = digest_dir / "LEGAL_EVIDENCE_DIGEST.txt"
+            digest_path.write_text("\n".join(replaced), encoding="utf-8")
+            with mock.patch.object(checker, "EVIDENCE_DIR", digest_dir):
+                errors = checker.check_digest_file_exact()
+            self.assertTrue(
+                any(
+                    "gradle_modules=" in e and "dynamically discovered from settings.gradle.kts" in e
+                    for e in errors
+                )
+            )
+
+    def test_malformed_sha256_value_is_rejected(self) -> None:
+        real_bytes = (checker.EVIDENCE_DIR / "LEGAL_EVIDENCE_DIGEST.txt").read_bytes()
+        lines = real_bytes.decode("utf-8").split("\n")
+        replaced = [
+            "notice_sha256=NOT-A-VALID-HEX-DIGEST" if ln.startswith("notice_sha256=") else ln for ln in lines
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            digest_dir = Path(tmp)
+            digest_path = digest_dir / "LEGAL_EVIDENCE_DIGEST.txt"
+            digest_path.write_text("\n".join(replaced), encoding="utf-8")
+            with mock.patch.object(checker, "EVIDENCE_DIR", digest_dir):
+                errors = checker.check_digest_file_exact()
+            self.assertTrue(
+                any("not a 64-hex-char lowercase SHA-256 value" in e for e in errors)
+            )
+
 
 class EvidenceTreeExactTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -294,13 +402,26 @@ class PlaceholderDetectionTests(unittest.TestCase):
 
 class CargoElectionSchemaTests(unittest.TestCase):
     def _report(self, rows: list[dict], mandatory_count: int, accepted_count: int) -> dict:
+        # Mirrors generate_legal_evidence.py's real
+        # `all_mandatory_elections_accepted` formula: BOTH every mandatory
+        # OR-election row AND every mandatory AND-component (across all
+        # rows) must be ACCEPTED -- accepting one side never implicitly
+        # satisfies the other.
+        and_components = [
+            c
+            for r in rows
+            if r.get("linked_in_any_target")
+            for c in r.get("and_component_acceptance", [])
+        ]
+        all_and_accepted = all(c["status"] == "ACCEPTED" for c in and_components)
         return {
             "license_elections": {
                 "rows": rows,
                 "mandatory_row_count": mandatory_count,
                 "accepted_count": accepted_count,
                 "all_mandatory_elections_accepted": accepted_count == mandatory_count
-                and mandatory_count > 0,
+                and mandatory_count > 0
+                and all_and_accepted,
             }
         }
 
@@ -438,97 +559,509 @@ class CargoElectionSchemaTests(unittest.TestCase):
         self.assertIn("memchr@2.8.3", errors[0])
         self.assertNotIn("anyhow@1.0.103", errors[0])
 
+    def test_accepted_with_proposed_election_not_in_options_is_rejected(self) -> None:
+        # Gap 3: an ACCEPTED row's proposed_election must be EXACTLY one of
+        # its own or_election_options -- e.g. accepting "BSD-3-Clause" for a
+        # package whose actual SPDX expression only offers MIT/Apache-2.0.
+        report = self._report(
+            [
+                {
+                    "name": "anyhow",
+                    "version": "1.0.103",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                    "proposed_election": "BSD-3-Clause",
+                    "or_election_options": ["MIT", "Apache-2.0"],
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("ci-structural")
+        self.assertTrue(
+            any(
+                "proposed_election" in e and "BSD-3-Clause" in e and "or_election_options" in e
+                for e in errors
+            )
+        )
+
+    def test_accepted_with_missing_proposed_election_is_rejected(self) -> None:
+        # memchr's real shape: proposed_election is deliberately None (no
+        # blanket Unlicense-vs-MIT election). Accepting the row anyway
+        # (status ACCEPTED, proposed_election still None) must fail even
+        # though status/reviewer/review_date all look superficially valid.
+        report = self._report(
+            [
+                {
+                    "name": "memchr",
+                    "version": "2.8.3",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                    "proposed_election": None,
+                    "or_election_options": ["Unlicense", "MIT"],
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("ci-structural")
+        self.assertTrue(any("memchr@2.8.3" in e and "not exactly one of" in e for e in errors))
+
+    def test_and_component_missing_reviewer_is_rejected_even_though_or_side_accepted(
+        self,
+    ) -> None:
+        # unicode-ident's real shape: MIT OR Apache-2.0 (OR side) AND
+        # Unicode-3.0 (mandatory AND component). Accepting the OR side
+        # must NOT implicitly accept the Unicode-3.0 AND component.
+        report = self._report(
+            [
+                {
+                    "name": "unicode-ident",
+                    "version": "1.0.22",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                    "proposed_election": "Apache-2.0",
+                    "or_election_options": ["MIT", "Apache-2.0"],
+                    "and_component_acceptance": [
+                        {"component": "Unicode-3.0", "status": "ACCEPTED", "reviewer": None, "review_date": "2026-08-24"}
+                    ],
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("ci-structural")
+        self.assertTrue(
+            any("AND-component" in e and "Unicode-3.0" in e and "reviewer is empty" in e for e in errors)
+        )
+
+    def test_and_component_open_fails_release_mode_even_though_or_side_accepted(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "unicode-ident",
+                    "version": "1.0.22",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                    "proposed_election": "Apache-2.0",
+                    "or_election_options": ["MIT", "Apache-2.0"],
+                    "and_component_acceptance": [
+                        {"component": "Unicode-3.0", "status": "OPEN", "reviewer": None, "review_date": None}
+                    ],
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            errors = checker.check_cargo_license_elections("release")
+        self.assertTrue(any("AND components not accepted" in e and "Unicode-3.0" in e for e in errors))
+
+    def test_and_component_fully_accepted_passes_release_mode(self) -> None:
+        report = self._report(
+            [
+                {
+                    "name": "unicode-ident",
+                    "version": "1.0.22",
+                    "status": "ACCEPTED",
+                    "reviewer": "Jane Doe",
+                    "review_date": "2026-08-24",
+                    "linked_in_any_target": True,
+                    "proposed_election": "Apache-2.0",
+                    "or_election_options": ["MIT", "Apache-2.0"],
+                    "and_component_acceptance": [
+                        {"component": "Unicode-3.0", "status": "ACCEPTED", "reviewer": "Jane Doe", "review_date": "2026-08-24"}
+                    ],
+                }
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "cargo_dependency_inventory_per_target", lambda: report
+        ):
+            self.assertEqual(checker.check_cargo_license_elections("release"), [])
+
+
+class GradleElectionSchemaTests(unittest.TestCase):
+    """Mirrors CargoElectionSchemaTests for the Gradle side (Gap 2),
+    including JNA, using a synthetic gradle_license_inventory() report so
+    these are fast, deterministic unit tests independent of the local
+    Gradle module cache."""
+
+    def _report(self, rows: list[dict], mandatory_count: int, accepted_count: int) -> dict:
+        return {
+            "license_elections": {
+                "rows": rows,
+                "mandatory_row_count": mandatory_count,
+                "accepted_count": accepted_count,
+                "all_mandatory_elections_accepted": accepted_count == mandatory_count
+                and mandatory_count > 0,
+            }
+        }
+
+    def _jna_row(self, **overrides) -> dict:
+        row = {
+            "coordinate": "net.java.dev.jna:jna:5.19.1",
+            "status": "OPEN",
+            "reviewer": None,
+            "review_date": None,
+            "proposed_election": "Apache-2.0",
+            "or_election_options": ["Apache-2.0", "LGPL-2.1-or-later"],
+        }
+        row.update(overrides)
+        return row
+
+    def test_jna_open_status_is_valid_in_ci_structural(self) -> None:
+        report = self._report([self._jna_row()], mandatory_count=1, accepted_count=0)
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            self.assertEqual(checker.check_gradle_license_elections("ci-structural"), [])
+
+    def test_jna_missing_election_status_is_rejected(self) -> None:
+        report = self._report([self._jna_row(status=None)], mandatory_count=1, accepted_count=0)
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            errors = checker.check_gradle_license_elections("ci-structural")
+        self.assertTrue(any("jna" in e and "not one of" in e for e in errors))
+
+    def test_jna_invalid_election_status_string_is_rejected(self) -> None:
+        report = self._report([self._jna_row(status="Approved")], mandatory_count=1, accepted_count=0)
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            errors = checker.check_gradle_license_elections("ci-structural")
+        self.assertTrue(any("Approved" in e and "not one of" in e for e in errors))
+
+    def test_jna_accepted_without_reviewer_is_rejected(self) -> None:
+        report = self._report(
+            [self._jna_row(status="ACCEPTED", reviewer=None, review_date="2026-08-24")],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            errors = checker.check_gradle_license_elections("ci-structural")
+        self.assertTrue(any("reviewer is empty" in e for e in errors))
+
+    def test_jna_accepted_with_invalid_date_is_rejected(self) -> None:
+        report = self._report(
+            [self._jna_row(status="ACCEPTED", reviewer="Jane Doe", review_date="24-08-2026")],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            errors = checker.check_gradle_license_elections("ci-structural")
+        self.assertTrue(any("not an ISO-8601 date" in e for e in errors))
+
+    def test_jna_accepted_election_not_in_options_is_rejected(self) -> None:
+        report = self._report(
+            [
+                self._jna_row(
+                    status="ACCEPTED",
+                    reviewer="Jane Doe",
+                    review_date="2026-08-24",
+                    proposed_election="MIT",
+                )
+            ],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            errors = checker.check_gradle_license_elections("ci-structural")
+        self.assertTrue(any("MIT" in e and "or_election_options" in e for e in errors))
+
+    def test_jna_fully_accepted_passes_release_mode(self) -> None:
+        report = self._report(
+            [self._jna_row(status="ACCEPTED", reviewer="Jane Doe", review_date="2026-08-24")],
+            mandatory_count=1,
+            accepted_count=1,
+        )
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            self.assertEqual(checker.check_gradle_license_elections("release"), [])
+
+    def test_jna_still_open_fails_release_mode(self) -> None:
+        report = self._report([self._jna_row()], mandatory_count=1, accepted_count=0)
+        with mock.patch.object(
+            evidence, "gradle_dependency_inventory", lambda modules: {"modules": {}}
+        ), mock.patch.object(evidence, "gradle_license_inventory", lambda gr: report):
+            errors = checker.check_gradle_license_elections("release")
+        self.assertTrue(any("net.java.dev.jna:jna:5.19.1" in e for e in errors))
+
+    def test_real_tree_jna_row_is_open_in_ci_structural(self) -> None:
+        # Integration check against the real committed license_catalog.py:
+        # JNA's real row must exist, be schema-valid, and currently be OPEN
+        # (no blanket acceptance) -- this is the actual gap-2 regression
+        # this class exists to prevent from silently reappearing.
+        gradle_report = evidence.gradle_dependency_inventory(evidence.discover_gradle_modules())
+        report = evidence.gradle_license_inventory(gradle_report)
+        rows = report["license_elections"]["rows"]
+        jna_rows = [r for r in rows if r["coordinate"].startswith("net.java.dev.jna:jna:")]
+        self.assertEqual(len(jna_rows), 1)
+        self.assertEqual(jna_rows[0]["status"], "OPEN")
+        self.assertEqual(checker.check_gradle_license_elections("ci-structural"), [])
+        release_errors = checker.check_gradle_license_elections("release")
+        self.assertTrue(any("jna" in e for e in release_errors))
+
 
 class CargoInventoryHostAmbiguousFreshnessTests(unittest.TestCase):
-    """`cargo_dependency_inventory.json`'s x86_64-unknown-linux-gnu membership
-    slice is host-ambiguous (see the comment above `LINUX_X86_64_TARGET_TRIPLE`
-    in scripts/check_release_evidence.py); everything else must still fail
-    closed, on every host, exactly as before."""
+    """The ONLY permitted host-ambiguous difference in
+    `cargo_dependency_inventory.json` is the single, exact `errno@0.3.14`
+    `x86_64-unknown-linux-gnu` membership entry (see the comment above
+    `LINUX_X86_64_TARGET_TRIPLE` in scripts/check_release_evidence.py);
+    everything else -- a different package, a different triple, a wrong
+    errno version/source/checksum, an inconsistent/partial version of the
+    known diff, or any additional unrelated diff -- must still fail closed,
+    on every host, exactly as before. The exception applies only when the
+    ACTUAL `rustc -vV` host (not a spoofable `platform`/env value) is not
+    itself `x86_64-unknown-linux-gnu`.
+    """
 
     def _committed_payload(self) -> dict:
+        """A small, self-contained synthetic payload -- deliberately NOT the
+        real committed docs/evidence/cargo_dependency_inventory.json.
+
+        The real file's errno@0.3.14 x86_64-unknown-linux-gnu membership
+        reflects whatever this specific machine's `cargo tree` actually
+        resolved at generation time, which empirically is NOT stable across
+        environments/toolchain versions -- unlike the narrow, purely
+        pairwise `_cargo_inventory_diff_is_known_errno_host_ambiguity()`
+        logic under test here, which only cares about the SHAPE of a diff
+        between two payloads, not which absolute state either one starts
+        from. A synthetic fixture keeps this test class's outcome
+        independent of the current host's own cargo resolution.
+        """
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        other_triple = "aarch64-apple-darwin"
+        other_pkg_id = "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228"
+        return {
+            "package_count": 2,
+            "packages": [
+                {
+                    "name": checker.KNOWN_ERRNO_NAME,
+                    "version": checker.KNOWN_ERRNO_VERSION,
+                    "source": checker.KNOWN_ERRNO_SOURCE,
+                    "cargo_lock_checksum": checker.KNOWN_ERRNO_CHECKSUM,
+                    "membership": {},
+                },
+                {
+                    "name": "serde",
+                    "version": "1.0.228",
+                    "source": "registry+https://github.com/rust-lang/crates.io-index",
+                    "cargo_lock_checksum": "0" * 64,
+                    "membership": {triple: ["linked_into_compiled_artifact"]},
+                },
+            ],
+            "membership_by_target": {
+                triple: {"linked_into_compiled_artifact": [other_pkg_id]},
+                other_triple: {"linked_into_compiled_artifact": []},
+            },
+        }
+
+    def _add_known_errno_diff(self, payload: dict) -> dict:
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        payload = copy.deepcopy(payload)
+        linked = payload["membership_by_target"][triple]["linked_into_compiled_artifact"]
+        if pkg_id not in linked:
+            payload["membership_by_target"][triple]["linked_into_compiled_artifact"] = sorted(
+                linked + [pkg_id]
+            )
+        errno_pkg = next(p for p in payload["packages"] if p["name"] == "errno")
+        errno_pkg["membership"][triple] = ["linked_into_compiled_artifact"]
+        return payload
+
+    def test_exact_known_diff_matches(self) -> None:
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertTrue(matches, detail)
+
+    def test_identical_payloads_are_not_reported_as_a_diff_match_target(self) -> None:
+        # Not the scenario this function is called for in practice (the
+        # caller only invokes it when fresh_text != committed_text), but it
+        # must not crash and must not claim a match when nothing differs.
+        committed = self._committed_payload()
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(
+            committed, copy.deepcopy(committed)
+        )
+        self.assertFalse(matches)
+
+    def test_unrelated_package_linux_membership_diff_fails(self) -> None:
+        committed = self._committed_payload()
+        fresh = copy.deepcopy(committed)
+        fresh["membership_by_target"][checker.LINUX_X86_64_TARGET_TRIPLE][
+            "linked_into_compiled_artifact"
+        ].append("registry+https://github.com/rust-lang/crates.io-index#some_other_package@1.0.0")
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_errno_wrong_version_fails(self) -> None:
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        next(p for p in fresh["packages"] if p["name"] == "errno")["version"] = "0.3.15"
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_errno_wrong_source_fails(self) -> None:
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        next(p for p in fresh["packages"] if p["name"] == "errno")["source"] = "registry+https://example.invalid"
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_errno_wrong_checksum_fails(self) -> None:
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        next(p for p in fresh["packages"] if p["name"] == "errno")["cargo_lock_checksum"] = "0" * 64
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_extra_path_alongside_known_diff_fails(self) -> None:
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        fresh["package_count"] = committed["package_count"] + 1
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_inconsistent_partial_diff_fails(self) -> None:
+        # membership_by_target says errno is linked for that target, but the
+        # package's own membership dict disagrees -- not the known shape.
+        committed = self._committed_payload()
+        fresh = copy.deepcopy(committed)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        fresh["membership_by_target"][triple]["linked_into_compiled_artifact"] = sorted(
+            fresh["membership_by_target"][triple]["linked_into_compiled_artifact"] + [pkg_id]
+        )
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_missing_membership_by_target_entry_fails(self) -> None:
+        committed = self._committed_payload()
+        fresh = copy.deepcopy(committed)
+        del fresh["membership_by_target"][checker.LINUX_X86_64_TARGET_TRIPLE]["linked_into_compiled_artifact"]
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_host_spoof_via_platform_module_is_ignored(self) -> None:
+        # Even if platform.system()/machine() are spoofed to claim
+        # Linux/x86_64, only the actual rustc host (mocked here) decides.
+        with (
+            mock.patch("platform.system", return_value="Linux"),
+            mock.patch("platform.machine", return_value="x86_64"),
+            mock.patch.object(checker, "_rustc_host_triple", return_value="aarch64-apple-darwin"),
+        ):
+            self.assertFalse(checker._host_is_linux_x86_64())
+
+    def test_host_is_linux_x86_64_uses_rustc_host_triple(self) -> None:
+        with mock.patch.object(checker, "_rustc_host_triple", return_value="x86_64-unknown-linux-gnu"):
+            self.assertTrue(checker._host_is_linux_x86_64())
+        with mock.patch.object(checker, "_rustc_host_triple", return_value="aarch64-apple-darwin"):
+            self.assertFalse(checker._host_is_linux_x86_64())
+        with mock.patch.object(checker, "_rustc_host_triple", return_value=None):
+            self.assertFalse(checker._host_is_linux_x86_64())
+
+    def _real_committed_payload(self) -> dict:
         text = (checker.EVIDENCE_DIR / "cargo_dependency_inventory.json").read_text(encoding="utf-8")
         return json.loads(text)
 
-    def test_strip_removes_nested_triple_key_everywhere(self) -> None:
-        payload = {
-            "membership_by_target": {
-                "x86_64-unknown-linux-gnu": {"linked_into_compiled_artifact": ["errno@0.3.14"]},
-                "aarch64-apple-darwin": {"linked_into_compiled_artifact": ["errno@0.3.14"]},
-            },
-            "packages": [
-                {
-                    "name": "errno",
-                    "membership": {
-                        "x86_64-unknown-linux-gnu": ["linked_into_compiled_artifact"],
-                        "aarch64-apple-darwin": ["linked_into_compiled_artifact"],
-                    },
-                }
-            ],
-        }
-        stripped = checker._strip_host_ambiguous_cargo_target_membership(
-            payload, checker.LINUX_X86_64_TARGET_TRIPLE
-        )
-        self.assertNotIn("x86_64-unknown-linux-gnu", stripped["membership_by_target"])
-        self.assertNotIn("x86_64-unknown-linux-gnu", stripped["packages"][0]["membership"])
-        self.assertIn("aarch64-apple-darwin", stripped["membership_by_target"])
-        self.assertIn("aarch64-apple-darwin", stripped["packages"][0]["membership"])
+    def _toggle_known_errno_diff(self, payload: dict) -> dict:
+        """Flip errno@0.3.14's x86_64-unknown-linux-gnu presence, whichever
+        way it currently is, guaranteeing a genuine, exact-shape diff from
+        `payload` regardless of which side of the real ambiguity the actual
+        committed evidence file happens to be on when these three
+        integration-style tests run (this repo's own committed file's
+        exact errno membership on this one target is itself a live,
+        environment-dependent fact this test class must not assume either
+        way -- only the mechanics of the exception matter here).
+        """
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        payload = copy.deepcopy(payload)
+        linked = payload["membership_by_target"][triple]["linked_into_compiled_artifact"]
+        errno_pkg = next(p for p in payload["packages"] if p["name"] == "errno")
+        if pkg_id in linked:
+            payload["membership_by_target"][triple]["linked_into_compiled_artifact"] = [
+                x for x in linked if x != pkg_id
+            ]
+            errno_pkg["membership"].pop(triple, None)
+        else:
+            payload["membership_by_target"][triple]["linked_into_compiled_artifact"] = sorted(
+                linked + [pkg_id]
+            )
+            errno_pkg["membership"][triple] = ["linked_into_compiled_artifact"]
+        return payload
 
-    def test_non_matching_host_skips_when_divergence_confined_to_ambiguous_target(self) -> None:
-        committed = self._committed_payload()
-        fresh = copy.deepcopy(committed)
-        fresh["membership_by_target"]["x86_64-unknown-linux-gnu"]["linked_into_compiled_artifact"].append(
-            "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14"
-        )
+    def test_non_matching_rustc_host_skips_only_the_known_diff(self) -> None:
+        committed = self._real_committed_payload()
+        fresh = self._toggle_known_errno_diff(committed)
         with (
             mock.patch.object(evidence, "cargo_dependency_inventory_per_target", lambda: fresh),
-            mock.patch.object(checker.platform, "system", return_value="Darwin"),
-            mock.patch.object(checker.platform, "machine", return_value="arm64"),
+            mock.patch.object(checker, "_rustc_host_triple", return_value="aarch64-apple-darwin"),
         ):
             errors = checker.check_evidence_is_freshly_regenerable()
         self.assertEqual(errors, [])
 
-    def test_matching_host_does_not_skip_the_same_divergence(self) -> None:
-        committed = self._committed_payload()
-        fresh = copy.deepcopy(committed)
-        fresh["membership_by_target"]["x86_64-unknown-linux-gnu"]["linked_into_compiled_artifact"].append(
-            "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14"
-        )
+    def test_matching_rustc_host_does_not_skip_the_same_diff(self) -> None:
+        committed = self._real_committed_payload()
+        fresh = self._toggle_known_errno_diff(committed)
         with (
             mock.patch.object(evidence, "cargo_dependency_inventory_per_target", lambda: fresh),
-            mock.patch.object(checker.platform, "system", return_value="Linux"),
-            mock.patch.object(checker.platform, "machine", return_value="x86_64"),
+            mock.patch.object(checker, "_rustc_host_triple", return_value="x86_64-unknown-linux-gnu"),
         ):
             errors = checker.check_evidence_is_freshly_regenerable()
         self.assertTrue(any("cargo_dependency_inventory.json is stale" in e for e in errors))
 
     def test_non_matching_host_still_fails_on_unrelated_divergence(self) -> None:
-        committed = self._committed_payload()
+        committed = self._real_committed_payload()
         fresh = copy.deepcopy(committed)
         fresh["package_count"] = committed["package_count"] + 1
         with (
             mock.patch.object(evidence, "cargo_dependency_inventory_per_target", lambda: fresh),
-            mock.patch.object(checker.platform, "system", return_value="Darwin"),
-            mock.patch.object(checker.platform, "machine", return_value="arm64"),
+            mock.patch.object(checker, "_rustc_host_triple", return_value="aarch64-apple-darwin"),
         ):
             errors = checker.check_evidence_is_freshly_regenerable()
         self.assertTrue(any("cargo_dependency_inventory.json is stale" in e for e in errors))
 
-    def test_host_is_linux_x86_64_helper(self) -> None:
+    def test_non_matching_host_fails_when_known_diff_plus_extra_diff_both_present(self) -> None:
+        committed = self._real_committed_payload()
+        fresh = self._toggle_known_errno_diff(committed)
+        fresh["package_count"] = committed["package_count"] + 1
         with (
-            mock.patch.object(checker.platform, "system", return_value="Linux"),
-            mock.patch.object(checker.platform, "machine", return_value="x86_64"),
+            mock.patch.object(evidence, "cargo_dependency_inventory_per_target", lambda: fresh),
+            mock.patch.object(checker, "_rustc_host_triple", return_value="aarch64-apple-darwin"),
         ):
-            self.assertTrue(checker._host_is_linux_x86_64())
-        with (
-            mock.patch.object(checker.platform, "system", return_value="Darwin"),
-            mock.patch.object(checker.platform, "machine", return_value="arm64"),
-        ):
-            self.assertFalse(checker._host_is_linux_x86_64())
-        with (
-            mock.patch.object(checker.platform, "system", return_value="Linux"),
-            mock.patch.object(checker.platform, "machine", return_value="aarch64"),
-        ):
-            self.assertFalse(checker._host_is_linux_x86_64())
+            errors = checker.check_evidence_is_freshly_regenerable()
+        self.assertTrue(any("cargo_dependency_inventory.json is stale" in e for e in errors))
 
 
 def _write_temp_markdown(text: str) -> Path:

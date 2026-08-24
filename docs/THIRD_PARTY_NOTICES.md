@@ -95,9 +95,12 @@ Kardano SDK release artifact, and neither is in
 1. **Kardano's own Windows x86-64 JVM signing-backend candidate**
    (`win32-x86-64/kardano_ed25519_bip32_signing.dll`). It has a technical GO
    on native-artifact (PE-structure) evidence in
-   `.github/workflows/windows-jvm-rebuild-evidence.yml`, but promotion is
-   withheld pending independent PE re-review and upstream issue #226 below.
-   See `crypto-signing-backend/README.md` "Windows x86-64 — candidate-only".
+   `.github/workflows/windows-jvm-rebuild-evidence.yml`. Its independent PE
+   technical review is complete (commit `c65a20a`); promotion remains
+   withheld solely because of the still-open upstream issue #226 below (and
+   any separate manual/release decision) -- PE technical-review completion
+   does not promote this candidate or mean any DLL is distributed. See
+   `crypto-signing-backend/README.md` "Windows x86-64 — candidate-only".
 2. **The Identus `apollo` derivation-backend native library's Windows
    build.** `org.hyperledger.identus:bip32-ed25519` 1.8.8 ships Android `.so`
    natives per ABI but has not published a `win32-x86-64` build upstream

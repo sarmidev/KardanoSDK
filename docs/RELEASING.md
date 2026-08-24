@@ -14,10 +14,14 @@ tag plus release notes that identify the source revision, verified targets, and 
    passes. Before an actual release, also run
    `python3 scripts/check_release_evidence.py --mode release`, which
    additionally fails while any `docs/LEGAL_REVIEW.md` field still carries one
-   of the four named `ALLOWED_OPEN_GATE_MARKERS` strings (counsel review,
-   Identus issue #226, Windows PE re-review, per-election reviewer
-   acceptance) — it is expected to fail until every one of those gates is
-   actually resolved by a human. None of these is legal advice or counsel
+   of the three named `ALLOWED_OPEN_GATE_MARKERS` strings (counsel review,
+   Identus issue #226, per-election reviewer acceptance) — it is expected to
+   fail until every one of those gates is actually resolved by a human. The
+   independent PE (native-artifact structural) technical review is a
+   separate, already-COMPLETE gate (commit `c65a20a`); its completion is a
+   technical finding only, not a legal approval, and does not promote the
+   Windows candidate or imply any DLL is distributed. None of these is legal
+   advice or counsel
    approval; `LEGAL_REVIEW.md` records the counsel gate as open until an
    actual reviewer signs off.
 3. Verify repository history contains no API keys, real mnemonics, private keys, or live-fund

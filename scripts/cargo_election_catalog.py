@@ -28,6 +28,21 @@ instruction, `proposed_election` stays `None` (no election proposed) and
 `LICENSES/MIT.txt` so that whichever branch ultimately applies, its text is
 already present -- this repository does not pre-elect away from Unlicense
 before a reviewer has actually accepted an MIT election for this package.
+
+An entry may optionally carry `and_component_acceptance`: a mapping from an
+AND-required component's exact name (e.g. `"Unicode-3.0"`) to its own
+`{"status", "reviewer", "review_date"}` dict, independent of this row's OR
+election above. `scripts/generate_legal_evidence.py`'s
+`cargo_license_elections()` defaults any AND-required component missing
+from this mapping to `status: "OPEN"` (target-linked) or `"NOT_APPLICABLE"`
+(not target-linked) -- accepting the OR election above never implicitly
+accepts an AND-required component, and `release` mode requires both to be
+independently `"ACCEPTED"`. No entry below currently needs this key: the
+only AND-required component in this crate's graph today
+(`unicode-ident`'s `Unicode-3.0`) is on a package that is not target-linked
+for any of the 9 committed artifacts, so no AND-component acceptance is
+mandatory yet -- this docstring exists so the schema is documented before
+it is ever needed, not narrated only after the fact.
 """
 
 from __future__ import annotations

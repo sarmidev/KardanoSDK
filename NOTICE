@@ -36,22 +36,38 @@ The following are used under the Apache License, Version 2.0:
 - org.hyperledger.identus:bip32-ed25519 (part of the hyperledger-identus/apollo
   monorepo). Copyright 2024 Input Output Global. The Android artifact
   (bip32-ed25519-android) also redistributes a compiled Rust native library
-  per ABI (libuniffi_ed25519_bip32_wrapper.so). This repository has not
-  obtained or reviewed that native library's own build-time dependency graph;
-  whether it embeds an MPL-2.0 UniFFI runtime the way this repo's own
+  per ABI (libuniffi_ed25519_bip32_wrapper.so). A separate JVM-classified
+  artifact of this same coordinate (bip32-ed25519-jvm) is also resolved (by
+  crypto/shared/wallet/desktopApp/androidApp's JVM source sets) and bundles
+  its own compiled natives for macOS/Linux only (no Windows build exists
+  for it at all); it is not itself redistributed by Kardano through any
+  channel in this release (Kardano SDK does not publish Maven/JVM artifacts
+  yet; see docs/RELEASING.md). This repository has not obtained or reviewed
+  either native library's own build-time dependency graph; whether either
+  one embeds an MPL-2.0 UniFFI runtime the way this repo's own
   crypto-signing-backend does is an OPEN counsel determination (see
   docs/LEGAL_REVIEW.md §6b), not assumed to be "also just Apache-2.0" by
   inheritance from this wrapper's own POM declaration.
+- androidx.graphics:graphics-path 1.0.1 (`shared`/`androidApp` runtime
+  dependency, resolved via Compose UI graphics support). Copyright The
+  Android Open Source Project. Also a native carrier: its `.aar` bundles a
+  compiled `libandroidx.graphics.path.so` per Android ABI; see
+  docs/evidence/maven_native_carriers_inventory.json.
 - com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings.
   Copyright 2019 Ugljesa Jovanovic. Its JVM artifact also redistributes
   compiled libsodium binaries for macOS/Linux/Windows; see the ISC entry
   below for libsodium's own license.
 - net.java.dev.jna:jna 5.19.1 (dual Apache-2.0 OR LGPL-2.1-or-later, per its
-  own POM; Kardano SDK elects Apache-2.0 for this distribution). Copyright
-  the JNA contributors. This jar is also a native carrier: it bundles 25
-  platform-specific libjnidispatch binaries (com/sun/jna/<platform>/); see
-  docs/evidence/maven_native_carriers_inventory.json. Do not read this entry
-  as "JNA is source-only".
+  own POM; Kardano SDK proposes electing Apache-2.0 for this distribution,
+  but that election is not yet ACCEPTED -- see docs/LEGAL_REVIEW.md §5a and
+  docs/evidence/gradle_license_inventory.json "license_elections"). Copyright
+  the JNA contributors. This coordinate is also a native carrier across TWO
+  separate resolved artifacts: the main `.jar` bundles 27 platform-specific
+  libjnidispatch binaries (com/sun/jna/<platform>/), and a separate Android
+  `.aar` Gradle Module Metadata variant of the SAME coordinate bundles 7 more
+  (jni/<abi>/libjnidispatch.so) -- 34 embedded native binaries in total, not
+  25; see docs/evidence/maven_native_carriers_inventory.json. Do not read
+  this entry as "JNA is source-only".
 - ed25519-bip32 (Rust crate, 0.4.2) and cryptoxide (0.5.3, transitive; dual
   MIT OR Apache-2.0; Kardano SDK elects Apache-2.0 for this distribution).
   Compiled into all nine committed crypto-signing-backend native artifacts
@@ -163,10 +179,13 @@ docs/LEGAL_REVIEW.md but are explicitly NOT part of any Kardano SDK release
 artifact, so no attribution text is included for them here:
 
 - Windows x86-64 JVM signing-backend candidate DLL
-  (win32-x86-64/kardano_ed25519_bip32_signing.dll). Candidate-only; has a
-  technical GO on native-artifact evidence but is withheld from
-  crypto-signing-backend/CHECKSUMS.sha256 and from any release pending
-  independent PE re-review and upstream hyperledger-identus/apollo issue #226.
+  (win32-x86-64/kardano_ed25519_bip32_signing.dll). Candidate-only. Its
+  independent PE technical review is complete (c65a20a); it is still
+  withheld from crypto-signing-backend/CHECKSUMS.sha256 and from any release
+  solely because of the still-open upstream hyperledger-identus/apollo issue
+  #226 (and any separate manual/release decision). Completion of the PE
+  technical review does not promote this candidate and does not mean any
+  DLL is distributed.
 - The Identus apollo Android derivation-backend native library's Windows
   build. Not produced upstream (Identus issue #226); Kardano SDK cannot
   distribute what upstream has not published.
