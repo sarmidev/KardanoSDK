@@ -79,6 +79,10 @@ Their `action.yml` files contain no nested `uses:`.
 does not use those events. Runner requirement for the Node 24 Actions is
 `>= 2.327.1`; GitHub-hosted `ubuntu-latest` and `macos-latest` meet that.
 
+`windows-jvm-rebuild-evidence.yml` reuses the same `checkout`,
+`setup-java`, `setup-gradle`, `upload-artifact`, and `download-artifact`
+pins. No new Action SHA was added.
+
 `setup-java` v5.7.0 was `releases/latest` on 2026-08-23. A `v4.9.1`
 backport was published on 2026-08-04 and is not this pin. The workflows
 keep `distribution: temurin` and `java-version: "17"`. Adopt aliases are

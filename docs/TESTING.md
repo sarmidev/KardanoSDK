@@ -188,8 +188,10 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
   uses JNA prefix `linux-x86-64/` and is rebuilt only on native `ubuntu-22.04`
   (glibc >= 2.35, measured at runtime). The `.so` is the ninth CHECKSUMS row
   (`cb439099…4ed5`), promoted from run `32678079715`. Fresh Linux rebuilds
-  must match A==B and that row. Linux ARM, musl, older glibc, and Windows
-  are out of scope.
+  must match A==B and that row. Linux ARM, musl, and older glibc are out
+  of scope. Windows x86-64 JVM is candidate-only (JNA prefix
+  `win32-x86-64/`, `windows-2022` / ImageOS `win22`) and is not a
+  CHECKSUMS row.
 
 Native rebuild comparison (does not overwrite committed binaries):
 
@@ -226,6 +228,17 @@ job does not write CHECKSUMS or committed `src/`. After Phase C it
 requires A==B **and** identity with the committed Linux `.so` /
 CHECKSUMS row. Promoted from run `32678079715` (artifacts
 `9503309381` / `9503308946` / `9503350346`, expire 2026-09-07).
+
+`windows-jvm-rebuild-evidence.yml` rebuilds `x86_64-pc-windows-msvc`
+twice on pinned `windows-2022` (ImageOS `win22`, not `windows-latest`),
+records OS/MSVC/dumpbin evidence, compares SHA-256 + PE32+ reports
+(AMD64, PE32+, `IMAGE_FILE_DLL`, exact sign export, allowlisted
+imports, empty delay-load/debug/Authenticode, `TimeDateStamp` 0,
+`DYNAMIC_BASE`+`NX_COMPAT`, no overlay), then runs the same four
+`jvmTest` tasks via `gradlew.bat`. The DLL is placed only on the
+runner JNA path for those tests. Permissions stay `contents: read`.
+Uploads use `if-no-files-found: error`. CHECKSUMS and committed `src/`
+are unchanged. Promotion waits for independent review.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

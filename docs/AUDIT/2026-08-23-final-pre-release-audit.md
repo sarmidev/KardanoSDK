@@ -310,8 +310,8 @@ On `fix/native-build-and-platform-evidence`:
   exact `.dynamic`/`PT_DYNAMIC` and `DT_STRTAB`/`DT_VERSYM` relations,
   raw-byte plus slash-byte path scan; invalid UTF-8 fails on a
   forbidden root or an unapproved absolute-looking path; `/proc` is a
-  runtime prefix) and two-build identity; it is not
-  promoted in Phase C from run `32678079715` (SHA-256
+  runtime prefix)   and two-build identity. Linux Phase C promotion from run
+  `32678079715` landed at `58f82a2` (SHA-256
   `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`;
   artifacts `9503309381` / `9503308946` / `9503350346`, expire
   2026-09-07). Versym indices resolve to unique `vna_other`/`vd_ndx`;
@@ -319,4 +319,6 @@ On `fix/native-build-and-platform-evidence`:
   following `/`, path stop, or EOF. Versym 0 / dynsym 0 / globally
   unique `vna_other`/`vd_ndx` / readelf sign records coupled to the
   parsed sign Versym.
-  Linux ARM, musl, older glibc, and Windows remain out of scope.
+  Linux ARM, musl, and older glibc remain out of scope. Windows x86-64
+  JVM is candidate-only (`win32-x86-64/`, `windows-2022`) and is not a
+  CHECKSUMS row.

@@ -177,8 +177,9 @@ ACTION_PINS: tuple[ActionPin, ...] = (
         runtime="node24",
         kind="javascript",
         note=(
-            "First-party pin for linux-jvm-rebuild-evidence.yml candidate "
-            "compare. Resolved live from releases/latest (v8.0.1, published "
+            "First-party pin for linux-jvm-rebuild-evidence.yml and "
+            "windows-jvm-rebuild-evidence.yml candidate compare. Resolved "
+            "live from releases/latest (v8.0.1, published "
             "2026-03-11T15:44:25Z). The tag object is a commit "
             "(3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c). action.yml is "
             "javascript (runs.using: node24) with no nested uses:. Used "

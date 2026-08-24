@@ -50,7 +50,11 @@ does not invent a second loader path.
   `85670a7206b692c110624b4ef9a69dbfff319ca3` (SHA-256
   `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`).
   Linux ARM, musl, and older glibc are out of scope.
-- **Windows JVM hosts are not covered.**
+- **Windows x86-64** — candidate-only. JNA 5.19.1 prefix is
+  `win32-x86-64/` and the mapped name is
+  `kardano_ed25519_bip32_signing.dll` (no `lib` prefix). Rebuilt only
+  on native `windows-2022` (`x86_64-pc-windows-msvc`, ImageOS `win22`).
+  Not in `CHECKSUMS.sha256`. Windows ARM is out of scope.
 
 ## Verified (ADR-0016 §7d / §9f) — legs against this real module
 

@@ -87,7 +87,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`
   (artifacts `9503309381` / `9503308946` / `9503350346`, expire
   2026-09-07). Fresh Linux rebuilds must match A==B and that row.
-  Linux ARM, musl, older glibc, and Windows are out of scope.
+  Linux ARM, musl, and older glibc are out of scope. Windows x86-64
+  JVM is candidate-only: JNA 5.19.1 prefix `win32-x86-64/`, native
+  `windows-2022` / rustc 1.97.0 / `x86_64-pc-windows-msvc`, fail-closed
+  PE32+ verifier plus `dumpbin` corroboration, two independent
+  candidate jobs. Not a CHECKSUMS row. Windows ARM is out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

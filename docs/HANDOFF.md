@@ -70,8 +70,8 @@ Read these first:
 - The Playground factory cache key is a second in-memory copy of the project id. It is
   not persisted or logged.
 - iOS runtime execution of CIP-3 / signing vectors is still future verification
-  (compile/link only on this host). Linux/Windows JVM signing artifacts are not
-  included (W9-4).
+  (compile/link only on this host). Linux x86-64 JVM is promoted. Windows
+  x86-64 JVM is candidate-only (W9-4).
 - Still-open hygiene items outside this stacked batch: tag-triggered
   release CI (W4-5). Android lint Debug/Release is a CI error (W3-3
   closed). Owner should still glance at pre-API-26 launcher tiles.
@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 2 Linux | Linux x86-64 JVM `.so` promoted from run `32678079715` at `85670a7` (SHA-256 `cb439099…4ed5`). Ninth CHECKSUMS row. Independent promotion re-review still required. Windows not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Phase C promotion not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -101,7 +101,15 @@ Stacked remediations, each additive (no amend / no force-push):
 
 ### Last Session Summary
 
-Date: 2026-08-23
+Date: 2026-08-24
+
+- **Gate 3 Windows x86-64 JVM (candidate-only) on
+  `fix/native-build-and-platform-evidence`.** Linux promotion GO at
+  `58f82a2`. JNA 5.19.1 resource is
+  `win32-x86-64/kardano_ed25519_bip32_signing.dll`. Fail-closed PE32+
+  verifier + `dumpbin` corroboration. Two independent `windows-2022`
+  jobs; CHECKSUMS stays 9 rows. Phase C promotion waits for review.
+  Do not merge/tag or start the legal packet.
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence`.**
   Gate 1 is GO at `d09db44`. Gate 2 Linux x86-64 JVM uses JNA prefix
