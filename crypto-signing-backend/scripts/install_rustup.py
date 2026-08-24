@@ -103,7 +103,8 @@ def install_rustup_init(dest: Path, triple: str) -> Path:
     expected = RUSTUP_INIT_SHA256.get(triple)
     if expected is None:
         raise InstallError(f"no pinned rustup-init SHA-256 for {triple}")
-    payload = download(f"{ARCHIVE_BASE}/{triple}/{rustup_init_filename(triple)}")
+    filename = rustup_init_filename(triple)
+    payload = download(f"{ARCHIVE_BASE}/{triple}/{filename}")
     actual = sha256_bytes(payload)
     if actual != expected:
         raise InstallError(f"rustup-init {triple} SHA-256 {actual} != pinned {expected}")
@@ -111,7 +112,10 @@ def install_rustup_init(dest: Path, triple: str) -> Path:
     tmp = dest.with_name(f".{dest.name}.{os.urandom(8).hex()}.tmp")
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o755)
     try:
-        os.write(fd, payload)
+        view = memoryview(payload)
+        written = 0
+        while written < len(payload):
+            written += os.write(fd, view[written:])
         if hasattr(os, "fchmod"):
             try:
                 os.fchmod(fd, 0o755)
@@ -125,11 +129,26 @@ def install_rustup_init(dest: Path, triple: str) -> Path:
             os.close(fd)
         if tmp.exists():
             tmp.unlink()
+    on_disk = sha256_bytes(dest.read_bytes())
+    if on_disk != expected:
+        raise InstallError(
+            f"written rustup-init {dest} SHA-256 {on_disk} != pinned {expected}"
+        )
     try:
         dest.chmod(dest.stat().st_mode | stat.S_IXUSR)
     except OSError:
         pass
+    print(f"verified rustup-init {filename} for {triple} ({len(payload)} bytes)")
     return dest
+
+
+def rustup_bin(cargo_home: Path) -> Path | None:
+    for name in ("rustup", "rustup.exe"):
+        candidate = cargo_home / "bin" / name
+        if candidate.is_file():
+            return candidate
+    found = shutil_which("rustup")
+    return Path(found) if found else None
 
 
 def ensure_toolchain(channel: str, cargo_home: Path) -> None:
@@ -137,9 +156,9 @@ def ensure_toolchain(channel: str, cargo_home: Path) -> None:
     env["CARGO_HOME"] = str(cargo_home)
     env["RUSTUP_HOME"] = str(cargo_home.parent / "rustup")
     env["PATH"] = f"{cargo_home / 'bin'}{os.pathsep}{env.get('PATH', '')}"
-    rustup = cargo_home / "bin" / "rustup"
-    if not rustup.is_file():
-        raise InstallError(f"rustup missing after rustup-init at {rustup}")
+    rustup = rustup_bin(cargo_home)
+    if rustup is None:
+        raise InstallError(f"rustup missing after rustup-init at {cargo_home / 'bin'}")
     completed = subprocess.run(
         [str(rustup), "toolchain", "install", channel, "--profile", "minimal"],
         env=env,
@@ -184,7 +203,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.skip_if_present and rustc_matches(args.channel):
             print(f"rustc {args.channel} already on PATH; rustup-init not downloaded")
             return 0
+        existing = rustup_bin(args.cargo_home)
+        if existing is not None:
+            print(f"using existing rustup at {existing}; rustup-init not downloaded")
+            ensure_toolchain(args.channel, args.cargo_home)
+            print(f"installed rustup channel {args.channel}")
+            return 0
         triple = host_triple()
+        print(f"downloading rustup-init for {triple}")
         init = install_rustup_init(args.dest, triple)
         completed = subprocess.run(
             [
