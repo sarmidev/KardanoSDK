@@ -52,7 +52,7 @@ def build_pe(
         | pe.IMAGE_FILE_LARGE_ADDRESS_AWARE
     ),
     magic: int = pe.IMAGE_NT_OPTIONAL_HDR64_MAGIC,
-    subsystem: int = pe.IMAGE_SUBSYSTEM_WINDOWS_CUI,
+    subsystem: int = pe.IMAGE_SUBSYSTEM_WINDOWS_GUI,
     dll_characteristics: int = (
         pe.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA
         | pe.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
@@ -288,7 +288,7 @@ class AdversarialHeaderTests(unittest.TestCase):
     def test_wrong_subsystem_and_flags_and_timestamp(self) -> None:
         with self.assertRaises(pe.PeError):
             pe.parse_pe32_plus_x86_64_dll(
-                build_pe(subsystem=pe.IMAGE_SUBSYSTEM_WINDOWS_GUI)
+                build_pe(subsystem=pe.IMAGE_SUBSYSTEM_WINDOWS_CUI)
             )
         with self.assertRaises(pe.PeError):
             pe.parse_pe32_plus_x86_64_dll(

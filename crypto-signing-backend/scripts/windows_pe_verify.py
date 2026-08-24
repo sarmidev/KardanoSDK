@@ -27,8 +27,9 @@ Policy (documented, not a strength claim):
   are empty; no unexpected import names
 - no debug directory, no ``RSDS``/``.pdb``, no embedded workspace/home/temp
   roots; COFF ``TimeDateStamp`` is 0 (``/Brepro``)
-- subsystem ``IMAGE_SUBSYSTEM_WINDOWS_CUI``; DLL characteristics include
-  ``DYNAMIC_BASE`` and ``NX_COMPAT`` and only the documented extra bits
+- subsystem ``IMAGE_SUBSYSTEM_WINDOWS_GUI`` as rustc 1.97.0 + MSVC
+  emit for this cdylib; DLL characteristics include ``DYNAMIC_BASE``
+  and ``NX_COMPAT`` and only the documented extra bits
 """
 
 from __future__ import annotations
@@ -416,8 +417,8 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
         raise PeError("SizeOfImage is zero")
     if number_of_rva != IMAGE_NUMBEROF_DIRECTORY_ENTRIES:
         raise PeError("NumberOfRvaAndSizes must be 16")
-    if subsystem != IMAGE_SUBSYSTEM_WINDOWS_CUI:
-        raise PeError(f"subsystem {subsystem} is not WINDOWS_CUI")
+    if subsystem != IMAGE_SUBSYSTEM_WINDOWS_GUI:
+        raise PeError(f"subsystem {subsystem} is not WINDOWS_GUI")
     if dll_characteristics & REQUIRED_DLL_CHARACTERISTICS != REQUIRED_DLL_CHARACTERISTICS:
         raise PeError("DYNAMIC_BASE and NX_COMPAT are required")
     extra = dll_characteristics & ~REQUIRED_DLL_CHARACTERISTICS
