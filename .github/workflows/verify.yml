@@ -77,7 +77,20 @@ jobs:
         run: |
           cp docs/evidence/cargo_dependency_inventory.json /tmp/committed_cdi.json
           python3 scripts/generate_legal_evidence.py || true
-          diff -u /tmp/committed_cdi.json docs/evidence/cargo_dependency_inventory.json || true
+          python3 - <<'PYEOF'
+          import json
+          a = json.load(open("/tmp/committed_cdi.json"))
+          b = json.load(open("docs/evidence/cargo_dependency_inventory.json"))
+          pa = {p["name"] + "@" + p["version"]: p for p in a["packages"]}
+          pb = {p["name"] + "@" + p["version"]: p for p in b["packages"]}
+          for key in sorted(set(pa) | set(pb)):
+              ea = pa.get(key)
+              eb = pb.get(key)
+              if ea != eb:
+                  print("DIFFERS:", key)
+                  print("  committed(macOS-cross) membership:", ea["membership"] if ea else None)
+                  print("  fresh(this-host)       membership:", eb["membership"] if eb else None)
+          PYEOF
           git checkout -- docs/evidence
       - name: Run legal-evidence regression tests
         env:
