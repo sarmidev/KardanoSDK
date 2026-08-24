@@ -42,12 +42,15 @@ Policy (documented, not a strength claim):
 - ``DT_VERSYM`` binds to exactly one allocated ``.gnu.version``;
   ``DT_VERDEF``/``DT_VERDEFNUM`` and ``.gnu.version_d`` are all-or-nothing
 - every ``.gnu.version`` entry is parsed; count equals dynsym count.
-  Hidden bit ``0x8000`` is separated from the base index. Indices 0/1
-  follow ELF local/global rules. Base indices greater than 1 resolve
-  uniquely to one ``vna_other`` (undefined symbols) or one ``vd_ndx``
-  (defined symbols). Reserved 0/1 on need/def, duplicate names on one
-  index, need/def collisions, and ``0x7fff`` fail. The required sign
-  export is unhidden and uses global/unversioned or a matching Verdef
+  Hidden bit ``0x8000`` is separated from the base index. Index 0 is
+  only for dynsym entry 0, ``STB_LOCAL``, or the toolchain's undefined
+  ``STB_WEAK`` unversioned import. Undefined ``STB_GLOBAL`` imports
+  must not use 0. Base indices greater than 1 resolve uniquely to one
+  ``vna_other`` or one ``vd_ndx``. Every ``vna_other`` is globally
+  unique across files. Dynsym entry 0 is the canonical null symbol.
+  ``readelf --version-info`` index maps and ``readelf --dyn-syms``
+  sign records must match exactly. The required sign export is
+  unhidden and uses global/unversioned or a matching Verdef
 - ELF64 arithmetic uses ``UINT64_MAX``; ``_checked_add`` / ``_checked_mul``
   reject negatives and sums that exceed ``UINT64_MAX``
 - raw-byte searches catch every documented forbidden build root at any
@@ -258,6 +261,10 @@ LDD_GLIBC_RE = re.compile(
     re.IGNORECASE,
 )
 READELF_VER_NAME_RE = re.compile(r"\bName:\s+(\S+)")
+# GNU readelf --dyn-syms default columns: Num Value Size Type Bind Vis Ndx Name
+READELF_DYNSYM_RE = re.compile(
+    r"^\s*(\d+):\s+([0-9A-Fa-f]+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+(\S+))?\s*$"
+)
 
 
 class ElfError(RuntimeError):
@@ -313,6 +320,16 @@ class PosixNmRecord:
     type_code: str
     value: str
     size: str
+
+
+@dataclass
+class ReadelfDynsymRecord:
+    name: str
+    type_name: str
+    bind: str
+    visibility: str
+    ndx: str
+    version: str | None
 
 
 @dataclass
@@ -940,42 +957,94 @@ def _readelf_field(line: str, label: str) -> str | None:
 
 
 def parse_readelf_need_indices(text: str) -> dict[int, str]:
-    """Exact per-line Name:/Version: pairs from ``readelf --version-info``.
+    """Exact per-line Name:/Version: Vernaux pairs from ``readelf --version-info``.
 
-    The same label may appear on more than one needed file with distinct
-    ``vna_other`` values. The map is index -> name, matching the parser.
+    Verneed file headers and Verdef ``Rev``/``Index`` rows are skipped.
+    A ``Name:`` without ``Version:`` is a missing field. Duplicate
+    ``Version`` indices fail even when the name matches.
     """
     parsed: dict[int, str] = {}
-    for line in text.splitlines():
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        tokens = line.split()
         name = _readelf_field(line, "Name")
         version = _readelf_field(line, "Version")
-        if name is None or version is None or "File:" in line.split():
+        if "File:" in tokens:
             continue
+        if "Rev:" in tokens or _readelf_field(line, "Index") is not None:
+            continue
+        if name is None and version is None:
+            continue
+        if name is None or version is None:
+            raise ElfError(
+                f"readelf --version-info line {line_no} is missing a Name or Version field"
+            )
         if not version.isdigit():
             raise ElfError(f"readelf Version field {version!r} is not an integer")
         index = int(version)
-        existing = parsed.get(index)
-        if existing is not None and existing != name:
-            raise ElfError(f"readelf Version {index} has conflicting Name fields")
+        if index in parsed:
+            raise ElfError(f"duplicate readelf Version index {index}")
         parsed[index] = name
     return parsed
 
 
-def parse_readelf_dynsym_version(line: str) -> tuple[str, str | None] | None:
-    """Split one ``readelf --dyn-syms`` name field. No substring search."""
-    tokens = line.split()
-    if len(tokens) < 8:
-        return None
-    field = tokens[-1]
-    if field == "UND" or field.startswith("["):
-        return None
-    if "@@" in field:
-        name, version = field.split("@@", 1)
-        return name, version
-    if "@" in field:
-        name, version = field.split("@", 1)
-        return name, version
-    return field, None
+def parse_readelf_dynsym_records(text: str) -> list[ReadelfDynsymRecord]:
+    """Parse GNU ``readelf --dyn-syms`` rows. No substring name search."""
+    records: list[ReadelfDynsymRecord] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or not stripped[0].isdigit():
+            continue
+        if ":" not in stripped:
+            raise ElfError(f"readelf --dyn-syms line {line_no} is malformed")
+        match = READELF_DYNSYM_RE.fullmatch(line.rstrip("\n"))
+        if match is None:
+            raise ElfError(f"readelf --dyn-syms line {line_no} has malformed columns")
+        raw_name = match.group(8) or ""
+        version = None
+        name = raw_name
+        if "@@" in raw_name:
+            name, version = raw_name.split("@@", 1)
+        elif "@" in raw_name:
+            name, version = raw_name.split("@", 1)
+        records.append(
+            ReadelfDynsymRecord(
+                name=name,
+                type_name=match.group(4),
+                bind=match.group(5),
+                visibility=match.group(6),
+                ndx=match.group(7),
+                version=version,
+            )
+        )
+    return records
+
+
+def require_exact_sign_readelf(
+    records: list[ReadelfDynsymRecord],
+    verdef_indices: dict[int, str],
+) -> ReadelfDynsymRecord:
+    matches = [item for item in records if item.name == SIGN_SYMBOL]
+    if not matches:
+        raise ElfError(f"{SIGN_SYMBOL} missing from readelf --dyn-syms records")
+    if len(matches) > 1:
+        raise ElfError(f"{SIGN_SYMBOL} is duplicate in readelf --dyn-syms records")
+    record = matches[0]
+    if record.type_name != "FUNC":
+        raise ElfError(f"{SIGN_SYMBOL} readelf type {record.type_name!r} is not FUNC")
+    if record.bind not in {"GLOBAL", "WEAK"}:
+        raise ElfError(f"{SIGN_SYMBOL} readelf bind {record.bind!r} is not GLOBAL/WEAK")
+    if record.visibility not in {"DEFAULT", "PROTECTED"}:
+        raise ElfError(
+            f"{SIGN_SYMBOL} readelf visibility {record.visibility!r} is not DEFAULT/PROTECTED"
+        )
+    if record.ndx == "UND" or not record.ndx.isdigit():
+        raise ElfError(f"{SIGN_SYMBOL} readelf section {record.ndx!r} is not a defined section")
+    if record.version is not None and record.version not in verdef_indices.values():
+        raise ElfError(
+            f"readelf --dyn-syms {SIGN_SYMBOL} version {record.version!r} "
+            "is not a parsed Verdef name"
+        )
+    return record
 
 
 def parse_elf64_le_x86_64_dso(
@@ -1292,6 +1361,10 @@ def parse_elf64_le_x86_64_dso(
         )
         if name:
             record.symbols.append(name)
+        if index == 0 and any(
+            (st_name, st_info, st_other, st_shndx, st_value, st_size)
+        ):
+            raise ElfError("dynsym 0 is not the canonical null entry")
 
     _require_sign_export(parsed_symbols, e_shnum, record)
 
@@ -1308,10 +1381,11 @@ def parse_elf64_le_x86_64_dso(
             verneed_vaddr=verneed_vaddr,
             verneed_num=verneed_num,
             dynstr=dynstr,
+            needed=record.needed,
         )
-        # The same GLIBC_* label may appear on libc.so.6 and ld-linux-*.
-        # Duplicate policy is (file, name) in the Verneed walk, not the
-        # flattened name list used for the baseline cap.
+        # The same GLIBC_* label may appear on libc.so.6 and ld-linux-*
+        # only with distinct vna_other values. Flattened names are used
+        # for the baseline cap.
         record.glibc_requirements = sorted(
             {name for name in record.gnu_versions if name.startswith("GLIBC_")}
         )
@@ -1400,9 +1474,8 @@ def _reject_reserved_version_index(index: int, what: str) -> None:
 
 def _register_need_index(need_indices: dict[int, str], index: int, name: str) -> None:
     _reject_reserved_version_index(index, "vna_other")
-    existing = need_indices.get(index)
-    if existing is not None and existing != name:
-        raise ElfError(f"duplicate vna_other {index} for {existing!r} and {name!r}")
+    if index in need_indices:
+        raise ElfError(f"duplicate vna_other {index} ({need_indices[index]!r} / {name!r})")
     need_indices[index] = name
 
 
@@ -1459,9 +1532,15 @@ def _resolve_versym(
                 raise ElfError("dynsym 0 versym is not VER_NDX_LOCAL")
             continue
         if base == VER_NDX_LOCAL:
-            if defined and symbol.bind != STB_LOCAL:
+            if defined:
+                if symbol.bind != STB_LOCAL:
+                    raise ElfError(
+                        f"versym local index on defined non-local symbol {symbol.name or index}"
+                    )
+                continue
+            if symbol.bind != STB_WEAK:
                 raise ElfError(
-                    f"versym local index on defined non-local symbol {symbol.name or index}"
+                    f"versym local index on undefined non-weak symbol {symbol.name or index}"
                 )
             continue
         if base == VER_NDX_GLOBAL:
@@ -1517,6 +1596,7 @@ def _parse_verneed(
     verneed_vaddr: int,
     verneed_num: int,
     dynstr,
+    needed: list[str],
 ) -> tuple[list[str], dict[int, str]]:
     if verneed_num <= 0 or verneed_num > MAX_VERNEED:
         raise ElfError(f"DT_VERNEEDNUM {verneed_num} is missing or exceeds MAX_VERNEED")
@@ -1569,6 +1649,10 @@ def _parse_verneed(
         if vn_aux == 0:
             raise ElfError("vn_aux is missing")
         file_name = dynstr(vn_file)
+        if not file_name:
+            raise ElfError("empty Verneed file identity")
+        if file_name not in needed:
+            raise ElfError(f"Verneed file {file_name!r} is not a DT_NEEDED name")
         aux = _checked_add(cursor, vn_aux, "vn_aux")
         if aux <= cursor:
             raise ElfError("vn_aux is not a positive forward offset")
@@ -1795,28 +1879,22 @@ def verify_linux_x86_64_cdylib(
                 f"readelf GLIBC requirement {too_new} exceeds documented baseline "
                 f"{DOCUMENTED_GLIBC_BASELINE_LABEL}"
             )
-        tool_need = parse_readelf_need_indices(record.readelf_version_text)
-        if tool_need and tool_need != record.verneed_indices:
-            raise ElfError(
-                "readelf --version-info Name/Version indices do not match the parser: "
-                f"{tool_need} vs {record.verneed_indices}"
-            )
+        if record.verneed_indices:
+            tool_need = parse_readelf_need_indices(record.readelf_version_text)
+            if not tool_need:
+                raise ElfError("readelf --version-info version index map is empty")
+            if tool_need != record.verneed_indices:
+                raise ElfError(
+                    "readelf --version-info Name/Version indices do not match the parser: "
+                    f"{tool_need} vs {record.verneed_indices}"
+                )
         dynsyms = _run([readelf_bin, "--dyn-syms", str(path)])
-        if dynsyms.returncode == 0:
-            for line in (dynsyms.stdout or "").splitlines():
-                parsed = parse_readelf_dynsym_version(line)
-                if parsed is None:
-                    continue
-                name, version = parsed
-                if name != SIGN_SYMBOL:
-                    continue
-                if version is None:
-                    continue
-                if version not in record.verdef_indices.values():
-                    raise ElfError(
-                        f"readelf --dyn-syms {SIGN_SYMBOL} version {version!r} "
-                        "is not a parsed Verdef name"
-                    )
+        if dynsyms.returncode != 0:
+            raise ElfError(f"readelf --dyn-syms exited {dynsyms.returncode}")
+        require_exact_sign_readelf(
+            parse_readelf_dynsym_records((dynsyms.stdout or "") + (dynsyms.stderr or "")),
+            record.verdef_indices,
+        )
     if nm_bin:
         completed = _run(
             [nm_bin, "-D", "--defined-only", "--format=posix", str(path)]

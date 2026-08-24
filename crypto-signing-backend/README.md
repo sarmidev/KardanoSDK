@@ -251,22 +251,15 @@ material. `nm` corroboration uses `--defined-only --format=posix`
 exact records, not substring search. Every `.gnu.version` entry is
 parsed; the hidden bit is split from the base index; indices greater
 than 1 resolve uniquely to a Vernaux `vna_other` (undefined) or a
-Verdef `vd_ndx` (defined). The sign export is unhidden and
-global/unversioned or a matching Verdef. ELF64 add/mul checks operands
-against `UINT64_MAX` before summing. Path policy is two-pass: raw-byte
-search for documented build roots at any offset when the next byte is
-`/`, a path stop, or EOF, then a slash-byte scan through
-NUL/control/whitespace/EOF. Allowed remap/runtime prefixes use an
-exact component boundary (`path == prefix` or next byte `/`).
-`/home/runner-up`, `/Userspace`, and `/opt/homebrewery` are not raw
-root hits. `/proc` is a runtime prefix. Fresh Phase B at `7d91a5f` is
-run `32675120131` (A/B + compare + JVM KAT success on `ubuntu-22.04`).
-Artifacts `linux-jvm-candidate-a` (id `9502437375`, expires
-2026-09-06T23:57:41Z), `linux-jvm-candidate-b` (id `9502437881`,
-expires 2026-09-06T23:57:42Z), and `linux-jvm-compare-report` (id
-`9502473946`, expires 2026-09-07T00:00:40Z) are not downloaded and
-not promoted. Runs `32673275963` and `32673752819` are superseded.
-Independent re-review is still required before any CHECKSUMS row.
+Verdef `vd_ndx` (defined). `vna_other` is globally unique across
+files. Versym 0 is only for dynsym entry 0, `STB_LOCAL`, or the
+undefined `STB_WEAK` unversioned import. Dynsym entry 0 is the
+canonical null symbol. `readelf --version-info` index maps and
+`readelf --dyn-syms` sign records must match exactly. The sign
+export is unhidden and global/unversioned or a matching Verdef.
+ELF64 add/mul checks operands against `UINT64_MAX` before summing.
+Runs `32675120131` and `32675524925` are superseded; a fresh Phase B
+at this verifier tip is required before any CHECKSUMS row.
 
 Recorded 2026-08-23: on the original macOS arm64 host, a clean
 `target/`-directory rebuild matched all eight then-current (W5-2)

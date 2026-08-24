@@ -89,6 +89,11 @@ def build_elf(
     undefined_symbol: str | None = None,
     undefined_versym: int = 2,
     undefined_bind: int = elf.STB_GLOBAL,
+    undefined_type: int = elf.STT_NOTYPE,
+    local_symbol: str | None = None,
+    loader_vna_other: int = 9,
+    verneed_file: str | None = None,
+    empty_verneed_file: bool = False,
     vna_others: tuple[int, ...] | None = None,
     vd_ndx: int = 4,
     versym_entsize: int | None = None,
@@ -111,11 +116,15 @@ def build_elf(
     symbol_off = add_str(symbol)
     extra_off = add_str(extra_symbol) if extra_symbol else None
     undefined_off = add_str(undefined_symbol) if undefined_symbol else None
+    local_off = add_str(local_symbol) if local_symbol else None
     rpath_off = add_str(rpath) if rpath else None
     runpath_off = add_str(runpath) if runpath else None
     version_offs = [add_str(name) for name in glibc_versions]
     loader_name_off = add_str("ld-linux-x86-64.so.2") if loader_verneed else None
     verdef_second_off = add_str("LIBKARDANO_1") if duplicate_vd_ndx else None
+    verneed_file_off = 0 if empty_verneed_file else (
+        add_str(verneed_file) if verneed_file is not None else None
+    )
     dynstr = b"".join(dynstr_entries)
     if unterminated_dynstr:
         dynstr = dynstr[:-1]
@@ -171,8 +180,10 @@ def build_elf(
             )
     if extra_off is not None:
         symbols.append(pack_sym(extra_off, elf.STB_GLOBAL, elf.STT_FUNC, elf.STV_DEFAULT, 1, 0x1010))
+    if local_off is not None:
+        symbols.append(pack_sym(local_off, elf.STB_LOCAL, elf.STT_OBJECT, elf.STV_DEFAULT, 1, 0x1020))
     if undefined_off is not None:
-        symbols.append(pack_sym(undefined_off, undefined_bind, elf.STT_NOTYPE, elf.STV_DEFAULT, 0, 0))
+        symbols.append(pack_sym(undefined_off, undefined_bind, undefined_type, elf.STV_DEFAULT, 0, 0))
     dynsym = b"".join(symbols)
 
     aux_names = list(version_offs)
@@ -181,6 +192,7 @@ def build_elf(
     verneed = b""
     if not skip_verneed and aux_names:
         libc_off = offsets.get(LIBC, add_str(LIBC))
+        file_off = libc_off if verneed_file_off is None else verneed_file_off
         aux_blob = b""
         for index, name_off in enumerate(aux_names):
             nxt = elf.ELF64_VERNAUX_SIZE if index + 1 < len(aux_names) else 0
@@ -194,7 +206,7 @@ def build_elf(
                 "<HHIII",
                 verneed_version,
                 len(aux_names),
-                libc_off,
+                file_off,
                 elf.ELF64_VERNEED_SIZE,
                 first_next,
             )
@@ -209,7 +221,7 @@ def build_elf(
                 loader_name_off,
                 elf.ELF64_VERNEED_SIZE,
                 0,
-            ) + struct.pack("<IHHII", 0, 0, 9, shared, 0)
+            ) + struct.pack("<IHHII", 0, 0, loader_vna_other, shared, 0)
         buf = bytearray(verneed)
         if vn_aux is not None:
             struct.pack_into("<I", buf, 8, vn_aux)
@@ -303,6 +315,8 @@ def build_elf(
                     entries.append(elf.VER_NDX_GLOBAL)
             if extra_off is not None:
                 entries.append(elf.VER_NDX_GLOBAL)
+            if local_off is not None:
+                entries.append(elf.VER_NDX_LOCAL)
             if undefined_off is not None:
                 entries.append(undefined_versym)
         if len(entries) < symbol_count:
@@ -948,17 +962,102 @@ class LinuxElfVerifyTests(unittest.TestCase):
                 self.stdout = stdout
                 self.stderr = ""
 
-        def run_with(version_text: str):
+        version_ok = (
+            "  Version: 1  File: libc.so.6  Cnt: 2\n"
+            "  Name: GLIBC_2.2.5  Flags: none  Version: 2\n"
+            "  Name: GLIBC_2.35  Flags: none  Version: 3\n"
+        )
+        dynsym_ok = (
+            "     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"
+            f"     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 {SIGN}\n"
+        )
+
+        def run_with(
+            *,
+            version_text: str = version_ok,
+            dynsym_text: str = dynsym_ok,
+            version_code: int = 0,
+            dynsym_code: int = 0,
+        ):
             def _run(command: list[str]) -> _Result:
                 if "--version-info" in command:
-                    return _Result(version_text)
+                    return _Result(version_text, version_code)
+                if "--dyn-syms" in command:
+                    return _Result(dynsym_text, dynsym_code)
                 return _Result("Dynamic section")
             return _run
 
-        matching = "  Name: GLIBC_2.2.5\n  Name: GLIBC_2.35\n"
-        with patch.object(elf, "_run", run_with(matching)):
+        with patch.object(elf, "_run", run_with()):
             record = elf.verify_linux_x86_64_cdylib(path, readelf="readelf", nm=None)
             self.assertEqual(record.glibc_requirements, ["GLIBC_2.2.5", "GLIBC_2.35"])
+            self.assertEqual(record.verneed_indices, {2: "GLIBC_2.2.5", 3: "GLIBC_2.35"})
+
+        self.assertEqual(elf.parse_readelf_need_indices(""), {})
+        with self.assertRaisesRegex(elf.ElfError, "missing a Name or Version"):
+            elf.parse_readelf_need_indices("  Name: GLIBC_2.2.5\n  Name: GLIBC_2.35\n")
+
+        cases = (
+            (dict(version_text="  Rev: 1  Index: 2  Name: GLIBC_2.2.5\n  Rev: 1  Index: 3  Name: GLIBC_2.35\n"), "empty"),
+            (dict(version_text="  Name: GLIBC_2.2.5\n  Name: GLIBC_2.35\n"), "missing a Name or Version"),
+            (dict(version_code=1), "exited 1"),
+            (dict(dynsym_code=2), "exited 2"),
+            (dict(dynsym_text="     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"), "missing from readelf"),
+            (
+                dict(
+                    dynsym_text=(
+                        dynsym_ok
+                        + f"     2: 0000000000002000    16 FUNC    GLOBAL DEFAULT   12 {SIGN}\n"
+                    )
+                ),
+                "duplicate",
+            ),
+            (
+                dict(
+                    dynsym_text=(
+                        "     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"
+                        f"     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 {SIGN}_suffix\n"
+                    )
+                ),
+                "missing from readelf",
+            ),
+            (
+                dict(
+                    dynsym_text=(
+                        "     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"
+                        f"     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 prefix_{SIGN}\n"
+                    )
+                ),
+                "missing from readelf",
+            ),
+            (
+                dict(
+                    version_text=(
+                        "  Version: 1  File: libc.so.6  Cnt: 3\n"
+                        "  Name: GLIBC_2.2.5  Flags: none  Version: 2\n"
+                        "  Name: GLIBC_2.35  Flags: none  Version: 3\n"
+                        "  Name: GCC_3.0  Flags: none  Version: 4\n"
+                    )
+                ),
+                "do not match the parser",
+            ),
+            (dict(dynsym_text="     1: not-enough-columns\n"), "malformed columns"),
+            (
+                dict(
+                    version_text=(
+                        "  Version: 1  File: libc.so.6  Cnt: 2\n"
+                        "  Name: GLIBC_2.2.5  Flags: none  Version: 2\n"
+                        "  Name: GLIBC_2.35  Flags: none  Version: 9\n"
+                    )
+                ),
+                "do not match the parser",
+            ),
+        )
+        for kwargs, needle in cases:
+            with self.subTest(needle):
+                with patch.object(elf, "_run", run_with(**kwargs)):
+                    with self.assertRaisesRegex(elf.ElfError, needle):
+                        elf.verify_linux_x86_64_cdylib(path, readelf="readelf", nm=None)
+
         for label, needle in (
             ("GLIBC_2.36x", "unparseable"),
             ("GLIBC_999", "unparseable"),
@@ -967,7 +1066,11 @@ class LinuxElfVerifyTests(unittest.TestCase):
             ("GLIBC_2.36", "does not match the parser"),
         ):
             with self.subTest(label):
-                with patch.object(elf, "_run", run_with(f"  Name: {label}\n")):
+                with patch.object(
+                    elf,
+                    "_run",
+                    run_with(version_text=f"  Name: {label}  Flags: none  Version: 2\n"),
+                ):
                     with self.assertRaisesRegex(elf.ElfError, needle):
                         elf.verify_linux_x86_64_cdylib(path, readelf="readelf", nm=None)
 
@@ -1044,6 +1147,38 @@ class LinuxElfVerifyTests(unittest.TestCase):
             )
         )
         self.assertEqual(gmon.versym_values[2], elf.VER_NDX_LOCAL)
+        weak_func = elf.parse_elf64_le_x86_64_dso(
+            build_elf(
+                undefined_symbol="__gmon_start__",
+                undefined_versym=elf.VER_NDX_LOCAL,
+                undefined_bind=elf.STB_WEAK,
+                undefined_type=elf.STT_FUNC,
+            )
+        )
+        self.assertEqual(weak_func.versym_values[2], elf.VER_NDX_LOCAL)
+        local = elf.parse_elf64_le_x86_64_dso(build_elf(local_symbol="local_obj"))
+        self.assertEqual(local.versym_values[2], elf.VER_NDX_LOCAL)
+        with self.assertRaisesRegex(elf.ElfError, "undefined non-weak"):
+            elf.parse_elf64_le_x86_64_dso(
+                build_elf(
+                    undefined_symbol="memcpy",
+                    undefined_versym=elf.VER_NDX_LOCAL,
+                    undefined_bind=elf.STB_GLOBAL,
+                )
+            )
+        with self.assertRaisesRegex(elf.ElfError, "undefined non-weak"):
+            elf.parse_elf64_le_x86_64_dso(
+                build_elf(
+                    undefined_symbol="memcpy",
+                    undefined_versym=elf.VER_NDX_LOCAL,
+                    undefined_bind=elf.STB_GLOBAL,
+                    undefined_type=elf.STT_FUNC,
+                )
+            )
+        with self.assertRaisesRegex(elf.ElfError, "defined non-local"):
+            elf.parse_elf64_le_x86_64_dso(
+                build_elf(symbol_bind=elf.STB_WEAK, sign_versym=elf.VER_NDX_LOCAL)
+            )
         defined = elf.parse_elf64_le_x86_64_dso(build_elf(include_verdef=True, sign_versym=4))
         self.assertEqual(defined.versym_values[1], 4)
         self.assertEqual(defined.verdef_indices, {4: SONAME})
@@ -1088,6 +1223,64 @@ class LinuxElfVerifyTests(unittest.TestCase):
             elf.parse_readelf_need_indices(shared),
             {4: "GLIBC_2.3", 9: "GLIBC_2.3"},
         )
+        with self.assertRaisesRegex(elf.ElfError, "duplicate readelf Version index"):
+            elf.parse_readelf_need_indices(
+                "  Name: GLIBC_2.3  Flags: none  Version: 4\n"
+                "  Name: GLIBC_2.3  Flags: none  Version: 4\n"
+            )
+
+    def test_dynsym_entry_zero_is_canonical(self) -> None:
+        layout: dict = {}
+        blob = bytearray(build_elf(layout=layout))
+        elf.parse_elf64_le_x86_64_dso(bytes(blob))
+        off = layout["dynsym_off"]
+        mutations = (
+            (off, "<I", 1, "canonical null"),
+            (off + 4, "<B", 1, "canonical null"),
+            (off + 5, "<B", 1, "canonical null"),
+            (off + 6, "<H", 1, "canonical null"),
+            (off + 8, "<Q", 1, "canonical null"),
+            (off + 16, "<Q", 8, "canonical null"),
+        )
+        for offset, fmt, value, needle in mutations:
+            with self.subTest(offset):
+                mutated = bytearray(blob)
+                struct.pack_into(fmt, mutated, offset, value)
+                with self.assertRaisesRegex(elf.ElfError, needle):
+                    elf.parse_elf64_le_x86_64_dso(bytes(mutated))
+        combined = bytearray(blob)
+        struct.pack_into("<I", combined, off, 4)
+        struct.pack_into("<Q", combined, off + 8, 0x10)
+        with self.assertRaisesRegex(elf.ElfError, "canonical null"):
+            elf.parse_elf64_le_x86_64_dso(bytes(combined))
+        versym = bytearray(blob)
+        struct.pack_into("<H", versym, layout["versym_off"], elf.VER_NDX_GLOBAL)
+        with self.assertRaisesRegex(elf.ElfError, "dynsym 0 versym"):
+            elf.parse_elf64_le_x86_64_dso(bytes(versym))
+
+    def test_vernaux_indices_are_globally_unique(self) -> None:
+        same_name = elf.parse_elf64_le_x86_64_dso(
+            build_elf(
+                needed=(LIBC, "ld-linux-x86-64.so.2"),
+                loader_verneed=True,
+            )
+        )
+        self.assertEqual(same_name.verneed_indices[2], "GLIBC_2.2.5")
+        self.assertEqual(same_name.verneed_indices[9], "GLIBC_2.2.5")
+        with self.assertRaisesRegex(elf.ElfError, "duplicate vna_other"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(vna_others=(2, 2)))
+        with self.assertRaisesRegex(elf.ElfError, "duplicate vna_other"):
+            elf.parse_elf64_le_x86_64_dso(
+                build_elf(
+                    needed=(LIBC, "ld-linux-x86-64.so.2"),
+                    loader_verneed=True,
+                    loader_vna_other=2,
+                )
+            )
+        with self.assertRaisesRegex(elf.ElfError, "empty Verneed file"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(empty_verneed_file=True))
+        with self.assertRaisesRegex(elf.ElfError, "not a DT_NEEDED"):
+            elf.parse_elf64_le_x86_64_dso(build_elf(verneed_file="not-needed.so.1"))
 
     def test_checked_elf64_arithmetic(self) -> None:
         self.assertEqual(elf._checked_add(0, elf.UINT64_MAX, "t"), elf.UINT64_MAX)

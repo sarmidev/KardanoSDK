@@ -78,12 +78,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   promotion review. Versym entries are parsed and resolved to unique
   `vna_other`/`vd_ndx` values; ELF64 add/mul rejects values outside
   `0..UINT64_MAX` and sums that overflow; raw known-root matches
-  require a following `/`, path stop, or EOF. Fresh Phase B at
-  `7d91a5f` is run `32675120131` (success; artifacts expire
-  2026-09-06/07; not downloaded). Runs `32673275963` and `32673752819`
-  are superseded. The ninth CHECKSUMS row is added only after that
-  re-review is GO. Linux ARM, musl, older glibc, and Windows are out
-  of scope.
+  require a following `/`, path stop, or EOF. Versym 0 is limited to
+  the null dynsym entry, `STB_LOCAL`, and undefined `STB_WEAK`;
+  `vna_other` is globally unique; `readelf` index maps and dynsym
+  sign records must match exactly. Runs `32675120131` and
+  `32675524925` are superseded. The ninth CHECKSUMS row is added only
+  after that re-review is GO. Linux ARM, musl, older glibc, and
+  Windows are out of scope.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
