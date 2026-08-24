@@ -1,0 +1,32 @@
+{
+  "carriers": [
+    {
+      "bundled_native": "libuniffi_ed25519_bip32_wrapper.so (per ABI)",
+      "carrier_kind": "Android .aar",
+      "distributed_by_kardano": true,
+      "license": "Apache-2.0",
+      "maven_coordinate": "org.hyperledger.identus:bip32-ed25519:1.8.8",
+      "note": "Upstream has not published a win32-x86-64 build (hyperledger-identus/apollo issue #226); Kardano SDK cannot distribute what upstream has not built.",
+      "windows_native_available_upstream": false
+    },
+    {
+      "bundled_native": "libdynamic-macos.dylib, libdynamic-linux-{arm64,x86-64}-libsodium.so, libdynamic-msvc-x86-64-libsodium.dll",
+      "carrier_kind": "JVM .jar",
+      "distributed_by_kardano": true,
+      "license": "Apache-2.0 (wrapper) + ISC (bundled libsodium binary)",
+      "maven_coordinate": "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5",
+      "note": "Windows libsodium .dll ships inside this jar; distinct from the Kardano Windows signing-backend candidate, which is not distributed.",
+      "windows_native_available_upstream": true
+    },
+    {
+      "bundled_native": "libsodium.so (per ABI)",
+      "carrier_kind": "Android .aar",
+      "distributed_by_kardano": true,
+      "license": "MPL-2.0 (wrapper) + ISC (bundled libsodium binary)",
+      "maven_coordinate": "com.goterl:lazysodium-android:5.2.0",
+      "note": "Android-only carrier; no Windows binary is bundled.",
+      "windows_native_available_upstream": false
+    }
+  ],
+  "method": "Static table mirroring the artifact-inspection evidence dated 2026-08-23 in docs/THIRD_PARTY_NOTICES.md. Distinct from crypto-signing-backend/CHECKSUMS.sha256, which lists only first-party binaries built from this repository's own Rust crate."
+}
