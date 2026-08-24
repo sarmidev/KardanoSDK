@@ -26,7 +26,9 @@ Policy (documented, not a strength claim):
   allowlist (case-insensitive); delay-load and Authenticode directories
   are empty; no unexpected import names
 - no debug directory, no ``RSDS``/``.pdb``, no embedded workspace/home/temp
-  roots; COFF ``TimeDateStamp`` is 0 (``/Brepro``)
+  roots; COFF ``TimeDateStamp`` is recorded. VS 2022 ``/Brepro`` emits a
+  deterministic hash stamp, not necessarily 0; A==B is the reproducibility
+  gate
 - subsystem ``IMAGE_SUBSYSTEM_WINDOWS_GUI`` as rustc 1.97.0 + MSVC
   emit for this cdylib; DLL characteristics include ``DYNAMIC_BASE``
   and ``NX_COMPAT`` and only the documented extra bits
@@ -424,8 +426,6 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
     extra = dll_characteristics & ~REQUIRED_DLL_CHARACTERISTICS
     if extra & ~ALLOWED_EXTRA_DLL_CHARACTERISTICS:
         raise PeError(f"unexpected DllCharacteristics bits 0x{dll_characteristics:x}")
-    if timestamp != 0:
-        raise PeError("COFF TimeDateStamp must be 0 (/Brepro)")
 
     directories: list[DataDirectory] = []
     dir_off = optional + 0x70

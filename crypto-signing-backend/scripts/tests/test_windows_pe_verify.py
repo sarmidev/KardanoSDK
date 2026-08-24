@@ -252,6 +252,9 @@ class ValidImageTests(unittest.TestCase):
         self.assertEqual(record.sign_exports[0].name, SIGN)
         self.assertEqual(record.imports[0].name, KERNEL32)
         self.assertEqual(record.timestamp, 0)
+        hashed = _write(build_pe(timestamp=0xA1B2C3D4))
+        hashed_record = pe.verify_windows_x86_64_dll(hashed, require_tools=False)
+        self.assertEqual(hashed_record.timestamp, 0xA1B2C3D4)
 
 
 class AdversarialHeaderTests(unittest.TestCase):
@@ -303,8 +306,6 @@ class AdversarialHeaderTests(unittest.TestCase):
                     )
                 )
             )
-        with self.assertRaises(pe.PeError):
-            pe.parse_pe32_plus_x86_64_dll(build_pe(timestamp=1))
         with self.assertRaises(pe.PeError):
             pe.parse_pe32_plus_x86_64_dll(build_pe(number_of_rva=15))
 
