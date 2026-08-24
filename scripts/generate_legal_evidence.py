@@ -1273,6 +1273,7 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
         "artifact_sha256": "65f047d39bf88991892daf685f1bfeda644e2195d803857909cc7672c6aa09d8",
+        "primary_artifact_kind": "aar",
         "embedded_natives": [
             {
                 "path": "jni/arm64-v8a/libuniffi_ed25519_bip32_wrapper.so",
@@ -1334,6 +1335,7 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
         "artifact_sha256": "4db0135006f5ecbcc445f9ec8800101ab40438e5a9daa083c5ccab85cc661d3a",
+        "primary_artifact_kind": "jar",
         "embedded_natives": [
             {
                 "path": "darwin-aarch64/libuniffi_ed25519_bip32_wrapper.dylib",
@@ -1415,6 +1417,7 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "windows_native_available_upstream": True,
         "inspected_2026_08_24": True,
         "artifact_sha256": "63d7b2ea35c6fa57636931977f25929d4f2cac9513411f16337a244b7ddc239b",
+        "primary_artifact_kind": "jar",
         "embedded_natives": [
             {
                 "path": "libdynamic-linux-arm64-libsodium.so",
@@ -1459,6 +1462,7 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
         "artifact_sha256": "b5378c1d9db2573d61b304e89cf83db187a05c3e4ff081d9b2ef3d0bb00ca314",
+        "primary_artifact_kind": "aar",
         "embedded_natives": [
             {
                 "path": "jni/arm64-v8a/libsodium.so",
@@ -1506,6 +1510,7 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
         "artifact_sha256": "8ca4032b6d79b351f0b59ad4b580eddbb9423e1652f7c958830687f1eee2ec03",
+        "primary_artifact_kind": "aar",
         "embedded_natives": [
             {
                 "path": "jni/arm64-v8a/libandroidx.graphics.path.so",
@@ -1557,6 +1562,7 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "windows_native_available_upstream": False,
         "inspected_2026_08_24": True,
         "artifact_sha256": "aec37b44e8dabf4de620068146769655748be3971bf868614e5ec6b240b2ac35",
+        "primary_artifact_kind": "jar",
         "embedded_natives": [
             {
                 "path": "libskiko-macos-arm64.dylib",
@@ -1585,12 +1591,17 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
     {
         "maven_coordinate": "net.java.dev.jna:jna:5.19.1",
         "carrier_kind": "JVM/Android jar (also used directly by crypto-signing-backend)",
-        "license": "Apache-2.0 OR LGPL-2.1-or-later (Kardano SDK elects Apache-2.0)",
+        "license": (
+            "Apache-2.0 OR LGPL-2.1-or-later (Kardano SDK proposes electing "
+            "Apache-2.0; not yet ACCEPTED -- OPEN row pending reviewer/date, "
+            "see docs/LEGAL_REVIEW.md §5a)"
+        ),
         "distribution_status": "redistributed_by_kardano",
         "distributed_by_kardano": True,
         "windows_native_available_upstream": True,
         "inspected_2026_08_24": True,
         "artifact_sha256": "4fb141dd8ef6b0585ffceea4bc49602fbc6312fa977e2c488794ea3e6aafecae",
+        "primary_artifact_kind": "jar",
         # JNA 5.19.1 publishes Gradle Module Metadata with a SEPARATE Android
         # `.aar` variant (distinct file from the `.jar` above, same GAV) --
         # found by cross_check_maven_native_carriers_against_local_cache()'s
@@ -1678,52 +1689,103 @@ VALID_CARRIER_DISTRIBUTION_STATUSES = (
 # code subject to the same review requirement as a shared library.
 NATIVE_MEMBER_EXTENSIONS = (".so", ".dll", ".dylib", ".jnilib", ".a")
 
-# Magic-byte sniffing as a defense-in-depth backstop for a native member
-# that was (deliberately or accidentally) packaged WITHOUT one of the
-# extensions above -- e.g. a renamed/extensionless shared object. Checked
-# only on members that did NOT already match NATIVE_MEMBER_EXTENSIONS, so a
-# real native payload cannot silently evade discovery merely by omitting or
-# changing its filename extension.
+# Magic-byte sniffing is applied to EVERY non-directory archive member,
+# regardless of its filename extension -- a native payload packaged with a
+# misleading extension (`payload.bin`, `.dat`, even a `.class`-suffixed
+# file) or no extension at all must not be able to evade discovery merely
+# by its name. `CAFEBABE` (Mach-O universal/fat binary) is deliberately
+# NOT in this flat list: see `_looks_like_fat_macho()` below for why that
+# one signature needs an extra disambiguating check instead of a flat
+# prefix match.
 NATIVE_MAGIC_SIGNATURES: tuple[bytes, ...] = (
     b"\x7fELF",  # ELF (Linux/BSD/Solaris shared objects and executables)
-    b"\xfe\xed\xfa\xce",  # Mach-O 32-bit
-    b"\xfe\xed\xfa\xcf",  # Mach-O 64-bit
-    b"\xcf\xfa\xed\xfe",  # Mach-O 64-bit, reversed byte order
-    b"\xce\xfa\xed\xfe",  # Mach-O 32-bit, reversed byte order
-    b"\xca\xfe\xba\xbe",  # Mach-O universal/fat binary
+    b"\xfe\xed\xfa\xce",  # Mach-O 32-bit (thin)
+    b"\xfe\xed\xfa\xcf",  # Mach-O 64-bit (thin)
+    b"\xcf\xfa\xed\xfe",  # Mach-O 64-bit (thin), reversed byte order
+    b"\xce\xfa\xed\xfe",  # Mach-O 32-bit (thin), reversed byte order
     b"MZ",  # PE/COFF (Windows DLL/EXE) DOS stub header
-    b"!<arch>\n",  # Unix ar archive (static library container, e.g. .a)
+    b"!<arch>\n",  # BSD/System-V ar archive (static library container, e.g. .a)
+    b"\x01\xdf",  # AIX XCOFF32 -- e.g. JNA's com/sun/jna/aix-ppc/libjnidispatch.a,
+    # which is a raw XCOFF object, NOT a "!<arch>\n" ar archive, despite its
+    # `.a` extension (empirically confirmed 2026-08-24 against the real
+    # resolved jna-5.19.1.jar in the local Gradle cache).
+    b"\x01\xf7",  # AIX XCOFF64 -- e.g. .../aix-ppc64/libjnidispatch.a
 )
-MAX_NATIVE_MAGIC_PREFIX_LEN = max(len(sig) for sig in NATIVE_MAGIC_SIGNATURES)
+MAX_NATIVE_MAGIC_PREFIX_LEN = 8
+
+FAT_MACHO_MAGIC = b"\xca\xfe\xba\xbe"
+
+# `CAFEBABE` is Apple's fat/universal Mach-O magic number AND (a deliberate
+# historical Sun/Apple naming coincidence, not a bug in either format) the
+# exact same 4 bytes every Java `.class` file starts with. A jar's `.class`
+# files vastly outnumber any real native member in this dependency graph,
+# so treating this one signature as an unconditional native indicator would
+# reintroduce the exact false-positive this generator was already found to
+# produce against `androidx.annotation:annotation-jvm` (dozens of ordinary
+# `.class` files misreported as "native"). The two formats diverge in their
+# next 4 bytes: a fat Mach-O's are `nfat_arch` (a big-endian count of the
+# fat_arch structs that follow, i.e. how many architecture slices this
+# binary bundles), while a class file's are `minor_version`(u2) then
+# `major_version`(u2) -- and every real major_version Java has ever shipped
+# (45 for JDK 1.1, increasing monotonically since) is far above any
+# plausible architecture-slice count a real fat binary would use.
+# Empirically confirmed 2026-08-24 against real, currently-resolved
+# artifacts in this repository's own dependency graph: the IonSpin
+# libsodium JVM jar's `libdynamic-macos.dylib` (a genuine universal
+# arm64+x86-64 fat Mach-O) has `nfat_arch == 2`, while
+# `androidx.annotation:annotation-jvm`'s real `.class` files have
+# `major_version == 52` (JDK 8) -- both far apart from this bound, which is
+# deliberately set with a wide margin on both sides rather than tuned to
+# either exact value.
+MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT = 20
+
+
+def _looks_like_fat_macho(prefix: bytes) -> bool:
+    if not prefix.startswith(FAT_MACHO_MAGIC) or len(prefix) < 8:
+        return False
+    nfat_arch = int.from_bytes(prefix[4:8], "big")
+    return 1 <= nfat_arch <= MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT
+
+
+def _has_native_magic(prefix: bytes) -> bool:
+    return any(prefix.startswith(sig) for sig in NATIVE_MAGIC_SIGNATURES) or _looks_like_fat_macho(prefix)
+
+
+def _member_has_native_extension(name: str) -> bool:
+    basename = name.rsplit("/", 1)[-1]
+    lower = basename.lower()
+    return any(lower.endswith(ext) for ext in NATIVE_MEMBER_EXTENSIONS)
+
+
+def classify_native_member_signal(name: str, prefix: bytes) -> str:
+    """Classify one archive member for native-code discovery purposes.
+
+    Returns exactly one of:
+    - `"native"`: treat as a native carrier member requiring review --
+      either a known native extension (`NATIVE_MEMBER_EXTENSIONS`) whose
+      leading bytes match a supported native magic signature, or an
+      unknown/absent extension whose leading bytes match one anyway (a
+      renamed/extensionless payload -- `payload.bin`, `.dat`, even a
+      misleading `.class` name, all still count if the magic is real).
+    - `"extension_magic_mismatch"`: the member's extension IS one of
+      `NATIVE_MEMBER_EXTENSIONS`, but its leading bytes do NOT match any
+      supported native magic signature. This is never silently accepted
+      OR silently ignored -- the caller must fail closed, since a `.so`/
+      `.dll`/`.dylib`/`.jnilib`/`.a` member whose content does not look
+      like the format its own extension claims is exactly the kind of
+      unsupported/ambiguous case this discovery must not guess about.
+    - `"not_native"`: neither condition holds; ordinary member (a
+      `.class` file, a resource, a POM, etc.).
+    """
+    has_ext = _member_has_native_extension(name)
+    has_magic = _has_native_magic(prefix)
+    if has_ext:
+        return "native" if has_magic else "extension_magic_mismatch"
+    return "native" if has_magic else "not_native"
+
 
 MAX_ZIP_MEMBERS_SCANNED = 20_000
 MAX_ZIP_MEMBER_BYTES_READ = 512 * 1024 * 1024
-
-
-def _looks_like_native_member(name: str, prefix: bytes) -> bool:
-    """True if `name`/`prefix` looks like a native code member.
-
-    Extension is checked first and is authoritative when present -- this
-    matters because magic-byte sniffing alone is NOT reliable here: a Java
-    `.class` file's own magic number (`CAFEBABE`) is byte-identical to a
-    Mach-O universal/fat binary's magic number, and a jar full of ordinary
-    `.class` files would otherwise be misreported as carrying dozens of
-    "native" members (a real false-positive this function was found to
-    produce against `androidx.annotation:annotation-jvm`, a pure-Kotlin/
-    Java artifact with zero native code). Magic sniffing is therefore only
-    consulted for a member with NO filename extension at all -- no
-    legitimately embedded native library in any carrier reviewed in
-    MAVEN_NATIVE_CARRIERS omits its extension, so this loses no real
-    coverage while eliminating the `.class`/Mach-O collision (and any other
-    extension's own magic-byte coincidence).
-    """
-    basename = name.rsplit("/", 1)[-1]
-    lower = basename.lower()
-    if any(lower.endswith(ext) for ext in NATIVE_MEMBER_EXTENSIONS):
-        return True
-    if "." in basename:
-        return False
-    return any(prefix.startswith(sig) for sig in NATIVE_MAGIC_SIGNATURES)
 
 
 def find_local_maven_artifacts(group: str, artifact: str, version: str) -> list[Path]:
@@ -1772,7 +1834,18 @@ def _scan_zip_for_native_members(archive_path: Path) -> list[dict[str, Any]]:
                 prefix = fh.read(MAX_NATIVE_MAGIC_PREFIX_LEN)
                 rest = fh.read()
             data = prefix + rest
-            if not _looks_like_native_member(info.filename, prefix):
+            signal = classify_native_member_signal(info.filename, prefix)
+            if signal == "extension_magic_mismatch":
+                raise EvidenceError(
+                    f"{archive_path}: member {info.filename!r} has a "
+                    "recognized native-code extension "
+                    f"{NATIVE_MEMBER_EXTENSIONS} but its leading bytes do "
+                    "not match any supported native magic signature "
+                    "(ELF/Mach-O/PE/ar/XCOFF) -- extension/content "
+                    "mismatch, refusing to classify automatically; a "
+                    "human reviewer must inspect this member"
+                )
+            if signal == "not_native":
                 continue
             members.append(
                 {
@@ -1784,23 +1857,102 @@ def _scan_zip_for_native_members(archive_path: Path) -> list[dict[str, Any]]:
     return members
 
 
+SUPPORTED_MAVEN_ARTIFACT_EXTENSIONS = ("jar", "aar")
+
+
+def _expected_artifact_hashes_by_extension(
+    gav: str, catalog_entry: dict[str, Any]
+) -> dict[str, str]:
+    """Map each supported archive extension ("jar"/"aar") to the single
+    whole-archive SHA-256 this catalog entry declares for it: its
+    required `primary_artifact_kind` maps to the top-level
+    `artifact_sha256`, and each `additional_artifacts[].kind` maps to
+    that entry's own `artifact_sha256`. `maven_native_carriers_inventory()`
+    already validates that `primary_artifact_kind` is one of
+    `SUPPORTED_MAVEN_ARTIFACT_EXTENSIONS` and is not also claimed by any
+    `additional_artifacts` entry, so this function only builds the map.
+    """
+    mapping = {catalog_entry["primary_artifact_kind"]: catalog_entry["artifact_sha256"]}
+    for extra in catalog_entry.get("additional_artifacts", []):
+        mapping[extra["kind"]] = extra["artifact_sha256"]
+    return mapping
+
+
+def _verify_resolved_artifact_hashes(
+    gav: str, catalog_entry: dict[str, Any], artifact_paths: list[Path]
+) -> None:
+    """Compute the whole-archive SHA-256 of every resolved .jar/.aar for
+    `gav` and require exact equality with the catalog's declared
+    primary/additional artifact hash for that extension, BEFORE any
+    member inside the archive is inspected.
+
+    A member-hash-only check cannot catch a substituted/wrong archive
+    whose one catalogued native member happens to still be byte-identical
+    while everything else (classes, metadata, other resources) differs --
+    this closes that gap. Also rejects: multiple resolved archives of the
+    same extension with different content (ambiguous -- which one was
+    actually used to build?), and a resolved extension this catalog entry
+    has no corresponding declared hash for at all (missing mapping).
+    """
+    expected_by_ext = _expected_artifact_hashes_by_extension(gav, catalog_entry)
+    by_ext: dict[str, dict[str, Path]] = {}
+    for path in artifact_paths:
+        ext = path.suffix.lower().lstrip(".")
+        digest = sha256_file(path)
+        by_ext.setdefault(ext, {})[digest] = path
+
+    for ext, digest_to_path in by_ext.items():
+        if len(digest_to_path) > 1:
+            raise EvidenceError(
+                f"{gav}: {len(digest_to_path)} different resolved .{ext} "
+                f"archives found in the local Gradle cache with different "
+                f"whole-archive SHA-256 values {sorted(digest_to_path)} -- "
+                "ambiguous which is the real resolved artifact, refusing "
+                "to inspect its members"
+            )
+        (actual_digest,) = digest_to_path
+        expected_digest = expected_by_ext.get(ext)
+        if expected_digest is None:
+            (only_path,) = digest_to_path.values()
+            raise EvidenceError(
+                f"{gav}: resolved .{ext} artifact {only_path} has no "
+                f"corresponding artifact_sha256/additional_artifacts entry "
+                f"in MAVEN_NATIVE_CARRIERS[{gav!r}] for extension {ext!r} "
+                f"(catalogued extensions: {sorted(expected_by_ext)}) -- "
+                "missing/ambiguous archive mapping, refusing to inspect "
+                "its members"
+            )
+        if actual_digest != expected_digest:
+            (only_path,) = digest_to_path.values()
+            raise EvidenceError(
+                f"{gav}: resolved .{ext} artifact {only_path} whole-archive "
+                f"SHA-256 {actual_digest} does not match catalogued "
+                f"{expected_digest} -- wrong/substituted artifact, "
+                "refusing to inspect its members"
+            )
+
+
 def cross_check_maven_native_carriers_against_local_cache(
     gradle_report: dict[str, Any],
 ) -> None:
-    """Defense-in-depth: on a warm Gradle cache, scan every resolved runtime
-    coordinate's actual .jar/.aar for native-looking members and require the
-    result to exactly match `MAVEN_NATIVE_CARRIERS` above.
+    """Defense-in-depth: on a warm Gradle cache, verify every resolved
+    runtime coordinate's actual .jar/.aar whole-archive bytes against
+    `MAVEN_NATIVE_CARRIERS` above, THEN scan for native-looking members and
+    require that result to exactly match the same catalog entry too.
 
     Like `find_local_pom()`'s live-cache fallback, this needs no
     pre-populated cache to pass (a cold cache simply finds nothing to check,
     since `find_local_maven_artifacts()` returns an empty list for every
     coordinate and this function never raises for a coordinate whose
     artifacts it could not locate) -- but when the cache IS warm, this
-    generator FAILS CLOSED
-    rather than silently omitting a native member: a native-carrying
-    coordinate absent from the static catalog, an unreviewed extra member
-    on a known carrier, or a hash/size mismatch on an already-catalogued
-    member all raise `EvidenceError` and abort generation.
+    generator FAILS CLOSED rather than silently omitting a native member or
+    trusting a substituted archive: a whole-archive hash that does not
+    match the catalog's primary/additional artifact_sha256 (checked BEFORE
+    any member is inspected -- see `_verify_resolved_artifact_hashes()`), a
+    native-carrying coordinate absent from the static catalog, an
+    unreviewed extra member on a known carrier, or a hash/size mismatch on
+    an already-catalogued member all raise `EvidenceError` and abort
+    generation.
     """
     catalog_by_coordinate = {c["maven_coordinate"]: c for c in MAVEN_NATIVE_CARRIERS}
 
@@ -1813,6 +1965,10 @@ def cross_check_maven_native_carriers_against_local_cache(
         artifact_paths = find_local_maven_artifacts(group, artifact, version)
         if not artifact_paths:
             continue  # cold cache for this coordinate -- nothing to cross-check
+
+        catalog_entry_for_hash_check = catalog_by_coordinate.get(gav)
+        if catalog_entry_for_hash_check is not None:
+            _verify_resolved_artifact_hashes(gav, catalog_entry_for_hash_check, artifact_paths)
 
         discovered_by_path: dict[str, dict[str, Any]] = {}
         for artifact_path in artifact_paths:
@@ -1909,7 +2065,31 @@ def maven_native_carriers_inventory(gradle_report: dict[str, Any] | None = None)
                 f"{carrier['maven_coordinate']}: artifact_sha256 "
                 f"{carrier.get('artifact_sha256')!r} is not a 64-hex-char sha256"
             )
+        primary_kind = carrier.get("primary_artifact_kind")
+        if primary_kind not in SUPPORTED_MAVEN_ARTIFACT_EXTENSIONS:
+            raise EvidenceError(
+                f"{carrier['maven_coordinate']}: primary_artifact_kind "
+                f"{primary_kind!r} is not one of {SUPPORTED_MAVEN_ARTIFACT_EXTENSIONS}"
+            )
+        additional_kinds_seen: set[str] = set()
         for extra_artifact in carrier.get("additional_artifacts", []):
+            extra_kind = extra_artifact.get("kind")
+            if extra_kind not in SUPPORTED_MAVEN_ARTIFACT_EXTENSIONS:
+                raise EvidenceError(
+                    f"{carrier['maven_coordinate']}: additional_artifacts kind "
+                    f"{extra_kind!r} is not one of {SUPPORTED_MAVEN_ARTIFACT_EXTENSIONS}"
+                )
+            if extra_kind == primary_kind:
+                raise EvidenceError(
+                    f"{carrier['maven_coordinate']}: additional_artifacts kind "
+                    f"{extra_kind!r} duplicates primary_artifact_kind"
+                )
+            if extra_kind in additional_kinds_seen:
+                raise EvidenceError(
+                    f"{carrier['maven_coordinate']}: additional_artifacts declares "
+                    f"kind {extra_kind!r} more than once"
+                )
+            additional_kinds_seen.add(extra_kind)
             if not SHA256_HEX_RE.match(extra_artifact.get("artifact_sha256", "")):
                 raise EvidenceError(
                     f"{carrier['maven_coordinate']}: additional_artifacts entry "
@@ -1968,9 +2148,18 @@ def maven_native_carriers_inventory(gradle_report: dict[str, Any] | None = None)
             "`distribution_status` is one of "
             f"{VALID_CARRIER_DISTRIBUTION_STATUSES}. Defense-in-depth: when "
             "generation runs with a warm local Gradle module cache, every "
-            "resolved runtime coordinate's actual .jar/.aar is scanned "
-            f"(extensions {NATIVE_MEMBER_EXTENSIONS} plus ELF/Mach-O/PE/ar "
-            "magic-byte sniffing for extensionless members) via "
+            "resolved runtime coordinate's actual .jar/.aar has its own "
+            "whole-archive SHA-256 verified against this table's "
+            "artifact_sha256/additional_artifacts BEFORE any member inside "
+            "it is inspected (rejecting a wrong/substituted/ambiguous "
+            "archive up front), then every non-directory member's leading "
+            "bytes are inspected for ELF/Mach-O (thin and fat/universal)/ "
+            "PE/ar/XCOFF magic regardless of filename extension -- a "
+            f"known native extension ({NATIVE_MEMBER_EXTENSIONS}) whose "
+            "content does not match any supported native magic fails "
+            "generation outright, and an unknown/absent extension whose "
+            "content DOES match becomes a reviewable carrier member the "
+            "same as an extension match would -- via "
             "cross_check_maven_native_carriers_against_local_cache(), which "
             "fails generation on any undeclared native-carrying coordinate, "
             "unreviewed extra/missing member, or member hash/size drift "

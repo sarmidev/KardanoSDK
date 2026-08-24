@@ -379,3 +379,29 @@ Prompt 7, or any release as GO. The counsel review, upstream
 per-election reviewer acceptance remain open gates in
 `docs/LEGAL_REVIEW.md` — release mode of `scripts/check_release_evidence.py`
 is expected to keep failing until a human resolves them.
+
+### 8.3 Addendum — 2026-08-24, PE re-review passage above is now historical/superseded
+
+**The "Windows PE re-review" clause in §8.2 immediately above is historical
+and superseded; it is not this document's current position.** The
+independent PE (native-artifact structural) technical review that §8.2
+described as an open gate is now COMPLETE, as of commit `c65a20a` (fresh
+independent A/B run, `docs/HANDOFF.md` Branch-Stack Status row 7 and
+`docs/LEGAL_REVIEW.md` §14/§15). Completion of that technical review is a
+narrow structural finding only — it is not a legal or counsel
+determination, does not promote the Windows x86-64 signing-backend
+candidate, and does not imply any DLL is distributed. The Windows
+candidate and Phase C promotion remain **NO-GO**, but solely because of the
+two gates below, which are the only remaining full-path blockers for that
+candidate:
+
+- Upstream `hyperledger-identus/apollo` issue #226 (no published
+  `win32-x86-64` `bip32-ed25519` build) — still open and unresolved.
+- Owner/counsel review of `docs/LEGAL_REVIEW.md` — still not occurred.
+
+Every per-election reviewer acceptance (Cargo §5a and Gradle §5b) also
+remains an open, unaccepted, merely-**proposed** election — see
+`docs/LEGAL_REVIEW.md` §5a/§14 and
+`scripts/check_release_evidence.py::check_no_completed_election_wording`.
+This addendum does not certify anything or mark this audit, Prompt 7, or
+any release as GO.

@@ -128,6 +128,36 @@ PE_TECHNICAL_REVIEW_COMPLETE_AT_COMMIT = "c65a20a"
 
 NATIVE_BINARY_SUFFIXES = (".so", ".dylib", ".a", ".dll")
 
+# Hand-written documents that describe license elections in prose (as
+# opposed to `docs/evidence/*.json`, which is generated and already
+# schema-validated by check_cargo_license_elections/check_gradle_license_elections).
+# Every one of these must describe an OPEN election as merely *proposed* --
+# never as already elected/accepted -- because the only thing that can make
+# an election accepted is a `status: "ACCEPTED"` row with a reviewer and an
+# ISO-8601 date (see docs/LEGAL_REVIEW.md §5a), and none of the elections in
+# this packet has that today.
+ELECTION_WORDING_WATCHED_FILES = (
+    "NOTICE",
+    "LICENSES/README.md",
+    "docs/THIRD_PARTY_NOTICES.md",
+    "docs/LEGAL_REVIEW.md",
+    "docs/HANDOFF.md",
+)
+
+# Case-insensitive substrings that claim an election is already made/settled
+# rather than merely proposed. Kept deliberately narrow (not just "elect")
+# so that legitimate phrases like "proposes electing" or "proposed election"
+# never collide with this list.
+COMPLETED_ELECTION_PHRASES = (
+    "elected branch",
+    "is the elected",
+    "has elected",
+    "have elected",
+    "sdk elects",
+    "election is accepted",
+    "election has been accepted",
+)
+
 
 def run_git(*args: str) -> str:
     import subprocess
@@ -194,6 +224,49 @@ def check_no_symlinks() -> list[str]:
     symlinks = git_symlinked_files(*watched)
     for path in sorted(symlinks):
         errors.append(f"tracked symlink is not allowed as an evidence input: {path}")
+    return errors
+
+
+def check_no_completed_election_wording() -> list[str]:
+    """No hand-written document may describe an OPEN license election as
+    already elected/accepted.
+
+    `docs/LEGAL_REVIEW.md` §5a is the single source of truth for election
+    acceptance: a row becomes accepted only once its generated `status` is
+    exactly `"ACCEPTED"` with a non-empty `reviewer` and an ISO-8601
+    `review_date` (see check_cargo_license_elections /
+    check_gradle_license_elections). Every election in this packet is
+    `status: "OPEN"` today, so no prose document may use completed-election
+    language such as "elected branch" or "SDK elects" for it -- only
+    "proposes electing" / "proposed election", with an explicit statement
+    that the election is not yet accepted.
+    """
+    errors: list[str] = []
+    for rel_path in ELECTION_WORDING_WATCHED_FILES:
+        path = REPO_ROOT / rel_path
+        if not path.is_file():
+            errors.append(f"{rel_path}: expected file is missing")
+            continue
+        text = path.read_text(encoding="utf-8")
+        lowered = text.lower()
+        for phrase in COMPLETED_ELECTION_PHRASES:
+            search_start = 0
+            while True:
+                idx = lowered.find(phrase, search_start)
+                if idx == -1:
+                    break
+                search_start = idx + len(phrase)
+                preceding = lowered[max(0, idx - 24) : idx]
+                if re.search(r"\bno\b|\bnot\b|\bnone\b|\bn't\b", preceding):
+                    continue  # explicit negation ("no election is accepted until ...")
+                lineno = lowered.count("\n", 0, idx) + 1
+                errors.append(
+                    f"{rel_path}:{lineno}: uses completed-election wording "
+                    f"{phrase!r}; an OPEN election must be described as "
+                    "'proposed'/'proposes electing', never as already "
+                    "elected/accepted, until reviewer/date/status are all "
+                    "recorded as ACCEPTED (see docs/LEGAL_REVIEW.md §5a)"
+                )
     return errors
 
 
@@ -493,6 +566,21 @@ def _cargo_inventory_diff_is_known_errno_host_ambiguity(
     if not isinstance(fresh_linked, list) or not isinstance(committed_linked, list):
         return False, f"membership_by_target[{triple!r}].linked_into_compiled_artifact is missing/malformed"
 
+    # Reject silently if the package id appears more than once in either
+    # list: a duplicate is itself a real regression (e.g. a corrupted
+    # membership_by_target index), not a shape this narrow exception is
+    # documented to cover, and `list.remove`-by-filter below would otherwise
+    # silently absorb a duplicate-vs-single-copy difference between the two
+    # sides instead of failing on it.
+    fresh_linked_count = fresh_linked.count(pkg_id)
+    committed_linked_count = committed_linked.count(pkg_id)
+    if fresh_linked_count > 1 or committed_linked_count > 1:
+        return False, (
+            f"errno package id appears more than once in "
+            f"membership_by_target[{triple!r}].linked_into_compiled_artifact "
+            "on at least one side -- not the known single-entry ambiguity"
+        )
+
     fresh_pkg_has_slice = triple in fresh_errno.get("membership", {})
     committed_pkg_has_slice = triple in committed_errno.get("membership", {})
     fresh_mbt_has_errno = pkg_id in fresh_linked
@@ -540,17 +628,30 @@ def _cargo_inventory_diff_is_known_errno_host_ambiguity(
             return False, "committed row's x86_64-unknown-linux-gnu target_membership value is not exactly ['linked_into_compiled_artifact']"
 
     # Every other byte of the payload -- every other package, every other
-    # target triple, every other field on the errno package itself -- must
-    # be identical. Build a normalized copy of each side with ONLY the
-    # known-mutable errno slices (its own membership dict, the top-level
+    # target triple, every other field on the errno package itself, and
+    # (crucially) the relative order of every OTHER element in the one list
+    # this exception touches -- must be identical. Build a normalized copy
+    # of each side with ONLY the exact known-mutable errno slices (its own
+    # membership dict entry, its exact package id inside the top-level
     # membership_by_target index, and its license_elections row's mirrored
-    # target_membership) removed, then require full equality.
+    # target_membership entry) removed at their exact validated JSON paths,
+    # with NO other normalization applied: no sorting of this or any other
+    # list, no reordering of any dict, no touching any other package/target/
+    # row. A 2026-08-24 independent review found this function previously
+    # called `sorted(...)` on the remaining
+    # `membership_by_target[triple]["linked_into_compiled_artifact"]`
+    # entries after filtering out errno's id -- that would have silently
+    # tolerated an unrelated package's position in that same list being
+    # reordered between fresh and committed, which is exactly the kind of
+    # broader-than-documented masking this exception must never do. The
+    # filter below preserves the exact relative order of every remaining
+    # element; only the literal `pkg_id` string is ever removed from it.
     def normalized(payload: dict) -> dict:
         payload = json.loads(json.dumps(payload))
         mbt = payload.get("membership_by_target", {}).get(triple, {})
         linked = mbt.get("linked_into_compiled_artifact")
         if isinstance(linked, list):
-            mbt["linked_into_compiled_artifact"] = sorted(x for x in linked if x != pkg_id)
+            mbt["linked_into_compiled_artifact"] = [x for x in linked if x != pkg_id]
         errno_pkg = _find_package(payload, KNOWN_ERRNO_NAME)
         if errno_pkg is not None:
             errno_pkg.get("membership", {}).pop(triple, None)
@@ -1314,6 +1415,7 @@ def main() -> int:
 
     checks = (
         ("no tracked symlinks in evidence inputs", check_no_symlinks),
+        ("no completed-election wording for OPEN elections", check_no_completed_election_wording),
         ("NOTICE / LICENSES cross-reference", check_notice_license_references),
         ("LICENSES/README.md table matches committed files", check_licenses_readme_table_matches_files),
         ("native inventory vs CHECKSUMS.sha256", check_native_inventory_matches_checksums),

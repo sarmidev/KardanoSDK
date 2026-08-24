@@ -125,7 +125,8 @@ Date: 2026-08-24
   placeholder in `docs/LEGAL_REVIEW.md`; it passed on this tree.
   `docs/THIRD_PARTY_NOTICES.md` is reconciled: JNA and the
   `ed25519-bip32`/`cryptoxide` dual licenses (`Apache-2.0 OR
-  LGPL-2.1`/`MIT OR Apache-2.0`) now record an explicit Apache-2.0 election;
+  LGPL-2.1`/`MIT OR Apache-2.0`) now record an explicit, but still OPEN and
+  unaccepted, proposed Apache-2.0 election;
   the single-license `uniffi` crate's MPL-2.0 file-level obligation (linked
   into all 9 native artifacts) is reviewed the same way as
   `lazysodium-android`; and the page states explicitly that the Windows
@@ -345,6 +346,17 @@ Date: 2026-08-24
   #226). Identus is not being built. Phase C promotion is NO-GO
   pending independent PE re-review. Do not merge/tag,
   download/promote the DLL, or start the legal packet.
+  **Historical/superseded note (added later, not rewriting the entry
+  above):** the "pending independent PE re-review" clause reflects this
+  session's state only. The independent PE (native-artifact structural)
+  technical review is now COMPLETE at `c65a20a` (see row 7 above and
+  `docs/LEGAL_REVIEW.md` §14/§15); it is no longer a blocking gate.
+  Completion of that technical review is not a legal approval and does
+  not promote the Windows candidate or imply any DLL is distributed.
+  Phase C / the Windows candidate remain NO-GO solely because of the
+  still-open upstream `hyperledger-identus/apollo` issue #226 (Identus
+  full build-availability gap), plus counsel review, which are the only
+  remaining full-path blockers.
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence`.**
   Gate 1 is GO at `d09db44`. Gate 2 Linux x86-64 JVM uses JNA prefix

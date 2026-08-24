@@ -69,9 +69,12 @@ The following are used under the Apache License, Version 2.0:
   25; see docs/evidence/maven_native_carriers_inventory.json. Do not read
   this entry as "JNA is source-only".
 - ed25519-bip32 (Rust crate, 0.4.2) and cryptoxide (0.5.3, transitive; dual
-  MIT OR Apache-2.0; Kardano SDK elects Apache-2.0 for this distribution).
-  Compiled into all nine committed crypto-signing-backend native artifacts
-  listed in crypto-signing-backend/CHECKSUMS.sha256.
+  MIT OR Apache-2.0; Kardano SDK proposes electing Apache-2.0 for this
+  distribution, but that election is not yet ACCEPTED -- see
+  docs/LEGAL_REVIEW.md §5a and docs/evidence/cargo_dependency_inventory.json
+  "license_elections"). Compiled into all nine committed
+  crypto-signing-backend native artifacts listed in
+  crypto-signing-backend/CHECKSUMS.sha256.
 
 ================================================================================
 Bouncy Castle License (see LICENSES/BouncyCastle.txt)

@@ -25,6 +25,9 @@ class RealTreeChecksTests(unittest.TestCase):
     def test_no_symlinks(self) -> None:
         self.assertEqual(checker.check_no_symlinks(), [])
 
+    def test_no_completed_election_wording(self) -> None:
+        self.assertEqual(checker.check_no_completed_election_wording(), [])
+
     def test_notice_license_cross_reference_passes(self) -> None:
         self.assertEqual(checker.check_notice_license_references(), [])
 
@@ -398,6 +401,83 @@ class PlaceholderDetectionTests(unittest.TestCase):
         ):
             errors = checker.check_legal_review_placeholders("release")
         self.assertEqual(errors, [])
+
+
+class CompletedElectionWordingDetectionTests(unittest.TestCase):
+    """OPEN elections must never be described in prose as already
+    elected/accepted (Gap 1 of the 2026-08-24 final re-review)."""
+
+    def _watch_single_file(self, text: str) -> Path:
+        path = _write_temp_markdown(text)
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        return path
+
+    def test_real_tracked_documents_use_no_completed_election_wording(self) -> None:
+        self.assertEqual(checker.check_no_completed_election_wording(), [])
+
+    def test_elected_branch_phrase_is_rejected(self) -> None:
+        path = self._watch_single_file(
+            "Apache-2.0 was the elected branch of this dual license.\n"
+        )
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(len(errors), 1)
+        self.assertIn("elected branch", errors[0])
+
+    def test_sdk_elects_phrase_is_rejected(self) -> None:
+        path = self._watch_single_file("Kardano SDK elects Apache-2.0 for this distribution.\n")
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(len(errors), 1)
+        self.assertIn("sdk elects", errors[0])
+
+    def test_has_elected_phrase_is_rejected(self) -> None:
+        path = self._watch_single_file("The project has elected Apache-2.0 already.\n")
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(len(errors), 1)
+        self.assertIn("has elected", errors[0])
+
+    def test_bare_election_is_accepted_without_negation_is_rejected(self) -> None:
+        path = self._watch_single_file("This election is accepted as of today.\n")
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(len(errors), 1)
+        self.assertIn("election is accepted", errors[0])
+
+    def test_negated_no_election_is_accepted_statement_is_allowed(self) -> None:
+        path = self._watch_single_file(
+            "No election is accepted until reviewer, date, and status are "
+            "all recorded as ACCEPTED.\n"
+        )
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(errors, [])
+
+    def test_proposed_election_wording_is_allowed(self) -> None:
+        path = self._watch_single_file(
+            "Kardano SDK proposes electing Apache-2.0 for this distribution, "
+            "but that election is not yet ACCEPTED.\n"
+        )
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(errors, [])
+
+    def test_missing_watched_file_is_reported(self) -> None:
+        missing = "/nonexistent/path/does-not-exist-election-wording.md"
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (missing,)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(len(errors), 1)
+        self.assertIn("expected file is missing", errors[0])
+
+    def test_multiple_offending_phrases_are_all_reported(self) -> None:
+        path = self._watch_single_file(
+            "Line one: is the elected choice.\n"
+            "Line two: SDK elects Apache-2.0 outright.\n"
+        )
+        with mock.patch.object(checker, "ELECTION_WORDING_WATCHED_FILES", (str(path),)):
+            errors = checker.check_no_completed_election_wording()
+        self.assertEqual(len(errors), 2)
 
 
 class CargoElectionSchemaTests(unittest.TestCase):
@@ -1049,6 +1129,149 @@ class CargoInventoryHostAmbiguousFreshnessTests(unittest.TestCase):
         fresh = self._add_known_errno_diff(committed)
         matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
         self.assertTrue(matches, detail)
+
+    # -- Gap 2: normalization must preserve every unrelated array order/
+    # value exactly, never sort beyond the generator's own canonical
+    # serialization, and reject multiple/duplicate errno entries. --
+
+    def _committed_payload_with_three_unrelated_packages(self) -> dict:
+        """Like `_committed_payload()`, but with THREE deliberately
+        non-alphabetically-ordered unrelated package ids in the one list
+        `normalized()` touches, so a test can prove their relative order
+        survives errno's own presence/absence being toggled -- and that
+        reversing/reordering them (with no errno involvement at all) is
+        never silently tolerated."""
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        other_triple = "aarch64-apple-darwin"
+        zzz_pkg_id = "registry+https://github.com/rust-lang/crates.io-index#zzz-crate@1.0.0"
+        mmm_pkg_id = "registry+https://github.com/rust-lang/crates.io-index#mmm-crate@1.0.0"
+        aaa_pkg_id = "registry+https://github.com/rust-lang/crates.io-index#aaa-crate@1.0.0"
+        return {
+            "package_count": 4,
+            "packages": [
+                {
+                    "name": checker.KNOWN_ERRNO_NAME,
+                    "version": checker.KNOWN_ERRNO_VERSION,
+                    "source": checker.KNOWN_ERRNO_SOURCE,
+                    "cargo_lock_checksum": checker.KNOWN_ERRNO_CHECKSUM,
+                    "membership": {},
+                },
+                {"name": "zzz-crate", "version": "1.0.0", "membership": {triple: ["linked_into_compiled_artifact"]}},
+                {"name": "mmm-crate", "version": "1.0.0", "membership": {triple: ["linked_into_compiled_artifact"]}},
+                {"name": "aaa-crate", "version": "1.0.0", "membership": {triple: ["linked_into_compiled_artifact"]}},
+            ],
+            "membership_by_target": {
+                # Deliberately NOT alphabetically sorted -- this is the
+                # generator's own (unspecified-here) canonical order, and
+                # normalized() must never impose sorted() on top of it.
+                triple: {"linked_into_compiled_artifact": [zzz_pkg_id, mmm_pkg_id, aaa_pkg_id]},
+                other_triple: {"linked_into_compiled_artifact": []},
+            },
+        }
+
+    def test_errno_inserted_in_the_middle_without_reordering_others_still_matches(self) -> None:
+        # Proves the fix directly: errno's id can be inserted at ANY
+        # position in the list (not just appended/sorted-in) without
+        # disturbing the other three ids' relative order, and the
+        # narrow exception still recognizes this as the known diff.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = copy.deepcopy(committed)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        linked = fresh["membership_by_target"][triple]["linked_into_compiled_artifact"]
+        linked.insert(1, pkg_id)  # between zzz and mmm -- not sorted, not appended
+        fresh["packages"][0]["membership"][triple] = ["linked_into_compiled_artifact"]
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertTrue(matches, detail)
+        # And the untouched list's relative order (zzz, mmm, aaa) is
+        # exactly what a byte-canonical re-serialization would still show.
+        self.assertEqual(
+            [p for p in linked if p != pkg_id],
+            committed["membership_by_target"][triple]["linked_into_compiled_artifact"],
+        )
+
+    def test_reversed_unrelated_package_membership_list_with_no_errno_involvement_fails(self) -> None:
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = copy.deepcopy(committed)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        fresh["membership_by_target"][triple]["linked_into_compiled_artifact"] = list(
+            reversed(fresh["membership_by_target"][triple]["linked_into_compiled_artifact"])
+        )
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_reversed_unrelated_list_alongside_the_known_errno_diff_still_fails(self) -> None:
+        # The known errno diff is present AND an unrelated list elsewhere
+        # is reversed -- the reversal alone must still cause a failure;
+        # the errno exception must never mask it.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = copy.deepcopy(committed)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        linked = fresh["membership_by_target"][triple]["linked_into_compiled_artifact"]
+        fresh["membership_by_target"][triple]["linked_into_compiled_artifact"] = list(reversed(linked)) + [pkg_id]
+        fresh["packages"][0]["membership"][triple] = ["linked_into_compiled_artifact"]
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_reversed_packages_array_order_fails(self) -> None:
+        # `packages[]` itself is an array of dicts; swapping two entries'
+        # positions with no other change must not be silently tolerated
+        # even though every individual package object is byte-identical.
+        committed = self._committed_payload_with_three_unrelated_packages()
+        fresh = copy.deepcopy(committed)
+        fresh["packages"] = list(reversed(fresh["packages"]))
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_inserted_unrelated_election_row_fails(self) -> None:
+        committed = self._committed_payload_with_election_row()
+        fresh = self._add_known_errno_diff_with_row(committed)
+        fresh["license_elections"]["rows"].append(
+            {
+                "name": "brand-new-crate",
+                "version": "9.9.9",
+                "target_membership": {},
+            }
+        )
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_reordered_election_rows_array_fails(self) -> None:
+        # license_elections.rows[] order is part of the canonical
+        # serialization too -- reordering it with no errno involvement at
+        # all must fail exactly like reordering packages[].
+        committed = self._committed_payload_with_election_row()
+        fresh = copy.deepcopy(committed)
+        fresh["license_elections"]["rows"] = list(reversed(fresh["license_elections"]["rows"]))
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_duplicate_errno_package_id_in_membership_by_target_fails(self) -> None:
+        # A duplicated errno package id within the SAME
+        # linked_into_compiled_artifact list is itself a real anomaly
+        # (e.g. a corrupted index), not the documented single-entry
+        # ambiguity -- must not be silently absorbed by the filter-based
+        # removal.
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        fresh["membership_by_target"][triple]["linked_into_compiled_artifact"].append(pkg_id)
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+        self.assertIn("more than once", detail)
+
+    def test_duplicate_errno_package_id_on_committed_side_fails(self) -> None:
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        pkg_id = checker.KNOWN_ERRNO_HOST_AMBIGUOUS_PACKAGE_ID
+        committed = copy.deepcopy(committed)
+        committed["membership_by_target"][triple]["linked_into_compiled_artifact"] = [pkg_id, pkg_id]
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+        self.assertIn("more than once", detail)
 
     def test_host_spoof_via_platform_module_is_ignored(self) -> None:
         # Even if platform.system()/machine() are spoofed to claim

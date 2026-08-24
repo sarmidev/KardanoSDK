@@ -628,6 +628,7 @@ class NativeCarrierValidationTests(unittest.TestCase):
             "windows_native_available_upstream": False,
             "inspected_2026_08_24": True,
             "artifact_sha256": "0" * 64,
+            "primary_artifact_kind": "jar",
             "embedded_natives": [
                 {
                     "path": "libfake.so",
@@ -669,15 +670,53 @@ class NativeCarrierValidationTests(unittest.TestCase):
 
 
 class NativeMemberDetectionTests(unittest.TestCase):
-    """`_looks_like_native_member()` extension/magic-byte classification."""
+    """`classify_native_member_signal()` -- Gap 4: magic-byte discovery
+    regardless of filename extension, with fail-closed extension/content
+    mismatch detection and explicit Java `.class`/fat-Mach-O disambiguation.
+    """
 
-    def test_extension_match_is_native_regardless_of_content(self) -> None:
-        self.assertTrue(evidence._looks_like_native_member("libfoo.so", b"not really elf"))
-        self.assertTrue(evidence._looks_like_native_member("jni/x86/libfoo.so", b""))
-        self.assertTrue(evidence._looks_like_native_member("foo.dylib", b""))
-        self.assertTrue(evidence._looks_like_native_member("foo.dll", b""))
-        self.assertTrue(evidence._looks_like_native_member("foo.jnilib", b""))
-        self.assertTrue(evidence._looks_like_native_member("foo.a", b""))
+    ELF = b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 8
+    PE = b"MZ\x90\x00\x03\x00\x00\x00" + b"\x00" * 8
+    MACHO_THIN_64 = b"\xcf\xfa\xed\xfe\x0c\x00\x00\x01" + b"\x00" * 8
+    MACHO_THIN_32 = b"\xce\xfa\xed\xfe\x07\x00\x00\x00" + b"\x00" * 8
+    AR = b"!<arch>\n" + b"fake-object-bytes"
+    XCOFF32 = b"\x01\xdf" + b"\x00" * 14
+    XCOFF64 = b"\x01\xf7" + b"\x00" * 14
+    # Fat/universal Mach-O with a plausible nfat_arch (2) -- empirically
+    # matches the real IonSpin libsodium universal .dylib.
+    FAT_MACHO = b"\xca\xfe\xba\xbe\x00\x00\x00\x02" + b"\x00" * 8
+    # Genuine Java .class file: CAFEBABE + minor_version=0 + major_version
+    # 52 (JDK 8) -- empirically matches androidx.annotation-jvm's real
+    # .class files. Major version is always far outside a plausible
+    # fat-arch count.
+    JAVA_CLASS = b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + b"\x00" * 8
+
+    def test_known_extension_with_matching_magic_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("libfoo.so", self.ELF), "native")
+        self.assertEqual(evidence.classify_native_member_signal("jni/x86/libfoo.so", self.ELF), "native")
+        self.assertEqual(evidence.classify_native_member_signal("foo.dylib", self.MACHO_THIN_64), "native")
+        self.assertEqual(evidence.classify_native_member_signal("foo.dll", self.PE), "native")
+        self.assertEqual(evidence.classify_native_member_signal("foo.jnilib", self.MACHO_THIN_32), "native")
+        self.assertEqual(evidence.classify_native_member_signal("foo.a", self.AR), "native")
+        # AIX XCOFF object masquerading as a `.a` -- real shape of JNA's
+        # com/sun/jna/aix-ppc*/libjnidispatch.a, NOT a "!<arch>\n" archive.
+        self.assertEqual(evidence.classify_native_member_signal("foo.a", self.XCOFF32), "native")
+        self.assertEqual(evidence.classify_native_member_signal("foo.a", self.XCOFF64), "native")
+        self.assertEqual(evidence.classify_native_member_signal("foo.dylib", self.FAT_MACHO), "native")
+
+    def test_known_extension_with_non_matching_magic_is_a_mismatch(self) -> None:
+        # A .so/.dll/.dylib/.jnilib/.a whose content does not look like ANY
+        # supported native format at all must fail closed -- never guess
+        # either "native" or "not native" for a claimed-but-unverified
+        # native extension.
+        for ext in evidence.NATIVE_MEMBER_EXTENSIONS:
+            with self.subTest(ext=ext):
+                self.assertEqual(
+                    evidence.classify_native_member_signal(
+                        f"foo{ext}", b"plain text, not native at all"
+                    ),
+                    "extension_magic_mismatch",
+                )
 
     def test_java_class_file_cafebabe_magic_is_not_native(self) -> None:
         # Regression test: a Java .class file's own magic number (CAFEBABE)
@@ -685,40 +724,76 @@ class NativeMemberDetectionTests(unittest.TestCase):
         # A real bug this generator was found to have: scanning
         # androidx.annotation:annotation-jvm (a pure-Kotlin/Java artifact,
         # zero native code) reported 75 ".class" members as "native".
-        self.assertFalse(
-            evidence._looks_like_native_member(
-                "androidx/annotation/NonNull.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x41"
-            )
+        self.assertEqual(
+            evidence.classify_native_member_signal(
+                "androidx/annotation/NonNull.class", self.JAVA_CLASS
+            ),
+            "not_native",
         )
 
-    def test_extensionless_member_with_elf_magic_is_native(self) -> None:
-        self.assertTrue(evidence._looks_like_native_member("payload", b"\x7fELF\x02\x01\x01\x00"))
+    def test_ordinary_resource_near_misses_are_not_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("README", b"just text here"), "not_native")
+        self.assertEqual(
+            evidence.classify_native_member_signal("icon.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 8),
+            "not_native",
+        )
+        self.assertEqual(evidence.classify_native_member_signal("module-info.class", self.JAVA_CLASS), "not_native")
 
-    def test_extensionless_member_with_pe_magic_is_native(self) -> None:
-        self.assertTrue(evidence._looks_like_native_member("payload", b"MZ\x90\x00"))
+    def test_extensionless_member_with_native_magic_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload", self.ELF), "native")
+        self.assertEqual(evidence.classify_native_member_signal("payload", self.PE), "native")
+        self.assertEqual(evidence.classify_native_member_signal("payload", self.AR), "native")
 
     def test_extensionless_member_without_native_magic_is_not_native(self) -> None:
-        self.assertFalse(evidence._looks_like_native_member("README", b"just text here"))
+        self.assertEqual(evidence.classify_native_member_signal("README", b"just text here"), "not_native")
 
-    def test_member_with_unrelated_extension_and_native_magic_is_not_native(self) -> None:
-        # An extension that IS recognized (even if not a native one) is
-        # authoritative -- magic sniffing is only a backstop for members
-        # with NO extension at all.
-        self.assertFalse(
-            evidence._looks_like_native_member("payload.txt", b"\x7fELF\x02\x01\x01\x00")
-        )
+    def test_renamed_elf_with_misleading_extension_is_native(self) -> None:
+        for name in ("payload.bin", "payload.dat", "payload.txt", "payload.class"):
+            with self.subTest(name=name):
+                self.assertEqual(evidence.classify_native_member_signal(name, self.ELF), "native")
+
+    def test_renamed_pe_with_misleading_extension_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.PE), "native")
+
+    def test_renamed_thin_macho_with_misleading_extension_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.MACHO_THIN_64), "native")
+
+    def test_renamed_fat_macho_with_misleading_extension_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.FAT_MACHO), "native")
+
+    def test_renamed_ar_with_misleading_extension_is_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload.dat", self.AR), "native")
+
+    def test_fat_macho_arch_count_outside_plausible_range_is_not_native(self) -> None:
+        # 0x63 = 99: far above MAX_PLAUSIBLE_FAT_MACHO_ARCH_COUNT and also
+        # far above any real fat binary's slice count -- ambiguous with a
+        # ludicrously high-major-version class file, so this must not be
+        # guessed as native.
+        implausible = b"\xca\xfe\xba\xbe\x00\x00\x00\x63" + b"\x00" * 8
+        self.assertEqual(evidence.classify_native_member_signal("payload", implausible), "not_native")
+
+    def test_truncated_magic_prefix_is_not_native(self) -> None:
+        self.assertEqual(evidence.classify_native_member_signal("payload", b"\xca\xfe"), "not_native")
+        self.assertEqual(evidence.classify_native_member_signal("payload.so", b"\x7f"), "extension_magic_mismatch")
 
 
 class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
-    """`cross_check_maven_native_carriers_against_local_cache()` -- Gap 7.
+    """`cross_check_maven_native_carriers_against_local_cache()` -- Gap 7,
+    extended for Gap 3 (whole-archive hash verification before member
+    inspection) and Gap 4 (magic-based discovery regardless of extension).
 
     Builds a disposable, synthetic Gradle module cache (never a real
     download) so every failure mode can be exercised deterministically:
     a brand-new native-carrying coordinate absent from the catalog, an
     unreviewed extra/missing member on an already-catalogued coordinate,
     a member hash/size drift, a duplicate member path within one archive,
-    and the cold-cache (nothing found) no-op case.
+    a wrong/substituted whole-archive hash (even with an identical native
+    member), an additional-artifact hash mismatch, an ambiguous duplicate
+    resolution, a renamed native payload with a misleading extension, a
+    known-extension/content mismatch, and the cold-cache no-op case.
     """
+
+    ELF = b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 8
 
     def setUp(self) -> None:
         self._orig_modules2 = evidence.GRADLE_MODULES2
@@ -729,88 +804,86 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         evidence.GRADLE_MODULES2 = self._orig_modules2
         self._tmp.cleanup()
 
-    def _write_jar(self, group: str, artifact: str, version: str, members: dict[str, bytes]) -> Path:
+    def _write_archive(
+        self,
+        group: str,
+        artifact: str,
+        version: str,
+        members: dict[str, bytes],
+        variant: str = "deadbeef",
+        ext: str = "jar",
+    ) -> tuple[Path, str]:
         import zipfile
 
-        base = evidence.GRADLE_MODULES2 / group / artifact / version / "deadbeef"
+        base = evidence.GRADLE_MODULES2 / group / artifact / version / variant
         base.mkdir(parents=True, exist_ok=True)
-        jar_path = base / f"{artifact}-{version}.jar"
-        with zipfile.ZipFile(jar_path, "w") as zf:
+        archive_path = base / f"{artifact}-{version}.{ext}"
+        with zipfile.ZipFile(archive_path, "w") as zf:
             for name, data in members.items():
                 zf.writestr(name, data)
-        return jar_path
+        return archive_path, evidence.sha256_file(archive_path)
+
+    def _write_jar(self, group: str, artifact: str, version: str, members: dict[str, bytes]) -> tuple[Path, str]:
+        return self._write_archive(group, artifact, version, members)
 
     def _gradle_report(self, gav: str) -> dict:
         return {"modules": {"fake": {"coordinates": {"runtime": [gav]}}}}
+
+    def _base_carrier(self, coordinate: str, artifact_sha256: str, embedded_natives: list[dict], **overrides) -> dict:
+        carrier = {
+            "maven_coordinate": coordinate,
+            "carrier_kind": "JVM .jar",
+            "license": "MIT",
+            "distribution_status": "redistributed_by_kardano",
+            "distributed_by_kardano": True,
+            "windows_native_available_upstream": False,
+            "inspected_2026_08_24": True,
+            "artifact_sha256": artifact_sha256,
+            "primary_artifact_kind": "jar",
+            "embedded_natives": embedded_natives,
+            "note": None,
+        }
+        carrier.update(overrides)
+        return carrier
 
     def test_cold_cache_is_a_no_op(self) -> None:
         gradle_report = self._gradle_report("com.example:nowhere:1.0")
         evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
 
     def test_new_native_carrying_coordinate_not_in_catalog_raises(self) -> None:
-        self._write_jar("com.example", "widget", "1.0", {"libwidget.so": b"fake-elf-bytes"})
+        self._write_jar("com.example", "widget", "1.0", {"libwidget.so": self.ELF + b"fake-elf-bytes"})
         gradle_report = self._gradle_report("com.example:widget:1.0")
         with self.assertRaises(evidence.EvidenceError) as ctx:
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
         self.assertIn("not present in MAVEN_NATIVE_CARRIERS", str(ctx.exception))
 
     def test_matching_catalog_entry_passes(self) -> None:
-        data = b"fake-elf-bytes"
+        data = self.ELF + b"fake-elf-bytes"
         digest = evidence.sha256_bytes(data)
-        self._write_jar("com.example", "widget", "1.0", {"libwidget.so": data})
-        carrier = {
-            "maven_coordinate": "com.example:widget:1.0",
-            "carrier_kind": "JVM .jar",
-            "license": "MIT",
-            "distribution_status": "redistributed_by_kardano",
-            "distributed_by_kardano": True,
-            "windows_native_available_upstream": False,
-            "inspected_2026_08_24": True,
-            "artifact_sha256": "0" * 64,
-            "embedded_natives": [
-                {
-                    "path": "libwidget.so",
-                    "size_bytes": len(data),
-                    "sha256": digest,
-                    "platform": "Linux",
-                    "arch": "x86-64",
-                }
-            ],
-            "note": None,
-        }
+        _, archive_digest = self._write_jar("com.example", "widget", "1.0", {"libwidget.so": data})
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            archive_digest,
+            [{"path": "libwidget.so", "size_bytes": len(data), "sha256": digest, "platform": "Linux", "arch": "x86-64"}],
+        )
         gradle_report = self._gradle_report("com.example:widget:1.0")
         with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
 
     def test_extra_undeclared_member_on_known_carrier_raises(self) -> None:
-        data = b"fake-elf-bytes"
+        data = self.ELF + b"fake-elf-bytes"
         digest = evidence.sha256_bytes(data)
-        self._write_jar(
+        _, archive_digest = self._write_jar(
             "com.example",
             "widget",
             "1.0",
-            {"libwidget.so": data, "libextra.so": b"a-second-native-blob"},
+            {"libwidget.so": data, "libextra.so": self.ELF + b"a-second-native-blob"},
         )
-        carrier = {
-            "maven_coordinate": "com.example:widget:1.0",
-            "carrier_kind": "JVM .jar",
-            "license": "MIT",
-            "distribution_status": "redistributed_by_kardano",
-            "distributed_by_kardano": True,
-            "windows_native_available_upstream": False,
-            "inspected_2026_08_24": True,
-            "artifact_sha256": "0" * 64,
-            "embedded_natives": [
-                {
-                    "path": "libwidget.so",
-                    "size_bytes": len(data),
-                    "sha256": digest,
-                    "platform": "Linux",
-                    "arch": "x86-64",
-                }
-            ],
-            "note": None,
-        }
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            archive_digest,
+            [{"path": "libwidget.so", "size_bytes": len(data), "sha256": digest, "platform": "Linux", "arch": "x86-64"}],
+        )
         gradle_report = self._gradle_report("com.example:widget:1.0")
         with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
             with self.assertRaises(evidence.EvidenceError) as ctx:
@@ -819,21 +892,16 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
 
     def test_missing_catalogued_member_raises(self) -> None:
         # Catalog declares a member the actual archive no longer contains.
-        self._write_jar("com.example", "widget", "1.0", {"libwidget.so": b"fake-elf-bytes"})
-        carrier = {
-            "maven_coordinate": "com.example:widget:1.0",
-            "carrier_kind": "JVM .jar",
-            "license": "MIT",
-            "distribution_status": "redistributed_by_kardano",
-            "distributed_by_kardano": True,
-            "windows_native_available_upstream": False,
-            "inspected_2026_08_24": True,
-            "artifact_sha256": "0" * 64,
-            "embedded_natives": [
+        data = self.ELF + b"fake-elf-bytes"
+        _, archive_digest = self._write_jar("com.example", "widget", "1.0", {"libwidget.so": data})
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            archive_digest,
+            [
                 {
                     "path": "libwidget.so",
-                    "size_bytes": 14,
-                    "sha256": evidence.sha256_bytes(b"fake-elf-bytes"),
+                    "size_bytes": len(data),
+                    "sha256": evidence.sha256_bytes(data),
                     "platform": "Linux",
                     "arch": "x86-64",
                 },
@@ -845,8 +913,7 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
                     "arch": "x86-64",
                 },
             ],
-            "note": None,
-        }
+        )
         gradle_report = self._gradle_report("com.example:widget:1.0")
         with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
             with self.assertRaises(evidence.EvidenceError) as ctx:
@@ -854,27 +921,13 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         self.assertIn("no longer contain", str(ctx.exception))
 
     def test_hash_drift_on_known_member_raises(self) -> None:
-        self._write_jar("com.example", "widget", "1.0", {"libwidget.so": b"fake-elf-bytes"})
-        carrier = {
-            "maven_coordinate": "com.example:widget:1.0",
-            "carrier_kind": "JVM .jar",
-            "license": "MIT",
-            "distribution_status": "redistributed_by_kardano",
-            "distributed_by_kardano": True,
-            "windows_native_available_upstream": False,
-            "inspected_2026_08_24": True,
-            "artifact_sha256": "0" * 64,
-            "embedded_natives": [
-                {
-                    "path": "libwidget.so",
-                    "size_bytes": len(b"fake-elf-bytes"),
-                    "sha256": "9" * 64,
-                    "platform": "Linux",
-                    "arch": "x86-64",
-                }
-            ],
-            "note": None,
-        }
+        data = self.ELF + b"fake-elf-bytes"
+        _, archive_digest = self._write_jar("com.example", "widget", "1.0", {"libwidget.so": data})
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            archive_digest,
+            [{"path": "libwidget.so", "size_bytes": len(data), "sha256": "9" * 64, "platform": "Linux", "arch": "x86-64"}],
+        )
         gradle_report = self._gradle_report("com.example:widget:1.0")
         with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
             with self.assertRaises(evidence.EvidenceError) as ctx:
@@ -882,18 +935,12 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         self.assertIn("archive/hash drift", str(ctx.exception))
 
     def test_size_drift_on_known_member_raises(self) -> None:
-        data = b"fake-elf-bytes"
-        self._write_jar("com.example", "widget", "1.0", {"libwidget.so": data})
-        carrier = {
-            "maven_coordinate": "com.example:widget:1.0",
-            "carrier_kind": "JVM .jar",
-            "license": "MIT",
-            "distribution_status": "redistributed_by_kardano",
-            "distributed_by_kardano": True,
-            "windows_native_available_upstream": False,
-            "inspected_2026_08_24": True,
-            "artifact_sha256": "0" * 64,
-            "embedded_natives": [
+        data = self.ELF + b"fake-elf-bytes"
+        _, archive_digest = self._write_jar("com.example", "widget", "1.0", {"libwidget.so": data})
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            archive_digest,
+            [
                 {
                     "path": "libwidget.so",
                     "size_bytes": len(data) + 1,
@@ -902,8 +949,7 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
                     "arch": "x86-64",
                 }
             ],
-            "note": None,
-        }
+        )
         gradle_report = self._gradle_report("com.example:widget:1.0")
         with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
             with self.assertRaises(evidence.EvidenceError):
@@ -916,14 +962,14 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
         base.mkdir(parents=True, exist_ok=True)
         jar_path = base / "widget-1.0.jar"
         with zipfile.ZipFile(jar_path, "w") as zf:
-            zf.writestr("libwidget.so", b"first-copy")
-            zf.writestr("libwidget.so", b"second-copy-different-bytes")
+            zf.writestr("libwidget.so", self.ELF + b"first-copy")
+            zf.writestr("libwidget.so", self.ELF + b"second-copy-different-bytes")
         gradle_report = self._gradle_report("com.example:widget:1.0")
         with self.assertRaises(evidence.EvidenceError) as ctx:
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
         self.assertIn("duplicate native", str(ctx.exception))
 
-    def test_false_extension_and_magic_does_not_trigger_a_false_positive(self) -> None:
+    def test_java_class_resource_near_misses_do_not_trigger_a_false_positive(self) -> None:
         # A jar full of ordinary .class files (CAFEBABE magic, colliding
         # with Mach-O fat-binary magic) must not be reported as carrying
         # native members at all.
@@ -931,7 +977,7 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
             "com.example",
             "puretype",
             "1.0",
-            {"com/example/Foo.class": b"\xca\xfe\xba\xbe\x00\x00\x00\x41rest-of-classfile"},
+            {"com/example/Foo.class": b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + b"rest-of-classfile"},
         )
         gradle_report = self._gradle_report("com.example:puretype:1.0")
         evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
@@ -939,27 +985,18 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
     def test_two_artifacts_same_coordinate_merge_without_conflict(self) -> None:
         # Mirrors JNA 5.19.1's real shape: a .jar AND a separate .aar for
         # the exact same coordinate, each carrying disjoint native paths.
-        jar_data = b"jar-native-bytes"
-        aar_data = b"aar-native-bytes"
-        base = evidence.GRADLE_MODULES2 / "com.example" / "dual" / "1.0"
-        (base / "jarhash").mkdir(parents=True)
-        (base / "aarhash").mkdir(parents=True)
-        import zipfile
-
-        with zipfile.ZipFile(base / "jarhash" / "dual-1.0.jar", "w") as zf:
-            zf.writestr("com/example/libdual.so", jar_data)
-        with zipfile.ZipFile(base / "aarhash" / "dual-1.0.aar", "w") as zf:
-            zf.writestr("jni/arm64-v8a/libdual.so", aar_data)
-        carrier = {
-            "maven_coordinate": "com.example:dual:1.0",
-            "carrier_kind": "JVM .jar + Android .aar",
-            "license": "MIT",
-            "distribution_status": "redistributed_by_kardano",
-            "distributed_by_kardano": True,
-            "windows_native_available_upstream": False,
-            "inspected_2026_08_24": True,
-            "artifact_sha256": "0" * 64,
-            "embedded_natives": [
+        jar_data = self.ELF + b"jar-native-bytes"
+        aar_data = self.ELF + b"aar-native-bytes"
+        _, jar_digest = self._write_archive(
+            "com.example", "dual", "1.0", {"com/example/libdual.so": jar_data}, variant="jarhash", ext="jar"
+        )
+        _, aar_digest = self._write_archive(
+            "com.example", "dual", "1.0", {"jni/arm64-v8a/libdual.so": aar_data}, variant="aarhash", ext="aar"
+        )
+        carrier = self._base_carrier(
+            "com.example:dual:1.0",
+            jar_digest,
+            [
                 {
                     "path": "com/example/libdual.so",
                     "size_bytes": len(jar_data),
@@ -975,11 +1012,168 @@ class NativeCarrierDynamicDiscoveryTests(unittest.TestCase):
                     "arch": "arm64-v8a",
                 },
             ],
-            "note": None,
-        }
+            carrier_kind="JVM .jar + Android .aar",
+            additional_artifacts=[{"kind": "aar", "artifact_sha256": aar_digest}],
+        )
         gradle_report = self._gradle_report("com.example:dual:1.0")
         with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
             evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)  # no raise
+
+    # -- Gap 3: whole-archive hash verification before member inspection --
+
+    def test_wrong_whole_archive_hash_raises_before_member_inspection(self) -> None:
+        data = self.ELF + b"fake-elf-bytes"
+        digest = evidence.sha256_bytes(data)
+        self._write_jar("com.example", "widget", "1.0", {"libwidget.so": data})
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            "f" * 64,  # deliberately wrong whole-archive hash
+            [{"path": "libwidget.so", "size_bytes": len(data), "sha256": digest, "platform": "Linux", "arch": "x86-64"}],
+        )
+        gradle_report = self._gradle_report("com.example:widget:1.0")
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("wrong/substituted artifact", str(ctx.exception))
+
+    def test_archive_classes_changed_but_native_member_identical_still_raises(self) -> None:
+        # The catalogued native member's own bytes are unchanged, but
+        # something else in the archive (a class file, metadata, etc.)
+        # changed -- the whole-archive hash therefore differs, and this
+        # must still fail even though a member-only check would have
+        # passed. Simulates a substituted archive that reuses a real
+        # native library while smuggling in different application code.
+        native = self.ELF + b"fake-elf-bytes"
+        native_digest = evidence.sha256_bytes(native)
+        _, original_archive_digest = self._write_jar(
+            "com.example", "widget", "1.0", {"libwidget.so": native, "com/example/Foo.class": b"original"}
+        )
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            original_archive_digest,
+            [{"path": "libwidget.so", "size_bytes": len(native), "sha256": native_digest, "platform": "Linux", "arch": "x86-64"}],
+        )
+        # Now rewrite the SAME archive path with different non-native
+        # content but the IDENTICAL native member bytes.
+        self._write_jar(
+            "com.example", "widget", "1.0", {"libwidget.so": native, "com/example/Foo.class": b"tampered-different"}
+        )
+        gradle_report = self._gradle_report("com.example:widget:1.0")
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("wrong/substituted artifact", str(ctx.exception))
+
+    def test_additional_artifact_hash_mismatch_raises(self) -> None:
+        jar_data = self.ELF + b"jar-native-bytes"
+        aar_data = self.ELF + b"aar-native-bytes"
+        _, jar_digest = self._write_archive(
+            "com.example", "dual", "1.0", {"com/example/libdual.so": jar_data}, variant="jarhash", ext="jar"
+        )
+        self._write_archive(
+            "com.example", "dual", "1.0", {"jni/arm64-v8a/libdual.so": aar_data}, variant="aarhash", ext="aar"
+        )
+        carrier = self._base_carrier(
+            "com.example:dual:1.0",
+            jar_digest,
+            [
+                {
+                    "path": "com/example/libdual.so",
+                    "size_bytes": len(jar_data),
+                    "sha256": evidence.sha256_bytes(jar_data),
+                    "platform": "Linux",
+                    "arch": "x86-64",
+                },
+                {
+                    "path": "jni/arm64-v8a/libdual.so",
+                    "size_bytes": len(aar_data),
+                    "sha256": evidence.sha256_bytes(aar_data),
+                    "platform": "Android",
+                    "arch": "arm64-v8a",
+                },
+            ],
+            carrier_kind="JVM .jar + Android .aar",
+            # Deliberately wrong additional_artifacts hash for the .aar.
+            additional_artifacts=[{"kind": "aar", "artifact_sha256": "e" * 64}],
+        )
+        gradle_report = self._gradle_report("com.example:dual:1.0")
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("wrong/substituted artifact", str(ctx.exception))
+
+    def test_ambiguous_duplicate_resolution_same_extension_different_content_raises(self) -> None:
+        # Two different .jar files resolved for the same coordinate+version
+        # (different Gradle module-cache hash directories) with genuinely
+        # different content -- this generator cannot know which one was
+        # actually used to build, so it must refuse rather than guess.
+        data_a = self.ELF + b"variant-a"
+        data_b = self.ELF + b"variant-b-different-content"
+        self._write_archive(
+            "com.example", "widget", "1.0", {"libwidget.so": data_a}, variant="hasha", ext="jar"
+        )
+        self._write_archive(
+            "com.example", "widget", "1.0", {"libwidget.so": data_b}, variant="hashb", ext="jar"
+        )
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            evidence.sha256_bytes(data_a),
+            [{"path": "libwidget.so", "size_bytes": len(data_a), "sha256": evidence.sha256_bytes(data_a), "platform": "Linux", "arch": "x86-64"}],
+        )
+        gradle_report = self._gradle_report("com.example:widget:1.0")
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("ambiguous", str(ctx.exception))
+
+    def test_resolved_extension_with_no_catalog_mapping_raises(self) -> None:
+        # Coordinate is catalogued (jar-only), but an .aar is resolved for
+        # it with no additional_artifacts entry to verify it against.
+        jar_data = self.ELF + b"jar-native-bytes"
+        _, jar_digest = self._write_archive(
+            "com.example", "widget", "1.0", {"libwidget.so": jar_data}, variant="jarhash", ext="jar"
+        )
+        self._write_archive(
+            "com.example", "widget", "1.0", {"jni/arm64-v8a/libwidget.so": self.ELF + b"aar-bytes"}, variant="aarhash", ext="aar"
+        )
+        carrier = self._base_carrier(
+            "com.example:widget:1.0",
+            jar_digest,
+            [{"path": "libwidget.so", "size_bytes": len(jar_data), "sha256": evidence.sha256_bytes(jar_data), "platform": "Linux", "arch": "x86-64"}],
+        )
+        gradle_report = self._gradle_report("com.example:widget:1.0")
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("no corresponding artifact_sha256", str(ctx.exception))
+
+    # -- Gap 4: magic-based discovery regardless of filename extension --
+
+    def test_renamed_native_payload_with_misleading_extension_is_discovered(self) -> None:
+        # A native payload packaged with a non-native, even Java-like
+        # extension must still be discovered via its magic bytes and
+        # treated the same as an undeclared native-carrying coordinate.
+        self._write_jar(
+            "com.example", "sneaky", "1.0", {"payload.class": self.ELF + b"renamed-elf-payload"}
+        )
+        gradle_report = self._gradle_report("com.example:sneaky:1.0")
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("not present in MAVEN_NATIVE_CARRIERS", str(ctx.exception))
+        self.assertIn("payload.class", str(ctx.exception))
+
+    def test_known_extension_content_mismatch_fails_generation(self) -> None:
+        # A member named like a native library but whose content matches
+        # no supported native magic signature at all must fail closed,
+        # not be silently accepted (as extension-only detection used to)
+        # nor silently skipped.
+        self._write_jar(
+            "com.example", "mismatched", "1.0", {"libwidget.so": b"not actually native content"}
+        )
+        gradle_report = self._gradle_report("com.example:mismatched:1.0")
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence.cross_check_maven_native_carriers_against_local_cache(gradle_report)
+        self.assertIn("extension/content mismatch", str(ctx.exception))
 
 
 class MavenCarrierSchemaValidationTests(unittest.TestCase):
@@ -996,6 +1190,7 @@ class MavenCarrierSchemaValidationTests(unittest.TestCase):
             "windows_native_available_upstream": False,
             "inspected_2026_08_24": True,
             "artifact_sha256": "0" * 64,
+            "primary_artifact_kind": "jar",
             "embedded_natives": [
                 {
                     "path": "libfake.so",
@@ -1060,6 +1255,53 @@ class MavenCarrierSchemaValidationTests(unittest.TestCase):
         with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
             with self.assertRaises(evidence.EvidenceError):
                 evidence.maven_native_carriers_inventory()
+
+    def test_missing_primary_artifact_kind_raises(self) -> None:
+        carrier = self._base_carrier()
+        del carrier["primary_artifact_kind"]
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.maven_native_carriers_inventory()
+        self.assertIn("primary_artifact_kind", str(ctx.exception))
+
+    def test_unsupported_primary_artifact_kind_raises(self) -> None:
+        carrier = self._base_carrier(primary_artifact_kind="zip")
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.maven_native_carriers_inventory()
+        self.assertIn("primary_artifact_kind", str(ctx.exception))
+
+    def test_additional_artifact_kind_duplicating_primary_raises(self) -> None:
+        carrier = self._base_carrier(
+            primary_artifact_kind="jar",
+            additional_artifacts=[{"kind": "jar", "artifact_sha256": "1" * 64}],
+        )
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.maven_native_carriers_inventory()
+        self.assertIn("duplicates primary_artifact_kind", str(ctx.exception))
+
+    def test_additional_artifact_duplicate_kinds_raises(self) -> None:
+        carrier = self._base_carrier(
+            primary_artifact_kind="jar",
+            additional_artifacts=[
+                {"kind": "aar", "artifact_sha256": "1" * 64},
+                {"kind": "aar", "artifact_sha256": "2" * 64},
+            ],
+        )
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.maven_native_carriers_inventory()
+        self.assertIn("more than once", str(ctx.exception))
+
+    def test_additional_artifact_unsupported_kind_raises(self) -> None:
+        carrier = self._base_carrier(
+            additional_artifacts=[{"kind": "war", "artifact_sha256": "1" * 64}]
+        )
+        with mock.patch.object(evidence, "MAVEN_NATIVE_CARRIERS", (carrier,)):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.maven_native_carriers_inventory()
+        self.assertIn("not one of", str(ctx.exception))
 
 
 class ColdGradleCacheTests(unittest.TestCase):

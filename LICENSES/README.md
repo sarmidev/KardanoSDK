@@ -34,7 +34,7 @@ rendered by an HTML page, not a fetched file — see the dedicated row and
 paragraphs displayed at `https://www.bouncycastle.org/licence.html` on
 2026-08-24 — that page is HTML with surrounding site markup, not a
 distributed plain-text `LICENSE`/`.txt` file, so there is no canonical
-upstream file to fetch byte-for-byte the way the other five entries above
+upstream file to fetch byte-for-byte the way the other six entries above
 were. To let a reviewer independently check the transcription against the
 actual source instead of trusting this repository's typing:
 
@@ -59,7 +59,7 @@ actual source instead of trusting this repository's typing:
 ## Package-level license/election mapping
 
 Per-package license data for **every** Gradle-runtime and Cargo
-target-linked package (not just the five named components above) lives in
+target-linked package (not just the seven named components above) lives in
 generated, machine-checked evidence, not in this README:
 
 - `docs/evidence/gradle_license_inventory.json` — every Gradle coordinate
@@ -105,11 +105,14 @@ Evaluated against the locked Gradle/Cargo dependency graph as of 2026-08-24:
 
 - **Apache-2.0** — directly applies to Kotlin/Ktor/kotlinx/Compose-AndroidX/
   KotlinCrypto/Skiko, `org.hyperledger.identus:bip32-ed25519`, the IonSpin
-  libsodium bindings, and is the **elected** branch of every dual
-  `Apache-2.0 OR X` redistributed component this review has found: JNA
-  5.19.1 (`Apache-2.0 OR LGPL-2.1-or-later`, confirmed from its own POM), and
-  the `ed25519-bip32` Rust crate and its `cryptoxide` dependency (`MIT OR
-  Apache-2.0`, compiled into the nine committed native artifacts).
+  libsodium bindings, and is the **proposed election** (not yet
+  **ACCEPTED** — each remains an OPEN row pending reviewer, ISO-8601 date,
+  and status; no election is accepted until all three are recorded, see
+  `docs/LEGAL_REVIEW.md` §5a) for every dual `Apache-2.0 OR X` redistributed
+  component this review has found: JNA 5.19.1 (`Apache-2.0 OR
+  LGPL-2.1-or-later`, confirmed from its own POM), and the `ed25519-bip32`
+  Rust crate and its `cryptoxide` dependency (`MIT OR Apache-2.0`, compiled
+  into the nine committed native artifacts).
 - **MPL-2.0** — applies to `com.goterl:lazysodium-android` (Android native
   libsodium carrier; MPL-2.0 is file-level copyleft, not chosen by election)
   and to the `uniffi` Rust crate (`=0.29.5`), a **single-license** MPL-2.0
