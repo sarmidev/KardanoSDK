@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Prior A/B `32722013030` at `6e5bb97` is superseded by the next PE debug/resource containment run. Phase C is NO-GO pending PE re-review and Identus #226. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`. Phase C is NO-GO pending PE re-review and Identus #226. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -125,26 +125,40 @@ Date: 2026-08-24
   `link.exe` `14.44.35228.0` and Windows SDK `10.0.26100.0` (required
   include/lib/bin paths; drift fails). Hosted `ImageVersion` is
   recorded and is not an immutable-image claim. CHECKSUMS stays 9
-  rows. Prior PE Phase B artifacts (`32719231997` at `7f2cc78`;
-  `32720083778` at `bc98c2a`) are superseded and must not be reused
-  for re-review. Fresh independent A/B at `6e5bb97` / run
-  [32722013030](https://github.com/sarmidev/KardanoSDK/actions/runs/32722013030):
+  rows. Prior PE artifacts (`32719231997` at `7f2cc78`;
+  `32720083778` at `bc98c2a`; `32722013030` at `6e5bb97`; failed
+  payload-parse run `32724069174` at `f1e44f2`) are superseded and
+  must not be reused for re-review. Fresh independent A/B at `73da4f4`
+  / run
+  [32724622118](https://github.com/sarmidev/KardanoSDK/actions/runs/32724622118):
   A==B SHA-256
   `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`
   (263680 bytes; same candidate bytes as `32715104620`). Artifacts A
-  `9518136145`, B `9518130568`, report `9518237120`, expire
-  2026-09-07. Sign export RVA `0x42c0` (ordinal 67). Selected
-  toolchain on the runner: MSVC `14.44.35207`
+  `9519072053`, B `9519114103`, report `9519211566`, expire
+  2026-09-07. Sign export RVA `0x42c0` (ordinal 67). Observed
+  `IMAGE_DEBUG_DIRECTORY`: type 13 POGO/coffgrp `SizeOfData=772`
+  `AddressOfRawData=0x37b7c` `PointerToRawData=0x36f7c`
+  payload SHA-256
+  `61fa6e6b20425e1cde52d663e5e3a90b534c6faea9a98ea3403506f0142861a4`
+  (`ZERO` + 40 entries, head `0000000000100000506202002e746578`);
+  type 16 REPRO `SizeOfData=36` `AddressOfRawData=0x37e80`
+  `PointerToRawData=0x37280` payload SHA-256
+  `9159c153358b044f594e064382c04264a6c4a580a1d8fbda1b7df62c6e6d0a1c`
+  (MSVC `uint32` length 32 + 32-byte hash; hash SHA-256
+  `f4aba6dd5cae4dee0299896d3d4a1af18f62a3509c25aa499b63137fa009ada2`).
+  Selected toolchain on the runner: MSVC `14.44.35207`
   `Hostx64/x64` `link.exe` Version `14.44.35228.0`; Windows SDK
   `10.0.26100.0` (`Include`/`Lib`/`bin` asserted);
   `ImageOS=win22`; `ImageVersion=20260818.277.1`.
   `:crypto-signing-backend:jvmTest` BUILD SUCCESSFUL. Linux
-  [32722013015](https://github.com/sarmidev/KardanoSDK/actions/runs/32722013015),
+  [32724622312](https://github.com/sarmidev/KardanoSDK/actions/runs/32724622312),
   Native
-  [32722013073](https://github.com/sarmidev/KardanoSDK/actions/runs/32722013073),
+  [32724622162](https://github.com/sarmidev/KardanoSDK/actions/runs/32724622162),
   Verify
-  [32722012993](https://github.com/sarmidev/KardanoSDK/actions/runs/32722012993)
-  were green at `6e5bb97`. `:crypto`/`:wallet` JVM tests remain
+  [32724622109](https://github.com/sarmidev/KardanoSDK/actions/runs/32724622109)
+  were green at PE evidence tip `73da4f4`. A later docs-only tip
+  records these IDs; reuse the `73da4f4` run for PE re-review, not
+  the docs-commit workflows. `:crypto`/`:wallet` JVM tests remain
   blocked by `bip32-ed25519` 1.8.8 missing `win32-x86-64` (Identus
   #226). Identus is not being built. Phase C promotion is NO-GO
   pending independent PE re-review. Do not merge/tag,
