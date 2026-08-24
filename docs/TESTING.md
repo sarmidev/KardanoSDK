@@ -234,16 +234,22 @@ CHECKSUMS row. Promoted from run `32678079715` (artifacts
 `windows-jvm-rebuild-evidence.yml` rebuilds `x86_64-pc-windows-msvc`
 twice on pinned `windows-2022` (ImageOS `win22`, not `windows-latest`;
 `ImageVersion` is recorded and is not an immutable-image claim).
-Jobs select MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe` via
-`vswhere`, prepend that directory, require `where.exe link` to match,
-and pass `-Clinker=` so cargo `--verbose` names that `link.exe`.
-Toolset drift fails until reviewed. Compares SHA-256 + PE32+ reports
+Jobs select MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe`
+Version `14.44.35228.0` and Windows SDK `10.0.26100.0` via
+`vswhere` plus the pinned Kits tree (required um/ucrt include, lib,
+and `bin/x64`). They prepend those directories, require
+`where.exe link` to match, set `WindowsSdkDir` /
+`WindowsSDKVersion` / `INCLUDE` / `LIB`, and pass `-Clinker=` so
+cargo `--verbose` names that `link.exe`. Toolset/SDK drift fails
+until reviewed. Compares SHA-256 + PE32+ reports
 (AMD64, PE32+, `IMAGE_FILE_DLL`, canonical `SizeOfImage`, exact sign
 export in a `CNT_CODE`+`MEM_EXECUTE` non-writable section, no
-forwarder RVA, every nonempty data directory parsed, allowlisted
-imports, empty delay-load/Authenticode/CLR/bound-import, no
+forwarder RVA, export tables/names inside `DataDirectory[EXPORT]`,
+ILT/IAT exactness inside `DataDirectory[IMPORT]`/`[IAT]`, every
+nonempty data directory parsed including resource tree and TLS
+callbacks, allowlisted imports, empty delay-load/Authenticode/CLR/bound-import, no
 CODEVIEW/PDB, `IMAGE_DEBUG_TYPE_REPRO` and observed
-`IMAGE_DEBUG_TYPE_POGO`, recorded `/Brepro`
+`IMAGE_DEBUG_TYPE_POGO` with matching raw pointers, recorded `/Brepro`
 `TimeDateStamp`, `DYNAMIC_BASE`+`NX_COMPAT`, no overlay). Path scan
 rejects ASCII and UTF-16LE drive-root and UNC candidates from any
 byte offset. Then runs `:crypto-signing-backend:jvmTest` via

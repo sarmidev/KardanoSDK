@@ -54,7 +54,8 @@ does not invent a second loader path.
   `win32-x86-64/` and the mapped name is
   `kardano_ed25519_bip32_signing.dll` (no `lib` prefix). Rebuilt only
   on native `windows-2022` (`x86_64-pc-windows-msvc`, ImageOS `win22`).
-  Jobs pin MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe` (fail on
+  Jobs pin MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe`
+  Version `14.44.35228.0` and Windows SDK `10.0.26100.0` (fail on
   drift until reviewed) and record `ImageVersion` without claiming the
   hosted image is immutable. Not in `CHECKSUMS.sha256`. Windows ARM is
   out of scope.
@@ -235,7 +236,8 @@ and `cargo metadata --locked` only.
 
 Pinned rebuild toolchain: rustc `1.97.0` (commit `2d8144b7880597b6e6d3dfd63a9a9efae3f533d3`),
 cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`,
-Windows MSVC toolset `14.44.35207` (`Hostx64/x64` `link.exe`).
+Windows MSVC toolset `14.44.35207` (`Hostx64/x64` `link.exe`
+Version `14.44.35228.0`) and Windows SDK `10.0.26100.0`.
 Hosted GitHub images may ship rustc `1.97.1` first on PATH; rebuild
 workflows activate the rustup `1.97.0` toolchain `bin` directory and
 set `RUSTUP_TOOLCHAIN=1.97.0` so the pin is the rustc that cargo sees.

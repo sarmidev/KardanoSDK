@@ -348,7 +348,7 @@ copied from CI log text. Lockfiles were not rewritten for this miss.
 |---|---|
 | Toolchain file | `crypto-signing-backend/rust-toolchain.toml` |
 | Channel | `1.97.0` (README pin; rustup resolved `1.97.0 (2d8144b78 2026-07-07)`). Hosted images may expose rustc `1.97.1` first; rebuild jobs activate the `1.97.0` toolchain `bin`. |
-| Windows MSVC | Toolset folder `14.44.35207` (`Hostx64/x64` `link.exe`), observed on `windows-2022` Phase B run `32715104620`. Drift fails until reviewed. `ImageVersion` is recorded; the hosted image is not claimed immutable. |
+| Windows MSVC | Toolset folder `14.44.35207` (`Hostx64/x64` `link.exe` Version `14.44.35228.0`) and Windows SDK `10.0.26100.0`, observed on `windows-2022` Phase B run `32715104620`. Exact version and required include/lib/bin paths are asserted. Drift fails until reviewed. `ImageVersion` is recorded; the hosted image is not claimed immutable. |
 | Direct crates | `ed25519-bip32 = "=0.4.2"`, `uniffi = "=0.29.5"` |
 | Lockfile | `crypto-signing-backend/Cargo.lock` (unchanged by the exact-pin edit) |
 | Rebuild flags | every documented `cargo` / `cargo ndk` rebuild uses `--locked` |

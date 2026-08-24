@@ -172,6 +172,13 @@ MAX_IMPORT_DLLS = 64
 MAX_IMPORT_NAMES = 4096
 MAX_PATH_CANDIDATE = 4096
 MAX_PATH_DISPLAY = 160
+IMAGE_ORDINAL_FLAG64 = 1 << 63
+THUNK64_SIZE = 8
+MAX_TLS_CALLBACKS = 64
+MAX_RESOURCE_ENTRIES = 4096
+RESOURCE_DATA_ENTRY_SIZE = 16
+IMAGE_RESOURCE_NAME_IS_STRING = 0x80000000
+IMAGE_RESOURCE_DATA_IS_DIRECTORY = 0x80000000
 
 # rustc 1.97 x86_64-pc-windows-msvc cdylib system/UCRT set. Extra names fail.
 # Refined only from Windows-runner dumpbin output, never guessed at promotion.
@@ -358,6 +365,20 @@ def _ranges_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
     return left[0] < right[1] and right[0] < left[1]
 
 
+def _directory_end(directory: DataDirectory) -> int:
+    return _checked_add(directory.rva, directory.size, limit=UINT32_MAX)
+
+
+def _require_contained(
+    rva: int, size: int, directory: DataDirectory, label: str
+) -> None:
+    if rva == 0 or size <= 0:
+        raise PeError(f"{label} is missing from the data directory")
+    end = _checked_add(rva, size, limit=UINT32_MAX)
+    if rva < directory.rva or end > _directory_end(directory):
+        raise PeError(f"{label} is outside the data directory")
+
+
 def section_containing_rva(sections: list[Section], rva: int) -> Section:
     hits = [
         section
@@ -427,6 +448,11 @@ def _slice(data: bytes, offset: int, size: int) -> bytes:
     return data[offset:end]
 
 
+def _ascii_z_span(data: bytes, offset: int, *, limit: int = 512) -> tuple[str, int]:
+    name = _ascii_z(data, offset, limit=limit)
+    return name, _checked_add(len(name), 1, limit=UINT32_MAX)
+
+
 def _ascii_z(data: bytes, offset: int, *, limit: int = 512) -> str:
     if offset < 0 or offset >= len(data):
         raise PeError("string offset is outside the image")
@@ -489,6 +515,8 @@ def _require_debug_directory(
     if count == 0 or count > 16:
         raise PeError("debug data directory entry count is out of range")
     base = rva_to_offset(sections, entry.rva, entry.size)
+    seen_types: set[int] = set()
+    payload_ranges: list[tuple[int, int]] = []
     for index in range(count):
         off = _checked_add(base, _checked_mul(index, IMAGE_DEBUG_DIRECTORY_SIZE, limit=UINT32_MAX))
         debug_type = _u32(data, off + 12)
@@ -499,13 +527,23 @@ def _require_debug_directory(
             raise PeError("CODEVIEW/PDB debug directory is not allowed")
         if debug_type not in ALLOWED_DEBUG_TYPES:
             raise PeError(f"unexpected debug directory type {debug_type}")
-        if size_of_data:
-            if pointer_to_raw:
-                end = _checked_add(pointer_to_raw, size_of_data, limit=len(data))
-                if end > len(data):
-                    raise PeError("debug payload PointerToRawData is out of range")
-            elif address_of_raw:
-                rva_to_offset(sections, address_of_raw, size_of_data, allow_virtual=True)
+        if debug_type in seen_types:
+            raise PeError(f"duplicate debug directory type {debug_type}")
+        seen_types.add(debug_type)
+        if size_of_data == 0:
+            if address_of_raw or pointer_to_raw:
+                raise PeError("zero-size debug payload has nonzero pointers")
+            continue
+        if bool(address_of_raw) != bool(pointer_to_raw):
+            raise PeError("debug payload AddressOfRawData/PointerToRawData mismatch")
+        file_end = _checked_add(pointer_to_raw, size_of_data, limit=len(data))
+        if file_end > len(data):
+            raise PeError("debug payload PointerToRawData is out of range")
+        mapped = rva_to_offset(sections, address_of_raw, size_of_data)
+        if mapped != pointer_to_raw:
+            raise PeError("debug AddressOfRawData does not map to PointerToRawData")
+        payload_ranges.append((pointer_to_raw, file_end))
+    parse_elf_style_ranges(payload_ranges, "debug payload")
 
 
 def parse_elf_style_ranges(ranges: list[tuple[int, int]], label: str) -> None:
@@ -768,7 +806,7 @@ def _require_resource_directory(
     base = _require_mapped_directory(sections, entry, "resource")
     if base < 0:
         return
-    _walk_resource_directory(data, sections, entry.rva, entry.size, 0, 0, set())
+    _walk_resource_directory(data, sections, entry.rva, entry.size, 0, 0, set(), [0])
 
 
 def _walk_resource_directory(
@@ -779,6 +817,7 @@ def _walk_resource_directory(
     rel: int,
     depth: int,
     seen: set[int],
+    entry_count: list[int],
 ) -> None:
     if depth > MAX_RESOURCE_DEPTH:
         raise PeError("resource directory nesting exceeds MAX_RESOURCE_DEPTH")
@@ -786,10 +825,15 @@ def _walk_resource_directory(
         raise PeError("resource directory has a cycle")
     seen.add(rel)
     dir_rva = _checked_add(root_rva, rel, limit=UINT32_MAX)
+    if _checked_add(rel, RESOURCE_DIRECTORY_SIZE, limit=UINT32_MAX) > root_size:
+        raise PeError("resource directory header is outside the resource data directory")
     off = rva_to_offset(sections, dir_rva, RESOURCE_DIRECTORY_SIZE)
     named = _u16(data, off + 12)
     ids = _u16(data, off + 14)
     count = _checked_add(named, ids, limit=UINT32_MAX)
+    entry_count[0] = _checked_add(entry_count[0], count, limit=UINT32_MAX)
+    if entry_count[0] > MAX_RESOURCE_ENTRIES:
+        raise PeError("resource entry count exceeds MAX_RESOURCE_ENTRIES")
     table_size = _checked_add(
         RESOURCE_DIRECTORY_SIZE, _checked_mul(count, RESOURCE_ENTRY_SIZE, limit=UINT32_MAX)
     )
@@ -804,19 +848,52 @@ def _walk_resource_directory(
                 _checked_mul(index, RESOURCE_ENTRY_SIZE, limit=UINT32_MAX),
             ),
         )
+        name_field = _u32(data, entry_off)
         offset_to_data = _u32(data, entry_off + 4)
+        is_named = bool(name_field & IMAGE_RESOURCE_NAME_IS_STRING)
+        if index < named and not is_named:
+            raise PeError("resource named entry is missing the name bit")
+        if index >= named and is_named:
+            raise PeError("resource ID entry has the name bit set")
+        if is_named:
+            str_rel = name_field & 0x7FFFFFFF
+            str_end = _checked_add(str_rel, 2, limit=UINT32_MAX)
+            if str_end > root_size:
+                raise PeError("resource name string is outside the resource data directory")
+            str_rva = _checked_add(root_rva, str_rel, limit=UINT32_MAX)
+            str_off = rva_to_offset(sections, str_rva, 2)
+            length = _u16(data, str_off)
+            nbytes = _checked_mul(length, 2, limit=UINT32_MAX)
+            if _checked_add(str_rel, _checked_add(2, nbytes, limit=UINT32_MAX), limit=UINT32_MAX) > root_size:
+                raise PeError("resource name string is truncated")
+            raw = _slice(data, str_off + 2, nbytes)
+            try:
+                raw.decode("utf-16-le")
+            except UnicodeDecodeError as error:
+                raise PeError("resource name is not valid UTF-16LE") from error
+        elif name_field > 0xFFFF:
+            raise PeError("resource ID exceeds 16 bits")
         child = offset_to_data & 0x7FFFFFFF
-        if offset_to_data & 0x80000000:
+        if offset_to_data & IMAGE_RESOURCE_DATA_IS_DIRECTORY:
             _walk_resource_directory(
-                data, sections, root_rva, root_size, child, depth + 1, seen
+                data, sections, root_rva, root_size, child, depth + 1, seen, entry_count
             )
-        else:
-            leaf_rva = _checked_add(root_rva, child, limit=UINT32_MAX)
-            leaf_off = rva_to_offset(sections, leaf_rva, 16)
-            data_rva = _u32(data, leaf_off)
-            data_size = _u32(data, leaf_off + 4)
-            if data_size:
-                rva_to_offset(sections, data_rva, data_size)
+            continue
+        leaf_end = _checked_add(child, RESOURCE_DATA_ENTRY_SIZE, limit=UINT32_MAX)
+        if leaf_end > root_size:
+            raise PeError("resource data entry is outside the resource data directory")
+        leaf_rva = _checked_add(root_rva, child, limit=UINT32_MAX)
+        leaf_off = rva_to_offset(sections, leaf_rva, RESOURCE_DATA_ENTRY_SIZE)
+        data_rva = _u32(data, leaf_off)
+        data_size = _u32(data, leaf_off + 4)
+        codepage = _u32(data, leaf_off + 8)
+        reserved = _u32(data, leaf_off + 12)
+        if reserved != 0:
+            raise PeError("resource data Reserved must be zero")
+        if codepage != 0:
+            raise PeError("resource data CodePage must be zero")
+        if data_size:
+            rva_to_offset(sections, data_rva, data_size)
 
 
 def _require_exception_directory(
@@ -908,6 +985,8 @@ def _require_tls_directory(
     end_va = _u64(data, off + 8)
     index_va = _u64(data, off + 16)
     callbacks_va = _u64(data, off + 24)
+    if (start_va == 0) != (end_va == 0):
+        raise PeError("TLS raw-data VA range is inconsistent")
     if start_va or end_va:
         if start_va < image_base or end_va < start_va:
             raise PeError("TLS raw-data VA range is inverted")
@@ -922,7 +1001,35 @@ def _require_tls_directory(
     if callbacks_va:
         if callbacks_va < image_base:
             raise PeError("TLS AddressOfCallBacks is below ImageBase")
-        rva_to_offset(sections, callbacks_va - image_base, 8, allow_virtual=True)
+        cb_rva = callbacks_va - image_base
+        if cb_rva % THUNK64_SIZE != 0:
+            raise PeError("TLS callback array is not 8-byte aligned")
+        terminated = False
+        for index in range(MAX_TLS_CALLBACKS + 1):
+            item_rva = _checked_add(
+                cb_rva, _checked_mul(index, THUNK64_SIZE, limit=UINT32_MAX)
+            )
+            off = rva_to_offset(sections, item_rva, THUNK64_SIZE)
+            value = _u64(data, off)
+            if value == 0:
+                terminated = True
+                break
+            if index == MAX_TLS_CALLBACKS:
+                raise PeError("TLS callback array is not terminated")
+            if value < image_base:
+                raise PeError("TLS callback VA is below ImageBase")
+            func_rva = value - image_base
+            section = section_containing_rva(sections, func_rva)
+            if not (
+                section.characteristics & IMAGE_SCN_CNT_CODE
+                and section.characteristics & IMAGE_SCN_MEM_EXECUTE
+            ):
+                raise PeError("TLS callback is not in an executable section")
+            if section.characteristics & IMAGE_SCN_MEM_WRITE:
+                raise PeError("TLS callback is in a writable section")
+            rva_to_offset(sections, func_rva, 1)
+        if not terminated:
+            raise PeError("TLS callback array is not terminated")
 
 
 def _require_load_config_directory(
@@ -956,6 +1063,7 @@ def _parse_exports(
 ) -> list[ExportRecord]:
     if directory.rva == 0 or directory.size < EXPORT_DIRECTORY_SIZE:
         raise PeError("export directory is missing")
+    _require_contained(directory.rva, EXPORT_DIRECTORY_SIZE, directory, "export header")
     off = rva_to_offset(sections, directory.rva, EXPORT_DIRECTORY_SIZE)
     name_rva = _u32(data, off + 12)
     ordinal_base = _u32(data, off + 16)
@@ -970,12 +1078,12 @@ def _parse_exports(
         raise PeError("NumberOfNames exceeds NumberOfFunctions")
     if ordinal_base == 0:
         raise PeError("export Base is zero")
-    dll_name = _ascii_z(data, rva_to_offset(sections, name_rva, 1))
-    if dll_name.lower() != STABLE_DLL_NAME.lower():
-        raise PeError(f"export DLL name {dll_name!r} != {STABLE_DLL_NAME!r}")
     func_bytes = _checked_mul(nfuncs, 4, limit=UINT32_MAX)
     name_bytes = _checked_mul(nnames, 4, limit=UINT32_MAX)
     ord_bytes = _checked_mul(nnames, 2, limit=UINT32_MAX)
+    _require_contained(funcs_rva, func_bytes, directory, "export AddressOfFunctions")
+    _require_contained(names_rva, name_bytes, directory, "export AddressOfNames")
+    _require_contained(ords_rva, ord_bytes, directory, "export AddressOfNameOrdinals")
     func_off = rva_to_offset(sections, funcs_rva, func_bytes)
     name_off = rva_to_offset(sections, names_rva, name_bytes)
     ord_off = rva_to_offset(sections, ords_rva, ord_bytes)
@@ -992,17 +1100,22 @@ def _parse_exports(
     for start, end in table_ranges:
         if _ranges_overlap(header_range, (start, end)):
             raise PeError("export tables overlap the export directory header")
+    dll_name, dll_size = _ascii_z_span(data, rva_to_offset(sections, name_rva, 1))
+    _require_contained(name_rva, dll_size, directory, "export DLL name")
+    if dll_name.lower() != STABLE_DLL_NAME.lower():
+        raise PeError(f"export DLL name {dll_name!r} != {STABLE_DLL_NAME!r}")
     seen_names: set[str] = set()
     seen_ordinals: set[int] = set()
     exports: list[ExportRecord] = []
-    export_end = _checked_add(directory.rva, directory.size, limit=UINT32_MAX)
+    export_end = _directory_end(directory)
     for index in range(nnames):
         export_name_rva = _u32(data, _checked_add(name_off, _checked_mul(index, 4, limit=UINT32_MAX)))
         name_index = _u16(data, _checked_add(ord_off, _checked_mul(index, 2, limit=UINT32_MAX)))
         if name_index >= nfuncs:
             raise PeError("export name ordinal is out of range")
         func_rva = _u32(data, _checked_add(func_off, _checked_mul(name_index, 4, limit=UINT32_MAX)))
-        name = _ascii_z(data, rva_to_offset(sections, export_name_rva, 1))
+        name, name_size = _ascii_z_span(data, rva_to_offset(sections, export_name_rva, 1))
+        _require_contained(export_name_rva, name_size, directory, f"export name {name!r}")
         if not name or name in seen_names:
             raise PeError("export name is empty or duplicated")
         ordinal = _checked_add(ordinal_base, name_index, limit=UINT32_MAX)
@@ -1026,60 +1139,153 @@ def _parse_imports(
 ) -> list[ImportDll]:
     if directory.rva == 0 or directory.size < IMPORT_DESCRIPTOR_SIZE:
         raise PeError("import directory is missing")
+    if iat is None or iat.rva == 0 or iat.size == 0:
+        raise PeError("IAT data directory is missing")
+    if iat.size % THUNK64_SIZE != 0:
+        raise PeError("IAT directory size is not a multiple of 8")
+    dir_end = _directory_end(directory)
+    occupied: list[tuple[int, int]] = []
     imports: list[ImportDll] = []
+    seen_dlls: set[str] = set()
+    seen_ilt: set[int] = set()
+    seen_iat: set[int] = set()
+    consumed = 0
     for index in range(MAX_IMPORT_DLLS + 1):
         desc_rva = _checked_add(
             directory.rva, _checked_mul(index, IMPORT_DESCRIPTOR_SIZE, limit=UINT32_MAX)
         )
+        desc_end = _checked_add(desc_rva, IMPORT_DESCRIPTOR_SIZE, limit=UINT32_MAX)
+        if desc_end > dir_end:
+            raise PeError("import descriptor or terminator is outside the import directory")
         off = rva_to_offset(sections, desc_rva, IMPORT_DESCRIPTOR_SIZE)
         raw = _slice(data, off, IMPORT_DESCRIPTOR_SIZE)
         if raw == b"\x00" * IMPORT_DESCRIPTOR_SIZE:
+            consumed = _checked_add(
+                _checked_mul(index + 1, IMPORT_DESCRIPTOR_SIZE, limit=UINT32_MAX),
+                0,
+                limit=UINT32_MAX,
+            )
             break
         if index == MAX_IMPORT_DLLS:
             raise PeError("too many import descriptors")
+        occupied.append((desc_rva, desc_end))
         ilt_rva = _u32(data, off)
+        timestamp = _u32(data, off + 4)
+        forwarder = _u32(data, off + 8)
         name_rva = _u32(data, off + 12)
         iat_rva = _u32(data, off + 16)
+        if timestamp != 0:
+            raise PeError("import descriptor TimeDateStamp must be zero")
+        if forwarder not in (0, 0xFFFFFFFF):
+            raise PeError("import descriptor ForwarderChain is unexpected")
         if name_rva == 0:
             raise PeError("import descriptor Name RVA is zero")
-        dll_name = _ascii_z(data, rva_to_offset(sections, name_rva, 1)).lower()
+        if iat_rva == 0:
+            raise PeError("import descriptor FirstThunk is zero")
+        dll_name, dll_size = _ascii_z_span(data, rva_to_offset(sections, name_rva, 1))
+        dll_name = dll_name.lower()
         if not dll_name.endswith(".dll"):
             raise PeError(f"import name {dll_name!r} is not a DLL")
-        thunk_rva = ilt_rva or iat_rva
-        if thunk_rva == 0:
-            raise PeError(f"import {dll_name} has no ILT/IAT")
-        if iat is not None and iat.rva and iat.size:
-            iat_end = _checked_add(iat.rva, iat.size, limit=UINT32_MAX)
-            if iat_rva == 0 or not (iat.rva <= iat_rva < iat_end):
-                raise PeError(f"import {dll_name} FirstThunk is outside the IAT directory")
-        functions = _parse_thunks(data, sections, thunk_rva)
-        imports.append(ImportDll(name=dll_name, functions=functions))
+        if dll_name in seen_dlls:
+            raise PeError(f"duplicate import DLL name {dll_name}")
+        seen_dlls.add(dll_name)
+        occupied.append((name_rva, _checked_add(name_rva, dll_size, limit=UINT32_MAX)))
+        oft_zero = ilt_rva == 0
+        ilt_source = iat_rva if oft_zero else ilt_rva
+        if not oft_zero:
+            if ilt_rva in seen_ilt:
+                raise PeError(f"import {dll_name} reuses an ILT RVA")
+            seen_ilt.add(ilt_rva)
+        if iat_rva in seen_iat:
+            raise PeError(f"import {dll_name} reuses an IAT RVA")
+        seen_iat.add(iat_rva)
+        ilt_values, ilt_names, ilt_size = _parse_thunks(
+            data, sections, ilt_source, label=f"{dll_name} ILT"
+        )
+        iat_values, iat_names, iat_size = _parse_thunks(
+            data,
+            sections,
+            iat_rva,
+            label=f"{dll_name} IAT",
+            require_inside=iat,
+        )
+        occupied.append((ilt_source, _checked_add(ilt_source, ilt_size, limit=UINT32_MAX)))
+        if not oft_zero:
+            occupied.append((iat_rva, _checked_add(iat_rva, iat_size, limit=UINT32_MAX)))
+        if len(ilt_values) != len(iat_values) or ilt_values != iat_values:
+            raise PeError(f"import {dll_name} ILT/IAT thunk values diverge")
+        if ilt_names != iat_names:
+            raise PeError(f"import {dll_name} ILT/IAT name/ordinal semantics diverge")
+        for thunk in ilt_values:
+            if thunk & IMAGE_ORDINAL_FLAG64:
+                continue
+            ibn_rva = thunk & UINT32_MAX
+            ibn_off = rva_to_offset(sections, ibn_rva, 3)
+            _, ibn_size = _ascii_z_span(data, ibn_off + 2)
+            occupied.append(
+                (ibn_rva, _checked_add(ibn_rva, _checked_add(2, ibn_size, limit=UINT32_MAX)))
+            )
+        imports.append(ImportDll(name=dll_name, functions=ilt_names))
     else:
         raise PeError("import directory is not terminated")
+    if consumed < directory.size:
+        pad_rva = _checked_add(directory.rva, consumed, limit=UINT32_MAX)
+        pad_size = directory.size - consumed
+        pad = _slice(data, rva_to_offset(sections, pad_rva, pad_size), pad_size)
+        if any(pad):
+            raise PeError("import directory remainder is not zero padding")
+    parse_elf_style_ranges(occupied, "import descriptor/ILT/IAT/name")
     return imports
 
 
-def _parse_thunks(data: bytes, sections: list[Section], thunk_rva: int) -> list[str]:
+def _parse_thunks(
+    data: bytes,
+    sections: list[Section],
+    thunk_rva: int,
+    *,
+    label: str,
+    require_inside: DataDirectory | None = None,
+) -> tuple[list[int], list[str], int]:
+    if thunk_rva == 0:
+        raise PeError(f"{label} RVA is zero")
+    values: list[int] = []
     names: list[str] = []
     for index in range(MAX_IMPORT_NAMES + 1):
-        item_rva = _checked_add(thunk_rva, _checked_mul(index, 8, limit=UINT32_MAX))
-        off = rva_to_offset(sections, item_rva, 8)
+        item_rva = _checked_add(
+            thunk_rva, _checked_mul(index, THUNK64_SIZE, limit=UINT32_MAX)
+        )
+        item_end = _checked_add(item_rva, THUNK64_SIZE, limit=UINT32_MAX)
+        if require_inside is not None:
+            if item_rva < require_inside.rva or item_end > _directory_end(require_inside):
+                raise PeError(f"{label} entry or terminator is outside the IAT directory")
+        off = rva_to_offset(sections, item_rva, THUNK64_SIZE)
         value = _u64(data, off)
         if value == 0:
-            break
+            size = _checked_add(
+                _checked_mul(index + 1, THUNK64_SIZE, limit=UINT32_MAX),
+                0,
+                limit=UINT32_MAX,
+            )
+            return values, names, size
         if index == MAX_IMPORT_NAMES:
-            raise PeError("too many import thunks")
-        if value & (1 << 63):
+            raise PeError(f"{label} has too many thunks")
+        if value & IMAGE_ORDINAL_FLAG64:
+            rest = value & ~IMAGE_ORDINAL_FLAG64
+            if rest >> 16:
+                raise PeError(f"{label} ordinal has reserved bits set")
             raise PeError("ordinal-only import is not allowed")
-        name_rva = value & ((1 << 63) - 1)
-        if name_rva > UINT32_MAX:
-            raise PeError("import-by-name RVA exceeds 32 bits")
-        # IMAGE_IMPORT_BY_NAME: Hint (2) + name
+        if value >> 32:
+            raise PeError(f"{label} import-by-name RVA has reserved bits set")
+        name_rva = value & UINT32_MAX
+        if name_rva == 0:
+            raise PeError(f"{label} import-by-name RVA is zero")
         name_off = rva_to_offset(sections, name_rva, 3)
-        names.append(_ascii_z(data, name_off + 2))
-    else:
-        raise PeError("import thunks are not terminated")
-    return names
+        name = _ascii_z(data, name_off + 2)
+        if not name:
+            raise PeError(f"{label} import name is empty")
+        values.append(value)
+        names.append(name)
+    raise PeError(f"{label} is not terminated")
 
 
 def _is_allowed_remap(path: str) -> bool:

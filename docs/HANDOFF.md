@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE re-review Phase B at `7f2cc78` / run `32719231997`. Phase C promotion not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Prior PE Phase B (`7f2cc78` / `32719231997`, docs tip `bc98c2a` / `32720083778`) is superseded. Phase C promotion is NO-GO pending PE re-review and Identus #226. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -107,27 +107,27 @@ Date: 2026-08-24
   `fix/native-build-and-platform-evidence`.** Linux promotion GO at
   `58f82a2`. JNA 5.19.1 resource is
   `win32-x86-64/kardano_ed25519_bip32_signing.dll`. Fail-closed PE32+
-  verifier + `dumpbin` corroboration now requires: sign export in a
-  `CNT_CODE`+`MEM_EXECUTE` non-writable section (forwarder RVA
-  rejected); canonical `SizeOfImage`; every nonempty data directory
-  parsed (security/delay/CLR/bound-import empty; debug
-  `IMAGE_DEBUG_TYPE_REPRO` plus observed `IMAGE_DEBUG_TYPE_POGO`);
-  ASCII and UTF-16LE drive-root/UNC
-  path scan. `windows-2022` jobs pin MSVC `14.44.35207`
-  `Hostx64/x64` `link.exe` (`where.exe` first result matches;
-  `link.exe` Version `14.44.35228.0`; Windows SDK `10.0.26100.0`)
-  and record `ImageOS=win22` / `ImageVersion=20260818.277.1`
-  without an immutable-image claim. CHECKSUMS stays 9 rows.
-  PE re-review Phase B equality from run `32719231997` at `7f2cc78`:
-  A==B SHA-256
-  `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`
-  (263680 bytes; same bytes as run `32715104620`). Artifacts A
-  `9517151698`, B `9517151682`, report `9517246164`, expire
-  2026-09-07. Sign export RVA `0x42c0` (ordinal 67).
-  `:crypto-signing-backend:jvmTest` passed on the candidate.
-  `:crypto`/`:wallet` JVM tests remain blocked by
-  `bip32-ed25519` 1.8.8 missing `win32-x86-64`. Identus is not
-  being built. Phase C promotion is NO-GO. Do not merge/tag,
+  verifier now also requires: import descriptors + all-zero terminator
+  strictly inside `DataDirectory[IMPORT]` (zero padding only);
+  independent 64-bit ILT/IAT arrays with mandatory terminators and
+  identical pre-relocation name/ordinal semantics; IAT array including
+  terminator inside `DataDirectory[IAT]`; export header, tables, DLL
+  name, and export strings wholly inside `DataDirectory[EXPORT]`
+  (function RVAs outside that span; forwarders rejected); debug
+  `AddressOfRawData`/`PointerToRawData` consistency (CODEVIEW/PDB
+  rejected; REPRO/POGO only); recursive resource-tree parse; TLS
+  callback array NUL-terminated with executable non-writable targets.
+  `windows-2022` jobs select exact MSVC `14.44.35207` /
+  `link.exe` `14.44.35228.0` and Windows SDK `10.0.26100.0` (required
+  include/lib/bin paths; drift fails). Hosted `ImageVersion` is
+  recorded and is not an immutable-image claim. CHECKSUMS stays 9
+  rows. Prior PE Phase B artifacts (`32719231997` at `7f2cc78`;
+  `32720083778` at `bc98c2a`) are superseded and must not be reused
+  for re-review. Fresh A/B + `:crypto-signing-backend:jvmTest` IDs
+  are recorded after this push. `:crypto`/`:wallet` JVM tests remain
+  blocked by `bip32-ed25519` 1.8.8 missing `win32-x86-64` (Identus
+  #226). Identus is not being built. Phase C promotion is NO-GO
+  pending independent PE re-review. Do not merge/tag,
   download/promote the DLL, or start the legal packet.
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence`.**

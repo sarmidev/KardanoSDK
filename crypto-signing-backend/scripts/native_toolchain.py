@@ -29,7 +29,9 @@ EXPECTED_WINDOWS_RUNS_ON = "windows-2022"
 # Fail on drift until an independent review changes this pin.
 # Hosted ImageVersion is recorded; it is not an immutable-image claim.
 EXPECTED_MSVC_TOOLSET = "14.44.35207"
+EXPECTED_MSVC_LINK_VERSION = "14.44.35228.0"
 EXPECTED_MSVC_LINK_VERSION_PREFIX = "14.44."
+EXPECTED_WINDOWS_SDK_VERSION = "10.0.26100.0"
 MSVC_HOST_ARCH = "Hostx64"
 MSVC_TARGET_ARCH = "x64"
 VSWHERE_DEFAULT = Path(
@@ -179,19 +181,75 @@ def first_where(name: str, env: dict[str, str]) -> Path | None:
     return Path(lines[0]) if lines else None
 
 
-def discover_windows_sdk(*, kits_root: Path | None = None) -> dict[str, object]:
+def require_windows_sdk(
+    *,
+    kits_root: Path | None = None,
+    expected_version: str = EXPECTED_WINDOWS_SDK_VERSION,
+) -> dict[str, object]:
+    """Select the pinned Windows 10 SDK; drift fails until reviewed."""
     root = kits_root if kits_root is not None else WINDOWS_KITS_ROOT
-    include = root / "Include"
-    versions: list[str] = []
-    if include.is_dir():
-        versions = sorted(path.name for path in include.iterdir() if path.name.startswith("10.0."))
-    version = versions[-1] if versions else ""
+    if not root.is_dir():
+        raise ToolchainError(
+            f"Windows Kits root is missing: {root} "
+            "(review before changing EXPECTED_WINDOWS_SDK_VERSION)"
+        )
+    version = expected_version
+    include_um = root / "Include" / version / "um"
+    include_ucrt = root / "Include" / version / "ucrt"
+    include_shared = root / "Include" / version / "shared"
+    lib_um = root / "Lib" / version / "um" / "x64"
+    lib_ucrt = root / "Lib" / version / "ucrt" / "x64"
+    bin_x64 = root / "bin" / version / "x64"
+    required_dirs = (include_um, include_ucrt, include_shared, lib_um, lib_ucrt, bin_x64)
+    required_files = (
+        include_um / "Windows.h",
+        include_ucrt / "stdlib.h",
+        lib_um / "kernel32.lib",
+        lib_ucrt / "libucrt.lib",
+    )
+    missing = [str(path) for path in required_dirs if not path.is_dir()]
+    missing.extend(str(path) for path in required_files if not path.is_file())
+    if missing:
+        raise ToolchainError(
+            f"Windows SDK {version} is missing required paths: {missing}; "
+            "review before changing EXPECTED_WINDOWS_SDK_VERSION"
+        )
     return {
-        "root": str(root) if root.is_dir() else "",
-        "versions": versions,
+        "root": str(root),
         "version": version,
-        "bin": str(root / "bin" / version / "x64") if version else "",
+        "include_um": str(include_um),
+        "include_ucrt": str(include_ucrt),
+        "include_shared": str(include_shared),
+        "lib_um": str(lib_um),
+        "lib_ucrt": str(lib_ucrt),
+        "bin": str(bin_x64),
     }
+
+
+def apply_windows_sdk_env(env: dict[str, str], sdk: dict[str, object]) -> None:
+    root = str(sdk["root"])
+    version = str(sdk["version"])
+    bin_path = str(sdk["bin"])
+    sep = "\\"
+    env["WindowsSdkDir"] = root if root.endswith(("\\", "/")) else root + sep
+    env["WindowsSDKVersion"] = version if version.endswith("\\") else version + sep
+    env["WindowsSdkVerBinPath"] = (
+        bin_path if bin_path.endswith(("\\", "/")) else bin_path + sep
+    )
+    env["UCRTVersion"] = env["WindowsSDKVersion"]
+    includes = [str(sdk["include_um"]), str(sdk["include_ucrt"]), str(sdk["include_shared"])]
+    libs = [str(sdk["lib_um"]), str(sdk["lib_ucrt"])]
+    existing_inc = env.get("INCLUDE", "")
+    existing_lib = env.get("LIB", "")
+    env["INCLUDE"] = os.pathsep.join(includes + ([existing_inc] if existing_inc else []))
+    env["LIB"] = os.pathsep.join(libs + ([existing_lib] if existing_lib else []))
+    env["PATH"] = f"{bin_path}{os.pathsep}{env.get('PATH', '')}"
+    env["KARDANO_WINDOWS_SDK_VERSION"] = version
+    env["KARDANO_WINDOWS_SDK_DIR"] = root
+
+
+def discover_windows_sdk(*, kits_root: Path | None = None) -> dict[str, object]:
+    return require_windows_sdk(kits_root=kits_root)
 
 
 def activate_pinned_msvc_linker(
@@ -228,12 +286,14 @@ def activate_pinned_msvc_linker(
         _capture([str(link)], env=env) + "\n" + _capture([str(link), "/?"], env=env)
     )
     version = parse_link_version(text)
-    if not version.startswith(EXPECTED_MSVC_LINK_VERSION_PREFIX):
+    if version != EXPECTED_MSVC_LINK_VERSION:
         raise ToolchainError(
-            f"link.exe Version {version!r} is not {EXPECTED_MSVC_LINK_VERSION_PREFIX}x "
-            f"(pinned toolset folder {EXPECTED_MSVC_TOOLSET})"
+            f"link.exe Version {version!r} != pinned {EXPECTED_MSVC_LINK_VERSION} "
+            f"(toolset folder {EXPECTED_MSVC_TOOLSET})"
         )
-    sdk = discover_windows_sdk(kits_root=kits_root)
+    sdk = require_windows_sdk(kits_root=kits_root)
+    apply_windows_sdk_env(env, sdk)
+    env["PATH"] = f"{host_dir}{os.pathsep}{env.get('PATH', '')}"
     return {
         "msvc_toolset": toolset,
         "link_path": str(link),

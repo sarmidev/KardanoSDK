@@ -84,7 +84,24 @@ def build_pe(
     directories_override: dict[int, tuple[int, int]] | None = None,
     exception_entries: tuple[tuple[int, int, int], ...] | None = None,
     reloc_block: bytes | None = None,
-    iat_directory: bool = False,
+    iat_directory: bool = True,
+    oft_zero: bool = False,
+    export_directory_size: int | None = None,
+    iat_directory_size: int | None = None,
+    divergent_iat: bool = False,
+    omit_iat_terminator: bool = False,
+    omit_ilt_terminator: bool = False,
+    thunk_reserved_bits: bool = False,
+    overlap_iat_with_ilt: bool = False,
+    debug_payload: bytes = b"",
+    debug_size_of_data: int | None = None,
+    debug_address: int | None = None,
+    debug_pointer: int | None = None,
+    debug_duplicate: bool = False,
+    resource_blob: bytes | None = None,
+    tls_callbacks: tuple[int, ...] | None = None,
+    tls_unterminated: bool = False,
+    tls_inconsistent_raw: bool = False,
 ) -> bytes:
     file_align = 0x200
     sect_align = 0x1000
@@ -92,9 +109,10 @@ def build_pe(
     rdata_va = 0x2000
     text_raw = 0x200
     rdata_raw = 0x400
+    image_base = 0x180000000
     text = bytearray(0x200)
     text[0x10:0x14] = b"\x90\x90\x90\xC3"
-    rdata = bytearray(0x200)
+    rdata = bytearray(0x400)
     cursor = 0
 
     def place(payload: bytes, align: int = 1) -> int:
@@ -137,25 +155,56 @@ def build_pe(
     )
     rdata[0 : pe.EXPORT_DIRECTORY_SIZE] = export_dir
     export_rva = rdata_va
-    export_size = pe.EXPORT_DIRECTORY_SIZE
+    export_size = cursor if export_directory_size is None else export_directory_size
 
-    thunks_rva_list: list[int] = []
+    ilt_rvas: list[int] = []
+    iat_rvas: list[int] = []
+    iat_sizes: list[int] = []
     import_name_rvas: list[int] = []
     for dll_name, funcs in import_dlls:
+        thunk_sentinel = struct.pack("<Q", 1 << 32)
         if ordinal_only_import:
-            thunk = struct.pack("<Q", (1 << 63) | 1)
-            thunks_rva_list.append(place(thunk + b"\x00" * 8, 8))
+            thunk_word = struct.pack("<Q", (1 << 63) | 1)
+            ilt_blob = thunk_word + (
+                thunk_sentinel if omit_ilt_terminator else b"\x00" * 8
+            )
+            iat_blob = thunk_word + (
+                thunk_sentinel if omit_iat_terminator else b"\x00" * 8
+            )
         else:
             ibn_rvas = []
             for func in funcs:
                 ibn_rvas.append(place(struct.pack("<H", 0) + func.encode("ascii") + b"\x00", 2))
-            blob = b"".join(struct.pack("<Q", rva) for rva in ibn_rvas) + b"\x00" * 8
-            thunks_rva_list.append(place(blob, 8))
+            words = list(ibn_rvas)
+            if thunk_reserved_bits:
+                words = [rva | (1 << 32) for rva in words]
+            ilt_term = thunk_sentinel if omit_ilt_terminator else b"\x00" * 8
+            ilt_blob = b"".join(struct.pack("<Q", rva) for rva in words) + ilt_term
+            iat_words = list(words)
+            if divergent_iat:
+                iat_words = [0xFFFFFFFFFFFFFFFF for _ in words]
+            iat_term = thunk_sentinel if omit_iat_terminator else b"\x00" * 8
+            iat_blob = b"".join(struct.pack("<Q", rva) for rva in iat_words) + iat_term
+        if oft_zero and omit_iat_terminator:
+            ilt_blob = ilt_blob[:-8] + thunk_sentinel
+        ilt_rva = place(ilt_blob, 8)
+        if oft_zero:
+            iat_rva = ilt_rva
+            iat_blob_size = len(ilt_blob)
+        else:
+            iat_rva = place(iat_blob, 8)
+            iat_blob_size = len(iat_blob)
+        if overlap_iat_with_ilt and not oft_zero:
+            iat_rva = ilt_rva + 8
+        ilt_rvas.append(ilt_rva)
+        iat_rvas.append(iat_rva)
+        iat_sizes.append(iat_blob_size)
         import_name_rvas.append(place(dll_name.encode("ascii") + b"\x00"))
 
     descriptors = bytearray()
-    for thunk_rva, name_rva in zip(thunks_rva_list, import_name_rvas):
-        descriptors += struct.pack("<IIIII", thunk_rva, 0, 0, name_rva, thunk_rva)
+    for ilt_rva, iat_rva, name_rva in zip(ilt_rvas, iat_rvas, import_name_rvas):
+        oft = 0 if oft_zero else ilt_rva
+        descriptors += struct.pack("<IIIII", oft, 0, 0, name_rva, iat_rva)
     if not unterminated_imports:
         descriptors += b"\x00" * pe.IMPORT_DESCRIPTOR_SIZE
     import_rva = place(bytes(descriptors), 4)
@@ -169,9 +218,22 @@ def build_pe(
         place(embed + b"\x00")
 
     if debug_type is not None:
-        entry = struct.pack("<IIHHIIII", 0, 0, 0, 0, debug_type, 0, 0, 0)
+        payload_rva = 0
+        pointer = 0
+        size = 0
+        if debug_payload:
+            payload_rva = place(debug_payload)
+            pointer = rdata_raw + (payload_rva - rdata_va)
+            size = len(debug_payload)
+        if debug_size_of_data is not None:
+            size = debug_size_of_data
+        addr = payload_rva if debug_address is None else debug_address
+        ptr = pointer if debug_pointer is None else debug_pointer
+        entry = struct.pack("<IIHHIIII", 0, 0, 0, 0, debug_type, size, addr, ptr)
+        if debug_duplicate:
+            entry += entry
         debug_rva = place(entry, 4)
-        debug_size = pe.IMAGE_DEBUG_DIRECTORY_SIZE
+        debug_size = len(entry)
 
     exception_rva = 0
     exception_size = 0
@@ -186,6 +248,45 @@ def build_pe(
         reloc_rva = place(reloc_block, 4)
         reloc_size = len(reloc_block)
 
+    resource_rva = 0
+    resource_size = 0
+    if resource_blob is not None:
+        resource_rva = place(resource_blob, 4)
+        resource_size = len(resource_blob)
+
+    tls_rva = 0
+    tls_size = 0
+    if tls_callbacks is not None or tls_inconsistent_raw:
+        callback_rvas = tls_callbacks or ()
+        entries = [struct.pack("<Q", image_base + rva) for rva in callback_rvas]
+        if not tls_unterminated:
+            entries.append(b"\x00" * 8)
+        elif cursor < len(rdata):
+            # Keep walking from hitting accidental zeros.
+            pass
+        cb_rva = place(b"".join(entries) if entries else b"\x00" * 8, 8)
+        if tls_unterminated:
+            # Nonzero unmapped VA so the walk cannot treat later zeros as a terminator.
+            extra = struct.pack("<Q", image_base + 0x00FFFF00)
+            rel = cb_rva - rdata_va + 8 * len(callback_rvas)
+            if rel + 8 <= len(rdata):
+                rdata[rel : rel + 8] = extra
+                cursor = max(cursor, rel + 8)
+        idx_rva = place(b"\x00" * 4, 4)
+        start_va = image_base + 0x2100 if tls_inconsistent_raw else 0
+        end_va = 0
+        tls = struct.pack(
+            "<QQQQII",
+            start_va,
+            end_va,
+            image_base + idx_rva,
+            image_base + cb_rva,
+            0,
+            0,
+        )
+        tls_rva = place(tls, 4)
+        tls_size = pe.TLS_DIRECTORY64_SIZE
+
     directories = [(0, 0)] * 16
     directories[pe.DIR_EXPORT] = (export_rva, export_size)
     directories[pe.DIR_IMPORT] = (import_rva, import_size)
@@ -194,10 +295,13 @@ def build_pe(
     directories[pe.DIR_SECURITY] = (cert_rva, cert_size)
     directories[pe.DIR_EXCEPTION] = (exception_rva, exception_size)
     directories[pe.DIR_BASERELOC] = (reloc_rva, reloc_size)
-    if iat_directory and thunks_rva_list:
-        first = min(thunks_rva_list)
-        last = max(thunks_rva_list)
-        directories[pe.DIR_IAT] = (first, last - first + 16)
+    directories[pe.DIR_RESOURCE] = (resource_rva, resource_size)
+    directories[pe.DIR_TLS] = (tls_rva, tls_size)
+    if iat_directory and iat_rvas:
+        first = min(iat_rvas)
+        last = max(rva + size for rva, size in zip(iat_rvas, iat_sizes))
+        iat_size = last - first if iat_directory_size is None else iat_directory_size
+        directories[pe.DIR_IAT] = (first, iat_size)
     if directories_override:
         for index, value in directories_override.items():
             directories[index] = value
@@ -205,7 +309,7 @@ def build_pe(
     opt = bytearray(pe.OPTIONAL_HEADER64_SIZE)
     struct.pack_into("<H", opt, 0, magic)
     struct.pack_into("<I", opt, 0x10, text_va + 0x10)
-    struct.pack_into("<Q", opt, 0x18, 0x180000000)
+    struct.pack_into("<Q", opt, 0x18, image_base)
     struct.pack_into("<I", opt, 0x20, sect_align)
     struct.pack_into("<I", opt, 0x24, file_align)
     struct.pack_into("<H", opt, 0x28, 6)
@@ -223,12 +327,12 @@ def build_pe(
     if rdata_chars is None:
         rdata_chars = pe.IMAGE_SCN_CNT_INITIALIZED_DATA | pe.IMAGE_SCN_MEM_READ
     rdata_raw_ptr = 0x400
-    rdata_raw_size = 0x200
+    rdata_raw_size = 0x400
     if section_raw_overflow:
         rdata_raw_size = 0xFFFF0000
     sections = _pack_section(b".text", 0x200, text_va, 0x200, text_raw, text_chars)
     sections += _pack_section(
-        b".rdata", 0x200, rdata_va, rdata_raw_size, rdata_raw_ptr, rdata_chars
+        b".rdata", 0x400, rdata_va, rdata_raw_size, rdata_raw_ptr, rdata_chars
     )
     used_sections = 2 if nsections is None else nsections
 
@@ -726,6 +830,262 @@ class WindowsPathScanTests(unittest.TestCase):
         path = _write(build_pe(embed="D:\\a\\repo\\x".encode("utf-16le")))
         with self.assertRaises(pe.PeError):
             pe.verify_windows_x86_64_dll(path, require_tools=False)
+
+
+def _resource_tree(
+    *,
+    named: bool = False,
+    name: str = "NAME",
+    name_offset: int | None = None,
+    id_value: int = 16,
+    data_rva: int = 0x1010,
+    data_size: int = 4,
+    codepage: int = 0,
+    reserved: int = 0,
+    cycle: bool = False,
+    truncate_leaf: bool = False,
+    subdirectory: int | None = None,
+) -> bytes:
+    named_count = 1 if named else 0
+    id_count = 0 if named else 1
+    header = struct.pack("<IIHHHH", 0, 0, 0, 0, named_count, id_count)
+    name_field = id_value
+    if named:
+        name_field = (40 if name_offset is None else name_offset) | 0x80000000
+    if cycle:
+        return header + struct.pack("<II", name_field, 0x80000000)
+    if subdirectory is not None:
+        return header + struct.pack("<II", name_field, subdirectory | 0x80000000)
+    blob = header + struct.pack("<II", name_field, 24)
+    if not truncate_leaf:
+        blob += struct.pack("<IIII", data_rva, data_size, codepage, reserved)
+    if named:
+        encoded = name.encode("utf-16-le")
+        blob = blob.ljust(40, b"\x00")
+        blob += struct.pack("<H", len(encoded) // 2) + encoded
+    return blob
+
+
+class ImportExactnessTests(unittest.TestCase):
+    def test_oft_zero_valid_uses_iat_as_ilt(self) -> None:
+        pe.parse_pe32_plus_x86_64_dll(build_pe(oft_zero=True))
+
+    def test_divergent_iat_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(divergent_iat=True))
+        self.assertTrue(
+            "diverge" in str(caught.exception).lower()
+            or "reserved" in str(caught.exception).lower(),
+            caught.exception,
+        )
+
+    def test_short_iat_directory_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(iat_directory_size=8))
+        self.assertIn("IAT", str(caught.exception))
+
+    def test_iat_terminator_outside_directory_is_rejected(self) -> None:
+        fixture = build_pe()
+        record = pe.parse_pe32_plus_x86_64_dll(fixture)
+        iat = record.directories[pe.DIR_IAT]
+        mutated = mutate_directory(fixture, pe.DIR_IAT, iat.rva, iat.size - 8)
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(mutated)
+        self.assertIn("terminator", str(caught.exception).lower())
+
+    def test_oft_zero_invalid_missing_terminator(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(oft_zero=True, omit_iat_terminator=True)
+            )
+
+    def test_ordinal_name_mismatch_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(build_pe(divergent_iat=True))
+
+    def test_missing_ilt_terminator_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(build_pe(omit_ilt_terminator=True))
+
+    def test_reserved_bits_and_overlap_are_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(thunk_reserved_bits=True))
+        self.assertIn("reserved", str(caught.exception).lower())
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(overlap_iat_with_ilt=True))
+        self.assertTrue(
+            "overlap" in str(caught.exception).lower()
+            or "diverge" in str(caught.exception).lower(),
+            caught.exception,
+        )
+
+    def test_missing_iat_directory_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(iat_directory=False))
+        self.assertIn("IAT", str(caught.exception))
+
+
+class ExportContainmentTests(unittest.TestCase):
+    def test_baseline_export_directory_covers_tables_and_names(self) -> None:
+        fixture = build_pe()
+        record = pe.parse_pe32_plus_x86_64_dll(fixture)
+        export = record.directories[pe.DIR_EXPORT]
+        self.assertGreater(export.size, pe.EXPORT_DIRECTORY_SIZE)
+        off = pe.rva_to_offset(record.sections, export.rva, pe.EXPORT_DIRECTORY_SIZE)
+        funcs_rva = struct.unpack_from("<I", fixture, off + 28)[0]
+        self.assertGreaterEqual(funcs_rva, export.rva)
+        self.assertLess(funcs_rva, export.rva + export.size)
+
+    def test_table_outside_export_directory_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(export_directory_size=pe.EXPORT_DIRECTORY_SIZE)
+            )
+        self.assertIn("outside the data directory", str(caught.exception))
+
+    def test_exact_export_boundary_is_accepted(self) -> None:
+        pe.parse_pe32_plus_x86_64_dll(build_pe())
+
+    def test_overlapping_export_tables_are_rejected(self) -> None:
+        fixture = build_pe()
+        record = pe.parse_pe32_plus_x86_64_dll(fixture)
+        export = record.directories[pe.DIR_EXPORT]
+        off = pe.rva_to_offset(record.sections, export.rva, pe.EXPORT_DIRECTORY_SIZE)
+        # Point AddressOfNames at AddressOfFunctions.
+        funcs_rva = struct.unpack_from("<I", fixture, off + 28)[0]
+        mutated = mutate_u32(fixture, off + 32, funcs_rva)
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(mutated)
+        self.assertIn("overlap", str(caught.exception).lower())
+
+    def test_function_rva_inside_export_span_is_forwarder(self) -> None:
+        fixture = build_pe()
+        record = pe.parse_pe32_plus_x86_64_dll(fixture)
+        export = record.directories[pe.DIR_EXPORT]
+        mutated = mutate_export_func_rva(fixture, export.rva + 8)
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(mutated)
+        self.assertIn("forwarder", str(caught.exception))
+
+
+class DebugReferenceTests(unittest.TestCase):
+    def test_zero_size_requires_zero_pointers(self) -> None:
+        pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO))
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(
+                    debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
+                    debug_size_of_data=0,
+                    debug_address=0x2100,
+                    debug_pointer=0,
+                )
+            )
+        self.assertIn("zero-size", str(caught.exception))
+
+    def test_one_zero_one_nonzero_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(
+                    debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
+                    debug_payload=b"repro",
+                    debug_pointer=0,
+                )
+            )
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(
+                    debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
+                    debug_payload=b"repro",
+                    debug_address=0,
+                )
+            )
+
+    def test_address_pointer_mismatch_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(
+                    debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
+                    debug_payload=b"repro",
+                    debug_pointer=0x480,
+                )
+            )
+        self.assertIn("does not map", str(caught.exception))
+
+    def test_duplicate_debug_type_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO, debug_duplicate=True)
+            )
+        self.assertIn("duplicate", str(caught.exception))
+
+    def test_matching_nonzero_payload_is_accepted(self) -> None:
+        pe.parse_pe32_plus_x86_64_dll(
+            build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO, debug_payload=b"repro")
+        )
+
+
+class ResourceTreeTests(unittest.TestCase):
+    def test_id_leaf_is_accepted(self) -> None:
+        pe.parse_pe32_plus_x86_64_dll(build_pe(resource_blob=_resource_tree()))
+
+    def test_named_utf16_is_accepted(self) -> None:
+        pe.parse_pe32_plus_x86_64_dll(
+            build_pe(resource_blob=_resource_tree(named=True, name="OK"))
+        )
+
+    def test_malformed_named_offset_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(resource_blob=_resource_tree(named=True, name_offset=0x200))
+            )
+
+    def test_cycle_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(resource_blob=_resource_tree(cycle=True)))
+        self.assertIn("cycle", str(caught.exception))
+
+    def test_truncated_leaf_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(resource_blob=_resource_tree(truncate_leaf=True))
+            )
+
+    def test_reserved_and_codepage_must_be_zero(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(resource_blob=_resource_tree(reserved=1))
+            )
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(resource_blob=_resource_tree(codepage=1252))
+            )
+
+
+class TlsCallbackTests(unittest.TestCase):
+    def test_terminated_code_callback_is_accepted(self) -> None:
+        pe.parse_pe32_plus_x86_64_dll(build_pe(tls_callbacks=(0x1010,)))
+
+    def test_missing_terminator_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(tls_callbacks=(0x1010,), tls_unterminated=True)
+            )
+        self.assertTrue(
+            "terminated" in str(caught.exception).lower()
+            or "out of range" in str(caught.exception).lower()
+            or "not in" in str(caught.exception).lower(),
+            caught.exception,
+        )
+
+    def test_callback_in_data_section_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(tls_callbacks=(0x2100,)))
+        self.assertIn("executable", str(caught.exception))
+
+    def test_inconsistent_raw_range_is_rejected(self) -> None:
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(tls_inconsistent_raw=True))
+        self.assertIn("inconsistent", str(caught.exception))
 
 
 if __name__ == "__main__":

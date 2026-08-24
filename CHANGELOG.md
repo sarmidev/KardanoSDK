@@ -95,17 +95,21 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   Hosted images may expose rustc 1.97.1 first on PATH; rebuild jobs
   activate the pinned 1.97.0 toolchain bin and set `RUSTUP_TOOLCHAIN`.
   Windows jobs also pin MSVC toolset `14.44.35207` `Hostx64/x64`
-  `link.exe` (fail on drift) and record `ImageVersion` without an
+  `link.exe` Version `14.44.35228.0` and Windows SDK `10.0.26100.0`
+  (fail on drift) and record `ImageVersion` without an
   immutable-image claim. PE policy requires a code/execute
   non-writable sign export, canonical `SizeOfImage`, every nonempty
-  data directory, `IMAGE_DEBUG_TYPE_REPRO` plus observed
+  data directory, export/ILT/IAT/resource/TLS/debug internal
+  containment, `IMAGE_DEBUG_TYPE_REPRO` plus observed
   `IMAGE_DEBUG_TYPE_POGO`, and ASCII/UTF-16LE
   drive-root plus UNC path scanning. Phase B run `32715104620` at
   `04c52dc` produced byte-identical candidates (SHA-256
   `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`);
   not promoted. PE-policy rerun `32719231997` at `7f2cc78` reproduced
   the same SHA-256 (artifacts A `9517151698` / B `9517151682` /
-  report `9517246164`, expire 2026-09-07).
+  report `9517246164`, expire 2026-09-07). Those Windows artifacts
+  are superseded by the next independent A/B after the PE/SDK
+  containment fixes; do not reuse them for re-review.
   `:crypto-signing-backend:jvmTest` is the Windows KAT in this
   workflow; `:crypto`/`:wallet` JVM tests still need the identus
   derivation wrapper's missing Windows native.
