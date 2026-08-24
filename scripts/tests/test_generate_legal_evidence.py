@@ -1531,6 +1531,36 @@ class JavaClassStructuralValidationTests(unittest.TestCase):
             with self.subTest(minor=minor):
                 self.assertFalse(evidence._is_supported_java_class_version(above_ceiling, minor))
 
+    def test_ceiling_is_pinned_to_the_evidenced_bcprov_major_69_not_a_buffer(self) -> None:
+        # Regression guard, independent of MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION
+        # itself: this locks in the LITERAL evidenced ceiling (major 69, Java
+        # SE 25 -- the highest major_version this SDK has actually found in a
+        # real, currently-used dependency's resolved class files, per the
+        # constant's own comment) so that a future edit accidentally widening
+        # the ceiling back to a speculative buffer (e.g. 80) is caught here
+        # even if every OTHER test in this class -- which all derive their
+        # expectations from the live constant -- would silently pass either
+        # way.
+        self.assertEqual(evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION, 69)
+        for minor in (0, 65535):
+            with self.subTest(major=69, minor=minor):
+                self.assertTrue(evidence._is_supported_java_class_version(69, minor))
+        for major in (70, 80, 81):
+            for minor in (0, 65535):
+                with self.subTest(major=major, minor=minor):
+                    self.assertFalse(evidence._is_supported_java_class_version(major, minor))
+
+    def test_bcprov_evidenced_major_69_class_is_accepted_end_to_end(self) -> None:
+        # A minimal but structurally complete class file at exactly major 69,
+        # minor 0 -- the actual major/minor pair this SDK has evidenced in
+        # its own resolved `org.bouncycastle:bcprov-jdk18on` multi-release
+        # jar (see the MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION comment) --
+        # must validate through the full class-structure checker, not merely
+        # through the narrower _is_supported_java_class_version() predicate.
+        data = bytearray(_build_java_class(with_field=True, with_method=True, with_attribute=True))
+        data[6:8] = (69).to_bytes(2, "big")
+        self.assertTrue(evidence._validate_java_class_structure(bytes(data)))
+
     def test_major_below_minimum_supported_is_rejected(self) -> None:
         self.assertFalse(evidence._is_supported_java_class_version(44, 0))
 
@@ -3318,6 +3348,42 @@ class ColdGradleCacheTests(unittest.TestCase):
             evidence.gradle_license_inventory(gradle_report)
 
 
+class SealedToolingFilesCatalogTests(unittest.TestCase):
+    """SEALED_TOOLING_FILES must exactly match the statically-discovered
+    import closure of the actual legal-evidence entry-point scripts, and
+    _validate_sealed_tooling_files_catalog() must fail closed the moment
+    they disagree (see the 'Tooling binding' module docstring)."""
+
+    def test_discovered_closure_matches_the_explicit_catalog_for_real_scripts(self) -> None:
+        self.assertEqual(
+            evidence._discover_local_tooling_closure(), frozenset(evidence.SEALED_TOOLING_FILES)
+        )
+
+    def test_validate_passes_for_the_real_catalog(self) -> None:
+        evidence._validate_sealed_tooling_files_catalog()  # must not raise
+
+    def test_validate_rejects_a_catalog_missing_a_discovered_file(self) -> None:
+        truncated = tuple(p for p in evidence.SEALED_TOOLING_FILES if p != "scripts/license_catalog.py")
+        with mock.patch.object(evidence, "SEALED_TOOLING_FILES", truncated):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence._validate_sealed_tooling_files_catalog()
+            self.assertIn("missing=", str(ctx.exception))
+
+    def test_validate_rejects_a_catalog_with_an_extra_untraceable_file(self) -> None:
+        widened = (*evidence.SEALED_TOOLING_FILES, "scripts/harvest_gradle_pom_licenses.py")
+        with mock.patch.object(evidence, "SEALED_TOOLING_FILES", widened):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence._validate_sealed_tooling_files_catalog()
+            self.assertIn("extra=", str(ctx.exception))
+
+    def test_validate_rejects_a_duplicate_entry(self) -> None:
+        duplicated = (*evidence.SEALED_TOOLING_FILES, evidence.SEALED_TOOLING_FILES[0])
+        with mock.patch.object(evidence, "SEALED_TOOLING_FILES", duplicated):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence._validate_sealed_tooling_files_catalog()
+            self.assertIn("duplicate entry", str(ctx.exception))
+
+
 class ScopeBindingSealTests(unittest.TestCase):
     """Exercise seal_scope_binding() against a disposable temp git repo.
 
@@ -3360,8 +3426,20 @@ class ScopeBindingSealTests(unittest.TestCase):
                 json.dumps({"name": name}) + "\n", encoding="utf-8"
             )
 
+    def _write_tooling_files(self) -> None:
+        """Stand-in tooling files at the exact relative paths
+        `evidence.SEALED_TOOLING_FILES` names -- `compute_tooling_hashes()`
+        reads these via the mocked `REPO_ROOT`, so `seal_scope_binding()`
+        can be exercised in this disposable temp repo without depending on
+        the real scripts/ tree."""
+        for rel_path in evidence.SEALED_TOOLING_FILES:
+            path = self.repo / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"# stand-in for {rel_path}\n", encoding="utf-8")
+
     def _commit_subject(self) -> str:
         (self.repo / "SOURCE.txt").write_text("subject source\n", encoding="utf-8")
+        self._write_tooling_files()
         self._git("add", "-A")
         self._git("commit", "-q", "-m", "subject commit")
         return self._git("rev-parse", "HEAD")
@@ -3381,6 +3459,42 @@ class ScopeBindingSealTests(unittest.TestCase):
         self.assertEqual(
             set(binding["sealed_evidence_digests"]), set(evidence.evidence_output_files())
         )
+
+    def test_seal_includes_tooling_sha256_for_every_sealed_tooling_file(self) -> None:
+        self._commit_subject()
+        self._commit_evidence()
+        binding = evidence.seal_scope_binding()
+        self.assertEqual(set(binding["tooling_sha256"]), set(evidence.SEALED_TOOLING_FILES))
+        for rel_path in evidence.SEALED_TOOLING_FILES:
+            self.assertEqual(
+                binding["tooling_sha256"][rel_path],
+                evidence.sha256_file(self.repo / rel_path),
+            )
+
+    def test_seal_raises_if_a_tooling_file_is_missing(self) -> None:
+        self._commit_subject()
+        self._commit_evidence()
+        any_rel_path = next(iter(evidence.SEALED_TOOLING_FILES))
+        (self.repo / any_rel_path).unlink()
+        # Commit the deletion so seal_scope_binding()'s dirty-worktree
+        # precondition passes and compute_tooling_hashes()'s own "missing"
+        # check is what actually gets exercised.
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "delete a sealed tooling file")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.seal_scope_binding()
+
+    def test_seal_raises_if_a_tooling_file_is_a_symlink(self) -> None:
+        self._commit_subject()
+        self._commit_evidence()
+        any_rel_path = next(iter(evidence.SEALED_TOOLING_FILES))
+        target = self.repo / any_rel_path
+        target.unlink()
+        target.symlink_to(self.repo / "SOURCE.txt")
+        self._git("add", "-A")
+        self._git("commit", "-q", "-m", "replace a sealed tooling file with a symlink")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence.seal_scope_binding()
 
     def test_seal_raises_on_dirty_worktree(self) -> None:
         self._commit_subject()

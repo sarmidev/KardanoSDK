@@ -1716,8 +1716,21 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
                 json.dumps({"name": name}) + "\n", encoding="utf-8"
             )
 
+    def _write_tooling_files(self, *, suffix: str = "") -> None:
+        """Stand-in tooling files at the exact relative paths
+        `evidence.SEALED_TOOLING_FILES` names, inside the disposable temp
+        repo -- `compute_tooling_hashes()` reads these via the mocked
+        `REPO_ROOT`, so the seal/checker tooling-binding logic can be
+        exercised without touching the real scripts/ tree.
+        """
+        for rel_path in evidence.SEALED_TOOLING_FILES:
+            path = self.repo / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"# stand-in for {rel_path}{suffix}\n", encoding="utf-8")
+
     def _seal(self) -> None:
         (self.repo / "SOURCE.txt").write_text("subject source\n", encoding="utf-8")
+        self._write_tooling_files()
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-q", "-m", "subject commit")
         self.main_branch = _git_output(self.repo, "symbolic-ref", "--short", "HEAD")
@@ -1856,6 +1869,109 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
         )
         errors = checker.check_scope_binding_seal()
         self.assertTrue(any("duplicate" in e for e in errors))
+
+    # -- tooling_sha256 binding --------------------------------------------
+
+    def test_old_schema_without_tooling_sha256_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        del binding["tooling_sha256"]
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("unexpected key set" in e for e in errors))
+
+    def test_tooling_file_changed_after_seal_is_rejected(self) -> None:
+        self._seal()
+        any_rel_path = next(iter(evidence.SEALED_TOOLING_FILES))
+        (self.repo / any_rel_path).write_text("# tampered tool content\n", encoding="utf-8")
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("tooling changed after the seal" in e for e in errors))
+
+    def test_tooling_file_deleted_after_seal_is_rejected(self) -> None:
+        self._seal()
+        any_rel_path = next(iter(evidence.SEALED_TOOLING_FILES))
+        (self.repo / any_rel_path).unlink()
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("is missing" in e and any_rel_path in e for e in errors))
+
+    def test_tooling_file_replaced_with_symlink_is_rejected(self) -> None:
+        self._seal()
+        any_rel_path = next(iter(evidence.SEALED_TOOLING_FILES))
+        target = self.repo / any_rel_path
+        target.unlink()
+        (self.repo / "SOURCE.txt").resolve()
+        target.symlink_to(self.repo / "SOURCE.txt")
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("is a symlink" in e and any_rel_path in e for e in errors))
+
+    def test_missing_tooling_entry_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        any_rel_path = next(iter(binding["tooling_sha256"]))
+        del binding["tooling_sha256"][any_rel_path]
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("tooling_sha256 key set" in e for e in errors))
+
+    def test_extra_tooling_entry_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        binding["tooling_sha256"]["scripts/not_a_real_tool.py"] = "0" * 64
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("tooling_sha256 key set" in e for e in errors))
+
+    def test_wrong_tooling_hash_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        any_rel_path = next(iter(binding["tooling_sha256"]))
+        binding["tooling_sha256"][any_rel_path] = "ab" * 32
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(
+            any("current bytes" in e and "do not match the sealed digest" in e for e in errors)
+        )
+
+    def test_malformed_tooling_hash_hex_is_rejected(self) -> None:
+        self._seal()
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        any_rel_path = next(iter(binding["tooling_sha256"]))
+        binding["tooling_sha256"][any_rel_path] = "not-a-hex-digest"
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(any("is not a 64-hex-char sha256" in e for e in errors))
+
+    def test_tooling_hash_matching_worktree_but_not_subject_commit_is_rejected(self) -> None:
+        # A fabricated seal: tooling_sha256 is hand-set to match the
+        # CURRENT worktree bytes (so the worktree-vs-sealed-digest check
+        # alone would pass), but those bytes were never actually what was
+        # committed at subject_commit -- caught only by the independent
+        # `git show <subject_commit>:<path>` cross-check.
+        self._seal()
+        any_rel_path = next(iter(evidence.SEALED_TOOLING_FILES))
+        (self.repo / any_rel_path).write_text("# bytes never actually committed\n", encoding="utf-8")
+        binding = json.loads((evidence.EVIDENCE_DIR / "scope_binding.json").read_text())
+        binding["tooling_sha256"][any_rel_path] = evidence.sha256_file(self.repo / any_rel_path)
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding), encoding="utf-8"
+        )
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(
+            any(
+                "sha256 at subject_commit" in e and "does not match the sealed digest" in e
+                for e in errors
+            )
+        )
 
 
 def _git_output(cwd: Path, *args: str) -> str:

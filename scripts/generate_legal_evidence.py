@@ -52,6 +52,7 @@ it is not a license or legal classification. See `CONFIG_RULES` below.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -2087,26 +2088,37 @@ JAVA_CP_DOUBLE_SLOT_TAGS = frozenset({JAVA_CP_TAG_LONG, JAVA_CP_TAG_DOUBLE})
 # "historical perspective" paragraph documents the minor_version rule
 # (0 or 65535) as a STABLE, intentionally-extensible pattern that every
 # subsequent JDK continues unchanged for its own new major version, not
-# something that needs re-deriving release by release. A real,
-# currently-used dependency in this SDK's own resolved Gradle dependency
-# graph (BouncyCastle's `bcprov-jdk18on`, a multi-release jar) already
-# ships classes under `META-INF/versions/25/` (major_version 69, Java SE
-# 25) as of 2026-08-24 -- so a ceiling pinned to exactly 65 would fail a
-# real, legitimately-used dependency's real class file, not just a
-# synthetic/adversarial one. This ceiling is instead set with a
-# multi-year buffer above that OBSERVED real maximum, so it does not need
-# bumping on every close release, while still being an explicit,
-# deliberate, documented bound rather than "accept anything": an unknown
-# constant-pool tag (not gated by this ceiling at all -- see the `else`
-# branch of `_parse_java_class_constant_pool`'s tag dispatch) is always
-# rejected regardless of major_version, so this ceiling's only job is
-# bounding the major/minor VERSION NUMBER itself to the stable pattern
-# above, never vouching for any attribute or tag this parser does not
-# already explicitly implement. Raising it further should still be a
-# deliberate act, informed by why (an even newer real dependency), not a
-# reflexive widen-to-be-safe.
+# something that needs re-deriving release by release.
+#
+# This ceiling is fail-closed and evidence-pinned, NOT a speculative
+# buffer: it is set to EXACTLY the highest major_version this SDK has
+# actually evidenced in a real, currently-used dependency, and no
+# higher. A 2026-08-24 direct inspection of the `.class` files inside
+# the resolved `org.bouncycastle:bcprov-jdk18on` jar (this exact
+# dependency's presence in this SDK's own resolved module graph is
+# recorded in `docs/evidence/gradle_dependency_inventory.json` and
+# `docs/evidence/gradle_license_inventory.json`) found it is a
+# multi-release jar shipping classes under `META-INF/versions/25/` with
+# major_version 69 (Java SE 25) -- and no evidenced dependency anywhere
+# in that same resolved module graph exceeds major_version 69. Every
+# constant-pool tag and attribute-layout rule this parser implements is
+# independently
+# unaffected by how high this ceiling is raised (an unknown
+# constant-pool tag is rejected via the tag dispatch's own `else`
+# branch, not gated by this ceiling), so this ceiling's ONLY job is
+# refusing to silently vouch for a major_version this SDK has never
+# actually needed to accept. Raising it past 69 requires a REVIEWED
+# reason -- a newer real dependency (with its own major version bumping
+# this constant AND this comment AND
+# `MethodHandleTargetNameSemanticsTests`/`JavaClassStructuralValidationTests`
+# tests to prove it) or a toolchain update, never a reflexive
+# widen-to-be-safe buffer "just in case" a future dependency needs more
+# room. Majors 70 and above fail closed today, even though many of them
+# almost certainly follow the exact same stable minor_version pattern
+# above -- this validator does not vouch for major versions it has
+# never actually needed to parse.
 MIN_SUPPORTED_JAVA_CLASS_MAJOR_VERSION = 45  # JVMS SE21 Table 4.1-A: Java SE 1.0.2
-MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION = 80  # buffer above the observed real major 69 (Java SE 25) ceiling above
+MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION = 69  # highest EVIDENCED major (bcprov-jdk18on, Java SE 25) -- see comment above
 
 
 def _is_supported_java_class_version(major_version: int, minor_version: int) -> bool:
@@ -3423,6 +3435,142 @@ def bouncycastle_license_source_inventory() -> dict[str, Any]:
 # itself notice (regeneration only compares against the CURRENT tracked
 # tree, which is exactly the self-reference this two-commit design avoids
 # relying on for the seal itself).
+#
+# Tooling binding: the seal above proves the EVIDENCE bytes are pinned to an
+# exact subject-source commit, but says nothing about whether the SCRIPT
+# that produced (and the script that checks) those bytes could itself
+# change later without a re-seal -- a 2026-08-24 independent review named
+# this gap explicitly: an unpinned generator/checker is an unpinned
+# verdict, no matter how tightly the evidence data itself is bound.
+# `sealed_at_seal_commit["tooling_sha256"]` closes this by recording the
+# SHA-256 of every file in `SEALED_TOOLING_FILES` -- this module, the
+# checker, every local catalog module they import, and any future such
+# helper -- as of the evidence-content commit (the same worktree state
+# `--seal` reads everything else from). `SEALED_TOOLING_FILES` is an
+# explicit, reviewed list, but it is not merely hand-maintained on trust:
+# `_discover_local_tooling_closure()` independently re-derives the same
+# set by statically parsing (never importing/executing) every top-level
+# `import`/`from ... import` statement reachable from
+# `generate_legal_evidence.py` and `check_release_evidence.py`, and this
+# module refuses to import at all if that dynamically-discovered closure
+# and the explicit list disagree -- so a new helper module added to either
+# script's import graph without also being added to
+# `SEALED_TOOLING_FILES` fails closed immediately, rather than silently
+# going unsealed. `check_release_evidence.py`'s `check_scope_binding_seal()`
+# recomputes every sealed tool file's CURRENT on-disk hash and fails if any
+# differs from what was sealed -- so an edit to the generator, the checker,
+# or any catalog they both depend on, made ANY time after the seal commit,
+# is caught exactly like post-seal evidence drift is caught above.
+
+
+# Explicit, reviewed set of every script/catalog/config file whose bytes
+# can affect ANY evidence file this module generates OR any check
+# `scripts/check_release_evidence.py` performs -- this is exactly what
+# `seal_scope_binding()`'s `tooling_sha256` field seals (see the "Tooling
+# binding" module docstring above). Repo-relative, POSIX-separated paths.
+# Reviewed 2026-08-24; kept honest against silent drift by
+# `_discover_local_tooling_closure()` below, which this module refuses to
+# import against if the two disagree.
+SEALED_TOOLING_FILES: tuple[str, ...] = (
+    "scripts/generate_legal_evidence.py",
+    "scripts/check_release_evidence.py",
+    "scripts/cargo_election_catalog.py",
+    "scripts/license_catalog.py",
+    "scripts/license_catalog_harvested.py",
+)
+
+# The two scripts that actually generate or check legal evidence; every
+# local module reachable from either one's import graph must appear in
+# SEALED_TOOLING_FILES above (nothing more, nothing less).
+_TOOLING_ENTRY_POINT_SCRIPTS: tuple[str, ...] = (
+    "generate_legal_evidence.py",
+    "check_release_evidence.py",
+)
+
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+
+
+def _discover_local_tooling_closure() -> frozenset[str]:
+    """Statically re-derive the transitive closure of same-directory
+    (`scripts/`) module imports reachable from every legal-evidence
+    entry-point script, via `ast` parsing only -- never by importing or
+    executing anything, so this catalog's completeness can be verified
+    even though `check_release_evidence.py` imports `generate_legal_evidence`
+    and not the other way around (a live-import approach from inside this
+    module would never see `check_release_evidence.py` itself).
+
+    Returns repo-relative POSIX paths (e.g. `"scripts/foo.py"`).
+    """
+    seen: set[str] = set()
+    pending: list[str] = list(_TOOLING_ENTRY_POINT_SCRIPTS)
+    while pending:
+        name = pending.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        path = _SCRIPTS_DIR / name
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=name)
+        for node in ast.walk(tree):
+            module_names: list[str] = []
+            if isinstance(node, ast.Import):
+                module_names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
+                module_names = [node.module]
+            for module_name in module_names:
+                candidate = module_name.split(".")[0] + ".py"
+                if (_SCRIPTS_DIR / candidate).is_file():
+                    pending.append(candidate)
+    return frozenset(f"scripts/{name}" for name in seen)
+
+
+def _validate_sealed_tooling_files_catalog() -> None:
+    """Fail closed at import time if `SEALED_TOOLING_FILES` (hand-reviewed)
+    and `_discover_local_tooling_closure()` (statically re-derived) ever
+    disagree -- see `SEALED_TOOLING_FILES`'s own docstring comment above."""
+    explicit = frozenset(SEALED_TOOLING_FILES)
+    if len(explicit) != len(SEALED_TOOLING_FILES):
+        raise EvidenceError(
+            f"SEALED_TOOLING_FILES contains a duplicate entry: {SEALED_TOOLING_FILES!r}"
+        )
+    discovered = _discover_local_tooling_closure()
+    missing = discovered - explicit
+    extra = explicit - discovered
+    if missing or extra:
+        raise EvidenceError(
+            "SEALED_TOOLING_FILES has drifted from the actual import graph of "
+            f"{_TOOLING_ENTRY_POINT_SCRIPTS}: missing={sorted(missing)!r} "
+            f"extra={sorted(extra)!r} -- add/remove entries in "
+            "SEALED_TOOLING_FILES (scripts/generate_legal_evidence.py) to match."
+        )
+
+
+_validate_sealed_tooling_files_catalog()
+
+
+def compute_tooling_hashes() -> dict[str, str]:
+    """SHA-256 of every `SEALED_TOOLING_FILES` entry's CURRENT bytes on
+    disk, keyed by its repo-relative path.
+
+    Used by both `seal_scope_binding()` (to record `tooling_sha256` at seal
+    time) and `check_release_evidence.py`'s `check_scope_binding_seal()` (to
+    independently recompute and compare against what was sealed). Raises
+    `EvidenceError` if any listed file is missing, is a symlink (never trust
+    an indirection for something this security-sensitive), or is not a
+    regular file.
+    """
+    hashes: dict[str, str] = {}
+    for rel_path in SEALED_TOOLING_FILES:
+        path = REPO_ROOT / rel_path
+        if path.is_symlink():
+            raise EvidenceError(
+                f"sealed tooling file {rel_path!r} is a symlink -- refusing to hash it"
+            )
+        if not path.is_file():
+            raise EvidenceError(f"sealed tooling file {rel_path!r} is missing")
+        hashes[rel_path] = sha256_file(path)
+    return hashes
 
 
 def git(*args: str) -> str:
@@ -3523,13 +3671,24 @@ def seal_scope_binding() -> dict[str, Any]:
             "subject_tree are that commit's immediate parent -- the "
             "immutable subject-source commit actually inventoried "
             "(crypto-signing-backend/Cargo.lock, every */gradle.lockfile, "
-            "CHECKSUMS.sha256, NOTICE, LICENSES/*.txt as they existed there). "
-            "sealed_evidence_digests is the SHA-256 of each evidence file's "
-            "bytes as committed at evidence_commit; "
-            "scripts/check_release_evidence.py's check_scope_binding_seal() "
-            "independently recomputes these from both the current worktree "
-            "and `git show <evidence_commit>:<path>` and fails on any "
-            "mismatch, ancestry violation, or non-immediate-parent binding."
+            "CHECKSUMS.sha256, NOTICE, LICENSES/*.txt as they existed there, "
+            "PLUS every file listed as a key of tooling_sha256 as it existed "
+            "there -- the subject commit is where the sealed tool version is "
+            "pinned). sealed_evidence_digests is the SHA-256 of each "
+            "evidence file's bytes as committed at evidence_commit. "
+            "tooling_sha256 is the SHA-256 of every "
+            "scripts/generate_legal_evidence.py SEALED_TOOLING_FILES entry's "
+            "bytes (see the 'Tooling binding' module docstring) as of this "
+            "same evidence-content commit's worktree -- the generator and "
+            "checker script(s), and every local catalog module they import, "
+            "that could affect what any evidence file says or what any check "
+            "accepts. scripts/check_release_evidence.py's "
+            "check_scope_binding_seal() independently recomputes both "
+            "sealed_evidence_digests and tooling_sha256 from both the "
+            "current worktree and `git show <evidence_commit>:<path>` / "
+            "`git show <subject_commit>:<path>` and fails on any mismatch, "
+            "ancestry violation, non-immediate-parent binding, or "
+            "missing/extra/symlinked tooling entry."
         ),
         "evidence_commit": evidence_commit,
         "evidence_tree": evidence_tree,
@@ -3538,6 +3697,7 @@ def seal_scope_binding() -> dict[str, Any]:
         "sealed_evidence_digests": {
             name: sha256_file(path) for name, path in sorted(outputs.items())
         },
+        "tooling_sha256": compute_tooling_hashes(),
     }
 
 

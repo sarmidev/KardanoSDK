@@ -943,6 +943,7 @@ SCOPE_BINDING_REQUIRED_KEYS = {
     "subject_commit",
     "subject_tree",
     "sealed_evidence_digests",
+    "tooling_sha256",
 }
 
 
@@ -970,6 +971,16 @@ def check_scope_binding_seal() -> list[str]:
       edited an already-sealed evidence file without a re-seal is caught
       even though regeneration-equality checks elsewhere only ever compare
       against the CURRENT tracked tree, not the sealed historical one.
+    - `tooling_sha256`'s key set is EXACTLY
+      `evidence.SEALED_TOOLING_FILES` (no missing or extra tool entry).
+    - Every sealed tooling file: is not a symlink, exists, and its
+      CURRENT on-disk bytes match both the recorded `tooling_sha256`
+      entry AND the actual bytes committed at `subject_commit`'s tree
+      (`git show <subject_commit>:<path>`, since the tool version is
+      pinned as of the subject-source commit, not the evidence-content
+      commit) -- so an edit to the generator, the checker, or any local
+      catalog module either one imports, made at ANY point after the
+      seal, is caught the same way post-seal evidence drift is caught.
     """
     errors: list[str] = []
     path = EVIDENCE_DIR / "scope_binding.json"
@@ -1096,6 +1107,58 @@ def check_scope_binding_seal() -> list[str]:
                 f"docs/evidence/{name}: sha256 at evidence_commit "
                 f"({committed_digest}) does not match the sealed digest "
                 f"{digest} in scope_binding.json"
+            )
+
+    tooling = binding["tooling_sha256"]
+    if not isinstance(tooling, dict):
+        return errors + [
+            "docs/evidence/scope_binding.json: tooling_sha256 is not an object"
+        ]
+    expected_tool_paths = set(evidence.SEALED_TOOLING_FILES)
+    actual_tool_paths = set(tooling)
+    if actual_tool_paths != expected_tool_paths:
+        errors.append(
+            "docs/evidence/scope_binding.json: tooling_sha256 key set "
+            f"{sorted(actual_tool_paths)} != expected {sorted(expected_tool_paths)}"
+        )
+
+    for rel_path in sorted(expected_tool_paths & actual_tool_paths):
+        tool_digest = tooling[rel_path]
+        if not isinstance(tool_digest, str) or not SHA256_HEX_RE.match(tool_digest):
+            errors.append(
+                f"docs/evidence/scope_binding.json: tooling_sha256"
+                f"[{rel_path!r}] is not a 64-hex-char sha256: {tool_digest!r}"
+            )
+            continue
+        tool_path = REPO_ROOT / rel_path
+        if tool_path.is_symlink():
+            errors.append(f"{rel_path} is a symlink (required by the sealed tooling binding)")
+            continue
+        if not tool_path.is_file():
+            errors.append(f"{rel_path} is missing (required by the sealed tooling binding)")
+            continue
+        current_tool_digest = evidence.sha256_file(tool_path)
+        if current_tool_digest != tool_digest:
+            errors.append(
+                f"{rel_path}: current bytes (sha256 {current_tool_digest}) do "
+                f"not match the sealed digest {tool_digest} in "
+                "scope_binding.json's tooling_sha256 -- tooling changed after "
+                "the seal without a re-seal"
+            )
+        try:
+            committed_tool_bytes = run_git_bytes("show", f"{subject_commit}:{rel_path}")
+        except Exception:  # noqa: BLE001
+            errors.append(
+                f"{rel_path}: not found at subject_commit {subject_commit}'s "
+                "tree (git show failed)"
+            )
+            continue
+        committed_tool_digest = hashlib.sha256(committed_tool_bytes).hexdigest()
+        if committed_tool_digest != tool_digest:
+            errors.append(
+                f"{rel_path}: sha256 at subject_commit ({committed_tool_digest}) "
+                f"does not match the sealed digest {tool_digest} in "
+                "scope_binding.json's tooling_sha256"
             )
 
     return errors
@@ -1519,7 +1582,11 @@ def main() -> int:
         ("evidence freshness (deterministic regeneration)", check_evidence_is_freshly_regenerable),
         ("docs/evidence/ recursive tree has no extra/missing/symlinked files", check_evidence_tree_exact),
         ("LEGAL_EVIDENCE_DIGEST.txt exact recomputation", check_digest_file_exact),
-        ("scope_binding.json two-commit seal (ancestry + byte cross-check)", check_scope_binding_seal),
+        (
+            "scope_binding.json two-commit seal + tooling-hash binding "
+            "(ancestry + byte cross-check)",
+            check_scope_binding_seal,
+        ),
         ("no uninventoried UniFFI/module scope drift", check_uniffi_and_native_scope_has_no_orphans),
         (
             f"Cargo license elections ({args.mode} mode)",
