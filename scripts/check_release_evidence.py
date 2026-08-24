@@ -776,6 +776,7 @@ def check_evidence_is_freshly_regenerable() -> list[str]:
         "uniffi_bindings_inventory.json": evidence.uniffi_bindings_inventory,
         "native_artifacts_inventory.json": evidence.native_artifacts_inventory,
         "bouncycastle_license_source.json": evidence.bouncycastle_license_source_inventory,
+        "java_class_version_evidence.json": evidence.java_class_version_evidence,
     }
 
     def gradle_license_generator() -> dict:
