@@ -383,7 +383,14 @@ KNOWN_NON_REGENERABLE_EVIDENCE_FILES = {"scope_binding.json"}
 # '["linked_into_compiled_artifact"]` key in its own `membership` dict, and
 # `membership_by_target["x86_64-unknown-linux-gnu"]["linked_into_compiled_artifact"]`
 # either does or does not contain errno's exact package id -- consistently
-# with each other. ANY other difference anywhere in the payload (a different
+# with each other -- AND (when present) `license_elections.rows[]`'s own
+# errno@0.3.14 row, whose `target_membership` field mirrors the identical
+# per-target data for that checker's separate reporting purpose, agrees with
+# the same presence/value. Empirically confirmed 2026-08-24 (Verify run
+# 32756290850) that this second, independently-serialized copy of the exact
+# same data reflects the exact same host ambiguity and must be normalized
+# the same way, not treated as a second, unrelated difference. ANY other
+# difference anywhere in the payload (a different
 # package, a different target triple, a different field, a wrong version/
 # source/checksum for errno itself, or an inconsistent/partial version of
 # just this one difference) is NOT the known ambiguity and fails closed like
@@ -441,6 +448,17 @@ def _find_package(payload: dict, name: str) -> dict | None:
     return matches[0]
 
 
+def _find_election_row(payload: dict, name: str, version: str) -> dict | None:
+    """The single `license_elections.rows[]` entry for `name@version`, or
+    `None` if `payload` has no `license_elections` section at all (older/
+    synthetic test fixtures) or the row isn't found/is ambiguous."""
+    rows = payload.get("license_elections", {}).get("rows", [])
+    matches = [r for r in rows if r.get("name") == name and r.get("version") == version]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
 def _cargo_inventory_diff_is_known_errno_host_ambiguity(
     fresh: dict, committed: dict
 ) -> tuple[bool, str]:
@@ -491,10 +509,42 @@ def _cargo_inventory_diff_is_known_errno_host_ambiguity(
     if committed_pkg_has_slice and committed_errno["membership"][triple] != ["linked_into_compiled_artifact"]:
         return False, "committed errno's x86_64-unknown-linux-gnu membership value is not exactly ['linked_into_compiled_artifact']"
 
+    # `license_elections.rows[]` carries its own `target_membership` copy of
+    # the exact same per-target data (built from the same cargo tree query,
+    # for the checker's own election reporting) -- this is a SEPARATE JSON
+    # location the same host-ambiguous cfg difference reappears in, not a
+    # distinct diff, so it must be present/absent and valued identically to
+    # the package's own membership dict, or this is not the known shape.
+    # Skipped entirely when neither side has a `license_elections` section
+    # at all (older/synthetic fixtures predating this field).
+    if "license_elections" in fresh or "license_elections" in committed:
+        fresh_row = _find_election_row(fresh, KNOWN_ERRNO_NAME, KNOWN_ERRNO_VERSION)
+        committed_row = _find_election_row(committed, KNOWN_ERRNO_NAME, KNOWN_ERRNO_VERSION)
+        if fresh_row is None or committed_row is None:
+            return False, "expected exactly one license_elections row for errno@0.3.14 on each side"
+        fresh_row_has_slice = triple in fresh_row.get("target_membership", {})
+        committed_row_has_slice = triple in committed_row.get("target_membership", {})
+        if fresh_row_has_slice != fresh_pkg_has_slice:
+            return False, (
+                "fresh payload's license_elections row target_membership "
+                "disagrees with its own package's membership"
+            )
+        if committed_row_has_slice != committed_pkg_has_slice:
+            return False, (
+                "committed payload's license_elections row target_membership "
+                "disagrees with its own package's membership"
+            )
+        if fresh_row_has_slice and fresh_row["target_membership"][triple] != ["linked_into_compiled_artifact"]:
+            return False, "fresh row's x86_64-unknown-linux-gnu target_membership value is not exactly ['linked_into_compiled_artifact']"
+        if committed_row_has_slice and committed_row["target_membership"][triple] != ["linked_into_compiled_artifact"]:
+            return False, "committed row's x86_64-unknown-linux-gnu target_membership value is not exactly ['linked_into_compiled_artifact']"
+
     # Every other byte of the payload -- every other package, every other
     # target triple, every other field on the errno package itself -- must
-    # be identical. Build a normalized copy of each side with ONLY the two
-    # known-mutable errno slices removed, then require full equality.
+    # be identical. Build a normalized copy of each side with ONLY the
+    # known-mutable errno slices (its own membership dict, the top-level
+    # membership_by_target index, and its license_elections row's mirrored
+    # target_membership) removed, then require full equality.
     def normalized(payload: dict) -> dict:
         payload = json.loads(json.dumps(payload))
         mbt = payload.get("membership_by_target", {}).get(triple, {})
@@ -504,6 +554,9 @@ def _cargo_inventory_diff_is_known_errno_host_ambiguity(
         errno_pkg = _find_package(payload, KNOWN_ERRNO_NAME)
         if errno_pkg is not None:
             errno_pkg.get("membership", {}).pop(triple, None)
+        errno_row = _find_election_row(payload, KNOWN_ERRNO_NAME, KNOWN_ERRNO_VERSION)
+        if errno_row is not None:
+            errno_row.get("target_membership", {}).pop(triple, None)
         return payload
 
     if normalized(fresh) != normalized(committed):

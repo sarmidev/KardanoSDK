@@ -972,6 +972,84 @@ class CargoInventoryHostAmbiguousFreshnessTests(unittest.TestCase):
         matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
         self.assertFalse(matches)
 
+    def _committed_payload_with_election_row(self) -> dict:
+        """Same shape as `_committed_payload()`, plus the real payload's
+        SEPARATE `license_elections.rows[]` mirror of errno's per-target
+        membership (`target_membership`) -- the second JSON location the
+        2026-08-24 Verify run 32756290850 found this same host ambiguity
+        reappears in, which a hand-patch of only `packages[].membership`
+        missed."""
+        payload = self._committed_payload()
+        payload["license_elections"] = {
+            "rows": [
+                {
+                    "name": checker.KNOWN_ERRNO_NAME,
+                    "version": checker.KNOWN_ERRNO_VERSION,
+                    "target_membership": {},
+                },
+                {
+                    "name": "serde",
+                    "version": "1.0.228",
+                    "target_membership": {
+                        checker.LINUX_X86_64_TARGET_TRIPLE: ["linked_into_compiled_artifact"]
+                    },
+                },
+            ]
+        }
+        return payload
+
+    def _add_known_errno_diff_with_row(self, payload: dict) -> dict:
+        payload = self._add_known_errno_diff(payload)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        errno_row = next(
+            r for r in payload["license_elections"]["rows"] if r["name"] == "errno"
+        )
+        errno_row["target_membership"][triple] = ["linked_into_compiled_artifact"]
+        return payload
+
+    def test_exact_known_diff_matches_when_election_row_mirror_also_toggled(self) -> None:
+        committed = self._committed_payload_with_election_row()
+        fresh = self._add_known_errno_diff_with_row(committed)
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertTrue(matches, detail)
+
+    def test_election_row_mirror_left_stale_alongside_toggled_package_membership_fails(self) -> None:
+        # Regression test for the exact real-world mistake this class exists
+        # to catch: `packages[].membership` and `membership_by_target` are
+        # toggled consistently, but the SEPARATE `license_elections.rows[]`
+        # `target_membership` mirror is left on the OLD side -- not the
+        # known shape, must fail closed rather than silently pass.
+        committed = self._committed_payload_with_election_row()
+        fresh = self._add_known_errno_diff(committed)  # note: row NOT updated
+        fresh["license_elections"] = copy.deepcopy(committed["license_elections"])
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches, detail)
+
+    def test_election_row_missing_entirely_when_section_present_fails(self) -> None:
+        committed = self._committed_payload_with_election_row()
+        fresh = self._add_known_errno_diff_with_row(committed)
+        del fresh["license_elections"]["rows"][0]  # drop the errno row entirely
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_election_row_wrong_target_membership_value_fails(self) -> None:
+        committed = self._committed_payload_with_election_row()
+        fresh = self._add_known_errno_diff_with_row(committed)
+        triple = checker.LINUX_X86_64_TARGET_TRIPLE
+        errno_row = next(r for r in fresh["license_elections"]["rows"] if r["name"] == "errno")
+        errno_row["target_membership"][triple] = ["build_dependency_only"]
+        matches, _detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertFalse(matches)
+
+    def test_absent_license_elections_section_on_both_sides_skips_row_check(self) -> None:
+        # Backward-compatible with the plain _committed_payload() fixture
+        # (no "license_elections" key at all) used by every other test in
+        # this class.
+        committed = self._committed_payload()
+        fresh = self._add_known_errno_diff(committed)
+        matches, detail = checker._cargo_inventory_diff_is_known_errno_host_ambiguity(fresh, committed)
+        self.assertTrue(matches, detail)
+
     def test_host_spoof_via_platform_module_is_ignored(self) -> None:
         # Even if platform.system()/machine() are spoofed to claim
         # Linux/x86_64, only the actual rustc host (mocked here) decides.
@@ -1009,16 +1087,28 @@ class CargoInventoryHostAmbiguousFreshnessTests(unittest.TestCase):
         payload = copy.deepcopy(payload)
         linked = payload["membership_by_target"][triple]["linked_into_compiled_artifact"]
         errno_pkg = next(p for p in payload["packages"] if p["name"] == "errno")
+        errno_row = next(
+            (
+                r
+                for r in payload.get("license_elections", {}).get("rows", [])
+                if r.get("name") == "errno" and r.get("version") == checker.KNOWN_ERRNO_VERSION
+            ),
+            None,
+        )
         if pkg_id in linked:
             payload["membership_by_target"][triple]["linked_into_compiled_artifact"] = [
                 x for x in linked if x != pkg_id
             ]
             errno_pkg["membership"].pop(triple, None)
+            if errno_row is not None:
+                errno_row.get("target_membership", {}).pop(triple, None)
         else:
             payload["membership_by_target"][triple]["linked_into_compiled_artifact"] = sorted(
                 linked + [pkg_id]
             )
             errno_pkg["membership"][triple] = ["linked_into_compiled_artifact"]
+            if errno_row is not None:
+                errno_row["target_membership"][triple] = ["linked_into_compiled_artifact"]
         return payload
 
     def test_non_matching_rustc_host_skips_only_the_known_diff(self) -> None:
