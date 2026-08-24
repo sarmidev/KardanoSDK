@@ -192,11 +192,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   ids) reserve space under the sticky header via one `scroll-padding-top` offset
   (`--anchor-scroll-offset`), raised at the 860px and 560px breakpoints when header/nav wrap.
 - A distribution legal-evidence packet (Prompt 7, non-counsel scope): root `NOTICE`,
-  `LICENSES/` (verbatim Apache-2.0, MPL-2.0, ISC, and Bouncy Castle license texts fetched
-  2026-08-24 from each project's own canonical URL; see `LICENSES/README.md` for source/
-  checksum), `docs/LEGAL_REVIEW.md` (an owner/counsel evidence checklist and template — not
-  legal advice, not approval), and deterministic generated inventories under `docs/evidence/`
-  (`scripts/generate_legal_evidence.py`): per-module Gradle source/runtime/test-only
+  `LICENSES/` (verbatim Apache-2.0, MPL-2.0, and ISC license texts fetched 2026-08-24 from
+  each project's own canonical URL; the Bouncy Castle license text is a **manual
+  transcription**, not a fetched file — corrected below; see `LICENSES/README.md` for
+  source/checksum), `docs/LEGAL_REVIEW.md` (an owner/counsel evidence checklist and
+  template — not legal advice, not approval), and deterministic generated inventories under
+  `docs/evidence/` (`scripts/generate_legal_evidence.py`): per-module Gradle
+  source/runtime/test-only
   classification from `*/gradle.lockfile`, `cargo metadata --locked` for the signing backend,
   the committed UniFFI-generated binding files, an exact 9-artifact
   `crypto-signing-backend/CHECKSUMS.sha256` cross-check, and a static Maven-native-carrier
@@ -235,6 +237,33 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   evidence-generation-time subject commit/tree separately from the packet's own commit/tree.
   Still non-counsel scope; still does not mark Prompt 7, the Windows candidate, or any release
   as GO.
+- Legal-evidence packet fixes, round 2 (same branch, additive commits; a second independent
+  review found the round-1 fixes above still incomplete on 10 further points).
+  `scripts/license_catalog.py` (hand-curated) plus a new, mechanically harvested
+  `scripts/license_catalog_harvested.py` together resolve all 298 Gradle-runtime coordinates
+  with zero unresolved and no dependency on a pre-populated local Gradle cache, proven by a
+  cold, empty-`GRADLE_USER_HOME` test and CI step; `gradle_license_inventory()` now fails
+  generation rather than recording a silent unresolved list. Every one of the 27 (not 3)
+  target-linked Cargo packages with a non-single-license SPDX expression now has an explicit,
+  catalog-backed election row (`scripts/cargo_election_catalog.py`, a new
+  `parse_spdx_expression()` that also fixes legacy `MIT/Apache-2.0` slash-syntax packages like
+  `cryptoxide` being silently treated as single-license); `memchr`'s `Unlicense OR MIT` gets no
+  proposed election, and `LICENSES/Unlicense.txt` is committed. `docs/evidence/` freshness
+  checking is now a full recursive tree walk rejecting nested extras/symlinks, not a top-level
+  glob. `maven_native_carriers_inventory.json` now records each carrier's own artifact
+  SHA-256, a `distribution_status` enum, and per-embedded-native SHA-256/platform/arch, with a
+  corrected JNA embedded-native count of 27 (was 25). `LICENSES/README.md` is now required and
+  blank `docs/LEGAL_REVIEW.md` table cells now fail instead of passing silently.
+  `docs/evidence/scope_binding.json` is no longer written in the same commit as the evidence it
+  describes (self-referential, unverifiable); it is now a two-commit seal — an evidence-content
+  commit followed by a separate seal commit (`generate_legal_evidence.py --seal`) that records
+  the evidence commit's exact hash/tree, its immediate parent as the subject-source commit, and
+  a per-file SHA-256 digest — checked independently via git ancestry and
+  `git show <evidence_commit>:<path>`, never by silent regeneration. Cargo network access is now
+  bounded to one explicit `cargo fetch --locked` bootstrap step; generation itself always passes
+  `--offline` and runs with `CARGO_NET_OFFLINE=true`, and CI now diffs the entire tracked
+  worktree (not just `docs/evidence/`) before/after the whole job. Still non-counsel scope; still
+  does not mark Prompt 7, the Windows candidate, or any release as GO.
 
 ### Changed
 

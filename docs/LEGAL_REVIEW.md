@@ -109,13 +109,13 @@ the files present on disk (no extra, no missing).
 ## 5. Package-level license/election mapping
 
 Every Gradle-runtime coordinate (across every module discovered from
-`settings.gradle.kts`) and every Cargo package linked into at least one of
-the 9 committed native-artifact target triples is resolved to a license in
-generated evidence, not narrated by hand here:
+`settings.gradle.kts`) and every Cargo package reachable in any of the 9
+target-triple graphs is resolved to a license in generated evidence, not
+narrated by hand here:
 
 | Report | Coverage | Method |
 |---|---|---|
-| `docs/evidence/gradle_license_inventory.json` | `resolved_count`/`runtime_coordinate_count` of all Gradle-runtime coordinates | `scripts/license_catalog.py` (curated, dated) first, then the coordinate's own POM `<licenses>` block from the local Gradle module cache |
+| `docs/evidence/gradle_license_inventory.json` | `resolved_count`/`runtime_coordinate_count` of all Gradle-runtime coordinates — 298/298, `unresolved_count` 0 | `scripts/license_catalog.GRADLE_LICENSE_CATALOG` (curated, hand-reviewed, dated) first, then `scripts/license_catalog_harvested.HARVESTED_POM_LICENSE_CATALOG` (mechanically harvested from POMs, committed, single-license-only) second; a live local-Gradle-cache read is defense-in-depth only and is never required — see the clean-`GRADLE_USER_HOME` tests in `scripts/tests/test_generate_legal_evidence.py::ColdGradleCacheTests`. Generation fails closed (raises, writes nothing) if any coordinate is unresolved by all three paths. |
 | `docs/evidence/cargo_dependency_inventory.json` | Every package reachable in any of the 9 target-triple graphs | The package's own `license` field from `cargo metadata` (Cargo.toml, not guessed) |
 
 A dual/OR license (e.g. `Apache-2.0 OR LGPL-2.1-or-later`) is recorded with
@@ -125,28 +125,77 @@ genuinely lists more than one license; a single-license coordinate (e.g.
 as if an `Apache-2.0 OR X` election elsewhere covers it. This is the exact
 mistake the 2026-08-24 independent review flagged.
 
-### 5a. Elections made, and the reviewer-acceptance gate for each
+### 5a. Complete Cargo election table (every target-linked non-single-license package)
 
-| Coordinate | Available licenses (source) | Elected | Reviewer acceptance |
-|---|---|---|---|
-| `net.java.dev.jna:jna:5.19.1` | Apache-2.0 OR LGPL-2.1-or-later (own POM) | Apache-2.0 | OPEN — pending per-election reviewer acceptance |
-| `ed25519-bip32` (Rust, 0.4.2) | MIT OR Apache-2.0 (own Cargo.toml) | Apache-2.0 | OPEN — pending per-election reviewer acceptance |
-| `cryptoxide` (Rust, 0.5.3, transitive) | MIT/Apache-2.0 (own Cargo.toml) | Apache-2.0 | OPEN — pending per-election reviewer acceptance |
+`docs/evidence/cargo_dependency_inventory.json`'s `license_elections` section
+is the authoritative, generated source (27 mandatory rows as of 2026-08-24,
+one per target-linked package whose Cargo.toml `license` is not a single
+unambiguous SPDX license); `scripts/cargo_election_catalog.py` is the
+hand-reviewed catalog backing it, and
+`scripts/check_release_evidence.py --mode release` fails while any mandatory
+row's `status` is not exactly `"ACCEPTED"` (with a non-empty `reviewer` and
+an ISO-8601 `review_date`) — **all 27 are `status: "OPEN"` today; none has
+been accepted.** A prior version of this table hand-picked 3 dual-license
+crates plus 2 compound-expression crates and a since-corrected, non-existent
+`r-efi` entry (that package is not actually present in this crate's
+Cargo.lock or dependency graph for any of the 9 targets — removed here); this
+undercounted the real 27 by omitting crates such as `bitflags`, `hashbrown`,
+`indexmap`, `serde`, `serde_json`, `tempfile`, `thiserror`, and others with
+the identical `MIT OR Apache-2.0` (or legacy `/`-separated) expression.
 
-Compound (not disjunctive) expressions found — no election applies, but each
-still needs a named reviewer determination that this repository's build-time
-vs. linked-in classification is accepted:
+| Coordinate | Expression | Proposed election | AND-required (always mandatory) | Status |
+|---|---|---|---|---|
+| `anyhow` 1.0.103 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `bitflags` 2.13.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `camino` 1.2.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `cargo-platform` 0.1.9 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `cfg-if` 1.0.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `cryptoxide` 0.5.3 (transitive) | `MIT/Apache-2.0` (legacy slash syntax) | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `ed25519-bip32` 0.4.2 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `equivalent` 1.0.2 | `Apache-2.0 OR MIT` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `errno` 0.3.14 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `fastrand` 2.4.1 | `Apache-2.0 OR MIT` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `getrandom` 0.4.3 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `hashbrown` 0.17.1 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `heck` 0.5.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `indexmap` 2.14.0 | `Apache-2.0 OR MIT` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `itoa` 1.0.18 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `libc` 0.2.186 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `linux-raw-sys` 0.12.1 | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | Apache-2.0 (plain, no exception) | — | OPEN — pending per-election reviewer acceptance |
+| `memchr` 2.8.3 | `Unlicense OR MIT` | **none proposed** | — | OPEN — pending per-election reviewer acceptance |
+| `once_cell` 1.21.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `rustix` 1.1.4 | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | Apache-2.0 (plain, no exception) | — | OPEN — pending per-election reviewer acceptance |
+| `semver` 1.0.28 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `serde` 1.0.228 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `serde_core` 1.0.228 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `serde_json` 1.0.150 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `static_assertions` 1.1.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `tempfile` 3.27.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `thiserror` 2.0.18 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
 
-| Coordinate | Expression (source) | This repo's classification | Reviewer acceptance |
-|---|---|---|---|
-| `unicode-ident` (Rust, 1.0.24) | `(MIT OR Apache-2.0) AND Unicode-3.0` (own Cargo.toml) | proc-macro-support-only; not linked into any of the 9 targets (`docs/evidence/cargo_dependency_inventory.json`) | OPEN — pending per-election reviewer acceptance |
-| `linux-raw-sys` (Rust, 0.12.1) | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` (own Cargo.toml) | Linux/Android target-linked (per §9); Apache-2.0-with-exception branch not separately elected | OPEN — pending per-election reviewer acceptance |
-| `r-efi` (Rust, 6.0.0, transitive via `getrandom`) | `MIT OR Apache-2.0 OR LGPL-2.1-or-later` (own Cargo.toml) | present in Cargo.lock; membership per target in `docs/evidence/cargo_dependency_inventory.json` | OPEN — pending per-election reviewer acceptance |
+`memchr` is a deliberate exception to the "propose Apache-2.0" pattern: no
+election is proposed between `Unlicense` and `MIT`, and `LICENSES/Unlicense.txt`
+is committed and cited in NOTICE precisely because that election has not been
+made — see `scripts/cargo_election_catalog.py`'s module docstring.
+
+Non-target-linked packages with the same kind of non-single expression
+(`autocfg`, `fs-err`, `proc-macro2`, `quote`, `serde_derive`, `siphasher`,
+`syn`, `thiserror-impl`, `toml`, `unicode-ident`) are not shipped in any of
+the 9 committed native artifacts, so no election row is mandatory for them;
+they still appear in `license_elections.rows` with `status: "NOT_APPLICABLE"`
+for completeness. `unicode-ident`'s compound expression
+(`(MIT OR Apache-2.0) AND Unicode-3.0`) is the one case with a real
+AND-required component: even though it is not target-linked here, the
+Unicode-3.0 text is still committed (`LICENSES/Unicode-3.0.txt`) and cited in
+NOTICE, since Unicode-3.0 is never satisfied merely by electing a side of the
+`OR` — that is true regardless of linkage.
 
 No election is recorded for `org.slf4j:slf4j-api`, `com.goterl:resource-loader`,
 `bytes`, `cargo_metadata`, or `zmij` (all single-license MIT, no `OR` clause
 in their own metadata) — they need only `LICENSES/MIT.txt` (§4), not an
-election.
+election. `net.java.dev.jna:jna:5.19.1` (Gradle side, Apache-2.0 OR
+LGPL-2.1-or-later) keeps its existing OPEN election row in
+`docs/evidence/gradle_license_inventory.json`.
 
 ## 6. MPL-2.0 obligations — OPEN, not asserted satisfied
 
@@ -213,17 +262,27 @@ hashes as independently verifiable facts:
 
 Distinct from `crypto-signing-backend/CHECKSUMS.sha256` (§10), which lists
 only first-party binaries built from this repository's own Rust crate. Full
-detail, including every embedded member path and size: `docs/evidence/
-maven_native_carriers_inventory.json` (point-in-time inspection, 2026-08-24 —
-see §13 for why this is not re-derived live on every run).
+detail — every carrier's own `artifact_sha256`, and every embedded member's
+path/size/SHA-256/platform/arch (not just path/size) — is in
+`docs/evidence/maven_native_carriers_inventory.json` (point-in-time
+inspection, 2026-08-24, via Python `zipfile` per-member extraction and
+hashing — see §13 for why this is not re-derived live on every run).
 
-| Coordinate | Carrier kind | Embedded natives | Windows build upstream? |
-|---|---|---|---|
-| `net.java.dev.jna:jna:5.19.1` | JVM/Android jar | 25 platform-specific `libjnidispatch` binaries (all bundled in the one jar; only one loads per host) | Yes (`win32-x86-64`, `win32-aarch64`) |
-| `org.hyperledger.identus:bip32-ed25519-android:1.8.8` | Android `.aar` | 4 (`libuniffi_ed25519_bip32_wrapper.so` per ABI) | No (issue #226; see §6b) |
-| `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5` | JVM `.jar` | 4 (libsodium per OS/arch, including a Windows `.dll`) | Yes |
-| `com.goterl:lazysodium-android:5.2.0` | Android `.aar` | 4 (`libsodium.so` per ABI) | No (Android-only carrier) |
-| `org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6` | JVM `.jar` (desktopApp sample only) | 2 (macOS Skia `.dylib`, arm64 + x64) | No (only macOS-arm64 variant resolved in this repo's lockfiles) |
+`distribution_status` is one of `resolved_runtime_dependency`,
+`transitively_available`, `redistributed_by_kardano`, or
+`not_in_first_release_scope` (`scripts/generate_legal_evidence.py`'s
+`VALID_CARRIER_DISTRIBUTION_STATUSES`); Skiko is deliberately
+`not_in_first_release_scope`, not `redistributed_by_kardano`, because no
+Desktop installer is built or distributed in this release (§1a) even though
+the coordinate is genuinely resolved in `desktopApp/gradle.lockfile`.
+
+| Coordinate | Carrier kind | Embedded natives | `distribution_status` | Windows build upstream? |
+|---|---|---|---|---|
+| `net.java.dev.jna:jna:5.19.1` | JVM/Android jar | 27 platform-specific `libjnidispatch` binaries (all bundled in the one jar; only one loads per host — a prior version of this evidence said 25, missing the two AIX variants; corrected by a full zip-member enumeration) | `redistributed_by_kardano` | Yes (`win32-x86-64`, `win32-aarch64`) |
+| `org.hyperledger.identus:bip32-ed25519-android:1.8.8` | Android `.aar` | 4 (`libuniffi_ed25519_bip32_wrapper.so` per ABI) | `redistributed_by_kardano` | No (issue #226; see §6b) |
+| `com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5` | JVM `.jar` | 4 (libsodium per OS/arch, including a Windows `.dll`) | `redistributed_by_kardano` | Yes |
+| `com.goterl:lazysodium-android:5.2.0` | Android `.aar` | 4 (`libsodium.so` per ABI) | `redistributed_by_kardano` | No (Android-only carrier) |
+| `org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6` | JVM `.jar` (desktopApp sample only) | 2 (macOS Skia `.dylib`, arm64 + x64) | `not_in_first_release_scope` | No (only macOS-arm64 variant resolved in this repo's lockfiles) |
 
 Do not classify JNA as source-only (§5's election table is about the
 *source* license; this table is about the *separate* fact that the same jar
@@ -297,58 +356,128 @@ under `crypto-signing-backend/src/`, by `scripts/check_release_evidence.py`
 | Windows x86-64 JVM signing-backend candidate DLL | Not distributed | Technical GO on native-artifact PE evidence; withheld until the two named gates in §14 are resolved (independent PE re-review; upstream issue #226) |
 | Identus `apollo` Android derivation-backend native library, Windows build | Not distributed by Kardano SDK | Upstream (`hyperledger-identus/apollo`) has not published a `win32-x86-64` build; Kardano SDK cannot distribute what upstream has not built — tracked as upstream issue #226 |
 
-## 12. Scope binding: subject commit/tree vs. evidence-packet commit/tree
+## 12. Scope binding: two-commit seal (evidence-content commit + seal commit)
 
-`docs/evidence/scope_binding.json`'s `subject_commit`/`subject_tree` are the
-repository `HEAD` **at generation time** — necessarily the parent of
-whatever commit later carries that generated file, because a commit cannot
-record the hash of its own resulting tree in advance. This is a structural
-property of Git, not a gap in this script: there is no way to make this
-field self-referential, and this file does not pretend otherwise.
+A `scope_binding.json` written in the SAME commit as the evidence it
+describes cannot prove anything on its own: regenerating it always
+trivially "passes" by rewriting the binding to whatever `HEAD` happens to
+be at check time, so a later commit could silently edit an
+already-generated evidence file and no fresh regeneration would ever
+notice. A 2026-08-24 independent review named this self-reference gap
+explicitly; this section replaces the earlier single-commit design.
 
-To verify the binding for a specific evidence-packet commit `E`:
+The packet now uses two separate commits, never amended once made:
+
+1. **Evidence-content commit** (`evidence_commit`). Produced by
+   `python3 scripts/generate_legal_evidence.py` (no flag), which writes
+   every `docs/evidence/*.json` file except `scope_binding.json` — plus
+   `LEGAL_EVIDENCE_DIGEST.txt` over exactly those files — against whatever
+   is currently `HEAD`. That `HEAD`, `evidence_commit`'s own immediate
+   parent, is the immutable **subject-source commit** (`subject_commit`):
+   the actual `crypto-signing-backend/Cargo.lock`, every
+   `*/gradle.lockfile`, `CHECKSUMS.sha256`, `NOTICE`, and `LICENSES/*.txt`
+   state that was inventoried.
+2. **Seal commit** (built on top of `evidence_commit`, with a clean
+   worktree). Produced by
+   `python3 scripts/generate_legal_evidence.py --seal`, which reads back
+   `evidence_commit`'s own hash (`git rev-parse HEAD`) and its immediate
+   parent (`subject_commit`), records a SHA-256 of every evidence-content
+   file's bytes (`sealed_evidence_digests`), writes `scope_binding.json`,
+   and rewrites `LEGAL_EVIDENCE_DIGEST.txt` to add a
+   `scope_binding.json_sha256=` line — the manifest now covers the seal
+   file's own bytes without needing to hash itself.
+
+`scripts/check_release_evidence.py`'s `check_scope_binding_seal()` verifies
+this independently of regeneration — it never rewrites `scope_binding.json`
+to a fresh `HEAD`. It confirms, purely from git history plus current
+worktree bytes:
+
+- `evidence_commit`/`subject_commit` exist as real commit objects, and
+  `evidence_tree`/`subject_tree` are exactly those commits' own trees.
+- `subject_commit` is EXACTLY `evidence_commit`'s immediate parent (not
+  merely some ancestor).
+- `evidence_commit` is an ancestor of (or equal to) current `HEAD`.
+- Every sealed evidence file's CURRENT bytes match both the recorded digest
+  in `scope_binding.json` AND the actual bytes committed at
+  `evidence_commit`'s tree (`git show <evidence_commit>:<path>`) — so a
+  later commit that edits an already-sealed evidence file without a
+  re-seal is caught, even though the freshness check elsewhere only ever
+  compares against the current tracked tree.
+
+To manually verify a specific sealed `scope_binding.json`:
 
 ```bash
-git log -1 --format='%H %T' E^   # the commit BEFORE E
-cat docs/evidence/scope_binding.json   # E's own committed subject_commit/subject_tree
-# subject_commit/subject_tree in E must equal E^'s hash/tree above
+cat docs/evidence/scope_binding.json                 # read evidence_commit/subject_commit
+git rev-parse <evidence_commit>^                     # must equal subject_commit exactly
+git show <evidence_commit>:docs/evidence/cargo_dependency_inventory.json | sha256sum
+# must equal sealed_evidence_digests["cargo_dependency_inventory.json"] (repeat per file)
 ```
 
-`scripts/check_release_evidence.py` checks that `scope_binding.json`
-regenerates with the same *keys* (structural shape) but does not require the
-*values* to stay fixed across commits — `subject_commit` is expected to
-change every time `HEAD` changes, by design.
+If new evidence content is generated later (a new evidence-content commit),
+`scope_binding.json` must be re-sealed against that new commit — an old
+seal bound to a superseded `evidence_commit` will fail the "current bytes
+match sealed digest" check the moment the evidence files move on without a
+matching new seal.
 
 ## 13. Network and cache dependency (determinism)
 
-Two of the seven generators in `scripts/generate_legal_evidence.py` are
-**not** reproducible from the tracked tree alone on a machine that has not
-already resolved certain dependencies:
+**Gradle license resolution no longer depends on any local cache.**
+`scripts/license_catalog.py` (hand-curated) plus the mechanically harvested
+`scripts/license_catalog_harvested.py` (`scripts/harvest_gradle_pom_licenses.py`)
+together cover all 298 currently locked Gradle-runtime coordinates with zero
+unresolved; `gradle_license_inventory()` raises (fails generation, writes
+nothing) if any coordinate is still unresolved after checking both catalogs
+and, as a last-resort defense-in-depth, the local Gradle module cache. This
+is proved by `ColdGradleCacheTests` (`scripts/tests/test_generate_legal_evidence.py`),
+which point `GRADLE_USER_HOME` at a brand-new empty temp directory and
+require byte-identical resolution, and by `verify.yml`'s
+"Regenerate from a clean temporary GRADLE_USER_HOME" step, which does the
+same in CI.
 
-- `gradle_license_inventory()` falls back to the local Gradle module cache
-  (`GRADLE_USER_HOME/caches/modules-2/files-2.1/.../*.pom`) for any
-  coordinate not in the curated `scripts/license_catalog.py`. On a machine
-  whose cache does not have a given coordinate's POM already resolved (e.g.
-  a clean CI container that has not run the corresponding Gradle task), that
-  coordinate is reported in `unresolved` rather than guessed. This is a
-  **read-only** cache lookup — the generator never triggers a network fetch
-  or Gradle invocation itself, so it cannot silently mutate a lockfile.
-- `maven_native_carriers_inventory()` is a **static, dated table** (2026-08-24
-  point-in-time inspection of specific resolved artifact bytes), not a live
-  re-derivation, precisely so that this generator never needs network access
-  to reproduce it. Re-verify by re-running the `unzip -l`/hash commands
-  against a freshly resolved copy of the same coordinate+version before
-  relying on this table for a release decision.
+`maven_native_carriers_inventory()` remains a **static, dated table**
+(2026-08-24 point-in-time inspection of specific resolved artifact bytes),
+not a live re-derivation, precisely so that this generator never needs
+network access to reproduce it. Re-verify by re-running the
+`unzip -l`/hash commands against a freshly resolved copy of the same
+coordinate+version before relying on this table for a release decision.
 
-Every Cargo invocation (`cargo metadata --locked --filter-platform <triple>`
-and `cargo tree --locked --target <triple> -e <edges>`) hashes
-`crypto-signing-backend/Cargo.lock` immediately before and immediately after
-the call and raises a fail-closed `EvidenceError` if the hash changed —
-`--locked` is required to make Cargo refuse to update the lockfile rather
-than silently doing so, and this script independently verifies that refusal
-instead of trusting the flag alone. `verify.yml`'s `legal-evidence-scan` job
-additionally runs `git diff --exit-code -- docs/evidence` after regenerating
-twice, so a CI run cannot silently commit drifted evidence either.
+**Cargo network access is explicit, bounded to one bootstrap step, and
+never implicit inside generation.** The only command in this packet's
+workflow allowed to touch the network is
+`cargo fetch --locked --manifest-path crypto-signing-backend/Cargo.toml`,
+run once before generation (`.github/workflows/verify.yml`'s
+"Bootstrap Cargo registry over the network" step; `--locked` means it
+populates the local registry cache with exactly what `Cargo.lock` already
+pins and refuses to re-resolve). Every Cargo invocation inside
+`scripts/generate_legal_evidence.py` itself
+(`cargo metadata --locked --offline --filter-platform <triple>` and
+`cargo tree --locked --offline --target <triple> -e <edges>`) additionally
+passes `--offline`, so generation can only ever read the registry cache
+that bootstrap step already populated — a generation run that unexpectedly
+needed network access fails loudly (a real `cargo` error) instead of
+silently re-fetching mid-run. Every such invocation also hashes
+`crypto-signing-backend/Cargo.lock` immediately before and immediately
+after the call and raises a fail-closed `EvidenceError` if the hash
+changed, independently verifying `--locked`'s refusal instead of trusting
+the flag alone. `verify.yml` additionally sets `CARGO_NET_OFFLINE=true` for
+every step that runs the generator or its tests, so even a code path that
+forgot the `--offline` flag would still fail rather than silently reaching
+the network.
+
+**Full-worktree mutation is checked, not just `docs/evidence/`.**
+`verify.yml`'s `legal-evidence-scan` job captures the entire tracked
+worktree's status (`git status --porcelain=v1`) and
+`crypto-signing-backend/Cargo.lock`'s SHA-256 before the Cargo bootstrap
+step, then — after the cold-cache run, the double-regeneration-diff run,
+and the release-evidence checker have all executed — re-diffs the ENTIRE
+tracked worktree (not merely `docs/evidence/`) against that snapshot and
+fails if any tracked file outside `docs/evidence/` changed, with a second,
+independent re-hash of `Cargo.lock` as an explicit belt-and-suspenders
+check on top of the per-Cargo-invocation guard above. This catches a
+generator bug that rewrote a lockfile, a gradle lockfile, or any other
+tracked source file even if every narrower check happened to miss it — not
+just evidence drift, but ANY unexpected worktree mutation during the whole
+legal-evidence job.
 
 ## 14. Unresolved / decision fields
 
@@ -357,7 +486,7 @@ twice, so a CI run cannot silently commit drifted evidence either.
 | Counsel review | OPEN — pending owner/counsel review | Every §2/§5a/§6/§6b/§7 field naming this marker |
 | Upstream Identus win32-x86-64 build | OPEN — pending upstream hyperledger-identus/apollo issue #226 | §6b, §11 |
 | Windows signing-backend PE re-review | OPEN — pending independent PE re-review | §11 |
-| Per-election reviewer acceptance | OPEN — pending per-election reviewer acceptance | §5a (3 elections, 3 compound expressions) |
+| Per-election reviewer acceptance | OPEN — pending per-election reviewer acceptance | §5a (27 mandatory target-linked election rows, one per non-single-license Cargo package) |
 | Release / tag decision | Not made in this packet | This packet prepares evidence only; it does not recommend, schedule, or make a release decision |
 
 ## 15. Gate cross-references
@@ -375,9 +504,19 @@ twice, so a CI run cannot silently commit drifted evidence either.
 ## Regeneration and verification
 
 ```bash
-python3 scripts/generate_legal_evidence.py   # writes docs/evidence/*
-python3 scripts/generate_legal_evidence.py   # run a second time
-git diff --quiet docs/evidence                # expect no diff (subject_commit unchanged if HEAD didn't move)
+# Network bootstrap (the only step allowed to touch the network -- see §13):
+cargo fetch --locked --manifest-path crypto-signing-backend/Cargo.toml
+
+# Evidence-content commit (everything except scope_binding.json):
+CARGO_NET_OFFLINE=true python3 scripts/generate_legal_evidence.py
+CARGO_NET_OFFLINE=true python3 scripts/generate_legal_evidence.py   # run again -- must be byte-identical
+git diff --quiet docs/evidence                # expect no diff after two runs
+git add -A && git commit -m "evidence-content commit"
+
+# Seal commit (run only against the clean commit made above -- see §12):
+python3 scripts/generate_legal_evidence.py --seal
+git add -A && git commit -m "seal commit"
+
 python3 scripts/check_release_evidence.py               # ci-structural mode (CI default)
 python3 scripts/check_release_evidence.py --mode release  # expected to fail today
 python3 -m unittest discover -s scripts/tests -p "test_*.py"

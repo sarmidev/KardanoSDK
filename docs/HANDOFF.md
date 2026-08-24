@@ -106,11 +106,12 @@ Date: 2026-08-24
 - **Legal-evidence packet (non-counsel scope) on
   `fix/native-build-and-platform-evidence`, starting from clean tip
   `c65a20a`.** Added root `NOTICE`; `LICENSES/` (verbatim `Apache-2.0.txt`,
-  `MPL-2.0.txt`, `ISC-libsodium.txt`, `BouncyCastle.txt`, each fetched
-  2026-08-24 from its own canonical URL — see `LICENSES/README.md` for
-  source/SHA-256); `docs/LEGAL_REVIEW.md` (an owner/counsel evidence
-  checklist and template, not legal advice or approval); and deterministic
-  generated inventories under `docs/evidence/`
+  `MPL-2.0.txt`, `ISC-libsodium.txt` fetched 2026-08-24 from each own
+  canonical URL; `BouncyCastle.txt` is a **manual transcription**, not a
+  fetched file — see the 2026-08-24 correction below and
+  `LICENSES/README.md` for source/SHA-256 detail); `docs/LEGAL_REVIEW.md`
+  (an owner/counsel evidence checklist and template, not legal advice or
+  approval); and deterministic generated inventories under `docs/evidence/`
   (`scripts/generate_legal_evidence.py`): per-module Gradle
   source/runtime/test-only classification from `*/gradle.lockfile`, a
   `cargo metadata --locked` package graph for the signing backend (then
@@ -209,7 +210,81 @@ Date: 2026-08-24
   malformed-lock corruption, missing `LICENSES/README.md`, lowercase
   placeholders, blank table cells, and `ci-structural` vs `release` mode
   behavior). This fix round still does not mark Prompt 7, the Windows
-  candidate, or any release as GO, and does not start Prompt 8.
+  candidate, or any release as GO, and does not start Prompt 8. **A second
+  independent review found this round incomplete — see the next bullet.**
+- **Legal-evidence packet NO-GO fixes, round 2 (same branch, prior legal
+  commits preserved as-is).** A second independent review found the round-1
+  fixes above still incomplete on 10 further points; this round addresses
+  the concrete engineering gaps: (1) Gradle license resolution no longer
+  depends on a pre-populated local cache — `scripts/license_catalog.py`
+  (hand-curated) plus a new, mechanically harvested
+  `scripts/license_catalog_harvested.py` (`scripts/harvest_gradle_pom_licenses.py`)
+  together cover all 298 runtime coordinates with zero unresolved, verified
+  by new `ColdGradleCacheTests` that point `GRADLE_USER_HOME` at an empty
+  temp directory, and a new CI step does the same in `verify.yml`;
+  `gradle_license_inventory()` now raises (fails generation) instead of
+  recording a silent unresolved list. (2) Every target-linked Cargo package
+  with a non-single-license SPDX expression (27, not the round-1 packet's 3
+  — a new `parse_spdx_expression()` also fixed a real bug where `cryptoxide`'s
+  legacy `MIT/Apache-2.0` slash syntax was silently treated as single-license)
+  now has an explicit, catalog-backed election row
+  (`scripts/cargo_election_catalog.py`,
+  `cargo_dependency_inventory.json`'s new `license_elections` section); a
+  target-linked package missing from that catalog fails generation (no
+  blanket election), and `check_release_evidence.py --mode release` fails
+  while any row is not `ACCEPTED`. A previously cited `r-efi` compound-license
+  entry did not actually exist in this crate's dependency graph and is
+  removed. (3) `docs/evidence/` freshness checking is now a full recursive
+  walk (`check_evidence_tree_exact()`), rejecting nested extra files and
+  symlinked directories, not just a top-level JSON glob. (4)
+  `docs/evidence/maven_native_carriers_inventory.json` now records each
+  carrier's own `artifact_sha256` and, for every embedded native member, its
+  own SHA-256 plus inferred platform/arch (not just path/size), a
+  `distribution_status` enum
+  (`resolved_runtime_dependency`/`transitively_available`/
+  `redistributed_by_kardano`/`not_in_first_release_scope`), and a corrected
+  JNA embedded-native count of 27 (a full zip-member enumeration found two
+  AIX variants the round-1 catalog missed); Skiko is explicitly
+  `not_in_first_release_scope`, not `redistributed_by_kardano`, since no
+  Desktop installer ships in this release. (5) `LICENSES/README.md` is now a
+  hard-required file for the checker, blank required table cells in
+  `docs/LEGAL_REVIEW.md` now fail instead of passing through silently, and
+  the new election rows are schema-validated (status must be an exact
+  `OPEN`/`ACCEPTED`/`NOT_APPLICABLE` enum; `ACCEPTED` requires a non-empty
+  reviewer and an ISO-8601 date). (6) `memchr`'s `Unlicense OR MIT`
+  expression gets no proposed election; `LICENSES/Unlicense.txt` is
+  committed and cited in `NOTICE` specifically because no MIT election has
+  been accepted for it. (7) This audit file's own round-1 addendum
+  overclaimed "all are fixed" when a second review found more gaps — see
+  its corrected §8.1/§8.2 split. (8) `docs/evidence/scope_binding.json` is
+  no longer written in the same commit as the evidence it describes (a
+  self-reference that could never independently prove anything — the
+  checker regeneration would always trivially "pass" by rewriting the
+  binding to whatever `HEAD` is right now). It is now a two-commit seal:
+  `generate_legal_evidence.py` (no flag) writes every other evidence file
+  against the current, still-uncommitted `HEAD` (the immutable
+  subject-source commit); after that is committed,
+  `generate_legal_evidence.py --seal` reads back that commit's own hash and
+  immediate parent, records a SHA-256 of every evidence file's bytes, and
+  writes `scope_binding.json` — committed separately as the seal commit.
+  `check_release_evidence.py`'s new `check_scope_binding_seal()` verifies
+  this purely from git history (commit/tree existence, exact
+  immediate-parent ancestry, `evidence_commit` reachable from `HEAD`) plus
+  a byte-for-byte cross-check against both the current worktree and
+  `git show <evidence_commit>:<path>` — never by regenerating and
+  comparing keys. (9) Cargo network access is now bounded to one explicit
+  `cargo fetch --locked` bootstrap step in `verify.yml`; every Cargo
+  invocation inside the generator itself now also passes `--offline`
+  (`cargo metadata --locked --offline`, `cargo tree --locked --offline`),
+  so generation can only read the registry cache that bootstrap step
+  already populated, and `CARGO_NET_OFFLINE=true` is set for every step
+  that runs the generator or its tests as a second, independent guard.
+  `verify.yml` also now diffs the ENTIRE tracked worktree (not just
+  `docs/evidence/`) before vs. after the whole legal-evidence job and
+  fails on any unexpected mutation outside `docs/evidence/`, on top of the
+  existing per-Cargo-invocation `Cargo.lock` hash guard. This round still
+  does not mark Prompt 7, the Windows candidate, or any release as GO, and
+  does not start Prompt 8.
 - **Gate 3 Windows x86-64 JVM (candidate-only) on
   `fix/native-build-and-platform-evidence`.** Linux promotion GO at
   `58f82a2`. JNA 5.19.1 resource is
@@ -419,11 +494,17 @@ Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase C promotion from run `32678079715` is on
 the branch (ninth CHECKSUMS row). Gate 3 Windows x86-64 JVM is
 candidate-only: PE re-review is still NO-GO and Identus #226 still
-blocks `:crypto`/`:wallet` JVM tests. Residual owner work:
-authenticated GitHub artifact download, secret-scanning / Dependabot,
-the manual accessibility walkthrough, and a post-replacement Android
-device `connectedAndroidDeviceTest`. Do not merge from an automated
-session.
+blocks `:crypto`/`:wallet` JVM tests. The non-counsel legal-evidence
+packet on this same branch has been through two independent-review
+NO-GO rounds (see "Recent Sessions" above); a reviewer should check
+whether a third round finds further engineering gaps before treating the
+packet itself as engineering-complete — separately, and regardless of
+engineering completeness, the packet's owner/counsel/Identus/Windows
+open gates in `docs/LEGAL_REVIEW.md` are not something an automated
+session can close. Residual owner work: authenticated GitHub artifact
+download, secret-scanning / Dependabot, the manual accessibility
+walkthrough, and a post-replacement Android device
+`connectedAndroidDeviceTest`. Do not merge from an automated session.
 
 ## Prompt For Cursor Business/Product Work
 

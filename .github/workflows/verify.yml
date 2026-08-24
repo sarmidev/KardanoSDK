@@ -46,19 +46,81 @@ jobs:
         run: |
           rustup toolchain install 1.97.0 --profile minimal --no-self-update
           rustup default 1.97.0
+      - name: Capture pre-generation worktree state
+        run: |
+          git status --porcelain=v1 > /tmp/worktree-before.txt
+          git diff --binary > /tmp/tracked-diff-before.patch
+          sha256sum crypto-signing-backend/Cargo.lock > /tmp/cargo-lock-before.sha256
+      - name: Bootstrap Cargo registry over the network (--locked only, no lockfile edits)
+        # This is the ONLY step in this job that is allowed real network
+        # access. It fetches exactly the crates crypto-signing-backend/Cargo.lock
+        # already pins (a --locked fetch fails rather than re-resolving), and
+        # every later step in this job runs with CARGO_NET_OFFLINE=true so a
+        # generator/test that tried to reach the network would fail loudly
+        # instead of silently re-resolving or mutating the lockfile.
+        run: |
+          cargo fetch --locked --manifest-path crypto-signing-backend/Cargo.toml
+          cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/before.hash
+          sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/after.hash
+          diff /tmp/before.hash /tmp/after.hash
       - name: Run legal-evidence regression tests
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: >-
           python3 -m unittest
           scripts.tests.test_generate_legal_evidence
           scripts.tests.test_check_release_evidence
+      - name: Regenerate from a clean temporary GRADLE_USER_HOME (proves no local-cache dependency)
+        # This job never installs a JDK or runs any ./gradlew task, so this
+        # runner's Gradle cache is already empty -- GRADLE_USER_HOME is set
+        # explicitly here anyway so the property is visible in the log, not
+        # just incidental to this job's step order. A 2026-08-24 independent
+        # review found gradle_license_inventory() previously required a
+        # pre-populated local Gradle POM cache to resolve every coordinate;
+        # scripts/license_catalog.py + scripts/license_catalog_harvested.py
+        # are now a complete, committed catalog, and
+        # scripts/generate_legal_evidence.py fails closed (raises, writes
+        # nothing) if any coordinate is still unresolved.
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          rm -rf "$RUNNER_TEMP/cold-gradle-home"
+          mkdir -p "$RUNNER_TEMP/cold-gradle-home"
+          GRADLE_USER_HOME="$RUNNER_TEMP/cold-gradle-home" python3 scripts/generate_legal_evidence.py
+          cp -r docs/evidence /tmp/legal-evidence-cold-cache
       - name: Regenerate evidence twice and diff
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: |
           python3 scripts/generate_legal_evidence.py
           cp -r docs/evidence /tmp/legal-evidence-run1
           python3 scripts/generate_legal_evidence.py
           diff -rq /tmp/legal-evidence-run1 docs/evidence
+      - name: Fail if cold-cache output differs from the committed evidence
+        run: diff -rq /tmp/legal-evidence-cold-cache docs/evidence
       - name: Fail on uncommitted evidence drift
         run: git diff --exit-code -- docs/evidence
+      - name: Fail if generation touched anything outside docs/evidence/
+        # Defense in depth beyond the per-call Cargo.lock hash guards inside
+        # scripts/generate_legal_evidence.py itself: every generator/test
+        # step above ran with CARGO_NET_OFFLINE=true, so a script that tried
+        # to silently re-resolve or fetch would have failed loudly instead.
+        # This step independently re-diffs the ENTIRE tracked worktree
+        # (not just docs/evidence/) against the pre-generation snapshot and
+        # fails if anything other than docs/evidence/ changed -- e.g. a
+        # generator bug that rewrote Cargo.lock, a gradle.lockfile, or any
+        # other tracked source file would be caught here even if every
+        # narrower check above happened to miss it.
+        run: |
+          git status --porcelain=v1 | awk '{print $2}' | grep -v '^docs/evidence/' > /tmp/worktree-after-non-evidence.txt || true
+          if [ -s /tmp/worktree-after-non-evidence.txt ]; then
+            echo "Tracked files outside docs/evidence/ changed during legal-evidence generation:"
+            cat /tmp/worktree-after-non-evidence.txt
+            exit 1
+          fi
+          cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/cargo-lock-before-final.hash
+          sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/cargo-lock-final.hash
+          diff /tmp/cargo-lock-before-final.hash /tmp/cargo-lock-final.hash
       - name: Run the release-evidence checker
         run: python3 scripts/check_release_evidence.py
 

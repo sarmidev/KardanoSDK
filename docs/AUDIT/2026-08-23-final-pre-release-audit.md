@@ -345,16 +345,37 @@ Prompt 7, or any release as GO.
 - Owner/counsel review of `docs/LEGAL_REVIEW.md` has not occurred; that field
   is recorded as an explicit open gate, not a passed check.
 
-### 8.1 Addendum — 2026-08-24, legal-evidence packet NO-GO fixes
+### 8.1 Addendum — 2026-08-24, legal-evidence packet NO-GO fixes (round 1)
 
 An independent review returned NO-GO on the §8 packet for factual and
 fail-closed gaps (a false "no MIT-only distributed component" framing, a
 single-closure Cargo heuristic instead of per-target-triple graphs, legal
 conclusions about UniFFI/MPL obligations being "satisfied", and several
-generator/checker gaps). All are fixed by additional commits on the same
-branch (see `docs/HANDOFF.md` and `CHANGELOG.md` for the itemized list);
-none of §1–§7 above changes, and this addendum still does not certify
-anything or mark this audit, Prompt 7, or any release as GO. The counsel
-review, upstream `hyperledger-identus/apollo` issue #226, the Windows PE
-re-review, and per-election reviewer acceptance remain open gates in
-`docs/LEGAL_REVIEW.md`.
+generator/checker gaps). The items that review named are addressed by
+additional commits on the same branch (see `docs/HANDOFF.md` and
+`CHANGELOG.md` for the itemized list); none of §1–§7 above changes, and this
+addendum still does not certify anything or mark this audit, Prompt 7, or
+any release as GO. A second independent review found this round incomplete
+— see §8.2 below; **do not read this section as "all gaps fixed."**
+
+### 8.2 Addendum — 2026-08-24, legal-evidence packet NO-GO fixes (round 2)
+
+The round-1 fixes above did not satisfy a second independent review, which
+found further engineering gaps still open after round 1: Gradle license
+resolution depended on a pre-populated local cache (cold CI would not
+reproduce it — confirmed by observing the `legal-evidence-scan` CI job
+actually fail on the round-1 tip); only 3 of the ~27 target-linked Cargo
+packages with a non-single-license SPDX expression had an election row; the
+`docs/evidence/` freshness check globbed only top-level JSON files, not the
+full recursive tree; native-carrier evidence recorded member path/size but
+not member SHA-256/platform/arch or a distribution-status classification
+(and separately, JNA's own embedded-native count was wrong — 27, not 25);
+several release-checker mandatory-field/schema gaps; and this file's own
+round-1 addendum above overclaimed "all are fixed." Round 2's fixes are
+itemized in `docs/HANDOFF.md`/`CHANGELOG.md` for that session. This
+addendum, like round 1, does not certify anything or mark this audit,
+Prompt 7, or any release as GO. The counsel review, upstream
+`hyperledger-identus/apollo` issue #226, the Windows PE re-review, and every
+per-election reviewer acceptance remain open gates in
+`docs/LEGAL_REVIEW.md` — release mode of `scripts/check_release_evidence.py`
+is expected to keep failing until a human resolves them.
