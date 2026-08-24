@@ -816,5 +816,34 @@ class ScopeBindingSealTests(unittest.TestCase):
             evidence.seal_scope_binding()
 
 
+class OutputsIncludingExistingScopeBindingTests(unittest.TestCase):
+    """A plain (non---seal) regeneration against an already-sealed worktree
+    must not lose LEGAL_EVIDENCE_DIGEST.txt's scope_binding.json_sha256 line
+    (see evidence_output_files()'s docstring and run_generate())."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self._orig_evidence_dir = evidence.EVIDENCE_DIR
+        evidence.EVIDENCE_DIR = Path(self._tmp.name)
+        self.outputs = {"gradle_dependency_inventory.json": evidence.EVIDENCE_DIR / "gdi.json"}
+
+    def tearDown(self) -> None:
+        evidence.EVIDENCE_DIR = self._orig_evidence_dir
+        self._tmp.cleanup()
+
+    def test_unsealed_worktree_returns_outputs_unchanged(self) -> None:
+        merged = evidence.outputs_including_existing_scope_binding(self.outputs)
+        self.assertIs(merged, self.outputs)
+        self.assertNotIn("scope_binding.json", merged)
+
+    def test_sealed_worktree_adds_scope_binding_without_mutating_input(self) -> None:
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text("{}\n", encoding="utf-8")
+        merged = evidence.outputs_including_existing_scope_binding(self.outputs)
+        self.assertIsNot(merged, self.outputs)
+        self.assertNotIn("scope_binding.json", self.outputs)
+        self.assertEqual(merged["scope_binding.json"], evidence.EVIDENCE_DIR / "scope_binding.json")
+        self.assertEqual(merged["gradle_dependency_inventory.json"], self.outputs["gradle_dependency_inventory.json"])
+
+
 if __name__ == "__main__":
     unittest.main()

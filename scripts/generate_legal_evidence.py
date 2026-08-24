@@ -1518,7 +1518,13 @@ def evidence_output_files() -> dict[str, Path]:
     `--seal`, in a later commit) and `LEGAL_EVIDENCE_DIGEST.txt` (rewritten
     by `--seal` to add the seal file's own digest line, so its bytes
     legitimately differ between the evidence-content commit and every
-    commit from the seal commit onward).
+    commit from the seal commit onward). A plain (non---seal) run against an
+    ALREADY-sealed worktree does not lose that digest line, though: see
+    `run_generate()`'s opportunistic re-inclusion below, which is what lets
+    verify.yml's "regenerate twice"/"cold cache" steps run the plain
+    generator on top of an already-sealed tree and still get back the exact
+    committed `LEGAL_EVIDENCE_DIGEST.txt` bytes, without that being a second,
+    competing way to create or verify the seal itself.
     """
     return {
         "gradle_dependency_inventory.json": EVIDENCE_DIR / "gradle_dependency_inventory.json",
@@ -1529,6 +1535,23 @@ def evidence_output_files() -> dict[str, Path]:
         "maven_native_carriers_inventory.json": EVIDENCE_DIR / "maven_native_carriers_inventory.json",
         "bouncycastle_license_source.json": EVIDENCE_DIR / "bouncycastle_license_source.json",
     }
+
+
+def outputs_including_existing_scope_binding(outputs: dict[str, Path]) -> dict[str, Path]:
+    """`outputs` unchanged, or `outputs` plus `scope_binding.json` if that
+    file already exists on disk right now.
+
+    Pure/testable half of `run_generate()`'s opportunistic re-inclusion (see
+    `evidence_output_files()`'s docstring): does not create, delete, or read
+    `scope_binding.json`'s content, only decides whether `write_digest_file()`
+    should be asked to re-hash its current bytes.
+    """
+    scope_binding_path = EVIDENCE_DIR / "scope_binding.json"
+    if not scope_binding_path.is_file():
+        return outputs
+    merged = dict(outputs)
+    merged["scope_binding.json"] = scope_binding_path
+    return merged
 
 
 def seal_scope_binding() -> dict[str, Any]:
@@ -1664,6 +1687,15 @@ def run_generate() -> int:
             outputs["bouncycastle_license_source.json"], bouncycastle_license_source_inventory()
         )
         write_digest_file(modules, outputs)
+        # This run does not create, verify, or touch the seal itself (that is
+        # exclusively `--seal`'s job) -- it only avoids clobbering an
+        # ALREADY-sealed tree's LEGAL_EVIDENCE_DIGEST.txt shape with the
+        # unsealed one above, purely by re-hashing scope_binding.json's
+        # existing, untouched bytes if that file happens to already be on
+        # disk (e.g. a plain re-run against an already-sealed worktree).
+        sealed_outputs = outputs_including_existing_scope_binding(outputs)
+        if sealed_outputs is not outputs:
+            write_digest_file(modules, sealed_outputs)
     except (EvidenceError, FileNotFoundError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"legal evidence generation failed: {exc}", file=sys.stderr)
         return 1
