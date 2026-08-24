@@ -1815,10 +1815,24 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-q", "-m", "unrelated root 2")
         # Now HEAD is this unrelated commit; the sealed evidence_commit is
-        # unreachable from it.
+        # not even reachable from it, let alone its immediate parent.
         errors = checker.check_scope_binding_seal()
         self.assertTrue(
-            any("is not an ancestor of (or equal to) current HEAD" in e for e in errors)
+            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
+        )
+
+    def test_extra_commit_on_top_of_seal_is_rejected(self) -> None:
+        # A 2026-08-24 independent review found the prior "ancestor of
+        # HEAD" wording let an unrelated later commit sit on top of an old
+        # seal without invalidating it -- the seal commit must remain the
+        # exact current tip for readiness.
+        self._seal()
+        (self.repo / "UNRELATED3.txt").write_text("x\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "unrelated later commit on top of the seal")
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(
+            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
         )
 
     def test_evidence_changed_after_seal_is_rejected(self) -> None:
@@ -1972,6 +1986,258 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
                 for e in errors
             )
         )
+
+
+class FullSourceScopeSealCheckTests(unittest.TestCase):
+    """check_full_source_scope_seal() -- broad, import-graph-independent
+    full source-scope diff (subject_commit vs current HEAD), replacing any
+    reliance on ordinary-import AST closure for completeness.
+
+    Builds the same disposable temp-git-repo, sealed three-commit history
+    as ScopeBindingSealCheckTests, then proves every named escape (a
+    dynamic-import helper, a relative/package-import helper, an arbitrary
+    non-Python config file, a workflow/settings/lockfile/build file, a
+    new/deleted/renamed tracked file, a symlink introduced at an otherwise
+    -allowed path, and a dirty worktree) is caught even though none of
+    them are `SEALED_TOOLING_FILES` entries or reached via any ordinary
+    `import` statement -- and that the untouched, correctly-sealed history
+    (and the exact reviewed allowed-path set itself) passes/matches.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name)
+        _git(self.repo, "init", "-q")
+        _git(self.repo, "config", "user.email", "test@example.invalid")
+        _git(self.repo, "config", "user.name", "Test")
+
+        self._patches = [
+            mock.patch.object(checker, "REPO_ROOT", self.repo),
+            mock.patch.object(checker, "EVIDENCE_DIR", self.repo / "docs" / "evidence"),
+            mock.patch.object(evidence, "REPO_ROOT", self.repo),
+            mock.patch.object(evidence, "EVIDENCE_DIR", self.repo / "docs" / "evidence"),
+        ]
+        for patch in self._patches:
+            patch.start()
+        (self.repo / "docs" / "evidence").mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        for patch in reversed(self._patches):
+            patch.stop()
+        self._tmp.cleanup()
+
+    def _write_outputs(self) -> None:
+        for name in evidence.evidence_output_files():
+            (evidence.EVIDENCE_DIR / name).write_text(
+                json.dumps({"name": name}) + "\n", encoding="utf-8"
+            )
+
+    def _write_tooling_files(self) -> None:
+        for rel_path in evidence.SEALED_TOOLING_FILES:
+            path = self.repo / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"# stand-in for {rel_path}\n", encoding="utf-8")
+
+    def _seal(self, extra_subject_files: dict[str, str] | None = None) -> None:
+        (self.repo / "SOURCE.txt").write_text("subject source\n", encoding="utf-8")
+        self._write_tooling_files()
+        for rel_path, content in (extra_subject_files or {}).items():
+            path = self.repo / rel_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "subject commit")
+
+        self._write_outputs()
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "evidence commit")
+
+        binding = evidence.seal_scope_binding()
+        (evidence.EVIDENCE_DIR / "scope_binding.json").write_text(
+            json.dumps(binding, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "seal commit")
+
+    def _commit_all(self, message: str) -> None:
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", message)
+
+    def test_only_exact_generated_output_changes_pass(self) -> None:
+        self._seal()
+        self.assertEqual(checker.check_full_source_scope_seal(), [])
+
+    def test_dynamic_import_helper_changed_is_rejected(self) -> None:
+        # Simulates a helper only ever reached via a dynamic
+        # importlib.import_module() call -- invisible to
+        # _discover_local_tooling_closure()'s ordinary-import AST walk,
+        # but still caught here because it is not an allowed output path.
+        self._seal(extra_subject_files={"scripts/dynamic_helper.py": "# original\n"})
+        (self.repo / "scripts" / "dynamic_helper.py").write_text(
+            "# changed after subject_commit, never reached by any ordinary "
+            "import statement\n",
+            encoding="utf-8",
+        )
+        self._commit_all("change a dynamically-loaded helper")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any(
+                "scripts/dynamic_helper.py" in e and "full source-scope seal violated" in e
+                for e in errors
+            )
+        )
+
+    def test_relative_or_package_import_helper_changed_is_rejected(self) -> None:
+        self._seal(
+            extra_subject_files={
+                "scripts/pkg/__init__.py": "",
+                "scripts/pkg/helper.py": "# original\n",
+            }
+        )
+        (self.repo / "scripts" / "pkg" / "helper.py").write_text(
+            "# changed -- reached only via `from . import helper`\n", encoding="utf-8"
+        )
+        self._commit_all("change a relative/package-import helper")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any(
+                "scripts/pkg/helper.py" in e and "full source-scope seal violated" in e
+                for e in errors
+            )
+        )
+
+    def test_arbitrary_config_file_changed_is_rejected(self) -> None:
+        self._seal(extra_subject_files={"scripts/some_catalog.toml": "value = 1\n"})
+        (self.repo / "scripts" / "some_catalog.toml").write_text("value = 2\n", encoding="utf-8")
+        self._commit_all("change an arbitrary config file read without any import statement")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any(
+                "scripts/some_catalog.toml" in e and "full source-scope seal violated" in e
+                for e in errors
+            )
+        )
+
+    def test_workflow_file_changed_is_rejected(self) -> None:
+        self._seal(extra_subject_files={".github/workflows/verify.yml": "name: Verify\n"})
+        (self.repo / ".github" / "workflows" / "verify.yml").write_text(
+            "name: Verify2\n", encoding="utf-8"
+        )
+        self._commit_all("change a workflow file")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any(
+                ".github/workflows/verify.yml" in e and "full source-scope seal violated" in e
+                for e in errors
+            )
+        )
+
+    def test_gradle_settings_file_changed_is_rejected(self) -> None:
+        self._seal(extra_subject_files={"settings.gradle.kts": 'rootProject.name = "x"\n'})
+        (self.repo / "settings.gradle.kts").write_text(
+            'rootProject.name = "y"\n', encoding="utf-8"
+        )
+        self._commit_all("change settings.gradle.kts")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any(
+                "settings.gradle.kts" in e and "full source-scope seal violated" in e
+                for e in errors
+            )
+        )
+
+    def test_gradle_lockfile_changed_is_rejected(self) -> None:
+        self._seal(extra_subject_files={"core/gradle.lockfile": "com.example:x:1.0=compile\n"})
+        (self.repo / "core" / "gradle.lockfile").write_text(
+            "com.example:x:2.0=compile\n", encoding="utf-8"
+        )
+        self._commit_all("change a gradle.lockfile")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any(
+                "core/gradle.lockfile" in e and "full source-scope seal violated" in e
+                for e in errors
+            )
+        )
+
+    def test_build_file_changed_is_rejected(self) -> None:
+        self._seal(extra_subject_files={"core/build.gradle.kts": "// v1\n"})
+        (self.repo / "core" / "build.gradle.kts").write_text("// v2\n", encoding="utf-8")
+        self._commit_all("change a build.gradle.kts")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any(
+                "core/build.gradle.kts" in e and "full source-scope seal violated" in e
+                for e in errors
+            )
+        )
+
+    def test_new_tracked_file_outside_allowed_set_is_rejected(self) -> None:
+        self._seal()
+        (self.repo / "NEW_FILE.txt").write_text("new\n", encoding="utf-8")
+        self._commit_all("add a new tracked file")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any("NEW_FILE.txt" in e and "full source-scope seal violated" in e for e in errors)
+        )
+
+    def test_deleted_tracked_file_outside_allowed_set_is_rejected(self) -> None:
+        self._seal(extra_subject_files={"TO_DELETE.txt": "gone soon\n"})
+        (self.repo / "TO_DELETE.txt").unlink()
+        self._commit_all("delete a tracked file")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(
+            any("TO_DELETE.txt" in e and "full source-scope seal violated" in e for e in errors)
+        )
+
+    def test_renamed_tracked_file_outside_allowed_set_is_rejected(self) -> None:
+        self._seal(extra_subject_files={"OLD_NAME.txt": "content\n"})
+        (self.repo / "OLD_NAME.txt").rename(self.repo / "NEW_NAME.txt")
+        self._commit_all("rename a tracked file")
+        errors = checker.check_full_source_scope_seal()
+        # --no-renames means this surfaces as delete-of-old plus add-of-new,
+        # each independently outside the allowed set -- both are reported.
+        self.assertTrue(any("OLD_NAME.txt" in e for e in errors))
+        self.assertTrue(any("NEW_NAME.txt" in e for e in errors))
+
+    def test_symlink_introduced_at_an_allowed_path_is_rejected(self) -> None:
+        self._seal()
+        any_name = next(iter(evidence.evidence_output_files()))
+        target_path = evidence.EVIDENCE_DIR / any_name
+        target_path.unlink()
+        target_path.symlink_to(self.repo / "SOURCE.txt")
+        self._commit_all("replace a generated evidence output with a symlink")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(any("is a symlink as of HEAD" in e for e in errors))
+
+    def test_worktree_staged_changes_are_rejected(self) -> None:
+        self._seal()
+        (self.repo / "STAGED.txt").write_text("staged\n", encoding="utf-8")
+        _git(self.repo, "add", "STAGED.txt")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(any("staged/unstaged changes" in e for e in errors))
+
+    def test_worktree_unstaged_changes_are_rejected(self) -> None:
+        self._seal()
+        any_name = next(iter(evidence.evidence_output_files()))
+        (evidence.EVIDENCE_DIR / any_name).write_text('{"tampered": true}\n', encoding="utf-8")
+        errors = checker.check_full_source_scope_seal()
+        self.assertTrue(any("staged/unstaged changes" in e for e in errors))
+
+    def test_missing_scope_binding_is_a_silent_no_op(self) -> None:
+        # Deferred to check_scope_binding_seal(), which already reports
+        # "is missing" -- this function must not also raise/duplicate it.
+        self._seal()
+        (evidence.EVIDENCE_DIR / "scope_binding.json").unlink()
+        self.assertEqual(checker.check_full_source_scope_seal(), [])
+
+    def test_allowed_set_is_exactly_generated_outputs_plus_seal_and_digest(self) -> None:
+        # Regression guard against silently widening the exclusion set --
+        # it must be EXACTLY this formula, never a hand-added extra path.
+        expected = {f"docs/evidence/{name}" for name in evidence.evidence_output_files()}
+        expected.add("docs/evidence/scope_binding.json")
+        expected.add("docs/evidence/LEGAL_EVIDENCE_DIGEST.txt")
+        self.assertEqual(checker._allowed_post_subject_change_paths(), frozenset(expected))
 
 
 def _git_output(cwd: Path, *args: str) -> str:

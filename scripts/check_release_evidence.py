@@ -61,9 +61,17 @@ Fails closed (either mode) on any of:
 8. docs/evidence/scope_binding.json's two-commit seal is independently
    verified against git history (not by regeneration): evidence_commit and
    subject_commit exist, subject_commit is evidence_commit's exact
-   immediate parent, evidence_commit is an ancestor of current HEAD, and
-   every sealed evidence file's current bytes match both the recorded
-   digest and the actual bytes committed at evidence_commit's tree.
+   immediate parent, evidence_commit is current HEAD's exact immediate
+   parent (the seal commit itself must remain the current tip), and every
+   sealed evidence file's current bytes match both the recorded digest and
+   the actual bytes committed at evidence_commit's tree.
+9. Every tracked file that differs at all between scope_binding.json's
+   subject_commit and current HEAD is one of the exact, small, reviewed
+   generated-evidence/seal output paths (docs/evidence/ generated outputs,
+   scope_binding.json, LEGAL_EVIDENCE_DIGEST.txt) -- an import-graph-
+   independent, fail-closed full source-scope diff, not merely an
+   ordinary-import AST closure. The current worktree must also be exactly
+   clean (no staged/unstaged changes).
 """
 
 from __future__ import annotations
@@ -962,8 +970,15 @@ def check_scope_binding_seal() -> list[str]:
       merely some ancestor -- the evidence-content commit must directly
       follow the subject-source commit it inventories, with no intervening
       commit that could have silently changed the inventoried state).
-    - `evidence_commit` is an ancestor of (or equal to) current HEAD (the
-      seal cannot point at a commit not yet reachable from here).
+    - `evidence_commit` is EXACTLY current HEAD's immediate parent (not
+      merely an ancestor -- the seal commit itself must BE the current
+      tip; a 2026-08-24 independent review found the prior "ancestor of
+      HEAD" wording let an unrelated later commit sit on top of an old
+      seal without invalidating it. This function does NOT independently
+      re-verify this requirement beyond that immediate-parent check --
+      see `check_full_source_scope_seal()` below for the broader,
+      import-graph-independent completeness check this two-commit design
+      relies on).
     - Every sealed evidence file's CURRENT on-disk bytes match both the
       recorded `sealed_evidence_digests` entry AND the actual bytes
       committed at `evidence_commit`'s tree (`git show
@@ -1055,10 +1070,17 @@ def check_scope_binding_seal() -> list[str]:
         )
 
     head = run_git("rev-parse", "HEAD").strip()
-    if not run_git_ok("merge-base", "--is-ancestor", evidence_commit, head):
+    if run_git_ok("rev-parse", "--verify", f"{head}^"):
+        actual_head_parent = run_git("rev-parse", f"{head}^").strip()
+    else:
+        actual_head_parent = None
+    if actual_head_parent != evidence_commit:
         errors.append(
             f"docs/evidence/scope_binding.json: evidence_commit {evidence_commit} "
-            f"is not an ancestor of (or equal to) current HEAD {head}"
+            f"is not current HEAD {head}'s immediate parent (actual parent: "
+            f"{actual_head_parent!r}) -- the seal commit must remain the exact "
+            "current tip for readiness; a later commit on top requires a "
+            "fresh subject/evidence/seal sequence"
         )
 
     digests = binding["sealed_evidence_digests"]
@@ -1161,6 +1183,137 @@ def check_scope_binding_seal() -> list[str]:
                 "scope_binding.json's tooling_sha256"
             )
 
+    return errors
+
+
+def _allowed_post_subject_change_paths() -> frozenset[str]:
+    """The ONLY repo-relative paths permitted to differ between a scope
+    binding's `subject_commit` and current HEAD -- see
+    `check_full_source_scope_seal()`. Exactly `evidence.evidence_output_files()`
+    (every generated evidence-content output under `docs/evidence/`) plus
+    the two files sealing itself is required to write:
+    `docs/evidence/scope_binding.json` (the seal file) and
+    `docs/evidence/LEGAL_EVIDENCE_DIGEST.txt` (rewritten at both the
+    evidence-content commit and again at the seal commit to add the seal
+    file's own digest line). Deliberately NOT: scripts, catalogs, configs,
+    build files, lockfiles, workflows, native manifests, or docs inputs --
+    none of those may change anywhere in a subject/evidence/seal sequence.
+    """
+    allowed = {f"docs/evidence/{name}" for name in evidence.evidence_output_files()}
+    allowed.add("docs/evidence/scope_binding.json")
+    allowed.add("docs/evidence/LEGAL_EVIDENCE_DIGEST.txt")
+    return frozenset(allowed)
+
+
+def _git_raw_diff_entries(a: str, b: str) -> list[tuple[str, str, str, str]]:
+    """`(old_mode, new_mode, status, path)` for every tracked file that
+    differs between two commits, via `git diff --raw -z --no-renames`.
+    `--no-renames` guarantees git never emits an `R`/`C` status: a renamed
+    file always surfaces as an ordinary delete-of-old-path plus
+    add-of-new-path record, each checked independently by
+    `check_full_source_scope_seal()` against the exact same allowed-path
+    set a genuinely unrelated delete/add would be -- so a rename of a
+    disallowed file is caught the same way a delete or an add is.
+    """
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "diff", "--raw", "-z", "--no-renames", a, b],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+    )
+    raw = result.stdout.decode("utf-8")
+    parts = raw.split("\0")
+    entries: list[tuple[str, str, str, str]] = []
+    i = 0
+    while i < len(parts) and parts[i]:
+        header = parts[i]
+        i += 1
+        fields = header.lstrip(":").split(" ")
+        old_mode, new_mode = fields[0], fields[1]
+        status = fields[4][0]
+        path = parts[i]
+        i += 1
+        entries.append((old_mode, new_mode, status, path))
+    return entries
+
+
+def check_full_source_scope_seal() -> list[str]:
+    """Fail-closed, import-graph-independent completeness check for the
+    scope binding: every tracked file that differs at all between
+    `scope_binding.json`'s `subject_commit` and current HEAD must be one
+    of the exact, small, reviewed generated-output paths in
+    `_allowed_post_subject_change_paths()` -- see the "Full source-scope
+    binding" module docstring in `scripts/generate_legal_evidence.py`.
+
+    This does NOT rely on `evidence.SEALED_TOOLING_FILES`/
+    `_discover_local_tooling_closure()`'s ordinary-import AST closure for
+    completeness (that remains additional audit detail only): a dynamic
+    import, a relative/package import, or an arbitrary non-Python config/
+    catalog/workflow/lockfile/build file read without any `import`
+    statement at all is caught here exactly the same as an ordinary
+    script edit would be, because this check does not ask HOW a file
+    could influence the evidence -- only whether it changed at all.
+
+    Also requires the current worktree to be exactly clean (no staged or
+    unstaged changes relative to HEAD): an uncommitted change is exactly
+    as much an unaccounted-for scope change as a committed one, just not
+    yet visible to the commit-to-commit diff this function otherwise
+    performs.
+
+    Silently returns no errors (defers to `check_scope_binding_seal()`) if
+    `scope_binding.json` is missing, unreadable, malformed, or has no
+    valid `subject_commit` -- those failures are already reported there.
+    """
+    errors: list[str] = []
+    path = EVIDENCE_DIR / "scope_binding.json"
+    if not path.is_file() or path.is_symlink():
+        return []
+    try:
+        binding = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_reject_duplicate_keys)
+    except ValueError:
+        return []
+    if not isinstance(binding, dict):
+        return []
+    subject_commit = binding.get("subject_commit")
+    if not isinstance(subject_commit, str) or not GIT_SHA1_RE.match(subject_commit):
+        return []
+    if not run_git_ok("cat-file", "-e", f"{subject_commit}^{{commit}}"):
+        return []
+
+    import subprocess
+
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+    )
+    if status_result.stdout.strip():
+        errors.append(
+            "worktree has staged/unstaged changes relative to HEAD -- the "
+            "full source-scope seal check requires an exactly clean "
+            f"worktree:\n{status_result.stdout}"
+        )
+
+    head = run_git("rev-parse", "HEAD").strip()
+    allowed = _allowed_post_subject_change_paths()
+    for old_mode, new_mode, status, changed_path in _git_raw_diff_entries(subject_commit, head):
+        if changed_path not in allowed:
+            errors.append(
+                f"{changed_path}: changed between subject_commit {subject_commit} "
+                f"and current HEAD {head} (git diff status {status!r}) but is "
+                "not one of the exact reviewed generated-evidence/seal output "
+                "paths -- full source-scope seal violated. Only "
+                "docs/evidence/ generated outputs, scope_binding.json, and "
+                "LEGAL_EVIDENCE_DIGEST.txt may change in a subject/evidence/"
+                "seal sequence."
+            )
+            continue
+        if new_mode == "120000":
+            errors.append(
+                f"{changed_path}: is a symlink as of HEAD {head} (mode "
+                f"{new_mode}) -- not permitted even for an otherwise-allowed "
+                "generated-evidence path"
+            )
     return errors
 
 
@@ -1586,6 +1739,10 @@ def main() -> int:
             "scope_binding.json two-commit seal + tooling-hash binding "
             "(ancestry + byte cross-check)",
             check_scope_binding_seal,
+        ),
+        (
+            "full source-scope seal (every tracked file, subject_commit vs HEAD)",
+            check_full_source_scope_seal,
         ),
         ("no uninventoried UniFFI/module scope drift", check_uniffi_and_native_scope_has_no_orphans),
         (

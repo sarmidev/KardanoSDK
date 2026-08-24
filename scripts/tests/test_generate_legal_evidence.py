@@ -3384,6 +3384,303 @@ class SealedToolingFilesCatalogTests(unittest.TestCase):
             self.assertIn("duplicate entry", str(ctx.exception))
 
 
+class JavaClassVersionEvidenceCatalogValidationTests(unittest.TestCase):
+    """_validate_sealed_java_class_version_evidence() -- fail-closed catalog
+    self-check for JAVA_CLASS_VERSION_EVIDENCE, run once at import time
+    against the real committed snapshot.
+    """
+
+    def test_real_catalog_passes(self) -> None:
+        evidence._validate_sealed_java_class_version_evidence(
+            evidence.JAVA_CLASS_VERSION_EVIDENCE
+        )  # no raise
+
+    def test_ceiling_mismatch_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        bad["max_major_version"] = 70
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("must be reviewed and updated together", str(ctx.exception))
+
+    def test_empty_members_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        bad["members_at_max_major_version"] = ()
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("is empty", str(ctx.exception))
+
+    def test_duplicate_member_path_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        members = list(bad["members_at_max_major_version"])
+        bad["members_at_max_major_version"] = tuple(members + [members[0]])
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("duplicate member path", str(ctx.exception))
+
+    def test_malformed_member_hash_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        members = [dict(m) for m in bad["members_at_max_major_version"]]
+        members[0]["sha256"] = "not-hex"
+        bad["members_at_max_major_version"] = tuple(members)
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("is not a 64-hex-char sha256", str(ctx.exception))
+
+    def test_member_major_not_equal_to_max_raises(self) -> None:
+        bad = dict(evidence.JAVA_CLASS_VERSION_EVIDENCE)
+        members = [dict(m) for m in bad["members_at_max_major_version"]]
+        members[0]["major_version"] = bad["max_major_version"] - 1
+        bad["members_at_max_major_version"] = tuple(members)
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_sealed_java_class_version_evidence(bad)
+        self.assertIn("!= max_major_version", str(ctx.exception))
+
+
+class JavaClassVersionEvidenceTests(unittest.TestCase):
+    """cross_check_java_class_version_evidence_against_local_cache() /
+    java_class_version_evidence() -- Gap: 'Commit deterministic Java
+    major-version evidence from resolved bytes'.
+
+    Builds a disposable, synthetic Gradle module cache (never a real
+    download) so every failure mode can be exercised deterministically
+    against a fake `JAVA_CLASS_VERSION_EVIDENCE` snapshot: a cold cache, a
+    matching fixture, a wrong whole-archive hash, a wrong member byte hash,
+    a wrong member version, a wrong member path, a real member the pinned
+    evidence still claims (missing Java25 class), a real member the pinned
+    evidence never reviewed (new higher class), and a duplicate member
+    path within one archive.
+    """
+
+    GROUP = "com.example"
+    ARTIFACT = "javaver"
+    VERSION = "9.9.9"
+    COORDINATE = f"{GROUP}:{ARTIFACT}:{VERSION}"
+
+    def setUp(self) -> None:
+        self._orig_modules2 = evidence.GRADLE_MODULES2
+        self._tmp = tempfile.TemporaryDirectory()
+        evidence.GRADLE_MODULES2 = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        evidence.GRADLE_MODULES2 = self._orig_modules2
+        self._tmp.cleanup()
+
+    def _write_jar(self, members: dict[str, bytes]) -> tuple[Path, str]:
+        base = evidence.GRADLE_MODULES2 / self.GROUP / self.ARTIFACT / self.VERSION / "deadbeef"
+        base.mkdir(parents=True, exist_ok=True)
+        jar_path = base / f"{self.ARTIFACT}-{self.VERSION}.jar"
+        with zipfile.ZipFile(jar_path, "w") as zf:
+            for name, data in members.items():
+                zf.writestr(name, data)
+        return jar_path, evidence.sha256_file(jar_path)
+
+    def _matching_fixture(self) -> dict[str, Any]:
+        low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
+        high1 = _build_java_class(major_version=69, minor_version=0, class_name="High1")
+        high2 = _build_java_class(major_version=69, minor_version=0, class_name="High2")
+        _, artifact_digest = self._write_jar(
+            {
+                "Low.class": low,
+                "META-INF/versions/25/High1.class": high1,
+                "META-INF/versions/25/High2.class": high2,
+            }
+        )
+        return {
+            "method": "test fixture",
+            "coordinate": self.COORDINATE,
+            "artifact_sha256": artifact_digest,
+            "total_class_members_scanned": 3,
+            "max_major_version": 69,
+            "members_at_max_major_version": [
+                {
+                    "path": "META-INF/versions/25/High1.class",
+                    "sha256": hashlib.sha256(high1).hexdigest(),
+                    "size_bytes": len(high1),
+                    "major_version": 69,
+                    "minor_version": 0,
+                },
+                {
+                    "path": "META-INF/versions/25/High2.class",
+                    "sha256": hashlib.sha256(high2).hexdigest(),
+                    "size_bytes": len(high2),
+                    "major_version": 69,
+                    "minor_version": 0,
+                },
+            ],
+        }
+
+    def test_cold_cache_is_a_no_op(self) -> None:
+        fake = {
+            "coordinate": self.COORDINATE,
+            "artifact_sha256": "0" * 64,
+            "total_class_members_scanned": 0,
+            "max_major_version": 69,
+            "members_at_max_major_version": [],
+        }
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", fake):
+            evidence.cross_check_java_class_version_evidence_against_local_cache()  # no raise
+
+    def test_matching_fixture_passes(self) -> None:
+        expected = self._matching_fixture()
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            evidence.cross_check_java_class_version_evidence_against_local_cache()  # no raise
+
+    def test_wrong_artifact_hash_raises(self) -> None:
+        expected = self._matching_fixture()
+        expected["artifact_sha256"] = "1" * 64
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("wrong/substituted artifact", str(ctx.exception))
+
+    def test_wrong_member_bytes_hash_raises(self) -> None:
+        expected = self._matching_fixture()
+        expected["members_at_max_major_version"][0]["sha256"] = "2" * 64
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("do not exactly match", str(ctx.exception))
+
+    def test_wrong_member_version_raises(self) -> None:
+        expected = self._matching_fixture()
+        expected["members_at_max_major_version"][0]["minor_version"] = 65535
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("do not exactly match", str(ctx.exception))
+
+    def test_wrong_member_path_raises(self) -> None:
+        expected = self._matching_fixture()
+        expected["members_at_max_major_version"][0]["path"] = "META-INF/versions/25/WrongName.class"
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("do not exactly match", str(ctx.exception))
+
+    def test_missing_java25_class_raises(self) -> None:
+        # The real resolved jar only carries ONE of the two members the
+        # pinned evidence still claims are both there at the maximum.
+        low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
+        high1 = _build_java_class(major_version=69, minor_version=0, class_name="High1")
+        high2 = _build_java_class(major_version=69, minor_version=0, class_name="High2")
+        _, artifact_digest = self._write_jar(
+            {"Low.class": low, "META-INF/versions/25/High1.class": high1}
+        )
+        expected = {
+            "coordinate": self.COORDINATE,
+            "artifact_sha256": artifact_digest,
+            "total_class_members_scanned": 2,
+            "max_major_version": 69,
+            "members_at_max_major_version": [
+                {
+                    "path": "META-INF/versions/25/High1.class",
+                    "sha256": hashlib.sha256(high1).hexdigest(),
+                    "size_bytes": len(high1),
+                    "major_version": 69,
+                    "minor_version": 0,
+                },
+                {
+                    "path": "META-INF/versions/25/High2.class",
+                    "sha256": hashlib.sha256(high2).hexdigest(),
+                    "size_bytes": len(high2),
+                    "major_version": 69,
+                    "minor_version": 0,
+                },
+            ],
+        }
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("do not exactly match", str(ctx.exception))
+
+    def test_new_higher_class_raises(self) -> None:
+        # The real resolved jar carries an unreviewed member at a HIGHER
+        # major than the pinned evidence's max -- e.g. a future Java
+        # version's multi-release class appearing after this evidence was
+        # last reviewed.
+        low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
+        higher = _build_java_class(major_version=69, minor_version=0, class_name="Higher")
+        _, artifact_digest = self._write_jar(
+            {"Low.class": low, "META-INF/versions/25/Higher.class": higher}
+        )
+        expected = {
+            "coordinate": self.COORDINATE,
+            "artifact_sha256": artifact_digest,
+            "total_class_members_scanned": 2,
+            "max_major_version": 52,
+            "members_at_max_major_version": [
+                {
+                    "path": "Low.class",
+                    "sha256": hashlib.sha256(low).hexdigest(),
+                    "size_bytes": len(low),
+                    "major_version": 52,
+                    "minor_version": 0,
+                },
+            ],
+        }
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("pins", str(ctx.exception))
+
+    def test_duplicate_members_raises(self) -> None:
+        base = evidence.GRADLE_MODULES2 / self.GROUP / self.ARTIFACT / self.VERSION / "deadbeef"
+        base.mkdir(parents=True, exist_ok=True)
+        jar_path = base / f"{self.ARTIFACT}-{self.VERSION}.jar"
+        cls = _build_java_class(major_version=69, minor_version=0, class_name="Dup")
+        with zipfile.ZipFile(jar_path, "w") as zf:
+            zf.writestr("META-INF/versions/25/Dup.class", cls)
+            zf.writestr("META-INF/versions/25/Dup.class", cls)
+        expected = {
+            "coordinate": self.COORDINATE,
+            "artifact_sha256": evidence.sha256_file(jar_path),
+            "total_class_members_scanned": 1,
+            "max_major_version": 69,
+            "members_at_max_major_version": [
+                {
+                    "path": "META-INF/versions/25/Dup.class",
+                    "sha256": hashlib.sha256(cls).hexdigest(),
+                    "size_bytes": len(cls),
+                    "major_version": 69,
+                    "minor_version": 0,
+                },
+            ],
+        }
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("normalize to the same canonical path", str(ctx.exception))
+
+    def test_ambiguous_duplicate_resolved_jars_raises(self) -> None:
+        low = _build_java_class(major_version=52, minor_version=0, class_name="Low")
+        self._write_jar({"Low.class": low})
+        # A second, differently-named variant directory with DIFFERENT
+        # bytes for the same coordinate -- ambiguous which was really used.
+        other_base = evidence.GRADLE_MODULES2 / self.GROUP / self.ARTIFACT / self.VERSION / "feedface"
+        other_base.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(other_base / f"{self.ARTIFACT}-{self.VERSION}.jar", "w") as zf:
+            zf.writestr("Low.class", _build_java_class(major_version=52, minor_version=0, class_name="Different"))
+        expected = self._matching_fixture()
+        expected["coordinate"] = self.COORDINATE
+        with mock.patch.object(evidence, "JAVA_CLASS_VERSION_EVIDENCE", expected):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence.cross_check_java_class_version_evidence_against_local_cache()
+        self.assertIn("ambiguous which is the real resolved artifact", str(ctx.exception))
+
+    def test_java_class_version_evidence_returns_the_real_pinned_snapshot_on_a_cold_cache(self) -> None:
+        # GRADLE_MODULES2 is mocked to an empty temp dir with no fixture
+        # written for org.bouncycastle:bcprov-jdk18on -- cold cache, so
+        # the live cross-check no-ops and the REAL pinned snapshot (not a
+        # test fixture) is returned unmodified.
+        result = evidence.java_class_version_evidence()
+        self.assertEqual(result["coordinate"], evidence.JAVA_CLASS_VERSION_EVIDENCE["coordinate"])
+        self.assertEqual(result["max_major_version"], evidence.MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION)
+        self.assertEqual(
+            result["members_at_max_major_version"],
+            list(evidence.JAVA_CLASS_VERSION_EVIDENCE["members_at_max_major_version"]),
+        )
+
+
 class ScopeBindingSealTests(unittest.TestCase):
     """Exercise seal_scope_binding() against a disposable temp git repo.
 

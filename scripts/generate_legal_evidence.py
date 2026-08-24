@@ -3394,6 +3394,471 @@ def bouncycastle_license_source_inventory() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Java class-version evidence: real resolved-artifact bytes, not just a
+# ceiling comment's prose claim
+# ---------------------------------------------------------------------------
+#
+# MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION's own comment (above) cites the
+# resolved `org.bouncycastle:bcprov-jdk18on` jar's real major_version 69
+# classes as this ceiling's evidence -- but a comment is prose, not
+# evidence a reviewer or a machine can independently verify. This section
+# instead commits the actual scan result, in the same
+# static-catalog-plus-live-cross-check shape `MAVEN_NATIVE_CARRIERS`/
+# `cross_check_maven_native_carriers_against_local_cache()` already use:
+# `JAVA_CLASS_VERSION_EVIDENCE` is a reviewed, static, committed snapshot
+# (so the evidence file's content is identical whether or not the local
+# Gradle module cache happens to be warm -- required for
+# `check_release_evidence.py`'s freshness check to pass on a cold-cache CI
+# runner exactly like every other cache-cross-checked evidence file), and
+# `cross_check_java_class_version_evidence_against_local_cache()` is the
+# live, defense-in-depth re-verification against the REAL resolved jar's
+# actual bytes, run every time `java_class_version_evidence()` is called
+# (from `run_generate()`, from `check_evidence_is_freshly_regenerable()`,
+# or directly) -- so a warm cache (a developer's own machine; this is
+# never true on this repo's own legal-evidence-scan CI job, which runs no
+# `./gradlew` task at all) always re-derives and requires an EXACT match
+# to the committed snapshot, and a cold cache safely no-ops, the same
+# tradeoff `find_local_maven_artifacts()` already documents.
+
+
+def _read_java_class_header_version(data: bytes) -> tuple[int, int] | None:
+    """Bounded read of ONLY a `.class` file's leading magic + minor/major
+    version fields (JVMS §4.1's first 8 bytes) -- deliberately not the
+    full structural walk `_validate_java_class_structure()` performs.
+    This helper's one job is extracting the raw `(major, minor)` pair for
+    `cross_check_java_class_version_evidence_against_local_cache()`'s
+    max-observed-major scan across every member of a real resolved jar;
+    `_validate_java_class_structure()` is still run separately (and
+    required to pass) against the SAME bytes, so the evidence this
+    produces is backed by full validator agreement, not just a
+    plausible-looking header. Returns `None` (never raises) if there are
+    fewer than 8 bytes or the first 4 do not match the Java class-file
+    magic.
+    """
+    if len(data) < 8 or data[:4] != JAVA_CLASS_COLLISION_FAT_MACHO_MAGIC:
+        return None
+    minor_version, major_version = struct.unpack(">HH", data[4:8])
+    return major_version, minor_version
+
+
+# Reviewed 2026-08-24 against the actual resolved
+# `org.bouncycastle:bcprov-jdk18on:1.85.2` jar in the local Gradle module
+# cache: every one of its 7163 non-directory `*.class` members (including
+# every `META-INF/versions/N/` multi-release variant) was read via Python
+# `zipfile`, its leading 8 bytes parsed for the JVMS §4.1 magic/minor/major
+# fields, and its full bytes independently run through this file's own
+# `_validate_java_class_structure()` -- all 7163 passed. The observed
+# maximum `major_version` is 69 (Java SE 25), reached by exactly the 24
+# members below, every one of them a real `META-INF/versions/25/...class`
+# member of the real resolved artifact (never synthetic). This ceiling
+# (`MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION`) and this snapshot are REQUIRED
+# to move together -- `_validate_sealed_java_class_version_evidence()`
+# below fails closed at import time if they ever disagree, and
+# `cross_check_java_class_version_evidence_against_local_cache()` fails
+# generation/checking outright if a warm-cache re-scan of the real
+# artifact ever produces a different whole-archive hash, member count,
+# observed maximum, or member set at that maximum.
+JAVA_CLASS_VERSION_EVIDENCE: dict[str, Any] = {
+    "method": (
+        "Point-in-time inspection (2026-08-24) of the actual resolved "
+        "org.bouncycastle:bcprov-jdk18on:1.85.2 .jar in the local Gradle "
+        "module cache: Python `zipfile` for member discovery, this file's "
+        "own bounded 8-byte header read for each member's raw major/minor "
+        "version fields, and this file's own _validate_java_class_structure() "
+        "(full JVMS §4 structural walk, not just the magic bytes) required "
+        "to pass for every one of the 7163 scanned members. This table is "
+        "static; it is not re-derived from a live artifact fetch on every "
+        "run (see docs/LEGAL_REVIEW.md §8 for why), but "
+        "cross_check_java_class_version_evidence_against_local_cache() "
+        "independently re-verifies it byte-for-byte against the real "
+        "resolved artifact whenever a warm Gradle cache has it, and fails "
+        "generation/checking outright on any drift: wrong whole-archive "
+        "SHA-256, wrong member count, wrong observed maximum major_version, "
+        "or a different member set at that maximum. max_major_version is "
+        "exactly MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION -- the ceiling and "
+        "this evidence are reviewed and moved together, never independently."
+    ),
+    "coordinate": "org.bouncycastle:bcprov-jdk18on:1.85.2",
+    "artifact_sha256": "986b0fb92ec10e0c66b43e036ce0077e6150cfaecd1db9fb92b56672e157afe5",
+    "total_class_members_scanned": 7163,
+    "max_major_version": 69,
+    "members_at_max_major_version": (
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi$HKDFwithSHA256.class",
+            "sha256": "684b2b75d3e1edf14b61cb80dd96569a350b3aaeb87260253bdd084ad78327a0",
+            "size_bytes": 576,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi$HKDFwithSHA384.class",
+            "sha256": "cc9bd91cae86950551f2f8fa6213c04fd151a4df557a6560c3b603c20bdc7db7",
+            "size_bytes": 576,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi$HKDFwithSHA512.class",
+            "sha256": "e62269c9686688d2952cad6ea6ecbf8c8e4a449d25b01223835455f5c825284b",
+            "size_bytes": 576,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi.class",
+            "sha256": "f85c537c7c6f61761216ea31ddfa8ba6f68ba9be55d19c5b16f1f5e930875bbc",
+            "size_bytes": 3947,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2with8BIT.class",
+            "sha256": "e06c05b971bb2e6fe9e8dbc9c862e01d014da96ac4d51826ab88255d187d9c4c",
+            "size_bytes": 739,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withGOST3411.class",
+            "sha256": "7ef4714d612cf474b206fa94c339a4c748d738e4c9268b7f9ec91515dec0b265",
+            "size_bytes": 594,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA224.class",
+            "sha256": "315c1073d3b4b5c5e35e6a1fc799c48bddcc1b5e4c0947dcfd93bb5565d64beb",
+            "size_bytes": 588,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA256.class",
+            "sha256": "a1dd374e1e91a0384eb30e4a588e043a23f4bd2fb728a9a77e38686917a2ad6f",
+            "size_bytes": 588,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA384.class",
+            "sha256": "4bc3257c6f93d06db155285ad762166e6777ec15e01cae2c8530d5244241237a",
+            "size_bytes": 588,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_224.class",
+            "sha256": "521b1da50a3eba6260c78df4eccc44d3fd1a74285bcddfc2fdce2cf9ac49a4b3",
+            "size_bytes": 600,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_256.class",
+            "sha256": "a1d54f34294da8a22e6724d1781e003563d5486d961d865f75e928f80f208483",
+            "size_bytes": 600,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_384.class",
+            "sha256": "b0d57673adf31a1926864d57dd49743a7ac1630e9b7c21976686f53f73f63504",
+            "size_bytes": 600,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_512.class",
+            "sha256": "ca04a30ba4b4abf8cc7192f69c4715c6fdbd0d57df51e320f239511ab90f69fb",
+            "size_bytes": 600,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA512.class",
+            "sha256": "d7804e2f671b2422c90d5b67b633918bb2967c52193ea56eeb9721c18045b132",
+            "size_bytes": 588,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA512_224.class",
+            "sha256": "1590d5acaa83d81fe2ad24c87725efa92b764abe4b32ff99c27474b47fa4f62c",
+            "size_bytes": 607,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA512_256.class",
+            "sha256": "6052992aa05284b15b0c3b86ccc15ba69d246f02470e13b5ba745b316e0c0e2e",
+            "size_bytes": 607,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSM3.class",
+            "sha256": "dba4695b7e5c2783d2eff4ced412adc125e470d53adb192db6cbcec002264e57",
+            "size_bytes": 579,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withUTF8.class",
+            "sha256": "7302e64cf2daaf7330468759be8a5db58ed8204da731b607f6e6023b7079b155",
+            "size_bytes": 582,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi.class",
+            "sha256": "c4e1257aa1abbff1fde8cd0ace5a8805c066b9e88e60396a6aab9c73d425a74a",
+            "size_bytes": 3992,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/scrypt/ScryptSpi$ScryptWithUTF8.class",
+            "sha256": "f29201b0a6b4a72b327be8ff72794e8de2f0ed7aa7839d6e36583ca5be9f4e77",
+            "size_bytes": 446,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/scrypt/ScryptSpi.class",
+            "sha256": "90d6cc65d5e56684b8c78dd18f59bbc1272a818955d23ff8b0eec92eb19bb142",
+            "size_bytes": 2497,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/spec/PBKDF2ParameterSpec.class",
+            "sha256": "ae49383adeac2ac730ca41577ff6939c118e4190ff8d7bf3b5c0ab173cd3fbb0",
+            "size_bytes": 340,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/spec/ScryptParameterSpec.class",
+            "sha256": "9cb161188533fdc08a937ef3ecbe810e1761957e1b24cbad719983260f658339",
+            "size_bytes": 255,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+        {
+            "path": "META-INF/versions/25/org/bouncycastle/jcajce/util/SpiUtil.class",
+            "sha256": "8357487278ffb208c738ce9f96e76d3e6f959d50a0fcc0d344ca6b39bbf6a72d",
+            "size_bytes": 231,
+            "major_version": 69,
+            "minor_version": 0,
+        },
+    ),
+}
+
+
+def _validate_sealed_java_class_version_evidence(entry: dict[str, Any]) -> None:
+    """Fail closed at import time if `JAVA_CLASS_VERSION_EVIDENCE` (hand-
+    reviewed) is internally malformed OR disagrees with the live
+    `MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION` ceiling -- these two are
+    required to move together (see this section's own module comment)."""
+    if not SHA256_HEX_RE.match(entry["artifact_sha256"]):
+        raise EvidenceError(
+            f"JAVA_CLASS_VERSION_EVIDENCE artifact_sha256 {entry['artifact_sha256']!r} "
+            "is not a 64-hex-char sha256"
+        )
+    if entry["max_major_version"] != MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION:
+        raise EvidenceError(
+            "JAVA_CLASS_VERSION_EVIDENCE max_major_version "
+            f"{entry['max_major_version']} != live "
+            f"MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION "
+            f"{MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION} -- the ceiling and this "
+            "evidence snapshot must be reviewed and updated together"
+        )
+    members = entry["members_at_max_major_version"]
+    if not members:
+        raise EvidenceError("JAVA_CLASS_VERSION_EVIDENCE members_at_max_major_version is empty")
+    seen_paths: set[str] = set()
+    for member in members:
+        if member["path"] in seen_paths:
+            raise EvidenceError(
+                f"JAVA_CLASS_VERSION_EVIDENCE has a duplicate member path {member['path']!r}"
+            )
+        seen_paths.add(member["path"])
+        if not SHA256_HEX_RE.match(member["sha256"]):
+            raise EvidenceError(
+                f"JAVA_CLASS_VERSION_EVIDENCE member {member['path']!r} sha256 "
+                f"{member['sha256']!r} is not a 64-hex-char sha256"
+            )
+        if member["major_version"] != entry["max_major_version"]:
+            raise EvidenceError(
+                f"JAVA_CLASS_VERSION_EVIDENCE member {member['path']!r} "
+                f"major_version {member['major_version']} != max_major_version "
+                f"{entry['max_major_version']}"
+            )
+        if not _is_supported_java_class_version(member["major_version"], member["minor_version"]):
+            raise EvidenceError(
+                f"JAVA_CLASS_VERSION_EVIDENCE member {member['path']!r} version "
+                f"{member['major_version']}.{member['minor_version']} fails this "
+                "file's own JVMS major/minor combination rules"
+            )
+
+
+_validate_sealed_java_class_version_evidence(JAVA_CLASS_VERSION_EVIDENCE)
+
+
+def cross_check_java_class_version_evidence_against_local_cache() -> None:
+    """Defense-in-depth: when the local Gradle module cache has the exact
+    resolved jar `JAVA_CLASS_VERSION_EVIDENCE` is pinned to, re-scan its
+    REAL bytes and require an exact match against that committed snapshot
+    -- whole-archive SHA-256 (checked BEFORE any member is inspected, same
+    ordering as `_verify_resolved_artifact_hashes()`), every real `.class`
+    member's own JVMS structural validity (`_validate_java_class_structure()`
+    must pass for every one, not just the ones recorded below), the true
+    observed maximum `major_version`, and the exact member set recorded at
+    that maximum (path, SHA-256, size, minor_version).
+
+    A cold cache (no `./gradlew` task has ever run -- true for this repo's
+    own legal-evidence-scan CI job) finds nothing to check via
+    `find_local_maven_artifacts()` and is not an error, same tradeoff as
+    every other local-cache cross-check in this file. Returns `None`;
+    every disagreement raises `EvidenceError`.
+    """
+    coordinate = JAVA_CLASS_VERSION_EVIDENCE["coordinate"]
+    group, artifact, version = parse_gav(coordinate)
+    artifact_paths = [
+        p for p in find_local_maven_artifacts(group, artifact, version) if p.suffix.lower() == ".jar"
+    ]
+    if not artifact_paths:
+        return
+
+    digest_to_path: dict[str, Path] = {}
+    for path in artifact_paths:
+        digest_to_path[sha256_file(path)] = path
+    if len(digest_to_path) > 1:
+        raise EvidenceError(
+            f"{coordinate}: {len(digest_to_path)} different resolved .jar "
+            f"archives found in the local Gradle cache with different "
+            f"whole-archive SHA-256 values {sorted(digest_to_path)} -- "
+            "ambiguous which is the real resolved artifact, refusing to "
+            "inspect its members"
+        )
+    (actual_artifact_sha256, jar_path), = digest_to_path.items()
+    expected_artifact_sha256 = JAVA_CLASS_VERSION_EVIDENCE["artifact_sha256"]
+    if actual_artifact_sha256 != expected_artifact_sha256:
+        raise EvidenceError(
+            f"{coordinate}: resolved .jar {jar_path} whole-archive SHA-256 "
+            f"{actual_artifact_sha256} does not match the pinned "
+            f"{expected_artifact_sha256} in JAVA_CLASS_VERSION_EVIDENCE -- "
+            "wrong/substituted artifact, refusing to inspect its members"
+        )
+    reject_symlink(jar_path)
+
+    max_major = -1
+    members_at_max: list[dict[str, Any]] = []
+    total_class_members = 0
+    with zipfile.ZipFile(jar_path) as zf:
+        infos = zf.infolist()
+        if len(infos) > MAX_ZIP_MEMBERS_SCANNED:
+            raise EvidenceError(
+                f"{jar_path}: {len(infos)} zip members exceeds "
+                f"MAX_ZIP_MEMBERS_SCANNED={MAX_ZIP_MEMBERS_SCANNED} (refusing to scan)"
+            )
+        _reject_duplicate_zip_members(jar_path, infos)
+        for info in infos:
+            if info.is_dir() or not info.filename.endswith(".class"):
+                continue
+            if info.file_size > MAX_ZIP_MEMBER_BYTES_READ:
+                raise EvidenceError(
+                    f"{jar_path}: member {info.filename!r} declares "
+                    f"{info.file_size} bytes, exceeding "
+                    f"MAX_ZIP_MEMBER_BYTES_READ={MAX_ZIP_MEMBER_BYTES_READ}"
+                )
+            with zf.open(info) as fh:
+                data = fh.read()
+            total_class_members += 1
+            header = _read_java_class_header_version(data)
+            if header is None:
+                raise EvidenceError(
+                    f"{jar_path}: member {info.filename!r} is named *.class but "
+                    "does not start with the Java class-file magic"
+                )
+            major_version, minor_version = header
+            if not _validate_java_class_structure(data):
+                raise EvidenceError(
+                    f"{jar_path}: member {info.filename!r} (version "
+                    f"{major_version}.{minor_version}) failed full JVMS "
+                    "structural validation"
+                )
+            if major_version > max_major:
+                max_major = major_version
+                members_at_max = []
+            if major_version == max_major:
+                members_at_max.append(
+                    {
+                        "path": info.filename,
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                        "size_bytes": len(data),
+                        "major_version": major_version,
+                        "minor_version": minor_version,
+                    }
+                )
+
+    expected_total = JAVA_CLASS_VERSION_EVIDENCE["total_class_members_scanned"]
+    if total_class_members != expected_total:
+        raise EvidenceError(
+            f"{coordinate}: resolved .jar {jar_path} has {total_class_members} "
+            f"*.class members, but JAVA_CLASS_VERSION_EVIDENCE pins "
+            f"{expected_total} -- the committed snapshot must be reviewed and "
+            "regenerated for this artifact"
+        )
+    expected_max_major = JAVA_CLASS_VERSION_EVIDENCE["max_major_version"]
+    if max_major != expected_max_major:
+        raise EvidenceError(
+            f"{coordinate}: resolved .jar {jar_path} actual observed maximum "
+            f"major_version is {max_major}, but JAVA_CLASS_VERSION_EVIDENCE "
+            f"pins {expected_max_major} -- the ceiling and this evidence "
+            "must be reviewed and updated together before this can pass"
+        )
+    if max_major != MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION:
+        raise EvidenceError(
+            f"{coordinate}: resolved .jar {jar_path} actual observed maximum "
+            f"major_version {max_major} != live "
+            f"MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION "
+            f"{MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION}"
+        )
+    actual_sorted = sorted(members_at_max, key=lambda m: m["path"])
+    expected_sorted = sorted(
+        JAVA_CLASS_VERSION_EVIDENCE["members_at_max_major_version"], key=lambda m: m["path"]
+    )
+    if actual_sorted != expected_sorted:
+        raise EvidenceError(
+            f"{coordinate}: resolved .jar {jar_path}'s actual members at "
+            f"major_version {max_major} do not exactly match "
+            "JAVA_CLASS_VERSION_EVIDENCE's members_at_max_major_version -- "
+            f"actual={actual_sorted!r} expected={expected_sorted!r}"
+        )
+
+
+def java_class_version_evidence() -> dict[str, Any]:
+    """Committed Java class-file major-version evidence, derived from real
+    resolved artifact bytes -- see this section's own module comment for
+    why the returned content is a static, reviewed snapshot rather than a
+    live scan result (a live-scan-only design could never pass on this
+    repo's own cold-cache CI runner), and
+    `cross_check_java_class_version_evidence_against_local_cache()` for the
+    independent live re-verification this function always runs first.
+    """
+    cross_check_java_class_version_evidence_against_local_cache()
+    return {
+        "method": JAVA_CLASS_VERSION_EVIDENCE["method"],
+        "coordinate": JAVA_CLASS_VERSION_EVIDENCE["coordinate"],
+        "artifact_sha256": JAVA_CLASS_VERSION_EVIDENCE["artifact_sha256"],
+        "total_class_members_scanned": JAVA_CLASS_VERSION_EVIDENCE["total_class_members_scanned"],
+        "max_major_version": JAVA_CLASS_VERSION_EVIDENCE["max_major_version"],
+        "members_at_max_major_version": list(JAVA_CLASS_VERSION_EVIDENCE["members_at_max_major_version"]),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Scope binding: two-commit seal (evidence-content commit -> seal commit)
 # ---------------------------------------------------------------------------
 #
@@ -3426,51 +3891,80 @@ def bouncycastle_license_source_inventory() -> dict[str, Any]:
 # `scripts/check_release_evidence.py`'s `check_scope_binding_seal()` verifies
 # this binding independently of regeneration: it confirms `evidence_commit`
 # and `subject_commit` exist as real git objects, that `subject_commit` is
-# EXACTLY `evidence_commit`'s immediate parent, that `evidence_commit` is an
-# ancestor of (or equal to) current HEAD, and that every evidence file's
-# CURRENT bytes match both the digest recorded here AND the actual bytes
-# committed at `evidence_commit`'s tree (`git show <evidence_commit>:<path>`)
-# -- so an evidence file edited by some later commit without a re-seal is
-# caught even though `check_evidence_is_freshly_regenerable()` would not
-# itself notice (regeneration only compares against the CURRENT tracked
-# tree, which is exactly the self-reference this two-commit design avoids
+# EXACTLY `evidence_commit`'s immediate parent, that `evidence_commit` is
+# EXACTLY current HEAD's immediate parent (i.e. the seal commit itself must
+# BE the current tip -- a 2026-08-24 independent review found the prior
+# "ancestor of HEAD" wording let an unrelated later commit sit on top of an
+# old seal without invalidating it; any commit added after the seal commit
+# now requires a fresh subject/evidence/seal sequence before this check
+# passes again), and that every evidence file's CURRENT bytes match both
+# the digest recorded here AND the actual bytes committed at
+# `evidence_commit`'s tree (`git show <evidence_commit>:<path>`) -- so an
+# evidence file edited by some later commit without a re-seal is caught
+# even though `check_evidence_is_freshly_regenerable()` would not itself
+# notice (regeneration only compares against the CURRENT tracked tree,
+# which is exactly the self-reference this two-commit design avoids
 # relying on for the seal itself).
 #
-# Tooling binding: the seal above proves the EVIDENCE bytes are pinned to an
-# exact subject-source commit, but says nothing about whether the SCRIPT
-# that produced (and the script that checks) those bytes could itself
-# change later without a re-seal -- a 2026-08-24 independent review named
-# this gap explicitly: an unpinned generator/checker is an unpinned
-# verdict, no matter how tightly the evidence data itself is bound.
-# `sealed_at_seal_commit["tooling_sha256"]` closes this by recording the
-# SHA-256 of every file in `SEALED_TOOLING_FILES` -- this module, the
-# checker, every local catalog module they import, and any future such
-# helper -- as of the evidence-content commit (the same worktree state
-# `--seal` reads everything else from). `SEALED_TOOLING_FILES` is an
-# explicit, reviewed list, but it is not merely hand-maintained on trust:
-# `_discover_local_tooling_closure()` independently re-derives the same
-# set by statically parsing (never importing/executing) every top-level
-# `import`/`from ... import` statement reachable from
-# `generate_legal_evidence.py` and `check_release_evidence.py`, and this
-# module refuses to import at all if that dynamically-discovered closure
-# and the explicit list disagree -- so a new helper module added to either
-# script's import graph without also being added to
-# `SEALED_TOOLING_FILES` fails closed immediately, rather than silently
-# going unsealed. `check_release_evidence.py`'s `check_scope_binding_seal()`
-# recomputes every sealed tool file's CURRENT on-disk hash and fails if any
-# differs from what was sealed -- so an edit to the generator, the checker,
-# or any catalog they both depend on, made ANY time after the seal commit,
-# is caught exactly like post-seal evidence drift is caught above.
+# Full source-scope binding: the seal above proves the EVIDENCE bytes are
+# pinned to an exact subject-source commit, but says nothing about whether
+# the SCRIPT that produced (and the script that checks) those bytes, or any
+# OTHER tracked file the generator might read (a config file, a workflow, a
+# lockfile, a dynamically-`importlib`-loaded or relative-imported helper an
+# import-graph closure could miss), could itself change later without a
+# re-seal -- a 2026-08-24 independent review named this gap explicitly, and
+# a follow-up review found that binding only an explicit, AST-import-
+# discovered TOOL-FILE set (the first attempt at closing this gap, kept
+# below as `SEALED_TOOLING_FILES`/`tooling_sha256`) is still an INCOMPLETE
+# closure claim: ordinary-import discovery cannot see a dynamic/relative/
+# package import, and says nothing at all about a non-script input (an
+# arbitrary config/catalog/workflow/lockfile/build file) the generator
+# might read without ever `import`-ing it.
+#
+# `check_scope_binding_seal()` therefore no longer relies on ANY import-
+# graph argument for completeness. Instead it diffs EVERY tracked file
+# between `subject_commit` and current HEAD (`git diff --raw --no-renames`,
+# so even a renamed file surfaces as an ordinary delete-of-old-path plus
+# add-of-new-path, each checked independently) and requires that the ONLY
+# paths allowed to differ are the exact, small, reviewed set of generated
+# outputs the evidence-content and seal commits are themselves allowed to
+# write: every name in `evidence_output_files()` under `docs/evidence/`,
+# plus `docs/evidence/scope_binding.json` and
+# `docs/evidence/LEGAL_EVIDENCE_DIGEST.txt` (see
+# `_allowed_post_subject_change_paths()` in
+# `scripts/check_release_evidence.py`). ANY other tracked file added,
+# deleted, renamed, mode-changed (a symlink introduced anywhere, even at an
+# otherwise-allowed path), or content-changed between those two commits
+# fails this check -- a script, a catalog module, a workflow file, a
+# lockfile, a build file, or a doc, whether reached by an ordinary import,
+# a dynamic import, a relative/package import, or no import at all (a
+# plain file read). This makes the import-graph question moot: it does not
+# matter HOW a file could influence generated evidence, only THAT it did
+# not change. `check_release_evidence.py`'s worktree-cleanliness check
+# (`git status --porcelain`) is required to be empty for this same reason
+# -- an uncommitted staged/unstaged change is exactly as much an
+# unaccounted-for scope change as a committed one, just not yet visible to
+# the commit-to-commit diff above.
+#
+# `SEALED_TOOLING_FILES`/`tooling_sha256` (below) are KEPT as additional,
+# narrower audit detail -- a reviewer can see at a glance exactly which
+# files this module considers "the tooling" and their exact pinned hashes,
+# without diffing two full trees by hand -- but they are no longer the
+# mechanism this module relies on to CLAIM completeness; the full
+# source-scope diff above is.
 
 
-# Explicit, reviewed set of every script/catalog/config file whose bytes
-# can affect ANY evidence file this module generates OR any check
-# `scripts/check_release_evidence.py` performs -- this is exactly what
-# `seal_scope_binding()`'s `tooling_sha256` field seals (see the "Tooling
-# binding" module docstring above). Repo-relative, POSIX-separated paths.
-# Reviewed 2026-08-24; kept honest against silent drift by
-# `_discover_local_tooling_closure()` below, which this module refuses to
-# import against if the two disagree.
+# Explicit, reviewed set of every LOCAL PYTHON MODULE reachable from either
+# legal-evidence entry-point script's ordinary import graph -- this is what
+# `seal_scope_binding()`'s `tooling_sha256` field seals, kept as narrower
+# audit detail alongside the authoritative full source-scope diff (see the
+# "Full source-scope binding" module docstring above, which is what
+# `check_scope_binding_seal()` actually relies on for completeness -- this
+# list, by construction, can never see a dynamic/relative import or a
+# non-Python input file, which is exactly why it is not that proof).
+# Repo-relative, POSIX-separated paths. Reviewed 2026-08-24; kept honest
+# against silent drift by `_discover_local_tooling_closure()` below, which
+# this module refuses to import against if the two disagree.
 SEALED_TOOLING_FILES: tuple[str, ...] = (
     "scripts/generate_legal_evidence.py",
     "scripts/check_release_evidence.py",
@@ -3603,6 +4097,7 @@ def evidence_output_files() -> dict[str, Path]:
         "native_artifacts_inventory.json": EVIDENCE_DIR / "native_artifacts_inventory.json",
         "maven_native_carriers_inventory.json": EVIDENCE_DIR / "maven_native_carriers_inventory.json",
         "bouncycastle_license_source.json": EVIDENCE_DIR / "bouncycastle_license_source.json",
+        "java_class_version_evidence.json": EVIDENCE_DIR / "java_class_version_evidence.json",
     }
 
 
@@ -3678,17 +4173,21 @@ def seal_scope_binding() -> dict[str, Any]:
             "evidence file's bytes as committed at evidence_commit. "
             "tooling_sha256 is the SHA-256 of every "
             "scripts/generate_legal_evidence.py SEALED_TOOLING_FILES entry's "
-            "bytes (see the 'Tooling binding' module docstring) as of this "
-            "same evidence-content commit's worktree -- the generator and "
-            "checker script(s), and every local catalog module they import, "
-            "that could affect what any evidence file says or what any check "
-            "accepts. scripts/check_release_evidence.py's "
-            "check_scope_binding_seal() independently recomputes both "
-            "sealed_evidence_digests and tooling_sha256 from both the "
-            "current worktree and `git show <evidence_commit>:<path>` / "
-            "`git show <subject_commit>:<path>` and fails on any mismatch, "
-            "ancestry violation, non-immediate-parent binding, or "
-            "missing/extra/symlinked tooling entry."
+            "bytes as of this same evidence-content commit's worktree -- "
+            "kept as additional, narrower audit detail alongside the "
+            "authoritative check, not the completeness proof itself (see "
+            "the 'Full source-scope binding' module docstring). "
+            "scripts/check_release_evidence.py's check_scope_binding_seal() "
+            "independently recomputes sealed_evidence_digests and "
+            "tooling_sha256 from both the current worktree and "
+            "`git show <evidence_commit>:<path>` / "
+            "`git show <subject_commit>:<path>`, requires evidence_commit to "
+            "be current HEAD's own immediate parent (the seal commit must "
+            "remain the exact tip -- any later commit requires a fresh "
+            "subject/evidence/seal sequence), and separately diffs EVERY "
+            "tracked file between subject_commit and HEAD, failing on any "
+            "change outside the exact reviewed set of generated evidence/ "
+            "seal outputs -- see check_full_source_scope_seal()."
         ),
         "evidence_commit": evidence_commit,
         "evidence_tree": evidence_tree,
@@ -3792,6 +4291,9 @@ def run_generate() -> int:
         )
         write_json(
             outputs["bouncycastle_license_source.json"], bouncycastle_license_source_inventory()
+        )
+        write_json(
+            outputs["java_class_version_evidence.json"], java_class_version_evidence()
         )
         write_digest_file(modules, outputs)
         # This run does not create, verify, or touch the seal itself (that is
