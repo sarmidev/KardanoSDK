@@ -112,17 +112,18 @@ Date: 2026-08-24
   checklist and template, not legal advice or approval); and deterministic
   generated inventories under `docs/evidence/`
   (`scripts/generate_legal_evidence.py`): per-module Gradle
-  source/runtime/test-only classification from `*/gradle.lockfile`,
-  `cargo metadata --locked` for the signing backend (69 packages, 63 linked
-  into the native artifacts, 0 dev-only), the 5 committed UniFFI-generated
-  binding files, an exact 9-row `crypto-signing-backend/CHECKSUMS.sha256`
-  cross-check, and a static Maven-native-carrier catalog
-  (Identus/IonSpin/LazySodium/libsodium). `scripts/check_release_evidence.py`
-  (25 new unit tests plus a live run) fails closed on a broken
-  `NOTICE`/`LICENSES/` reference, a native-inventory mismatch, stale
-  generated evidence, or a generic placeholder in `docs/LEGAL_REVIEW.md`; it
-  passed on this tree. `docs/THIRD_PARTY_NOTICES.md` is reconciled: JNA and
-  the `ed25519-bip32`/`cryptoxide` dual licenses (`Apache-2.0 OR
+  source/runtime/test-only classification from `*/gradle.lockfile`, a
+  `cargo metadata --locked` package graph for the signing backend (then
+  superseded by the per-target-triple `cargo tree` inventory below), the 5
+  committed UniFFI-generated binding files, an exact 9-row
+  `crypto-signing-backend/CHECKSUMS.sha256` cross-check, and a static
+  Maven-native-carrier catalog (Identus/IonSpin/LazySodium/libsodium).
+  `scripts/check_release_evidence.py` (25 new unit tests plus a live run)
+  fails closed on a broken `NOTICE`/`LICENSES/` reference, a
+  native-inventory mismatch, stale generated evidence, or a generic
+  placeholder in `docs/LEGAL_REVIEW.md`; it passed on this tree.
+  `docs/THIRD_PARTY_NOTICES.md` is reconciled: JNA and the
+  `ed25519-bip32`/`cryptoxide` dual licenses (`Apache-2.0 OR
   LGPL-2.1`/`MIT OR Apache-2.0`) now record an explicit Apache-2.0 election;
   the single-license `uniffi` crate's MPL-2.0 file-level obligation (linked
   into all 9 native artifacts) is reviewed the same way as
@@ -135,6 +136,80 @@ Date: 2026-08-24
   release as GO.** Counsel review and upstream `hyperledger-identus/apollo`
   issue #226 remain open gates, recorded as such (not as "TBD") in
   `docs/LEGAL_REVIEW.md`.
+- **Legal-evidence packet NO-GO fixes (same branch, four commits above
+  preserved as-is).** An independent review returned NO-GO on the packet
+  above for eight factual/fail-closed gaps; all eight are fixed in later
+  commits, not by amending the four commits above. (1) The packet's implicit
+  "no MIT-only distributed component" framing was wrong — `LICENSES/MIT.txt`
+  and `LICENSES/Unicode-3.0.txt` (both fetched verbatim from spdx.org, hash
+  in `LICENSES/README.md`) are now committed, and
+  `scripts/license_catalog.py` records a per-coordinate election for every
+  Gradle runtime dependency, including confirming `org.slf4j:slf4j-api` is
+  MIT-only (no dual-license `OR` clause in its POM) and that JNA's
+  `Apache-2.0 OR LGPL-2.1` election does not cover it. (2) The old "69
+  packages, 63 linked" single-closure heuristic is replaced by
+  `cargo tree --locked --target <triple> -e <edges> --prefix none` run
+  separately for each of the 9 committed target triples (Darwin 2: macOS
+  arm64/x86-64; Android 4: arm64-v8a/armeabi-v7a/x86/x86_64; iOS 2:
+  arm64/arm64-simulator; Linux 1: x86-64) in
+  `docs/evidence/cargo_dependency_inventory.json`; each triple separately
+  reports `linked_into_compiled_artifact` (32 or 33, depending on
+  Android-only deps), `proc_macro_and_support_closure` (12, never traversed
+  as linked), `host_build_dependency_only` (1), and `dev_dependency_only`
+  (0), over 46 distinct package/version/source combinations total, 33 of
+  them linked into at least one target; `unicode-ident`'s `(MIT OR Apache-2.0)
+  AND Unicode-3.0` compound expression and the three MIT-only linked crates
+  (`bytes`, `cargo_metadata`, `zmij`) are called out explicitly rather than
+  assumed covered by a blanket dual-license election. (3) Gradle modules are
+  now discovered by parsing `settings.gradle.kts` (not a static list); the
+  distribution scope statement in `docs/LEGAL_REVIEW.md` §3 is explicit that
+  Desktop MSI/DEB/DMG installers are not planned for this release and their
+  runtime inventory is not claimed complete; JNA's 25 embedded
+  `libjnidispatch` natives, Skiko's per-platform dylibs, and the Identus/
+  IonSpin/LazySodium native carriers are recorded with embedded path/hash/
+  platform notes in `docs/evidence/maven_native_carriers_inventory.json`, and
+  JNA is explicitly documented as "source-plus-embedded-native-carrier", not
+  Source. (4) `docs/LEGAL_REVIEW.md` §6/§6b no longer state that embedded
+  UniFFI or MPL handling is "satisfied"; both are marked as OPEN counsel
+  determinations, the 5 generated binding files are discovered dynamically
+  (`discover_uniffi_generated_files()`), and the Identus carrier statement
+  shows Apache-2.0-declared plus embedded/MPL uncertainty tied to issue #226
+  without claiming an exact source-file mapping. (5)
+  `scripts/generate_legal_evidence.py`/`scripts/check_release_evidence.py`
+  now reject symlinks among evidence inputs, parse `Cargo.lock`/
+  `CHECKSUMS.sha256` byte-strictly (malformed lines, duplicate
+  paths/coordinates, and CRLF all fail), recompute every named digest in
+  `LEGAL_EVIDENCE_DIGEST.txt` and its exact `licenses_files=`/
+  `expected_evidence_files=` file sets, and run in two modes:
+  `ci-structural` (default; permits the four named `ALLOWED_OPEN_GATE_MARKERS`
+  strings, rejects everything else including lowercase `open`/`pending` and
+  an unsupported "approved" claim) and `release` (additionally fails while
+  any of those four markers remains — expected to fail today). (6)
+  `docs/evidence/scope_binding.json` records the evidence-generation-time
+  `subject_commit`/`subject_tree` (the HEAD the packet was generated
+  against) separately from whatever commit and tree end up containing this
+  file, documented as non-self-referential by construction; `docs/LEGAL_REVIEW.md`
+  §14 adds an explicit "OPEN — pending per-election reviewer acceptance" row
+  covering the 3 elections and 3 compound expressions individually. (7)
+  `LICENSES/README.md` and `docs/evidence/bouncycastle_license_source.json`
+  now consistently call `LICENSES/BouncyCastle.txt` a **manual transcription**
+  of the licence paragraphs rendered at
+  `https://www.bouncycastle.org/licence.html`, not fetched/verbatim bytes;
+  the fetched HTML snapshot is separately committed at
+  `docs/evidence/license-sources/bouncycastle-licence-2026-08-24.html` and
+  both `source_html_sha256` and `transcription_sha256` are recorded, with
+  transcription faithfulness left as an explicit OPEN counsel field. (8)
+  Every `cargo metadata`/`cargo tree` call hashes
+  `crypto-signing-backend/Cargo.lock` immediately before and after and raises
+  a fail-closed error if it changed; `docs/LEGAL_REVIEW.md` §13 documents
+  which two generators need read-only network/cache access (Gradle POM
+  resolution, a dated static Maven-native-carrier table) and which do not.
+  New unit tests cover both scripts (conditional target deps, proc-macro
+  descendants, duplicate name/version packages, CRLF/symlink/duplicate-key/
+  malformed-lock corruption, missing `LICENSES/README.md`, lowercase
+  placeholders, blank table cells, and `ci-structural` vs `release` mode
+  behavior). This fix round still does not mark Prompt 7, the Windows
+  candidate, or any release as GO, and does not start Prompt 8.
 - **Gate 3 Windows x86-64 JVM (candidate-only) on
   `fix/native-build-and-platform-evidence`.** Linux promotion GO at
   `58f82a2`. JNA 5.19.1 resource is

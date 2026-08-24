@@ -315,21 +315,36 @@ Legal-evidence packet checks (Prompt 7; not legal advice, not approval):
 python3 scripts/generate_legal_evidence.py
 python3 scripts/generate_legal_evidence.py   # run twice; expect zero diff
 git diff --quiet docs/evidence
-python3 scripts/check_release_evidence.py
+python3 scripts/check_release_evidence.py                    # ci-structural mode (default)
+python3 scripts/check_release_evidence.py --mode release     # expected to fail today (open gates)
 python3 -m unittest scripts.tests.test_generate_legal_evidence scripts.tests.test_check_release_evidence
 ```
 
 `scripts/generate_legal_evidence.py` reads only already-locked/committed
-state (`*/gradle.lockfile`, `cargo metadata --locked` against
-`crypto-signing-backend/Cargo.lock`, the committed UniFFI-generated Kotlin
-bindings, and `crypto-signing-backend/CHECKSUMS.sha256`) and writes
-deterministic JSON/text under `docs/evidence/`; it never embeds absolute
-paths, timestamps, or hostnames. `scripts/check_release_evidence.py` fails
-closed if a `NOTICE`/`LICENSES/` cross-reference is broken, the native
-inventory does not match `CHECKSUMS.sha256` exactly (9 rows), any
-`docs/evidence/*.json` file is stale relative to the current tree, or
-`docs/LEGAL_REVIEW.md` contains a generic placeholder instead of a named
-open-gate marker.
+state — Gradle modules discovered dynamically from `settings.gradle.kts`
+(`*/gradle.lockfile`), a per-target-triple `cargo tree --locked --target
+<triple>` graph for each of the 9 committed native target triples against
+`crypto-signing-backend/Cargo.lock`, the dynamically-discovered
+UniFFI-generated Kotlin binding files, and
+`crypto-signing-backend/CHECKSUMS.sha256` — and writes deterministic
+JSON/text under `docs/evidence/`; it never embeds absolute paths,
+timestamps, or hostnames, and it hashes `Cargo.lock` before/after every
+Cargo invocation to fail closed if `--locked` did not actually prevent a
+mutation. `scripts/check_release_evidence.py` fails closed (either mode) if
+a `NOTICE`/`LICENSES/` cross-reference is broken (including a missing
+`LICENSES/MIT.txt` when an MIT-only Gradle or Cargo package is present), the
+native inventory does not match `CHECKSUMS.sha256` exactly (9 rows) or a
+tracked native binary is not one of those rows, any `docs/evidence/*.json`
+file (or `LEGAL_EVIDENCE_DIGEST.txt`'s own recomputed digests/file sets) is
+stale or has a duplicate JSON key, a tracked evidence input is a symlink, a
+newly added module/UniFFI file is not covered by dynamic discovery, or
+`docs/LEGAL_REVIEW.md` contains a generic placeholder, a blank required
+cell, or a bare `open`/`pending` that is not one of the four named
+`ALLOWED_OPEN_GATE_MARKERS` strings. `--mode release` additionally fails
+while any of those four markers is still present anywhere in the file — by
+design this is expected to fail until an actual reviewer resolves each gate;
+CI runs the default `ci-structural` mode so an open counsel/upstream gate
+does not turn ordinary `Verify` red.
 
 Dependency lock and verification (regenerate only when coordinates
 change; do not hand-edit generated checksums):

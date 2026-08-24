@@ -210,6 +210,31 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   derivation-backend Windows native library are **not** distributed. This packet does not
   mark Prompt 7, the Windows candidate, or any release as GO; both the counsel review and
   upstream `hyperledger-identus/apollo` issue #226 remain open gates.
+- Legal-evidence packet fixes (same branch, additive commits, independent review found the
+  packet above NO-GO): `LICENSES/MIT.txt` and `LICENSES/Unicode-3.0.txt` (both fetched verbatim
+  from spdx.org) correct a prior implicit claim that no MIT-only component was distributed —
+  `org.slf4j:slf4j-api` is confirmed MIT-only from its own POM, and `scripts/license_catalog.py`
+  now records an explicit election for every Gradle runtime coordinate rather than assuming a
+  dual-license `OR` clause covers it. `docs/evidence/cargo_dependency_inventory.json` replaces
+  the earlier single-closure heuristic with a separate `cargo tree --locked --target <triple>`
+  graph for each of the 9 committed target triples, reporting target-linked normal deps,
+  proc-macro-and-support closures, host-build-only deps, and dev-only deps separately (46
+  packages total, 33 linked into at least one target, including 3 MIT-only linked crates and
+  `unicode-ident`'s `(MIT OR Apache-2.0) AND Unicode-3.0` compound expression called out
+  explicitly). Gradle modules are now discovered from `settings.gradle.kts`; JNA's 25 embedded
+  `libjnidispatch` natives, Skiko's dylibs, and the Identus/IonSpin/LazySodium native carriers
+  are catalogued with embedded path/hash/platform detail, and JNA is no longer classified as
+  Source-only. `docs/LEGAL_REVIEW.md` no longer states embedded UniFFI creates no obligation or
+  that MPL-2.0 handling is satisfied — both are OPEN counsel determinations — and
+  `LICENSES/BouncyCastle.txt` is now consistently described as a manual transcription of the
+  cited HTML (source HTML snapshot and hash committed separately from the transcription hash).
+  `scripts/generate_legal_evidence.py`/`scripts/check_release_evidence.py` reject symlinks,
+  parse locks/checksums byte-strictly, recompute `LEGAL_EVIDENCE_DIGEST.txt` exactly, and run in
+  `ci-structural` (allows four named `ALLOWED_OPEN_GATE_MARKERS`) or `release` (fails while any
+  remain) modes, with new unit tests for both. `docs/evidence/scope_binding.json` records the
+  evidence-generation-time subject commit/tree separately from the packet's own commit/tree.
+  Still non-counsel scope; still does not mark Prompt 7, the Windows candidate, or any release
+  as GO.
 
 ### Changed
 

@@ -344,3 +344,17 @@ Prompt 7, or any release as GO.
   `win32-x86-64` build) remains open and unresolved by this addendum.
 - Owner/counsel review of `docs/LEGAL_REVIEW.md` has not occurred; that field
   is recorded as an explicit open gate, not a passed check.
+
+### 8.1 Addendum — 2026-08-24, legal-evidence packet NO-GO fixes
+
+An independent review returned NO-GO on the §8 packet for factual and
+fail-closed gaps (a false "no MIT-only distributed component" framing, a
+single-closure Cargo heuristic instead of per-target-triple graphs, legal
+conclusions about UniFFI/MPL obligations being "satisfied", and several
+generator/checker gaps). All are fixed by additional commits on the same
+branch (see `docs/HANDOFF.md` and `CHANGELOG.md` for the itemized list);
+none of §1–§7 above changes, and this addendum still does not certify
+anything or mark this audit, Prompt 7, or any release as GO. The counsel
+review, upstream `hyperledger-identus/apollo` issue #226, the Windows PE
+re-review, and per-election reviewer acceptance remain open gates in
+`docs/LEGAL_REVIEW.md`.

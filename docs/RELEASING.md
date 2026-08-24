@@ -10,9 +10,16 @@ tag plus release notes that identify the source revision, verified targets, and 
    the root `NOTICE` and `LICENSES/` texts, and the evidence checklist in
    [LEGAL_REVIEW.md](LEGAL_REVIEW.md). Regenerate `docs/evidence/` with
    `python3 scripts/generate_legal_evidence.py` and confirm
-   `python3 scripts/check_release_evidence.py` passes. None of these is legal
-   advice or counsel approval; `LEGAL_REVIEW.md` records the counsel gate as
-   open until an actual reviewer signs off.
+   `python3 scripts/check_release_evidence.py` (default `ci-structural` mode)
+   passes. Before an actual release, also run
+   `python3 scripts/check_release_evidence.py --mode release`, which
+   additionally fails while any `docs/LEGAL_REVIEW.md` field still carries one
+   of the four named `ALLOWED_OPEN_GATE_MARKERS` strings (counsel review,
+   Identus issue #226, Windows PE re-review, per-election reviewer
+   acceptance) — it is expected to fail until every one of those gates is
+   actually resolved by a human. None of these is legal advice or counsel
+   approval; `LEGAL_REVIEW.md` records the counsel gate as open until an
+   actual reviewer signs off.
 3. Verify repository history contains no API keys, real mnemonics, private keys, or live-fund
    addresses. Run `python3 scripts/check_gitleaks.py` after
    `python3 scripts/install_gitleaks.py`. This does not replace an owner-authenticated
