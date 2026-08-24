@@ -756,9 +756,13 @@ def scan_windows_forbidden_paths(
         try:
             candidate = data[index:end].decode("ascii")
         except UnicodeDecodeError:
-            candidate = data[index:end].decode("ascii", errors="replace")
-            if candidate not in hits:
-                hits.append(candidate[:MAX_PATH_DISPLAY])
+            raw = data[index:end]
+            # Binary `/` plus non-ASCII is not a path unless it contains a
+            # documented build root or a later `/` (absolute-looking).
+            if any(root in raw for root in roots) or b"/" in raw[1:]:
+                display = raw.decode("ascii", errors="replace")[:MAX_PATH_DISPLAY]
+                if display not in hits:
+                    hits.append(display)
             start = index + 1
             continue
         if len(candidate) >= 2 and not _is_allowed_remap(candidate):

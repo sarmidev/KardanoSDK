@@ -374,6 +374,8 @@ class AdversarialDebugCertPathTests(unittest.TestCase):
             pe.verify_windows_x86_64_dll(path, require_tools=False)
         path = _write(build_pe(embed=b"/cargo-target/release/out"))
         pe.verify_windows_x86_64_dll(path, require_tools=False)
+        path = _write(build_pe(embed=b"/\x01\xffA"))
+        pe.verify_windows_x86_64_dll(path, require_tools=False)
 
     def test_wrong_filename_and_arm_prefix_are_rejected(self) -> None:
         root = Path(tempfile.mkdtemp())

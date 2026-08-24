@@ -239,7 +239,9 @@ imports, empty delay-load/Authenticode, no CODEVIEW/PDB, recorded
 `/Brepro` `TimeDateStamp` and allowed non-PDB debug metadata
 (VS 2022 may emit a hash stamp and `IMAGE_DEBUG_TYPE_REPRO`; A==B
 is the gate),
-`DYNAMIC_BASE`+`NX_COMPAT`, no overlay), then runs the same four
+`DYNAMIC_BASE`+`NX_COMPAT`, no overlay). Slash-byte path scan does
+not treat `/` plus non-ASCII as a host path unless a documented
+root or a later `/` is present. Then runs the same four
 `jvmTest` tasks via `gradlew.bat`. The DLL is placed only on the
 runner JNA path for those tests. Permissions stay `contents: read`.
 Uploads use `if-no-files-found: error`. CHECKSUMS and committed `src/`
