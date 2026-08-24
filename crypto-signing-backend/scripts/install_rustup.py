@@ -93,17 +93,26 @@ def rustc_matches(channel: str) -> bool:
     rustc = shutil_which("rustc")
     if rustc is None:
         return False
+    env = os.environ.copy()
+    env.pop("RUSTUP_TOOLCHAIN", None)
     completed = subprocess.run(
         [rustc, "--version"],
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
     return completed.returncode == 0 and parse_rustc_release(completed.stdout or "") == channel
 
 
 def rustup_home_for(cargo_home: Path) -> Path:
-    return cargo_home.parent / "rustup"
+    """Standard rustup layout: ~/.cargo pairs with ~/.rustup, not ~/rustup."""
+    override = os.environ.get("RUSTUP_HOME")
+    if override:
+        return Path(override)
+    if cargo_home.name == ".cargo":
+        return cargo_home.with_name(".rustup")
+    return cargo_home.parent / ".rustup"
 
 
 def rustup_process_env(cargo_home: Path) -> dict[str, str]:
@@ -276,16 +285,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--skip-if-present",
         action="store_true",
-        help="Exit 0 when rustc --version equals --channel exactly.",
+        help="Skip rustup-init only when rustc already equals --channel and rustup is absent.",
     )
     args = parser.parse_args(argv)
     try:
-        if args.skip_if_present and rustc_matches(args.channel):
-            print(f"rustc {args.channel} already on PATH; rustup-init not downloaded")
-            if rustup_bin(args.cargo_home) is not None:
-                activate_pinned_toolchain(args.channel, args.cargo_home)
-            return 0
         existing = rustup_bin(args.cargo_home)
+        if (
+            args.skip_if_present
+            and rustc_matches(args.channel)
+            and existing is None
+        ):
+            print(f"rustc {args.channel} already on PATH; rustup-init not downloaded")
+            return 0
         if existing is not None:
             print(f"using existing rustup at {existing}; rustup-init not downloaded")
             ensure_toolchain(args.channel, args.cargo_home)

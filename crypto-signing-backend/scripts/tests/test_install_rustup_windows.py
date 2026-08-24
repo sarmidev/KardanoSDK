@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -41,6 +42,21 @@ class HostTripleTests(unittest.TestCase):
             rustup.parse_rustc_release("rustc 1.97.1 (8bab26f4f 2026-07-14)"),
             "1.97.0",
         )
+
+    def test_rustup_home_pairs_dot_cargo_with_dot_rustup(self) -> None:
+        previous = os.environ.pop("RUSTUP_HOME", None)
+        try:
+            self.assertEqual(
+                rustup.rustup_home_for(Path("/Users/runner/.cargo")),
+                Path("/Users/runner/.rustup"),
+            )
+            self.assertEqual(
+                rustup.rustup_home_for(Path("C:/Users/runneradmin/.cargo")),
+                Path("C:/Users/runneradmin/.rustup"),
+            )
+        finally:
+            if previous is not None:
+                os.environ["RUSTUP_HOME"] = previous
 
 
 if __name__ == "__main__":
