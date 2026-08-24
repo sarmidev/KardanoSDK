@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Fresh PE A/B at `6e5bb97` / run `32722013030` supersedes `32719231997` / `32720083778`. Phase C promotion is NO-GO pending PE re-review and Identus #226. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Prior A/B `32722013030` at `6e5bb97` is superseded by the next PE debug/resource containment run. Phase C is NO-GO pending PE re-review and Identus #226. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -114,8 +114,11 @@ Date: 2026-08-24
   terminator inside `DataDirectory[IAT]`; export header, tables, DLL
   name, and export strings wholly inside `DataDirectory[EXPORT]`
   (function RVAs outside that span; forwarders rejected); debug
-  `AddressOfRawData`/`PointerToRawData` consistency (CODEVIEW/PDB
-  rejected; REPRO/POGO only); recursive resource-tree parse; TLS
+  REPRO/POGO payloads parsed against Microsoft PE/COFF Debug Type
+  (REPRO empty or `uint32` length + 32-byte hash) and MSVC
+  `coffgrp` signatures `LTCG`/`PGI`/`PGO`/`PGU` (CODEVIEW/PDB
+  rejected); resource structural interval registry (exact same-kind
+  reuse only; partial overlap and cycles rejected); TLS
   callback array NUL-terminated with executable non-writable targets.
   `windows-2022` jobs select exact MSVC `14.44.35207` /
   `link.exe` `14.44.35228.0` and Windows SDK `10.0.26100.0` (required
@@ -172,8 +175,8 @@ Date: 2026-08-24
   `9503309381` / `9503308946` / `9503350346`, expire 2026-09-07)
   added the ninth CHECKSUMS row
   `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`.
-  Device runtime remains historical (W5-2). Do not start Windows or
-  merge/tag.
+  Device runtime remains historical (W5-2). Windows x86-64 JVM is
+  already in progress as candidate-only Gate 3 work. Do not merge/tag.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope
@@ -292,8 +295,9 @@ Do not use:
 
 Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
 `d09db44`. Gate 2 Linux Phase C promotion from run `32678079715` is on
-the branch (ninth CHECKSUMS row). Independent promotion re-review is
-the next gate. Do not start Windows. Residual owner work:
+the branch (ninth CHECKSUMS row). Gate 3 Windows x86-64 JVM is
+candidate-only: PE re-review is still NO-GO and Identus #226 still
+blocks `:crypto`/`:wallet` JVM tests. Residual owner work:
 authenticated GitHub artifact download, secret-scanning / Dependabot,
 the manual accessibility walkthrough, and a post-replacement Android
 device `connectedAndroidDeviceTest`. Do not merge from an automated

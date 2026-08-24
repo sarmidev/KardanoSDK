@@ -17,6 +17,23 @@ SIGN = pe.SIGN_SYMBOL
 DLL = pe.STABLE_DLL_NAME
 IMPORT_FN = "GetCurrentProcessId"
 KERNEL32 = "kernel32.dll"
+REPRO_HASH32 = bytes(range(32))
+
+
+def repro_hash_payload(digest: bytes = REPRO_HASH32) -> bytes:
+    return struct.pack("<I", len(digest)) + digest
+
+
+def pogo_payload(
+    *,
+    signature: int = pe.IMAGE_DEBUG_POGO_SIGNATURE_LTCG,
+    entries: tuple[tuple[int, int, str], ...] = ((0x1010, 4, ".text"),),
+) -> bytes:
+    body = b""
+    for rva, size, name in entries:
+        body += struct.pack("<II", rva, size) + name.encode("ascii") + b"\x00"
+        body += b"\x00" * ((4 - (len(body) % 4)) % 4)
+    return struct.pack("<I", signature) + body
 
 
 def _pack_section(
@@ -221,10 +238,17 @@ def build_pe(
         payload_rva = 0
         pointer = 0
         size = 0
-        if debug_payload:
-            payload_rva = place(debug_payload)
+        payload = debug_payload
+        if (
+            debug_type == pe.IMAGE_DEBUG_TYPE_POGO
+            and not payload
+            and debug_size_of_data is None
+        ):
+            payload = pogo_payload()
+        if payload:
+            payload_rva = place(payload)
             pointer = rdata_raw + (payload_rva - rdata_va)
-            size = len(debug_payload)
+            size = len(payload)
         if debug_size_of_data is not None:
             size = debug_size_of_data
         addr = payload_rva if debug_address is None else debug_address
@@ -1005,7 +1029,7 @@ class DebugReferenceTests(unittest.TestCase):
             pe.parse_pe32_plus_x86_64_dll(
                 build_pe(
                     debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
-                    debug_payload=b"repro",
+                    debug_payload=repro_hash_payload(),
                     debug_pointer=0x480,
                 )
             )
@@ -1018,10 +1042,59 @@ class DebugReferenceTests(unittest.TestCase):
             )
         self.assertIn("duplicate", str(caught.exception))
 
-    def test_matching_nonzero_payload_is_accepted(self) -> None:
-        pe.parse_pe32_plus_x86_64_dll(
-            build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO, debug_payload=b"repro")
+    def test_empty_and_hash32_repro_are_accepted(self) -> None:
+        empty = pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO))
+        self.assertEqual(empty.debug_entries[0].detail, "empty")
+        hashed = pe.parse_pe32_plus_x86_64_dll(
+            build_pe(
+                debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
+                debug_payload=repro_hash_payload(),
+            )
         )
+        self.assertTrue(hashed.debug_entries[0].detail.startswith("hash-32"))
+
+    def test_arbitrary_repro_bytes_are_rejected(self) -> None:
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO, debug_payload=b"repro")
+            )
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(
+                    debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
+                    debug_payload=struct.pack("<I", 16) + b"\x00" * 16,
+                )
+            )
+        with self.assertRaises(pe.PeError):
+            pe.parse_pe32_plus_x86_64_dll(
+                build_pe(
+                    debug_type=pe.IMAGE_DEBUG_TYPE_REPRO,
+                    debug_payload=repro_hash_payload() + b"\x00",
+                )
+            )
+
+    def test_valid_ltcg_pogo_is_accepted(self) -> None:
+        record = pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_POGO))
+        self.assertIn("entries=1", record.debug_entries[0].detail)
+
+    def test_pogo_malformed_signature_and_entries_are_rejected(self) -> None:
+        cases = [
+            pogo_payload(signature=0x41414141),
+            pogo_payload(entries=((0x1010, 4, ".text"),))[:-1],
+            struct.pack("<I", pe.IMAGE_DEBUG_POGO_SIGNATURE_LTCG)
+            + struct.pack("<II", 0x1010, 4)
+            + b"text",
+            pogo_payload(entries=((0x1010, 4, ".text"),)) + b"\x01\x00\x00\x00",
+            pogo_payload(entries=((0x5000, 4, ".text"),)),
+            pogo_payload(entries=((0x1010, 4, ".text"), (0x1010, 4, ".text"))),
+            pogo_payload(entries=((0x1010, 8, ".text"), (0x1014, 8, ".rdata"))),
+        ]
+        for blob in cases:
+            with self.subTest(blob=blob[:8]):
+                with self.assertRaises(pe.PeError):
+                    pe.parse_pe32_plus_x86_64_dll(
+                        build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_POGO, debug_payload=blob)
+                    )
 
 
 class ResourceTreeTests(unittest.TestCase):
@@ -1059,6 +1132,54 @@ class ResourceTreeTests(unittest.TestCase):
             pe.parse_pe32_plus_x86_64_dll(
                 build_pe(resource_blob=_resource_tree(codepage=1252))
             )
+
+    def test_name_offsets_into_header_or_table_are_rejected(self) -> None:
+        for offset in (0, 8, 16):
+            with self.subTest(offset=offset):
+                with self.assertRaises(pe.PeError) as caught:
+                    pe.parse_pe32_plus_x86_64_dll(
+                        build_pe(
+                            resource_blob=_resource_tree(named=True, name_offset=offset)
+                        )
+                    )
+                self.assertIn("overlap", str(caught.exception))
+
+    def test_exact_shared_data_entry_is_allowed(self) -> None:
+        header = struct.pack("<IIHHHH", 0, 0, 0, 0, 0, 2)
+        entries = struct.pack("<II", 1, 32) + struct.pack("<II", 2, 32)
+        leaf = struct.pack("<IIII", 0x1010, 4, 0, 0)
+        pe.parse_pe32_plus_x86_64_dll(build_pe(resource_blob=header + entries + leaf))
+
+    def test_exact_reuse_kind_mismatch_is_rejected(self) -> None:
+        # Data-entry offset 0 reuses the directory header interval.
+        header = struct.pack("<IIHHHH", 0, 0, 0, 0, 0, 1)
+        entry = struct.pack("<II", 1, 0)
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(resource_blob=header + entry))
+        self.assertTrue(
+            "overlap" in str(caught.exception) or "kind" in str(caught.exception),
+            caught.exception,
+        )
+
+    def test_partial_data_entry_overlap_is_rejected(self) -> None:
+        header = struct.pack("<IIHHHH", 0, 0, 0, 0, 0, 2)
+        entries = struct.pack("<II", 1, 32) + struct.pack("<II", 2, 40)
+        leafs = struct.pack("<IIII", 0x1010, 4, 0, 0) + struct.pack(
+            "<IIII", 0x1010, 4, 0, 0
+        )
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(resource_blob=header + entries + leafs))
+        self.assertIn("overlap", str(caught.exception))
+
+    def test_nested_subdirectory_overlapping_parent_table_is_rejected(self) -> None:
+        header = struct.pack("<IIHHHH", 0, 0, 0, 0, 0, 1)
+        entry = struct.pack("<II", 1, 8 | 0x80000000)
+        with self.assertRaises(pe.PeError) as caught:
+            pe.parse_pe32_plus_x86_64_dll(build_pe(resource_blob=header + entry))
+        self.assertTrue(
+            "overlap" in str(caught.exception) or "cycle" in str(caught.exception),
+            caught.exception,
+        )
 
 
 class TlsCallbackTests(unittest.TestCase):

@@ -49,6 +49,18 @@ def _report(path: Path) -> dict[str, object]:
             {"name": item.name, "ordinal": item.ordinal, "rva": item.rva}
             for item in record.sign_exports
         ],
+        "debug_entries": [
+            {
+                "type": item.debug_type,
+                "size_of_data": item.size_of_data,
+                "address_of_raw_data": item.address_of_raw_data,
+                "pointer_to_raw_data": item.pointer_to_raw_data,
+                "payload_sha256": item.payload_sha256,
+                "payload_head_hex": item.payload_head_hex,
+                "detail": item.detail,
+            }
+            for item in record.debug_entries
+        ],
         "dumpbin_returncode": record.dumpbin_returncode,
         "forbidden_paths": record.forbidden_paths,
         "jna_prefix": windows_pe.JNA_RESOURCE_PREFIX,

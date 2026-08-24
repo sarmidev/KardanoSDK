@@ -248,8 +248,10 @@ forwarder RVA, export tables/names inside `DataDirectory[EXPORT]`,
 ILT/IAT exactness inside `DataDirectory[IMPORT]`/`[IAT]`, every
 nonempty data directory parsed including resource tree and TLS
 callbacks, allowlisted imports, empty delay-load/Authenticode/CLR/bound-import, no
-CODEVIEW/PDB, `IMAGE_DEBUG_TYPE_REPRO` and observed
-`IMAGE_DEBUG_TYPE_POGO` with matching raw pointers, recorded `/Brepro`
+CODEVIEW/PDB, `IMAGE_DEBUG_TYPE_REPRO` (PE/COFF empty or
+`uint32`+32-byte hash) and observed `IMAGE_DEBUG_TYPE_POGO`/`coffgrp`
+(`LTCG`/`PGI`/`PGO`/`PGU` entries, no trailing junk) with matching
+raw pointers, resource structural interval tracking, recorded `/Brepro`
 `TimeDateStamp`, `DYNAMIC_BASE`+`NX_COMPAT`, no overlay). Path scan
 rejects ASCII and UTF-16LE drive-root and UNC candidates from any
 byte offset. Then runs `:crypto-signing-backend:jvmTest` via

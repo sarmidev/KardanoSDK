@@ -37,8 +37,16 @@ Policy (documented, not a strength claim):
   allowlist (case-insensitive); delay-load and Authenticode directories
   are empty; no unexpected import names
 - no CODEVIEW/PDB debug directory, no ``RSDS``/``.pdb``. Allowed debug
-  types are ``IMAGE_DEBUG_TYPE_REPRO`` and the observed
-  ``IMAGE_DEBUG_TYPE_POGO`` (windows-2022 run 32717757080). COFF
+  types are ``IMAGE_DEBUG_TYPE_REPRO`` (16) and observed
+  ``IMAGE_DEBUG_TYPE_POGO`` (13). REPRO payload follows Microsoft
+  PE/COFF Debug Type: empty, or a little-endian ``uint32`` hash
+  length plus exactly that many hash bytes
+  (https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#debug-type).
+  Non-empty REPRO must be the MSVC 32-byte hash form (length 32,
+  ``SizeOfData == 36``). POGO is not in that PE/COFF table; dumpbin
+  labels type 13 ``coffgrp`` and MSVC emits ``LTCG``/``PGI``/``PGO``/
+  ``PGU`` signatures plus RVA/size/NUL-name entries padded to 4
+  bytes. Unknown signatures and unimplemented types fail. COFF
   ``TimeDateStamp`` is recorded; VS 2022 ``/Brepro`` may emit a hash,
   not 0; A==B is the reproducibility gate
 - path scan rejects ASCII and UTF-16LE drive-root (``C:\\``) and UNC
@@ -53,6 +61,7 @@ Policy (documented, not a strength claim):
 from __future__ import annotations
 
 import glob
+import hashlib
 import re
 import shutil
 import struct
@@ -150,6 +159,29 @@ ALLOWED_DEBUG_TYPES = frozenset(
         IMAGE_DEBUG_TYPE_POGO,
     }
 )
+# Microsoft PE/COFF Debug Type: REPRO raw data is empty or
+# little-endian uint32 length + hash bytes. MSVC writes length 32.
+REPRO_HASH_LENGTH = 32
+REPRO_HASH_PAYLOAD_SIZE = 4 + REPRO_HASH_LENGTH
+# dumpbin /HEADERS labels type 13 "coffgrp" and prints the 4-byte
+# signature (e.g. 4C544347 LTCG). PE/COFF does not define this payload.
+IMAGE_DEBUG_POGO_SIGNATURE_LTCG = 0x4C544347
+IMAGE_DEBUG_POGO_SIGNATURE_PGI = 0x50474900
+IMAGE_DEBUG_POGO_SIGNATURE_PGO = 0x50474F00
+IMAGE_DEBUG_POGO_SIGNATURE_PGU = 0x50475500
+ALLOWED_POGO_SIGNATURES = frozenset(
+    {
+        IMAGE_DEBUG_POGO_SIGNATURE_LTCG,
+        IMAGE_DEBUG_POGO_SIGNATURE_PGI,
+        IMAGE_DEBUG_POGO_SIGNATURE_PGO,
+        IMAGE_DEBUG_POGO_SIGNATURE_PGU,
+    }
+)
+MAX_POGO_ENTRIES = 4096
+RESOURCE_KIND_HEADER = "header"
+RESOURCE_KIND_TABLE = "table"
+RESOURCE_KIND_NAME = "name"
+RESOURCE_KIND_DATA_ENTRY = "data_entry"
 RUNTIME_FUNCTION_SIZE = 12
 BASE_RELOC_BLOCK_HEADER = 8
 TLS_DIRECTORY64_SIZE = 40
@@ -303,6 +335,25 @@ class ImportDll:
 
 
 @dataclass
+class DebugRecord:
+    debug_type: int
+    size_of_data: int
+    address_of_raw_data: int
+    pointer_to_raw_data: int
+    payload_sha256: str
+    payload_head_hex: str
+    detail: str
+
+
+@dataclass
+class ResourceInterval:
+    start: int
+    end: int
+    kind: str
+    content: bytes
+
+
+@dataclass
 class PeRecord:
     path: str
     size: int
@@ -323,6 +374,7 @@ class PeRecord:
     exports: list[ExportRecord] = field(default_factory=list)
     imports: list[ImportDll] = field(default_factory=list)
     sign_exports: list[ExportRecord] = field(default_factory=list)
+    debug_entries: list[DebugRecord] = field(default_factory=list)
     forbidden_paths: list[str] = field(default_factory=list)
     dumpbin_text: str = ""
     dumpbin_returncode: int | None = None
@@ -502,11 +554,102 @@ def _require_empty_directory(directories: list[DataDirectory], index: int, label
         raise PeError(f"{label} data directory must be empty")
 
 
+def _debug_payload_record(
+    debug_type: int,
+    size_of_data: int,
+    address_of_raw: int,
+    pointer_to_raw: int,
+    payload: bytes,
+    detail: str,
+) -> DebugRecord:
+    return DebugRecord(
+        debug_type=debug_type,
+        size_of_data=size_of_data,
+        address_of_raw_data=address_of_raw,
+        pointer_to_raw_data=pointer_to_raw,
+        payload_sha256=hashlib.sha256(payload).hexdigest() if payload else "",
+        payload_head_hex=payload[:16].hex(),
+        detail=detail,
+    )
+
+
+def _require_repro_payload(payload: bytes) -> str:
+    # Microsoft PE/COFF Debug Type IMAGE_DEBUG_TYPE_REPRO:
+    # empty, or uint32 length followed by exactly that many hash bytes.
+    if not payload:
+        return "empty"
+    if len(payload) < 4:
+        raise PeError("REPRO payload is shorter than the hash-length field")
+    length = struct.unpack_from("<I", payload, 0)[0]
+    expected = _checked_add(4, length, limit=UINT32_MAX)
+    if length != REPRO_HASH_LENGTH:
+        raise PeError(
+            f"REPRO hash length {length} is not the MSVC {REPRO_HASH_LENGTH}-byte form"
+        )
+    if len(payload) != expected or expected != REPRO_HASH_PAYLOAD_SIZE:
+        raise PeError("REPRO SizeOfData does not match uint32 length plus hash")
+    return f"hash-32 sha256={hashlib.sha256(payload[4:]).hexdigest()}"
+
+
+def _require_pogo_payload(payload: bytes, sections: list[Section]) -> str:
+    # dumpbin coffgrp / MSVC POGO: 4-byte signature + 4-byte-aligned
+    # IMAGE_DEBUG_POGO_ENTRY { RVA, Size, name\\0, pad }.
+    if len(payload) < 4:
+        raise PeError("POGO payload is shorter than the 4-byte signature")
+    signature = struct.unpack_from("<I", payload, 0)[0]
+    if signature not in ALLOWED_POGO_SIGNATURES:
+        raise PeError(f"unknown POGO signature 0x{signature:08x}")
+    cursor = 4
+    ranges: list[tuple[int, int]] = []
+    seen_keys: set[tuple[int, int, str]] = set()
+    count = 0
+    while cursor < len(payload):
+        remaining = len(payload) - cursor
+        if remaining < 9:
+            raise PeError("POGO entry is truncated")
+        rva = struct.unpack_from("<I", payload, cursor)[0]
+        size = struct.unpack_from("<I", payload, cursor + 4)[0]
+        name_off = cursor + 8
+        nul = payload.find(b"\x00", name_off)
+        if nul < 0:
+            raise PeError("POGO entry name is not NUL-terminated")
+        raw_name = payload[name_off:nul]
+        if not raw_name or any(byte < 32 or byte > 126 for byte in raw_name):
+            raise PeError("POGO entry name is empty or not printable ASCII")
+        try:
+            name = raw_name.decode("ascii")
+        except UnicodeDecodeError as error:
+            raise PeError("POGO entry name is not ASCII") from error
+        consumed = _checked_add(nul - cursor, 1, limit=UINT32_MAX)
+        padded = (consumed + 3) & ~3
+        end = _checked_add(cursor, padded, limit=UINT32_MAX)
+        if end > len(payload):
+            raise PeError("POGO entry padding exceeds the payload")
+        if payload[nul + 1 : end] != b"\x00" * (end - nul - 1):
+            raise PeError("POGO entry padding is not zero")
+        if size == 0:
+            raise PeError("POGO entry size is zero")
+        rva_to_offset(sections, rva, size, allow_virtual=True)
+        key = (rva, size, name)
+        if key in seen_keys:
+            raise PeError("POGO entry is duplicated")
+        seen_keys.add(key)
+        ranges.append((rva, _checked_add(rva, size, limit=UINT32_MAX)))
+        cursor = end
+        count = _checked_add(count, 1, limit=UINT32_MAX)
+        if count > MAX_POGO_ENTRIES:
+            raise PeError("POGO entry count exceeds MAX_POGO_ENTRIES")
+    if cursor != len(payload):
+        raise PeError("POGO payload has trailing junk")
+    parse_elf_style_ranges(ranges, "POGO entry")
+    return f"sig=0x{signature:08x} entries={count}"
+
+
 def _require_debug_directory(
     data: bytes, sections: list[Section], entry: DataDirectory
-) -> None:
+) -> list[DebugRecord]:
     if entry.rva == 0 and entry.size == 0:
-        return
+        return []
     if entry.rva == 0 or entry.size == 0:
         raise PeError("debug data directory is truncated")
     if entry.size % IMAGE_DEBUG_DIRECTORY_SIZE != 0:
@@ -517,6 +660,7 @@ def _require_debug_directory(
     base = rva_to_offset(sections, entry.rva, entry.size)
     seen_types: set[int] = set()
     payload_ranges: list[tuple[int, int]] = []
+    records: list[DebugRecord] = []
     for index in range(count):
         off = _checked_add(base, _checked_mul(index, IMAGE_DEBUG_DIRECTORY_SIZE, limit=UINT32_MAX))
         debug_type = _u32(data, off + 12)
@@ -533,7 +677,12 @@ def _require_debug_directory(
         if size_of_data == 0:
             if address_of_raw or pointer_to_raw:
                 raise PeError("zero-size debug payload has nonzero pointers")
-            continue
+            if debug_type == IMAGE_DEBUG_TYPE_REPRO:
+                records.append(
+                    _debug_payload_record(debug_type, 0, 0, 0, b"", "empty")
+                )
+                continue
+            raise PeError("POGO debug payload must include a signature")
         if bool(address_of_raw) != bool(pointer_to_raw):
             raise PeError("debug payload AddressOfRawData/PointerToRawData mismatch")
         file_end = _checked_add(pointer_to_raw, size_of_data, limit=len(data))
@@ -542,8 +691,19 @@ def _require_debug_directory(
         mapped = rva_to_offset(sections, address_of_raw, size_of_data)
         if mapped != pointer_to_raw:
             raise PeError("debug AddressOfRawData does not map to PointerToRawData")
+        payload = _slice(data, pointer_to_raw, size_of_data)
+        if debug_type == IMAGE_DEBUG_TYPE_REPRO:
+            detail = _require_repro_payload(payload)
+        else:
+            detail = _require_pogo_payload(payload, sections)
+        records.append(
+            _debug_payload_record(
+                debug_type, size_of_data, address_of_raw, pointer_to_raw, payload, detail
+            )
+        )
         payload_ranges.append((pointer_to_raw, file_end))
     parse_elf_style_ranges(payload_ranges, "debug payload")
+    return records
 
 
 def parse_elf_style_ranges(ranges: list[tuple[int, int]], label: str) -> None:
@@ -698,7 +858,7 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
             raise PeError("unexpected non-zero overlay/trailing data")
         raise PeError("unexpected overlay/trailing data after last section")
 
-    _validate_all_data_directories(
+    debug_entries = _validate_all_data_directories(
         data, sections, directories, image_base=image_base, file_size=len(data)
     )
     exports = _parse_exports(data, sections, directories[DIR_EXPORT])
@@ -749,6 +909,7 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
         exports=exports,
         imports=imports,
         sign_exports=sign,
+        debug_entries=debug_entries,
     )
 
 
@@ -759,7 +920,7 @@ def _validate_all_data_directories(
     *,
     image_base: int,
     file_size: int,
-) -> None:
+) -> list[DebugRecord]:
     if len(directories) != IMAGE_NUMBEROF_DIRECTORY_ENTRIES:
         raise PeError("data directory count is not 16")
     _require_empty_directory(directories, DIR_SECURITY, "Authenticode/certificate")
@@ -772,7 +933,7 @@ def _validate_all_data_directories(
     _require_empty_directory(directories, DIR_CLR, "CLR")
     if directories[DIR_RESERVED].rva or directories[DIR_RESERVED].size:
         raise PeError("reserved data directory must be empty")
-    _require_debug_directory(data, sections, directories[DIR_DEBUG])
+    debug_entries = _require_debug_directory(data, sections, directories[DIR_DEBUG])
     _require_resource_directory(data, sections, directories[DIR_RESOURCE])
     _require_exception_directory(data, sections, directories[DIR_EXCEPTION])
     _require_basereloc_directory(data, sections, directories[DIR_BASERELOC])
@@ -788,6 +949,7 @@ def _validate_all_data_directories(
     rva_to_offset(sections, directories[DIR_EXPORT].rva, min(directories[DIR_EXPORT].size, EXPORT_DIRECTORY_SIZE))
     rva_to_offset(sections, directories[DIR_IMPORT].rva, min(directories[DIR_IMPORT].size, IMPORT_DESCRIPTOR_SIZE))
     _ = file_size
+    return debug_entries
 
 
 def _require_mapped_directory(
@@ -806,7 +968,36 @@ def _require_resource_directory(
     base = _require_mapped_directory(sections, entry, "resource")
     if base < 0:
         return
-    _walk_resource_directory(data, sections, entry.rva, entry.size, 0, 0, set(), [0])
+    _walk_resource_directory(
+        data,
+        sections,
+        entry.rva,
+        entry.size,
+        0,
+        0,
+        set(),
+        [0],
+        [],
+        -1,
+    )
+
+
+def _register_resource_interval(
+    registry: list[ResourceInterval], start: int, end: int, kind: str, content: bytes
+) -> bool:
+    if start < 0 or end < start:
+        raise PeError("resource interval is inverted")
+    for existing in registry:
+        if start == existing.start and end == existing.end:
+            if existing.kind != kind:
+                raise PeError("resource interval kind mismatch on exact reuse")
+            if existing.content != content:
+                raise PeError("resource interval content mismatch on exact reuse")
+            return False
+        if start < existing.end and existing.start < end:
+            raise PeError("resource structural intervals overlap")
+    registry.append(ResourceInterval(start=start, end=end, kind=kind, content=content))
+    return True
 
 
 def _walk_resource_directory(
@@ -816,30 +1007,52 @@ def _walk_resource_directory(
     root_size: int,
     rel: int,
     depth: int,
-    seen: set[int],
+    stack: set[int],
     entry_count: list[int],
+    registry: list[ResourceInterval],
+    root_off: int,
 ) -> None:
     if depth > MAX_RESOURCE_DEPTH:
         raise PeError("resource directory nesting exceeds MAX_RESOURCE_DEPTH")
-    if rel in seen:
+    if rel in stack:
         raise PeError("resource directory has a cycle")
-    seen.add(rel)
-    dir_rva = _checked_add(root_rva, rel, limit=UINT32_MAX)
-    if _checked_add(rel, RESOURCE_DIRECTORY_SIZE, limit=UINT32_MAX) > root_size:
+    dir_end = _checked_add(rel, RESOURCE_DIRECTORY_SIZE, limit=UINT32_MAX)
+    if dir_end > root_size:
         raise PeError("resource directory header is outside the resource data directory")
+    dir_rva = _checked_add(root_rva, rel, limit=UINT32_MAX)
     off = rva_to_offset(sections, dir_rva, RESOURCE_DIRECTORY_SIZE)
+    header = _slice(data, off, RESOURCE_DIRECTORY_SIZE)
+    header_new = _register_resource_interval(
+        registry, rel, dir_end, RESOURCE_KIND_HEADER, header
+    )
     named = _u16(data, off + 12)
     ids = _u16(data, off + 14)
     count = _checked_add(named, ids, limit=UINT32_MAX)
-    entry_count[0] = _checked_add(entry_count[0], count, limit=UINT32_MAX)
-    if entry_count[0] > MAX_RESOURCE_ENTRIES:
-        raise PeError("resource entry count exceeds MAX_RESOURCE_ENTRIES")
     table_size = _checked_add(
         RESOURCE_DIRECTORY_SIZE, _checked_mul(count, RESOURCE_ENTRY_SIZE, limit=UINT32_MAX)
     )
-    if _checked_add(rel, table_size, limit=UINT32_MAX) > root_size:
+    table_end = _checked_add(rel, table_size, limit=UINT32_MAX)
+    if table_end > root_size:
         raise PeError("resource directory table exceeds the resource data directory")
     rva_to_offset(sections, dir_rva, table_size)
+    table = _slice(data, off, table_size)[RESOURCE_DIRECTORY_SIZE:]
+    table_new = _register_resource_interval(
+        registry,
+        dir_end,
+        table_end,
+        RESOURCE_KIND_TABLE,
+        table,
+    )
+    if not header_new and not table_new:
+        return
+    if header_new != table_new:
+        raise PeError("resource header/table reuse is inconsistent")
+    stack.add(rel)
+    entry_count[0] = _checked_add(entry_count[0], count, limit=UINT32_MAX)
+    if entry_count[0] > MAX_RESOURCE_ENTRIES:
+        raise PeError("resource entry count exceeds MAX_RESOURCE_ENTRIES")
+    seen_names: set[str] = set()
+    seen_ids: set[int] = set()
     for index in range(count):
         entry_off = _checked_add(
             off,
@@ -857,26 +1070,60 @@ def _walk_resource_directory(
             raise PeError("resource ID entry has the name bit set")
         if is_named:
             str_rel = name_field & 0x7FFFFFFF
+            if str_rel % 2 != 0:
+                raise PeError("resource name string is not 2-byte aligned")
             str_end = _checked_add(str_rel, 2, limit=UINT32_MAX)
             if str_end > root_size:
                 raise PeError("resource name string is outside the resource data directory")
+            for existing in registry:
+                if str_rel < existing.end and existing.start < str_end:
+                    if not (str_rel == existing.start and str_end == existing.end and existing.kind == RESOURCE_KIND_NAME):
+                        raise PeError("resource structural intervals overlap")
             str_rva = _checked_add(root_rva, str_rel, limit=UINT32_MAX)
             str_off = rva_to_offset(sections, str_rva, 2)
             length = _u16(data, str_off)
+            if length == 0:
+                raise PeError("resource name string is empty")
             nbytes = _checked_mul(length, 2, limit=UINT32_MAX)
-            if _checked_add(str_rel, _checked_add(2, nbytes, limit=UINT32_MAX), limit=UINT32_MAX) > root_size:
+            name_end = _checked_add(str_rel, _checked_add(2, nbytes, limit=UINT32_MAX), limit=UINT32_MAX)
+            if name_end > root_size:
                 raise PeError("resource name string is truncated")
             raw = _slice(data, str_off + 2, nbytes)
             try:
-                raw.decode("utf-16-le")
+                name = raw.decode("utf-16-le")
             except UnicodeDecodeError as error:
                 raise PeError("resource name is not valid UTF-16LE") from error
-        elif name_field > 0xFFFF:
-            raise PeError("resource ID exceeds 16 bits")
+            if "\x00" in name:
+                raise PeError("resource name contains an embedded NUL")
+            _register_resource_interval(
+                registry,
+                str_rel,
+                name_end,
+                RESOURCE_KIND_NAME,
+                _slice(data, str_off, 2 + nbytes),
+            )
+            if name in seen_names:
+                raise PeError("resource name is duplicated in the directory")
+            seen_names.add(name)
+        else:
+            if name_field > 0xFFFF:
+                raise PeError("resource ID exceeds 16 bits")
+            if name_field in seen_ids:
+                raise PeError("resource ID is duplicated in the directory")
+            seen_ids.add(name_field)
         child = offset_to_data & 0x7FFFFFFF
         if offset_to_data & IMAGE_RESOURCE_DATA_IS_DIRECTORY:
             _walk_resource_directory(
-                data, sections, root_rva, root_size, child, depth + 1, seen, entry_count
+                data,
+                sections,
+                root_rva,
+                root_size,
+                child,
+                depth + 1,
+                stack,
+                entry_count,
+                registry,
+                root_off,
             )
             continue
         leaf_end = _checked_add(child, RESOURCE_DATA_ENTRY_SIZE, limit=UINT32_MAX)
@@ -884,6 +1131,10 @@ def _walk_resource_directory(
             raise PeError("resource data entry is outside the resource data directory")
         leaf_rva = _checked_add(root_rva, child, limit=UINT32_MAX)
         leaf_off = rva_to_offset(sections, leaf_rva, RESOURCE_DATA_ENTRY_SIZE)
+        leaf = _slice(data, leaf_off, RESOURCE_DATA_ENTRY_SIZE)
+        reused = not _register_resource_interval(
+            registry, child, leaf_end, RESOURCE_KIND_DATA_ENTRY, leaf
+        )
         data_rva = _u32(data, leaf_off)
         data_size = _u32(data, leaf_off + 4)
         codepage = _u32(data, leaf_off + 8)
@@ -894,6 +1145,8 @@ def _walk_resource_directory(
             raise PeError("resource data CodePage must be zero")
         if data_size:
             rva_to_offset(sections, data_rva, data_size)
+        _ = reused
+    stack.remove(rel)
 
 
 def _require_exception_directory(

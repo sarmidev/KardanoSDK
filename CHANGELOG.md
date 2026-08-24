@@ -100,8 +100,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   immutable-image claim. PE policy requires a code/execute
   non-writable sign export, canonical `SizeOfImage`, every nonempty
   data directory, export/ILT/IAT/resource/TLS/debug internal
-  containment, `IMAGE_DEBUG_TYPE_REPRO` plus observed
-  `IMAGE_DEBUG_TYPE_POGO`, and ASCII/UTF-16LE
+  containment, `IMAGE_DEBUG_TYPE_REPRO` (PE/COFF empty or
+  `uint32`+32-byte hash) plus observed `IMAGE_DEBUG_TYPE_POGO`
+  `coffgrp` signatures, resource structural interval tracking,
+  and ASCII/UTF-16LE
   drive-root plus UNC path scanning. Phase B run `32715104620` at
   `04c52dc` produced byte-identical candidates (SHA-256
   `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`);
