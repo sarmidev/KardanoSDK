@@ -108,10 +108,15 @@ Date: 2026-08-24
   `58f82a2`. JNA 5.19.1 resource is
   `win32-x86-64/kardano_ed25519_bip32_signing.dll`. Fail-closed PE32+
   verifier + `dumpbin` corroboration. Two independent `windows-2022`
-  jobs; CHECKSUMS stays 9 rows. Phase C promotion waits for review.
-  Hosted images may expose rustc 1.97.1 on PATH; jobs install 1.97.0
-  into `~/.rustup` and put that toolchain bin first. Do not merge/tag
-  or start the legal packet.
+  jobs; CHECKSUMS stays 9 rows. Phase B equality from run
+  `32715104620` at `04c52dc`: A==B SHA-256
+  `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`
+  (263680 bytes). Artifacts A `9515642236`, B `9515642439`, report
+  `9515785476`, expire 2026-09-07. `:crypto-signing-backend:jvmTest`
+  passed on the candidate. `:crypto:jvmTest` / `:wallet:jvmTest` failed
+  because `bip32-ed25519` 1.8.8 ships no `win32-x86-64` derivation
+  wrapper. Phase C promotion is NO-GO pending independent review.
+  Do not merge/tag or start the legal packet.
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence`.**
   Gate 1 is GO at `d09db44`. Gate 2 Linux x86-64 JVM uses JNA prefix

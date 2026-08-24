@@ -94,6 +94,11 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   candidate jobs. Not a CHECKSUMS row. Windows ARM is out of scope.
   Hosted images may expose rustc 1.97.1 first on PATH; rebuild jobs
   activate the pinned 1.97.0 toolchain bin and set `RUSTUP_TOOLCHAIN`.
+  Phase B run `32715104620` at `04c52dc` produced byte-identical
+  candidates (SHA-256 `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`);
+  not promoted. `:crypto-signing-backend:jvmTest` passed;
+  `:crypto`/`:wallet` JVM tests still need the identus derivation
+  wrapper's missing Windows native.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
