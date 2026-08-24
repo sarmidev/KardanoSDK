@@ -36,8 +36,9 @@ Policy (documented, not a strength claim):
 - import DLLs are a non-empty subset of the rustc 1.97 MSVC system
   allowlist (case-insensitive); delay-load and Authenticode directories
   are empty; no unexpected import names
-- no CODEVIEW/PDB debug directory, no ``RSDS``/``.pdb``. The only
-  allowed debug type is ``IMAGE_DEBUG_TYPE_REPRO``. COFF
+- no CODEVIEW/PDB debug directory, no ``RSDS``/``.pdb``. Allowed debug
+  types are ``IMAGE_DEBUG_TYPE_REPRO`` and the observed
+  ``IMAGE_DEBUG_TYPE_POGO`` (windows-2022 run 32717757080). COFF
   ``TimeDateStamp`` is recorded; VS 2022 ``/Brepro`` may emit a hash,
   not 0; A==B is the reproducibility gate
 - path scan rejects ASCII and UTF-16LE drive-root (``C:\\``) and UNC
@@ -140,8 +141,15 @@ IMAGE_DEBUG_TYPE_ILTCG = 14
 IMAGE_DEBUG_TYPE_REPRO = 16
 IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS = 20
 # rustc 1.97 + VS 2022 /DEBUG:NONE /Brepro. CODEVIEW/PDB is refused.
-# Deterministic policy: IMAGE_DEBUG_TYPE_REPRO only.
-ALLOWED_DEBUG_TYPES = frozenset({IMAGE_DEBUG_TYPE_REPRO})
+# Observed on windows-2022 run 32717757080: IMAGE_DEBUG_TYPE_POGO (13)
+# plus IMAGE_DEBUG_TYPE_REPRO. Other non-PDB types are not allowed until
+# a later runner observation is reviewed.
+ALLOWED_DEBUG_TYPES = frozenset(
+    {
+        IMAGE_DEBUG_TYPE_REPRO,
+        IMAGE_DEBUG_TYPE_POGO,
+    }
+)
 RUNTIME_FUNCTION_SIZE = 12
 BASE_RELOC_BLOCK_HEADER = 8
 TLS_DIRECTORY64_SIZE = 40

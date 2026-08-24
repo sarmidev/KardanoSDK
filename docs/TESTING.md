@@ -242,7 +242,8 @@ Toolset drift fails until reviewed. Compares SHA-256 + PE32+ reports
 export in a `CNT_CODE`+`MEM_EXECUTE` non-writable section, no
 forwarder RVA, every nonempty data directory parsed, allowlisted
 imports, empty delay-load/Authenticode/CLR/bound-import, no
-CODEVIEW/PDB, `IMAGE_DEBUG_TYPE_REPRO` only, recorded `/Brepro`
+CODEVIEW/PDB, `IMAGE_DEBUG_TYPE_REPRO` and observed
+`IMAGE_DEBUG_TYPE_POGO`, recorded `/Brepro`
 `TimeDateStamp`, `DYNAMIC_BASE`+`NX_COMPAT`, no overlay). Path scan
 rejects ASCII and UTF-16LE drive-root and UNC candidates from any
 byte offset. Then runs `:crypto-signing-backend:jvmTest` via

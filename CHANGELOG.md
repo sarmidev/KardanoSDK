@@ -98,7 +98,8 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `link.exe` (fail on drift) and record `ImageVersion` without an
   immutable-image claim. PE policy requires a code/execute
   non-writable sign export, canonical `SizeOfImage`, every nonempty
-  data directory, `IMAGE_DEBUG_TYPE_REPRO` only, and ASCII/UTF-16LE
+  data directory, `IMAGE_DEBUG_TYPE_REPRO` plus observed
+  `IMAGE_DEBUG_TYPE_POGO`, and ASCII/UTF-16LE
   drive-root plus UNC path scanning. Phase B run `32715104620` at
   `04c52dc` produced byte-identical candidates (SHA-256
   `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`);

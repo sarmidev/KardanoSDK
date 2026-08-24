@@ -111,7 +111,8 @@ Date: 2026-08-24
   `CNT_CODE`+`MEM_EXECUTE` non-writable section (forwarder RVA
   rejected); canonical `SizeOfImage`; every nonempty data directory
   parsed (security/delay/CLR/bound-import empty; debug
-  `IMAGE_DEBUG_TYPE_REPRO` only); ASCII and UTF-16LE drive-root/UNC
+  `IMAGE_DEBUG_TYPE_REPRO` plus observed `IMAGE_DEBUG_TYPE_POGO`);
+  ASCII and UTF-16LE drive-root/UNC
   path scan. `windows-2022` jobs pin MSVC `14.44.35207`
   `Hostx64/x64` `link.exe` and record `ImageVersion` without an
   immutable-image claim. CHECKSUMS stays 9 rows. Prior Phase B

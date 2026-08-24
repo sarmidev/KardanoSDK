@@ -331,6 +331,8 @@ class ValidImageTests(unittest.TestCase):
         self.assertEqual(hashed_record.timestamp, 0xA1B2C3D4)
         repro = _write(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO))
         pe.verify_windows_x86_64_dll(repro, require_tools=False)
+        pogo = _write(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_POGO))
+        pe.verify_windows_x86_64_dll(pogo, require_tools=False)
 
 
 class AdversarialHeaderTests(unittest.TestCase):
@@ -615,6 +617,7 @@ class CanonicalDirectoryTests(unittest.TestCase):
 
     def test_debug_repro_only_codeview_rejected_on_mutated_fixture(self) -> None:
         pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_REPRO))
+        pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_POGO))
         with self.assertRaises(pe.PeError):
             pe.parse_pe32_plus_x86_64_dll(
                 build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_CODEVIEW)
