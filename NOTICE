@@ -10,7 +10,11 @@ Full license texts are in LICENSES/. The mapping of each component below to
 its license, use, and evidence source is maintained in
 docs/THIRD_PARTY_NOTICES.md; do not treat this NOTICE file as the sole
 source of truth if the two ever disagree — file a correction instead of
-trusting whichever was edited more recently.
+trusting whichever was edited more recently. This list is a curated review,
+not a claim of exhaustive coverage of every transitive coordinate; see
+docs/evidence/gradle_license_inventory.json and
+docs/evidence/cargo_dependency_inventory.json for the generated, per-package
+inventories this file summarizes.
 
 ================================================================================
 Apache License, Version 2.0 (see LICENSES/Apache-2.0.txt)
@@ -21,22 +25,33 @@ The following are used under the Apache License, Version 2.0:
 - Kotlin and Kotlin Multiplatform, standard libraries and build plugins.
   Copyright JetBrains s.r.o. and Kotlin Programming Language contributors.
 - Ktor. Copyright JetBrains s.r.o.
-- kotlinx.serialization, kotlinx.coroutines, kotlinx.atomicfu.
-  Copyright JetBrains s.r.o. and contributors.
+- kotlinx.serialization, kotlinx.coroutines, kotlinx.atomicfu,
+  kotlinx-coroutines-slf4j. Copyright JetBrains s.r.o. and contributors.
 - Compose Multiplatform and AndroidX libraries. Copyright The Android Open
   Source Project / JetBrains s.r.o.
+- org.jetbrains.skiko:skiko (desktopApp sample only; not part of any SDK
+  module). Copyright JetBrains s.r.o. Its macOS-arm64 runtime artifact
+  redistributes compiled libskiko-macos-arm64.dylib / libskiko-macos-x64.dylib.
 - org.kotlincrypto.hash:blake2 / :sha2. Copyright KotlinCrypto contributors.
 - org.hyperledger.identus:bip32-ed25519 (part of the hyperledger-identus/apollo
-  monorepo). Copyright 2024 Input Output Global. Also redistributes a
-  compiled Rust native library per Android ABI
-  (libuniffi_ed25519_bip32_wrapper.so); see docs/THIRD_PARTY_NOTICES.md for
-  that library's own transitive dependency review.
+  monorepo). Copyright 2024 Input Output Global. The Android artifact
+  (bip32-ed25519-android) also redistributes a compiled Rust native library
+  per ABI (libuniffi_ed25519_bip32_wrapper.so). This repository has not
+  obtained or reviewed that native library's own build-time dependency graph;
+  whether it embeds an MPL-2.0 UniFFI runtime the way this repo's own
+  crypto-signing-backend does is an OPEN counsel determination (see
+  docs/LEGAL_REVIEW.md §6b), not assumed to be "also just Apache-2.0" by
+  inheritance from this wrapper's own POM declaration.
 - com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings.
   Copyright 2019 Ugljesa Jovanovic. Its JVM artifact also redistributes
   compiled libsodium binaries for macOS/Linux/Windows; see the ISC entry
   below for libsodium's own license.
-- net.java.dev.jna:jna 5.19.1 (dual Apache-2.0 OR LGPL-2.1; Kardano SDK
-  elects Apache-2.0 for this distribution). Copyright the JNA contributors.
+- net.java.dev.jna:jna 5.19.1 (dual Apache-2.0 OR LGPL-2.1-or-later, per its
+  own POM; Kardano SDK elects Apache-2.0 for this distribution). Copyright
+  the JNA contributors. This jar is also a native carrier: it bundles 25
+  platform-specific libjnidispatch binaries (com/sun/jna/<platform>/); see
+  docs/evidence/maven_native_carriers_inventory.json. Do not read this entry
+  as "JNA is source-only".
 - ed25519-bip32 (Rust crate, 0.4.2) and cryptoxide (0.5.3, transitive; dual
   MIT OR Apache-2.0; Kardano SDK elects Apache-2.0 for this distribution).
   Compiled into all nine committed crypto-signing-backend native artifacts
@@ -48,22 +63,74 @@ Bouncy Castle License (see LICENSES/BouncyCastle.txt)
 
 - org.bouncycastle:bcprov-jdk18on 1.85.2.
   Copyright (c) 2000 - 2026 The Legion of the Bouncy Castle Inc.
+  LICENSES/BouncyCastle.txt is a manual transcription of the license
+  paragraphs at bouncycastle.org/licence.html, not a fetched file; see
+  LICENSES/README.md and docs/LEGAL_REVIEW.md §7 for the source-HTML-hash vs
+  transcription-hash evidence and the OPEN counsel field on faithfulness.
+
+================================================================================
+MIT License (see LICENSES/MIT.txt)
+================================================================================
+
+- org.slf4j:slf4j-api (2.0.0-alpha1 in :crypto/:wallet; 2.0.18 elsewhere).
+  Copyright the SLF4J project (QOS.ch). MIT-only per its own POM (no OR
+  clause) — a real runtime dependency, not test-only.
+- com.goterl:resource-loader 2.0.2 (transitive runtime dependency of
+  com.goterl:lazysodium-android). Copyright the resource-loader
+  contributors. MIT-only per its own POM.
+- bytes (Rust crate, 1.12.1). Copyright the Tokio contributors. MIT-only per
+  its own Cargo.toml `license` field; linked into all nine committed native
+  artifacts via uniffi_core (a normal, non-optional dependency).
+- cargo_metadata (Rust crate, 0.19.2) and zmij (Rust crate, 1.0.22,
+  transitive via cargo_metadata's serde_json use). Copyright their
+  respective authors. MIT-only per their own Cargo.toml `license` fields;
+  linked into all nine committed native artifacts via uniffi's own default
+  "cargo-metadata" Cargo feature (confirmed via `cargo tree`, not assumed —
+  see docs/evidence/cargo_dependency_inventory.json "method").
+
+An earlier version of this file claimed no MIT-only distributed component
+existed; that claim was false and is corrected by this section — see
+LICENSES/README.md "About MIT" for how the correction was found and why it
+is now machine-checked instead of narrated by hand.
+
+================================================================================
+Unicode License v3 (see LICENSES/Unicode-3.0.txt)
+================================================================================
+
+- unicode-ident (Rust crate, 1.0.24). Compound license expression
+  `(MIT OR Apache-2.0) AND Unicode-3.0` per its own Cargo.toml. A support
+  dependency of proc-macro2, used only by proc-macro crates
+  (syn/quote/serde_derive/uniffi_macros/uniffi_internal_macros) during
+  compilation on the host; per
+  docs/evidence/cargo_dependency_inventory.json, it is in every target's
+  proc-macro-and-support closure, never in the linked-into-compiled-artifact
+  set for any of the 9 native targets. Listed here as a factual dependency
+  in this project's build graph regardless of that distinction, since
+  build-time-only vs. embedded is itself an open, not self-asserted,
+  determination.
 
 ================================================================================
 Mozilla Public License, Version 2.0 (see LICENSES/MPL-2.0.txt)
 ================================================================================
 
-MPL-2.0 is file-level, not whole-program, copyleft (MPL-2.0 3.1-3.2). Kardano
-SDK does not modify the Source Code Form of either project below; recipients
-are directed to the upstream repositories to obtain that Source Code Form.
+MPL-2.0 is file-level, not whole-program, copyleft (MPL-2.0 §3.1-§3.2).
+Kardano SDK does not modify the Source Code Form of either project below.
+Whether directing recipients to the upstream repository fully satisfies
+every MPL-2.0 obligation for a compiled/linked (rather than merely
+redistributed-as-is) dependency is an OPEN counsel determination — see
+docs/LEGAL_REVIEW.md §6. This NOTICE entry states the underlying facts; it
+does not conclude the obligation is satisfied.
 
 - com.goterl:lazysodium-android 5.2.0. Copyright the LazySodium Android
   contributors (github.com/terl/lazysodium-android). Its Android .aar also
   redistributes a compiled libsodium.so per ABI; see the ISC entry below.
 - uniffi (Rust crate, =0.29.5). Copyright the Mozilla UniFFI contributors
-  (github.com/mozilla/uniffi-rs). Its generated/compiled bindings code is
-  linked into all nine committed crypto-signing-backend native artifacts
-  listed in crypto-signing-backend/CHECKSUMS.sha256.
+  (github.com/mozilla/uniffi-rs). Its compiled code is linked into all nine
+  committed crypto-signing-backend native artifacts listed in
+  crypto-signing-backend/CHECKSUMS.sha256. The UniFFI-generated Kotlin
+  binding files themselves are inventoried in
+  docs/evidence/uniffi_bindings_inventory.json, which likewise states its
+  MPL obligation review as OPEN rather than concluded.
 
 ================================================================================
 ISC License (see LICENSES/ISC-libsodium.txt)
@@ -90,10 +157,13 @@ artifact, so no attribution text is included for them here:
 - The Identus apollo Android derivation-backend native library's Windows
   build. Not produced upstream (Identus issue #226); Kardano SDK cannot
   distribute what upstream has not published.
-- JUnit, androidx.test:runner, and other test-only dependencies (never
-  packaged into a distributed artifact).
+- JUnit, org.junit, org.hamcrest:hamcrest-core, androidx.test.*, and other
+  test-only dependencies (never packaged into a distributed artifact).
 - Gitleaks CLI, GitHub Actions, and other CI-only tooling (never packaged
   into a distributed artifact).
+- com.google.guava:listenablefuture 1.0. Guava's own well-known empty
+  placeholder artifact (avoids a classpath conflict with the real Guava);
+  carries no code and no license block in its own POM.
 
 ================================================================================
 First-party assets

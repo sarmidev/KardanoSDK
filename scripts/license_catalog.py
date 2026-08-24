@@ -1,0 +1,204 @@
+"""Curated Gradle coordinate -> license/election catalog.
+
+This is factual metadata review, not legal advice. Every entry below was
+checked against the coordinate's own published POM `<licenses>` block (Maven
+Central / Google Maven, or the local Gradle module cache mirroring the same
+bytes) on 2026-08-24 unless noted. `election` is filled only when the POM
+itself lists more than one `<license>` (a real disjunctive choice); it is
+never filled for a single-license coordinate — a single-license MIT (or
+other) coordinate has no "election" to make, and code in
+`scripts/generate_legal_evidence.py` must not treat it as if it did (this is
+the exact mistake the 2026-08-24 independent review flagged: a prior version
+of NOTICE/LICENSES claimed no MIT-only distributed component existed, which
+was false for `org.slf4j:slf4j-api`, and separately failed to record that the
+`bytes` Rust crate, MIT-only, is linked into every committed native
+artifact).
+
+`license` uses the exact SPDX-style name string from the POM (not
+normalized), so a reviewer can trace it back to the source. Coordinates are
+matched by `group:artifact` (any version), unless a specific
+`group:artifact:version` key is present, which takes precedence.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+# group:artifact (or group:artifact:version) -> catalog entry.
+GRADLE_LICENSE_CATALOG: dict[str, dict[str, Any]] = {
+    "org.jetbrains.kotlin": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt",
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt",
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt",
+        "note": "Bridges kotlinx.coroutines debug info to SLF4J; pulls org.slf4j:slf4j-api as a real runtime dependency.",
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/Kotlin/kotlinx.serialization/blob/master/LICENSE.txt",
+    },
+    "org.jetbrains.kotlinx:atomicfu": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/Kotlin/kotlinx-atomicfu/blob/master/LICENSE.txt",
+    },
+    "io.ktor": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/ktorio/ktor/blob/main/LICENSE",
+    },
+    "androidx": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://android.googlesource.com/platform/frameworks/support/+/androidx-main/LICENSE.txt",
+        "note": "Prefix match for the androidx.* group; individual androidx artifacts are not separately re-verified.",
+    },
+    "org.jetbrains.compose": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/JetBrains/compose-multiplatform/blob/master/LICENSE.txt",
+        "note": "Prefix match for org.jetbrains.compose.*; Playground/Desktop UI only.",
+    },
+    "org.jetbrains.compose.hot-reload": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/JetBrains/compose-hot-reload/blob/master/LICENSE.txt",
+        "note": "Dev-loop tooling only; classified build-tooling by scripts/generate_legal_evidence.py, never shipped.",
+    },
+    "org.jetbrains.skiko:skiko": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/JetBrains/skiko/blob/master/LICENSE",
+    },
+    "org.jetbrains.skiko:skiko-awt": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/JetBrains/skiko/blob/master/LICENSE",
+    },
+    "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/JetBrains/skiko/blob/master/LICENSE",
+        "note": (
+            "Native carrier: bundles compiled libskiko-macos-arm64.dylib and "
+            "libskiko-macos-x64.dylib. See docs/evidence/maven_native_carriers_inventory.json."
+        ),
+    },
+    "org.bouncycastle:bcprov-jdk18on": {
+        "licenses": ["Bouncy Castle Licence"],
+        "election": None,
+        "source": "https://www.bouncycastle.org/licence.html",
+        "note": "See LICENSES/BouncyCastle.txt and docs/LEGAL_REVIEW.md \u00a77 for the manual-transcription method.",
+    },
+    "org.kotlincrypto.hash:blake2": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/KotlinCrypto/hash/blob/master/LICENSE.txt",
+    },
+    "org.kotlincrypto.hash:sha2": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/KotlinCrypto/hash/blob/master/LICENSE.txt",
+    },
+    "org.hyperledger.identus:bip32-ed25519": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/hyperledger-identus/apollo/blob/main/LICENSE",
+        "note": (
+            "Android artifact is org.hyperledger.identus:bip32-ed25519-android; both share this "
+            "election. See docs/LEGAL_REVIEW.md \u00a76b for the embedded-native MPL/Apache uncertainty."
+        ),
+    },
+    "org.hyperledger.identus:bip32-ed25519-android": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/hyperledger-identus/apollo/blob/main/LICENSE",
+        "note": (
+            "Bundles compiled libuniffi_ed25519_bip32_wrapper.so per ABI. The POM declares "
+            "Apache-2.0 for the wrapper; this repository has not obtained or reviewed that native "
+            "library's own build-time dependency graph (e.g. whether it links an MPL-2.0 UniFFI "
+            "runtime the way this repo's own crypto-signing-backend does). Treat the embedded "
+            "native library's own license/notice obligations as an OPEN counsel determination, "
+            "not as \"also Apache-2.0\" by inheritance from the wrapper POM."
+        ),
+    },
+    "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://github.com/ionspin/kotlin-multiplatform-libsodium/blob/main/LICENSE",
+        "note": (
+            "Prefix match for all multiplatform-crypto-libsodium-bindings* variants (jvm/ios*/"
+            "metadata). The jvm variant bundles compiled libsodium binaries; see "
+            "docs/evidence/maven_native_carriers_inventory.json."
+        ),
+    },
+    "com.goterl:lazysodium-android": {
+        "licenses": ["MPL-2.0"],
+        "election": None,
+        "source": "https://github.com/terl/lazysodium-android/blob/master/LICENSE.md",
+        "note": "Bundles compiled libsodium.so per ABI. MPL-2.0 file-level obligation is OPEN (docs/LEGAL_REVIEW.md \u00a76).",
+    },
+    "net.java.dev.jna:jna": {
+        "licenses": ["LGPL-2.1-or-later", "Apache-2.0"],
+        "election": "Apache-2.0",
+        "source": "https://github.com/java-native-access/jna/blob/master/LICENSE",
+        "note": (
+            "The POM lists LGPL-2.1-or-later first, Apache-2.0 second, both under "
+            "<distribution>repo</distribution> as a real disjunctive choice (confirmed from the "
+            "artifact's own POM, not assumed). Kardano SDK elects Apache-2.0. Ships a jar that "
+            "itself bundles 25 platform-specific libjnidispatch native binaries; see "
+            "docs/evidence/maven_native_carriers_inventory.json. Do not classify JNA as source-only: "
+            "it is source-plus-embedded-native-carrier."
+        ),
+    },
+    "org.slf4j:slf4j-api": {
+        "licenses": ["MIT"],
+        "election": None,
+        "source": "https://www.slf4j.org/license.html",
+        "note": (
+            "MIT-only (no OR clause in the POM). This is the component a prior version of this "
+            "evidence packet incorrectly implied did not exist; see LICENSES/MIT.txt."
+        ),
+    },
+    "junit:junit": {
+        "licenses": ["Eclipse Public License 1.0"],
+        "election": None,
+        "source": "https://junit.org/junit4/license.html",
+        "note": "Test-only; never shipped.",
+    },
+    "org.junit": {
+        "licenses": ["Eclipse Public License 2.0"],
+        "election": None,
+        "source": "https://www.eclipse.org/legal/epl-2.0/",
+        "note": "Test-only (JUnit 5); never shipped.",
+    },
+    "org.hamcrest:hamcrest-core": {
+        "licenses": ["BSD-3-Clause"],
+        "election": None,
+        "source": "https://github.com/hamcrest/JavaHamcrest/blob/master/LICENSE",
+        "note": "Test-only; never shipped.",
+    },
+    "androidx.test": {
+        "licenses": ["Apache-2.0"],
+        "election": None,
+        "source": "https://android.googlesource.com/platform/frameworks/support/+/androidx-main/LICENSE.txt",
+        "note": "Test-only (androidx.test.*); never shipped.",
+    },
+}
+
+
+def lookup(group: str, artifact: str, version: str) -> dict[str, Any] | None:
+    for key in (f"{group}:{artifact}:{version}", f"{group}:{artifact}", group):
+        if key in GRADLE_LICENSE_CATALOG:
+            return GRADLE_LICENSE_CATALOG[key]
+    return None

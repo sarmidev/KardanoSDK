@@ -1,63 +1,136 @@
 # `LICENSES/` — Authoritative License Texts
 
 This directory holds unmodified, verbatim license texts for the licenses that
-actually apply to source or binaries Kardano SDK redistributes. It is generated
-evidence for the packet described in [`docs/LEGAL_REVIEW.md`](../docs/LEGAL_REVIEW.md);
-it is **not** a legal opinion and does not itself decide which license governs
+actually apply to source or binaries Kardano SDK redistributes, or that this
+repository has confirmed apply to at least one Gradle-runtime or Cargo
+target-linked package (see `docs/evidence/gradle_license_inventory.json` and
+`docs/evidence/cargo_dependency_inventory.json`). It is generated evidence for
+the packet described in [`docs/LEGAL_REVIEW.md`](../docs/LEGAL_REVIEW.md); it
+is **not** a legal opinion and does not itself decide which license governs
 which file — see [`../NOTICE`](../NOTICE) and
 [`docs/THIRD_PARTY_NOTICES.md`](../docs/THIRD_PARTY_NOTICES.md) for the
 per-component mapping.
 
-Each file below was fetched from the license steward's own canonical URL on
-**2026-08-24** (`curl`, no HTML/markdown conversion) and is committed with the
-exact bytes received, so the SHA-256 in this table can be reproduced by
-re-fetching the same URL.
+Six of the seven files below were fetched byte-for-byte from the license
+steward's own canonical URL (`curl`, no HTML/markdown conversion), so their
+SHA-256 can be reproduced by re-fetching the same URL. `BouncyCastle.txt` is
+the one exception: it is a **manual transcription** of the license paragraphs
+rendered by an HTML page, not a fetched file — see the dedicated row and
+"Bouncy Castle: transcription, not a fetched file" below.
 
-| File | License | Source URL | SHA-256 of the committed file |
+| File | License | Source | SHA-256 of the committed file |
 |---|---|---|---|
-| `Apache-2.0.txt` | Apache License, Version 2.0 | https://www.apache.org/licenses/LICENSE-2.0.txt | `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` |
-| `MPL-2.0.txt` | Mozilla Public License, Version 2.0 | https://www.mozilla.org/media/MPL/2.0/index.txt | `3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04` |
-| `ISC-libsodium.txt` | ISC License (as published by the `libsodium` project) | https://raw.githubusercontent.com/jedisct1/libsodium/master/LICENSE | `508a76d186356c0dd807a670ef510964f8724557024796a2c426c6c0e19ab683` |
-| `BouncyCastle.txt` | Bouncy Castle License (upstream describes it as "read in the same way as the MIT license"; it is not the generic SPDX `MIT` template) | https://www.bouncycastle.org/licence.html | `3216ec8f5e256138322eb8d7adb2c7d176af83e29193e38041a62a83ab55fd63` (SHA-256 of this repository's plain-text transcription of the licence paragraphs on that page; the upstream page is HTML, not a distributed `.txt`/`LICENSE` file, so there is no canonical upstream file digest to reproduce — re-verify by reading the page at the URL above) |
+| `Apache-2.0.txt` | Apache License, Version 2.0 | Fetched 2026-08-24: https://www.apache.org/licenses/LICENSE-2.0.txt | `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` |
+| `MPL-2.0.txt` | Mozilla Public License, Version 2.0 | Fetched 2026-08-24: https://www.mozilla.org/media/MPL/2.0/index.txt | `3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04` |
+| `ISC-libsodium.txt` | ISC License (as published by the `libsodium` project) | Fetched 2026-08-24: https://raw.githubusercontent.com/jedisct1/libsodium/master/LICENSE | `508a76d186356c0dd807a670ef510964f8724557024796a2c426c6c0e19ab683` |
+| `MIT.txt` | MIT License | Fetched 2026-08-24: https://raw.githubusercontent.com/spdx/license-list-data/main/text/MIT.txt (SPDX license-list-data, the canonical machine-readable MIT template) | `b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5` |
+| `Unicode-3.0.txt` | Unicode License v3 | Fetched 2026-08-24: https://raw.githubusercontent.com/spdx/license-list-data/main/text/Unicode-3.0.txt | `f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1` |
+| `BouncyCastle.txt` | Bouncy Castle License (upstream describes it as "read in the same way as the MIT license"; it is **not** the generic SPDX `MIT` template, and this file is **not** the fetched HTML bytes — see below) | Manually transcribed 2026-08-24 from https://www.bouncycastle.org/licence.html | `3216ec8f5e256138322eb8d7adb2c7d176af83e29193e38041a62a83ab55fd63` (SHA-256 of the transcription; does **not** match a hash of the source page) |
 
-## Why these four and not others
+## Bouncy Castle: transcription, not a fetched file
 
-Evaluated against the locked Gradle/Cargo dependency graph in
-`docs/LEGAL_REVIEW.md` (2026-08-24):
+`BouncyCastle.txt` is a **manual transcription** typed from the licence
+paragraphs displayed at `https://www.bouncycastle.org/licence.html` on
+2026-08-24 — that page is HTML with surrounding site markup, not a
+distributed plain-text `LICENSE`/`.txt` file, so there is no canonical
+upstream file to fetch byte-for-byte the way the other five entries above
+were. To let a reviewer independently check the transcription against the
+actual source instead of trusting this repository's typing:
+
+- The raw HTML bytes fetched from that URL on 2026-08-24 are committed at
+  [`docs/evidence/license-sources/bouncycastle-licence-2026-08-24.html`](../docs/evidence/license-sources/bouncycastle-licence-2026-08-24.html).
+- `docs/evidence/bouncycastle_license_source.json` (generated by
+  `scripts/generate_legal_evidence.py`) records both the source HTML's own
+  SHA-256 and the transcription's SHA-256 as two separate, independently
+  verifiable digests — it does not claim they are, or should be, the same
+  hash, and it does not conclude that the transcription is faithful or
+  complete. That determination is `docs/LEGAL_REVIEW.md` §7's explicit
+  **OPEN — pending owner/counsel review** field.
+- `org.bouncycastle:bcprov-jdk18on`'s own POM (Maven Central) declares only
+  `<name>Bouncy Castle Licence</name>` with the same URL above as its
+  `<url>` — it does not embed the license text as a `<comments>` block or
+  ship an alternate `LICENSE`/`NOTICE` file in the jar that could serve as a
+  release-bound, machine-verifiable alternative to this transcription. If a
+  future audit finds an official BC-published plain-text `LICENSE` file
+  (e.g. in the `bc-java` source repository at the tag matching a distributed
+  version), prefer hashing and citing that file instead of this transcription.
+
+## Package-level license/election mapping
+
+Per-package license data for **every** Gradle-runtime and Cargo
+target-linked package (not just the five named components above) lives in
+generated, machine-checked evidence, not in this README:
+
+- `docs/evidence/gradle_license_inventory.json` — every Gradle coordinate
+  Prompt 7 classifies as `runtime` (shipped) across every module discovered
+  from `settings.gradle.kts`, resolved from `scripts/license_catalog.py` (a
+  curated, dated review) or the local Gradle module cache's copy of that
+  coordinate's own POM `<licenses>` block. Lists an exact
+  `mit_only_coordinates` array (single-license MIT, no `OR` clause — e.g.
+  `org.slf4j:slf4j-api` and `com.goterl:resource-loader`) and an exact
+  `unresolved` array (coordinates this run could not resolve at all, e.g.
+  `com.google.guava:listenablefuture:1.0`, Guava's well-known empty
+  placeholder artifact, which carries no license block).
+- `docs/evidence/cargo_dependency_inventory.json` — every package in the
+  Rust dependency graph for each of the 9 committed native-artifact target
+  triples separately, each with its own `license` field taken directly from
+  `cargo metadata` (Cargo.toml's own `license` key, not a guess), and an
+  exact `mit_only_linked_packages` array (packages that are both MIT-only
+  AND actually linked into at least one compiled artifact — e.g. the `bytes`
+  crate, linked via `uniffi_core`, and the `cargo_metadata`/`zmij` crates,
+  linked via `uniffi`'s default `cargo-metadata` feature).
+
+`scripts/check_release_evidence.py` fails if any MIT-only package is found in
+either report and `LICENSES/MIT.txt` does not exist — see
+"About MIT" below for why that file is now present.
+
+### About "MIT" (now included, not evaluated-and-omitted)
+
+An earlier version of this evidence packet (2026-08-24, before an independent
+review) claimed no MIT-only distributed component existed and omitted
+`LICENSES/MIT.txt` on that basis. That claim was **false**: `org.slf4j:
+slf4j-api` (a real runtime dependency of `:crypto`, `:wallet`, and every
+Compose/Android module via `kotlinx-coroutines-slf4j`) is MIT-only per its own
+POM, and the Rust `bytes`/`cargo_metadata`/`zmij` crates (all MIT-only) are
+linked into every one of the 9 committed native artifacts via `uniffi`. This
+correction is why `MIT.txt` is now committed, and why the per-package mapping
+above is generated and machine-checked rather than narrated by hand: a
+hand-written claim of "no MIT-only component" could not by itself catch this
+kind of omission again, but `scripts/check_release_evidence.py` now can.
+
+## Why the other texts are here
+
+Evaluated against the locked Gradle/Cargo dependency graph as of 2026-08-24:
 
 - **Apache-2.0** — directly applies to Kotlin/Ktor/kotlinx/Compose-AndroidX/
-  KotlinCrypto, `org.hyperledger.identus:bip32-ed25519`, the IonSpin libsodium
-  bindings, and is the **elected** branch of every dual `Apache-2.0 OR X`
-  redistributed component: JNA 5.19.1 (`Apache-2.0 OR LGPL-2.1`), the
-  `ed25519-bip32` Rust crate and its `cryptoxide` dependency (`MIT OR
-  Apache-2.0`, compiled into the nine committed native artifacts). Electing
-  Apache-2.0 for those dual-licensed components means this SDK does not need a
-  separate generic `MIT` license file — see "About MIT" below.
+  KotlinCrypto/Skiko, `org.hyperledger.identus:bip32-ed25519`, the IonSpin
+  libsodium bindings, and is the **elected** branch of every dual
+  `Apache-2.0 OR X` redistributed component this review has found: JNA
+  5.19.1 (`Apache-2.0 OR LGPL-2.1-or-later`, confirmed from its own POM), and
+  the `ed25519-bip32` Rust crate and its `cryptoxide` dependency (`MIT OR
+  Apache-2.0`, compiled into the nine committed native artifacts).
 - **MPL-2.0** — applies to `com.goterl:lazysodium-android` (Android native
   libsodium carrier; MPL-2.0 is file-level copyleft, not chosen by election)
-  and to the `uniffi` Rust crate (`=0.29.5`), which is a **single-license**
-  MPL-2.0 dependency (no OR clause) whose generated/compiled code is linked
-  into all nine committed `crypto-signing-backend` native artifacts.
-- **ISC** — applies to `libsodium` itself (the C library), which is bundled
-  as a compiled native binary inside both the IonSpin JVM artifact and the
-  `lazysodium-android` artifact, per `docs/THIRD_PARTY_NOTICES.md`.
+  and to the `uniffi` Rust crate (`=0.29.5`), a **single-license** MPL-2.0
+  dependency (no `OR` clause) whose generated/compiled code is linked into
+  all nine committed `crypto-signing-backend` native artifacts. Neither
+  obligation is asserted "satisfied" here — see `docs/LEGAL_REVIEW.md` §6,
+  an explicit OPEN counsel determination.
+- **ISC** — applies to `libsodium` itself (the C library), bundled as a
+  compiled native binary inside both the IonSpin JVM artifact and the
+  `lazysodium-android` artifact.
+- **Unicode-3.0** — part of the `unicode-ident` Rust crate's compound
+  license expression, `(MIT OR Apache-2.0) AND Unicode-3.0` (from its own
+  Cargo.toml, per `cargo metadata`). `unicode-ident` is a support dependency
+  of `proc-macro2`, used only by proc-macro crates (`syn`/`quote`/
+  `serde_derive`/`uniffi_macros`/etc.) during compilation on the host; per
+  `docs/evidence/cargo_dependency_inventory.json`, it is in every target's
+  `proc_macro_and_support_closure`, never in `linked_into_compiled_artifact`.
+  It is included here anyway because a compound `AND` expression is exactly
+  the kind of manual/compound item this review does not resolve by
+  assumption, and because build-time-only vs. linked-in is itself an OPEN
+  counsel determination, not asserted dispositive by this script.
 - **Bouncy Castle License** — applies to `org.bouncycastle:bcprov-jdk18on`,
-  which is its own permissive license text, not the generic MIT template.
-
-### About "MIT" (evaluated, not separately included)
-
-The prompt's minimum evaluation list includes **MIT**. The only redistributed
-or compiled-in components with an MIT option are already covered by an
-Apache-2.0 election above (`ed25519-bip32`, `cryptoxide`) or have their own
-distinct text (Bouncy Castle). No redistributed or compiled-in component in
-the current locked graph is **MIT-only** (single-license, no OR clause) with
-no other applicable text already in this directory. Components that are
-genuinely MIT-only in this graph — the Gitleaks CLI, and the transitive
-`actions/upload-artifact` pin used by CI — are **not distributed** (CI-only
-tooling; see `docs/THIRD_PARTY_NOTICES.md`), so a generic `MIT.txt` is
-intentionally not added here. If a future dependency change introduces an
-MIT-only redistributed or compiled-in component, add a generic MIT license
-text file to this directory (source: https://opensource.org/license/mit/) in
-that same change and update this table and `docs/LEGAL_REVIEW.md`.
+  its own permissive license text, not the generic MIT template (see above).
 
 This evaluation is a factual dependency-graph finding, not legal advice.

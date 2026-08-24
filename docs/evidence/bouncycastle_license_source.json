@@ -1,0 +1,10 @@
+{
+  "fetched_date": "2026-08-24",
+  "method": "LICENSES/BouncyCastle.txt is a manual, human transcription of the licence paragraphs rendered by https://www.bouncycastle.org/licence.html -- it is NOT byte-fetched/verbatim HTML, and its SHA-256 cannot be reproduced by re-fetching that URL. To let a reviewer independently check the transcription, this repository separately commits the raw HTML snapshot fetched from that URL on 2026-08-24 at docs/evidence/license-sources/bouncycastle-licence-2026-08-24.html, hashed below as source_html_sha256. transcription_sha256 is the SHA-256 of LICENSES/BouncyCastle.txt itself. Whether the transcription is a faithful, complete rendering of the source HTML is an OPEN counsel determination, not asserted by this script.",
+  "source_html_sha256": "2831d401b398e73b37c336336cc798b50263cb4855026d5cda6c4d6ad8117927",
+  "source_html_snapshot": "docs/evidence/license-sources/bouncycastle-licence-2026-08-24.html",
+  "source_url": "https://www.bouncycastle.org/licence.html",
+  "transcription_faithfulness_review": "OPEN \u2014 pending owner/counsel review",
+  "transcription_file": "LICENSES/BouncyCastle.txt",
+  "transcription_sha256": "3216ec8f5e256138322eb8d7adb2c7d176af83e29193e38041a62a83ab55fd63"
+}
