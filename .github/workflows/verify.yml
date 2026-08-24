@@ -40,8 +40,10 @@ jobs:
     name: Legal-evidence packet (NOTICE/LICENSES/native/lock inventory)
     runs-on: ubuntu-latest
     steps:
-      - name: Check out source
+      - name: Check out source (full history for scope-binding seal ancestry checks)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Set up Rust (pinned toolchain)
         run: |
           rustup toolchain install 1.97.0 --profile minimal --no-self-update
@@ -69,6 +71,14 @@ jobs:
           cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/before.hash
           sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/after.hash
           diff /tmp/before.hash /tmp/after.hash
+      - name: DEBUG-TEMP diff cargo_dependency_inventory.json on this host
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          cp docs/evidence/cargo_dependency_inventory.json /tmp/committed_cdi.json
+          python3 scripts/generate_legal_evidence.py || true
+          diff -u /tmp/committed_cdi.json docs/evidence/cargo_dependency_inventory.json || true
+          git checkout -- docs/evidence
       - name: Run legal-evidence regression tests
         env:
           CARGO_NET_OFFLINE: "true"
