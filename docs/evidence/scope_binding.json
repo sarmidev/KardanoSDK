@@ -1,0 +1,16 @@
+{
+  "evidence_commit": "23bc6431aff46def22db920c6b57e0da14f83259",
+  "evidence_tree": "195163356bd038f9fa3348cf0c55b090d4b12fd3",
+  "note": "Two-commit seal (see scripts/generate_legal_evidence.py's module docstring 'Scope binding'). evidence_commit/evidence_tree are the commit/tree that carried the evidence-content files listed in sealed_evidence_digests (this commit's own hash, read back via `git rev-parse HEAD` while sealing). subject_commit/subject_tree are that commit's immediate parent -- the immutable subject-source commit actually inventoried (crypto-signing-backend/Cargo.lock, every */gradle.lockfile, CHECKSUMS.sha256, NOTICE, LICENSES/*.txt as they existed there). sealed_evidence_digests is the SHA-256 of each evidence file's bytes as committed at evidence_commit; scripts/check_release_evidence.py's check_scope_binding_seal() independently recomputes these from both the current worktree and `git show <evidence_commit>:<path>` and fails on any mismatch, ancestry violation, or non-immediate-parent binding.",
+  "sealed_evidence_digests": {
+    "bouncycastle_license_source.json": "0f95f9ef6bcd1acb4a73570d77f8672fd468cf851a4a7b2dd31e99e9e21f8f77",
+    "cargo_dependency_inventory.json": "61f316c5c424baa2677649b48fa2d55b67900899c7732981302c0743dbc3a2ca",
+    "gradle_dependency_inventory.json": "07875fe73d24520230f76765447965e5afe31280c519a5e850b855aa89363d11",
+    "gradle_license_inventory.json": "08dd0adf45ffec9af6d44312e32671584d1024a861fed0e8a39bdcca494c48bc",
+    "maven_native_carriers_inventory.json": "7d56fe55b43b658a95357c2e8461d7e4bd521f06bebc009a11223f1cac269958",
+    "native_artifacts_inventory.json": "f3b506ba443ad7ba1e1117b8c0cab326b41dadfda63852fe659d8363d3d9060d",
+    "uniffi_bindings_inventory.json": "1fad20d6cb77edc45bb2e9e673ff984c5a14748cc0c8b50f1858440423f6f9f9"
+  },
+  "subject_commit": "e3e4559423283aa5088618d03ecc13748d82a0c9",
+  "subject_tree": "54b87455adfc9c7a03c4e773e12a69a1f40a4a1b"
+}
