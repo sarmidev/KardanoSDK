@@ -969,8 +969,18 @@ class LinuxElfVerifyTests(unittest.TestCase):
         )
         dynsym_ok = (
             "     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"
-            f"     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 {SIGN}\n"
+            "     1: 0000000000000000     0 FUNC    GLOBAL DEFAULT  UND memcpy@GLIBC_2.2.5 (2)\n"
+            "     2: 0000000000000000     0 NOTYPE  WEAK   DEFAULT  UND __gmon_start__\n"
+            f"     3: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 {SIGN}\n"
         )
+        parsed_dyn = elf.parse_readelf_dynsym_records(dynsym_ok)
+        self.assertEqual(parsed_dyn[1].name, "memcpy")
+        self.assertEqual(parsed_dyn[1].version, "GLIBC_2.2.5")
+        self.assertEqual(parsed_dyn[1].version_index, 2)
+        self.assertEqual(parsed_dyn[1].ndx, "UND")
+        self.assertEqual(parsed_dyn[3].name, SIGN)
+        self.assertIsNone(parsed_dyn[3].version)
+        self.assertIsNone(parsed_dyn[3].version_index)
 
         def run_with(
             *,
@@ -1041,6 +1051,24 @@ class LinuxElfVerifyTests(unittest.TestCase):
                 "do not match the parser",
             ),
             (dict(dynsym_text="     1: not-enough-columns\n"), "malformed columns"),
+            (
+                dict(
+                    dynsym_text=(
+                        "     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"
+                        f"     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 {SIGN} extra\n"
+                    )
+                ),
+                "malformed columns",
+            ),
+            (
+                dict(
+                    dynsym_text=(
+                        "     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"
+                        f"     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 {SIGN} (9)\n"
+                    )
+                ),
+                "is not global",
+            ),
             (
                 dict(
                     version_text=(

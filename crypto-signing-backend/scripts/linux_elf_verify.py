@@ -261,9 +261,11 @@ LDD_GLIBC_RE = re.compile(
     re.IGNORECASE,
 )
 READELF_VER_NAME_RE = re.compile(r"\bName:\s+(\S+)")
-# GNU readelf --dyn-syms default columns: Num Value Size Type Bind Vis Ndx Name
+# GNU readelf --dyn-syms: Num Value Size Type Bind Vis [[other]] Ndx Name[@VER] [(index)]
 READELF_DYNSYM_RE = re.compile(
-    r"^\s*(\d+):\s+([0-9A-Fa-f]+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+(\S+))?\s*$"
+    r"^\s*(\d+):\s+([0-9A-Fa-f]+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)"
+    r"(?:\s+\[(?:[^\]]*)\])?"
+    r"\s+(\S+)(?:\s+(\S+)(?:\s+\((\d+)\))?)?\s*$"
 )
 
 
@@ -330,6 +332,7 @@ class ReadelfDynsymRecord:
     visibility: str
     ndx: str
     version: str | None
+    version_index: int | None = None
 
 
 @dataclass
@@ -1006,6 +1009,7 @@ def parse_readelf_dynsym_records(text: str) -> list[ReadelfDynsymRecord]:
             name, version = raw_name.split("@@", 1)
         elif "@" in raw_name:
             name, version = raw_name.split("@", 1)
+        raw_index = match.group(9)
         records.append(
             ReadelfDynsymRecord(
                 name=name,
@@ -1014,6 +1018,7 @@ def parse_readelf_dynsym_records(text: str) -> list[ReadelfDynsymRecord]:
                 visibility=match.group(6),
                 ndx=match.group(7),
                 version=version,
+                version_index=int(raw_index) if raw_index is not None else None,
             )
         )
     return records
@@ -1044,6 +1049,23 @@ def require_exact_sign_readelf(
             f"readelf --dyn-syms {SIGN_SYMBOL} version {record.version!r} "
             "is not a parsed Verdef name"
         )
+    if record.version_index is not None:
+        if record.version is None:
+            if record.version_index != VER_NDX_GLOBAL:
+                raise ElfError(
+                    f"readelf --dyn-syms {SIGN_SYMBOL} version index "
+                    f"{record.version_index} is not global"
+                )
+        elif record.version_index not in verdef_indices:
+            raise ElfError(
+                f"readelf --dyn-syms {SIGN_SYMBOL} version index "
+                f"{record.version_index} is not a parsed Verdef"
+            )
+        elif verdef_indices[record.version_index] != record.version:
+            raise ElfError(
+                f"readelf --dyn-syms {SIGN_SYMBOL} version index "
+                f"{record.version_index} does not match {record.version!r}"
+            )
     return record
 
 
