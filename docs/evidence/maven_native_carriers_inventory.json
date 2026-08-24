@@ -1,32 +1,116 @@
 {
   "carriers": [
     {
-      "bundled_native": "libuniffi_ed25519_bip32_wrapper.so (per ABI)",
       "carrier_kind": "Android .aar",
       "distributed_by_kardano": true,
-      "license": "Apache-2.0",
-      "maven_coordinate": "org.hyperledger.identus:bip32-ed25519:1.8.8",
-      "note": "Upstream has not published a win32-x86-64 build (hyperledger-identus/apollo issue #226); Kardano SDK cannot distribute what upstream has not built.",
+      "embedded_natives": [
+        {
+          "path": "jni/arm64-v8a/libuniffi_ed25519_bip32_wrapper.so",
+          "size_bytes": 696072
+        },
+        {
+          "path": "jni/armeabi-v7a/libuniffi_ed25519_bip32_wrapper.so",
+          "size_bytes": 523692
+        },
+        {
+          "path": "jni/x86/libuniffi_ed25519_bip32_wrapper.so",
+          "size_bytes": 708316
+        },
+        {
+          "path": "jni/x86_64/libuniffi_ed25519_bip32_wrapper.so",
+          "size_bytes": 668632
+        }
+      ],
+      "inspected_2026_08_24": true,
+      "license": "Apache-2.0 (wrapper POM); embedded native's own obligations OPEN",
+      "maven_coordinate": "org.hyperledger.identus:bip32-ed25519-android:1.8.8",
+      "note": "Upstream has not published a win32-x86-64 build (hyperledger-identus/apollo issue #226); Kardano SDK cannot distribute what upstream has not built. This repository has not independently reproduced this .so from source and does not claim an exact source-to-binary mapping; whether its own build embeds an MPL-2.0 UniFFI runtime (as this repo's own crypto-signing-backend does) is an OPEN counsel determination, not assumed either way.",
       "windows_native_available_upstream": false
     },
     {
-      "bundled_native": "libdynamic-macos.dylib, libdynamic-linux-{arm64,x86-64}-libsodium.so, libdynamic-msvc-x86-64-libsodium.dll",
       "carrier_kind": "JVM .jar",
       "distributed_by_kardano": true,
-      "license": "Apache-2.0 (wrapper) + ISC (bundled libsodium binary)",
-      "maven_coordinate": "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5",
+      "embedded_natives": [
+        {
+          "path": "libdynamic-linux-arm64-libsodium.so",
+          "size_bytes": 358168
+        },
+        {
+          "path": "libdynamic-linux-x86-64-libsodium.so",
+          "size_bytes": 524432
+        },
+        {
+          "path": "libdynamic-macos.dylib",
+          "size_bytes": 829200
+        },
+        {
+          "path": "libdynamic-msvc-x86-64-libsodium.dll",
+          "size_bytes": 346624
+        }
+      ],
+      "inspected_2026_08_24": true,
+      "license": "Apache-2.0 (wrapper) + ISC (bundled libsodium binaries)",
+      "maven_coordinate": "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5",
       "note": "Windows libsodium .dll ships inside this jar; distinct from the Kardano Windows signing-backend candidate, which is not distributed.",
       "windows_native_available_upstream": true
     },
     {
-      "bundled_native": "libsodium.so (per ABI)",
       "carrier_kind": "Android .aar",
       "distributed_by_kardano": true,
-      "license": "MPL-2.0 (wrapper) + ISC (bundled libsodium binary)",
+      "embedded_natives": [
+        {
+          "path": "jni/arm64-v8a/libsodium.so",
+          "size_bytes": 332824
+        },
+        {
+          "path": "jni/armeabi-v7a/libsodium.so",
+          "size_bytes": 341648
+        },
+        {
+          "path": "jni/x86/libsodium.so",
+          "size_bytes": 467596
+        },
+        {
+          "path": "jni/x86_64/libsodium.so",
+          "size_bytes": 427312
+        }
+      ],
+      "inspected_2026_08_24": true,
+      "license": "MPL-2.0 (wrapper, file-level obligation OPEN) + ISC (bundled libsodium binaries)",
       "maven_coordinate": "com.goterl:lazysodium-android:5.2.0",
       "note": "Android-only carrier; no Windows binary is bundled.",
       "windows_native_available_upstream": false
+    },
+    {
+      "carrier_kind": "JVM .jar (Desktop app runtime classpath)",
+      "distributed_by_kardano": true,
+      "embedded_natives": [
+        {
+          "path": "libskiko-macos-arm64.dylib",
+          "size_bytes": 21455568
+        },
+        {
+          "path": "libskiko-macos-x64.dylib",
+          "size_bytes": 22206704
+        }
+      ],
+      "inspected_2026_08_24": true,
+      "license": "Apache-2.0",
+      "maven_coordinate": "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6",
+      "note": "Compose Multiplatform/Skia native renderer for the desktopApp sample only; not part of any SDK module. Only the macOS-arm64 runtime variant is currently resolved in this repository's desktopApp/gradle.lockfile; other Skiko OS/arch variants are not reviewed here.",
+      "windows_native_available_upstream": false
+    },
+    {
+      "carrier_kind": "JVM/Android jar (also used directly by crypto-signing-backend)",
+      "distributed_by_kardano": true,
+      "embedded_native_count": 25,
+      "embedded_natives_note": "25 platform-specific libjnidispatch native binaries bundled inside the single jna-5.19.1.jar (com/sun/jna/<platform>/libjnidispatch.*); see docs/DECISIONS or re-run `unzip -l jna-5.19.1.jar` to enumerate them all. Only one loads at runtime per host; the jar as distributed contains all 25. Do not classify JNA as a source-only dependency.",
+      "inspected_2026_08_24": true,
+      "license": "Apache-2.0 OR LGPL-2.1-or-later (Kardano SDK elects Apache-2.0)",
+      "maven_coordinate": "net.java.dev.jna:jna:5.19.1",
+      "note": "JNA is both a direct SDK dependency and its own native carrier.",
+      "windows_native_available_upstream": true
     }
   ],
-  "method": "Static table mirroring the artifact-inspection evidence dated 2026-08-23 in docs/THIRD_PARTY_NOTICES.md. Distinct from crypto-signing-backend/CHECKSUMS.sha256, which lists only first-party binaries built from this repository's own Rust crate."
+  "method": "Point-in-time inspection (2026-08-24) of the actual resolved artifact bytes in the local Gradle module cache: unzip -l for the embedded native member list, sizes read directly from the archive directory. This table is static; it is not re-derived from a live artifact fetch on every run (see docs/LEGAL_REVIEW.md \u00a78 for why, and the re-verification command). Distinct from crypto-signing-backend/CHECKSUMS.sha256, which lists only first-party binaries built from this repository's own Rust crate."
 }

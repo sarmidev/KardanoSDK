@@ -1,0 +1,2393 @@
+{
+  "method": "Every coordinate is looked up first in scripts/license_catalog.py (a curated, dated review of the coordinate's own POM), then in the local Gradle module cache's copy of that coordinate's POM (GRADLE_USER_HOME/caches/modules-2/files-2.1), parsing every <license><name> entry (an OR list when more than one is present). This is NOT reproducible on a machine whose Gradle cache does not already have that POM resolved -- see docs/LEGAL_REVIEW.md \u00a78. Unresolved coordinates are listed explicitly with an exact count, never silently dropped or assumed permissive.",
+  "mit_only_coordinates": [
+    "com.goterl:resource-loader:2.0.2",
+    "org.slf4j:slf4j-api:2.0.0-alpha1",
+    "org.slf4j:slf4j-api:2.0.18"
+  ],
+  "resolved": {
+    "androidx.activity:activity-compose:1.13.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.activity:activity-compose:1.8.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.activity:activity-ktx:1.13.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.activity:activity-ktx:1.8.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.activity:activity:1.13.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.activity:activity:1.8.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.annotation:annotation-experimental:1.4.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.annotation:annotation-jvm:1.8.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.annotation:annotation-jvm:1.9.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.annotation:annotation:1.8.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.annotation:annotation:1.9.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.arch.core:core-common:2.2.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.arch.core:core-runtime:2.2.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.autofill:autofill:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.collection:collection-jvm:1.4.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.collection:collection-jvm:1.5.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.collection:collection-ktx:1.5.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.collection:collection:1.4.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.collection:collection:1.5.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.animation:animation-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.animation:animation-core-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.animation:animation-core:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.animation:animation:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.foundation:foundation-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.foundation:foundation-layout-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.foundation:foundation-layout:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.foundation:foundation:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.material3:material3-android:1.5.0-alpha17": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.material3:material3:1.5.0-alpha17": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.material:material-ripple-android:1.11.0-rc01": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.material:material-ripple:1.11.0-rc01": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-annotation-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-annotation-jvm:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-annotation:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-desktop:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-retain-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-retain-desktop:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-retain:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-saveable-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-saveable-desktop:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime-saveable:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.runtime:runtime:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-geometry-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-geometry:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-graphics-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-graphics:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-text-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-text:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-tooling-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-tooling-data-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-tooling-data:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-tooling-preview-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-tooling-preview:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-tooling:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-unit-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-unit:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-util-android:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui-util:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.compose.ui:ui:1.11.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.concurrent:concurrent-futures:1.1.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.core:core-ktx:1.16.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.core:core-ktx:1.18.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.core:core-viewtree:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.core:core:1.16.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.core:core:1.18.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.customview:customview-poolingcontainer:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.documentfile:documentfile:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.dynamicanimation:dynamicanimation:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.emoji2:emoji2:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.graphics:graphics-path:1.0.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.graphics:graphics-shapes-android:1.1.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.graphics:graphics-shapes-desktop:1.1.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.graphics:graphics-shapes:1.1.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.interpolator:interpolator:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.legacy:legacy-support-core-utils:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-common-java8:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-common-jvm:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-common:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-common:2.6.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-livedata-core-ktx:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-livedata-core:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-livedata:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-process:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime-android:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime-compose-android:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime-compose-desktop:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime-compose:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime-desktop:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime-ktx-android:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime-ktx:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-runtime:2.6.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-android:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-compose-android:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-desktop:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate-android:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate-desktop:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.lifecycle:lifecycle-viewmodel:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.loader:loader:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.localbroadcastmanager:localbroadcastmanager:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.navigationevent:navigationevent-android:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.navigationevent:navigationevent-compose-android:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.navigationevent:navigationevent-compose:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.navigationevent:navigationevent-desktop:1.0.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.navigationevent:navigationevent:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.navigationevent:navigationevent:1.0.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.print:print:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.profileinstaller:profileinstaller:1.3.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.profileinstaller:profileinstaller:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.savedstate:savedstate-android:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.savedstate:savedstate-compose-android:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.savedstate:savedstate-compose-desktop:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.savedstate:savedstate-compose:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.savedstate:savedstate-desktop:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.savedstate:savedstate-ktx:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.savedstate:savedstate:1.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.startup:startup-runtime:1.1.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.startup:startup-runtime:1.2.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.tracing:tracing:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.tracing:tracing:1.2.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.transition:transition:1.6.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.versionedparcelable:versionedparcelable:1.1.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.window:window-core-android:1.5.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.window:window-core:1.5.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "androidx.window:window:1.5.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.goterl:lazysodium-android:5.2.0": {
+      "election": null,
+      "licenses": [
+        "MPL-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/terl/lazysodium-android/blob/master/LICENSE.md"
+    },
+    "com.goterl:resource-loader:2.0.2": {
+      "election": null,
+      "licenses": [
+        "MIT"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings-jvm:0.9.5": {
+      "election": null,
+      "licenses": [
+        "The Apache License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings:0.9.5": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ionspin/kotlin-multiplatform-libsodium/blob/main/LICENSE"
+    },
+    "com.squareup.okhttp3:okhttp-android:5.3.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.squareup.okhttp3:okhttp:5.3.2": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.squareup.okio:okio-jvm:3.17.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.squareup.okio:okio-jvm:3.7.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.squareup.okio:okio:3.17.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "com.squareup.okio:okio:3.7.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "io.ktor:ktor-client-cio-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-client-cio:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-client-content-negotiation-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-client-content-negotiation:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-client-core-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-client-core:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-client-okhttp-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-client-okhttp:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-events-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-events:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-http-cio-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-http-cio:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-http-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-http:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-io-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-io:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-network-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-network-tls-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-network-tls:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-network:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-serialization-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-serialization-kotlinx-json-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-serialization-kotlinx-json:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-serialization-kotlinx-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-serialization-kotlinx:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-serialization:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-sse-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-sse:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-utils-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-utils:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-websocket-serialization-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-websocket-serialization:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-websockets-jvm:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "io.ktor:ktor-websockets:3.5.2": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/ktorio/ktor/blob/main/LICENSE"
+    },
+    "net.java.dev.jna:jna:5.19.1": {
+      "election": "Apache-2.0",
+      "licenses": [
+        "LGPL-2.1-or-later",
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/java-native-access/jna/blob/master/LICENSE"
+    },
+    "org.bouncycastle:bcprov-jdk18on:1.85.2": {
+      "election": null,
+      "licenses": [
+        "Bouncy Castle Licence"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://www.bouncycastle.org/licence.html"
+    },
+    "org.hyperledger.identus:bip32-ed25519-android:1.8.8": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/hyperledger-identus/apollo/blob/main/LICENSE"
+    },
+    "org.hyperledger.identus:bip32-ed25519-jvm:1.8.8": {
+      "election": null,
+      "licenses": [
+        "The Apache License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.hyperledger.identus:bip32-ed25519:1.8.8": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/hyperledger-identus/apollo/blob/main/LICENSE"
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-common:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose-desktop:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-runtime:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose-desktop:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.10.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.savedstate:savedstate-compose-desktop:1.3.6": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.savedstate:savedstate-compose:1.3.6": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.androidx.savedstate:savedstate:1.3.6": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.animation:animation-core-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.animation:animation-core:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.animation:animation-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.animation:animation:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.components:components-resources-android:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.components:components-resources-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.components:components-resources:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.desktop:desktop-jvm:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.desktop:desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.foundation:foundation-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.foundation:foundation-layout-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.foundation:foundation-layout:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.foundation:foundation:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.hot-reload:hot-reload-annotations-jvm:1.1.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/compose-hot-reload/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.compose.hot-reload:hot-reload-annotations:1.1.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/compose-hot-reload/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.compose.hot-reload:hot-reload-runtime-api-jvm:1.1.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/compose-hot-reload/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.compose.hot-reload:hot-reload-runtime-api:1.1.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/compose-hot-reload/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.compose.material3:material3-desktop:1.11.0-alpha07": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.material3:material3:1.11.0-alpha07": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.material:material-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.material:material-ripple-desktop:1.11.0-beta03": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.material:material-ripple-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.material:material-ripple:1.11.0-beta03": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.material:material-ripple:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.material:material:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.runtime:runtime-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.runtime:runtime-saveable-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.runtime:runtime-saveable:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.runtime:runtime:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-backhandler-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-backhandler:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-geometry-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-geometry:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-graphics-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-graphics:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-text-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-text:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-tooling-data:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-tooling-preview-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-tooling-preview:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-tooling:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-unit-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-unit:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-util-desktop:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui-util:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.compose.ui:ui:1.11.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-common:2.4.10": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.23": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.23": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib:2.4.10": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:atomicfu-jvm:0.26.1": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:atomicfu-jvm:0.28.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:atomicfu:0.26.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/Kotlin/kotlinx-atomicfu/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:atomicfu:0.28.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/Kotlin/kotlinx-atomicfu/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.6.4": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.4": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-datetime-jvm:0.7.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-datetime:0.7.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-bytestring-jvm:0.9.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-bytestring:0.9.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-core-jvm:0.9.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-core:0.9.1": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-bom:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-bom:1.6.3": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.6.3": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/Kotlin/kotlinx.serialization/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core:1.6.3": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/Kotlin/kotlinx.serialization/blob/master/LICENSE.txt"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-io-jvm:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-io:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.6.3": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.runtime:jbr-api:1.9.0": {
+      "election": null,
+      "licenses": [
+        "The Apache License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains.skiko:skiko-awt-runtime-macos-arm64:0.144.6": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/skiko/blob/master/LICENSE"
+    },
+    "org.jetbrains.skiko:skiko-awt:0.144.6": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/skiko/blob/master/LICENSE"
+    },
+    "org.jetbrains.skiko:skiko:0.144.6": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/JetBrains/skiko/blob/master/LICENSE"
+    },
+    "org.jetbrains:annotations:13.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jetbrains:annotations:23.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.jspecify:jspecify:1.0.0": {
+      "election": null,
+      "licenses": [
+        "The Apache License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.bitops:bits-jvm:0.3.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.bitops:bits:0.3.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.bitops:endian-jvm:0.3.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.bitops:endian:0.3.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.core:core-jvm:0.8.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.core:core:0.8.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.core:digest-jvm:0.8.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.core:digest:0.8.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.hash:blake2-jvm:0.8.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.hash:blake2:0.8.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/KotlinCrypto/hash/blob/master/LICENSE.txt"
+    },
+    "org.kotlincrypto.hash:sha2-jvm:0.8.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto.hash:sha2:0.8.0": {
+      "election": null,
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://github.com/KotlinCrypto/hash/blob/master/LICENSE.txt"
+    },
+    "org.kotlincrypto:error-jvm:0.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.kotlincrypto:error:0.4.0": {
+      "election": null,
+      "licenses": [
+        "The Apache Software License, Version 2.0"
+      ],
+      "resolution_method": "local-gradle-pom-cache",
+      "source": null
+    },
+    "org.slf4j:slf4j-api:2.0.0-alpha1": {
+      "election": null,
+      "licenses": [
+        "MIT"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://www.slf4j.org/license.html"
+    },
+    "org.slf4j:slf4j-api:2.0.18": {
+      "election": null,
+      "licenses": [
+        "MIT"
+      ],
+      "resolution_method": "curated-catalog",
+      "source": "https://www.slf4j.org/license.html"
+    }
+  },
+  "resolved_count": 297,
+  "runtime_coordinate_count": 298,
+  "unresolved": [
+    "com.google.guava:listenablefuture:1.0"
+  ],
+  "unresolved_count": 1
+}
