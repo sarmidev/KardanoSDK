@@ -448,9 +448,6 @@
           ],
           "x86_64-linux-android": [
             "linked_into_compiled_artifact"
-          ],
-          "x86_64-unknown-linux-gnu": [
-            "linked_into_compiled_artifact"
           ]
         },
         "version": "0.3.14"
@@ -2127,7 +2124,6 @@
         "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
         "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
         "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
-        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
         "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
         "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
         "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
@@ -2609,9 +2605,6 @@
           "linked_into_compiled_artifact"
         ],
         "x86_64-linux-android": [
-          "linked_into_compiled_artifact"
-        ],
-        "x86_64-unknown-linux-gnu": [
           "linked_into_compiled_artifact"
         ]
       },

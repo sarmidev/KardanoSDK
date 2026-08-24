@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
@@ -436,6 +437,98 @@ class CargoElectionSchemaTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("memchr@2.8.3", errors[0])
         self.assertNotIn("anyhow@1.0.103", errors[0])
+
+
+class CargoInventoryHostAmbiguousFreshnessTests(unittest.TestCase):
+    """`cargo_dependency_inventory.json`'s x86_64-unknown-linux-gnu membership
+    slice is host-ambiguous (see the comment above `LINUX_X86_64_TARGET_TRIPLE`
+    in scripts/check_release_evidence.py); everything else must still fail
+    closed, on every host, exactly as before."""
+
+    def _committed_payload(self) -> dict:
+        text = (checker.EVIDENCE_DIR / "cargo_dependency_inventory.json").read_text(encoding="utf-8")
+        return json.loads(text)
+
+    def test_strip_removes_nested_triple_key_everywhere(self) -> None:
+        payload = {
+            "membership_by_target": {
+                "x86_64-unknown-linux-gnu": {"linked_into_compiled_artifact": ["errno@0.3.14"]},
+                "aarch64-apple-darwin": {"linked_into_compiled_artifact": ["errno@0.3.14"]},
+            },
+            "packages": [
+                {
+                    "name": "errno",
+                    "membership": {
+                        "x86_64-unknown-linux-gnu": ["linked_into_compiled_artifact"],
+                        "aarch64-apple-darwin": ["linked_into_compiled_artifact"],
+                    },
+                }
+            ],
+        }
+        stripped = checker._strip_host_ambiguous_cargo_target_membership(
+            payload, checker.LINUX_X86_64_TARGET_TRIPLE
+        )
+        self.assertNotIn("x86_64-unknown-linux-gnu", stripped["membership_by_target"])
+        self.assertNotIn("x86_64-unknown-linux-gnu", stripped["packages"][0]["membership"])
+        self.assertIn("aarch64-apple-darwin", stripped["membership_by_target"])
+        self.assertIn("aarch64-apple-darwin", stripped["packages"][0]["membership"])
+
+    def test_non_matching_host_skips_when_divergence_confined_to_ambiguous_target(self) -> None:
+        committed = self._committed_payload()
+        fresh = copy.deepcopy(committed)
+        fresh["membership_by_target"]["x86_64-unknown-linux-gnu"]["linked_into_compiled_artifact"].append(
+            "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14"
+        )
+        with (
+            mock.patch.object(evidence, "cargo_dependency_inventory_per_target", lambda: fresh),
+            mock.patch.object(checker.platform, "system", return_value="Darwin"),
+            mock.patch.object(checker.platform, "machine", return_value="arm64"),
+        ):
+            errors = checker.check_evidence_is_freshly_regenerable()
+        self.assertEqual(errors, [])
+
+    def test_matching_host_does_not_skip_the_same_divergence(self) -> None:
+        committed = self._committed_payload()
+        fresh = copy.deepcopy(committed)
+        fresh["membership_by_target"]["x86_64-unknown-linux-gnu"]["linked_into_compiled_artifact"].append(
+            "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14"
+        )
+        with (
+            mock.patch.object(evidence, "cargo_dependency_inventory_per_target", lambda: fresh),
+            mock.patch.object(checker.platform, "system", return_value="Linux"),
+            mock.patch.object(checker.platform, "machine", return_value="x86_64"),
+        ):
+            errors = checker.check_evidence_is_freshly_regenerable()
+        self.assertTrue(any("cargo_dependency_inventory.json is stale" in e for e in errors))
+
+    def test_non_matching_host_still_fails_on_unrelated_divergence(self) -> None:
+        committed = self._committed_payload()
+        fresh = copy.deepcopy(committed)
+        fresh["package_count"] = committed["package_count"] + 1
+        with (
+            mock.patch.object(evidence, "cargo_dependency_inventory_per_target", lambda: fresh),
+            mock.patch.object(checker.platform, "system", return_value="Darwin"),
+            mock.patch.object(checker.platform, "machine", return_value="arm64"),
+        ):
+            errors = checker.check_evidence_is_freshly_regenerable()
+        self.assertTrue(any("cargo_dependency_inventory.json is stale" in e for e in errors))
+
+    def test_host_is_linux_x86_64_helper(self) -> None:
+        with (
+            mock.patch.object(checker.platform, "system", return_value="Linux"),
+            mock.patch.object(checker.platform, "machine", return_value="x86_64"),
+        ):
+            self.assertTrue(checker._host_is_linux_x86_64())
+        with (
+            mock.patch.object(checker.platform, "system", return_value="Darwin"),
+            mock.patch.object(checker.platform, "machine", return_value="arm64"),
+        ):
+            self.assertFalse(checker._host_is_linux_x86_64())
+        with (
+            mock.patch.object(checker.platform, "system", return_value="Linux"),
+            mock.patch.object(checker.platform, "machine", return_value="aarch64"),
+        ):
+            self.assertFalse(checker._host_is_linux_x86_64())
 
 
 def _write_temp_markdown(text: str) -> Path:

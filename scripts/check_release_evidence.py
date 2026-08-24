@@ -29,6 +29,12 @@ Fails closed (either mode) on any of:
    right now from the current tracked tree (lock/graph state is
    deterministic and the committed copy is not stale). No committed
    docs/evidence/*.json file contains a duplicate JSON object key.
+   One narrow, documented exception: `cargo_dependency_inventory.json`'s
+   `x86_64-unknown-linux-gnu` membership slice is excluded from this
+   byte-comparison when this checker itself is not running on a linux/x86_64
+   host (see `LINUX_X86_64_TARGET_TRIPLE` below for why -- an upstream
+   Cargo/rustix build-script-cfg ambiguity, not a generator bug); every other
+   byte of every evidence file, on every host, is still compared exactly.
 4. docs/evidence/LEGAL_EVIDENCE_DIGEST.txt's own named digests are
    byte-recomputed and compared, and its `licenses_files=`/
    `expected_evidence_files=` lines list exactly the files present on disk in
@@ -61,9 +67,11 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_legal_evidence as evidence  # noqa: E402
@@ -281,6 +289,49 @@ def check_native_inventory_matches_checksums() -> list[str]:
 # regeneration equality.
 KNOWN_NON_REGENERABLE_EVIDENCE_FILES = {"scope_binding.json"}
 
+# Empirically confirmed 2026-08-24 (Verify run 32744019867, job "Legal-evidence
+# packet"): `cargo tree --locked --offline --target x86_64-unknown-linux-gnu
+# -e normal` reports `errno@0.3.14` as reachable from this repository's
+# aarch64-apple-darwin host (cross-evaluating that target's `[target.'cfg(...)']`
+# sections), but NOT reachable when the identical command, same
+# crypto-signing-backend/Cargo.lock, same pinned 1.97.0 toolchain, is run
+# natively on an x86_64-unknown-linux-gnu host (ubuntu-latest CI). The
+# difference traces to `rustix` v1.1.4's Cargo.toml gating its `errno`/
+# `linux-raw-sys` dependency edges on a build-script-only custom cfg
+# (`rustix_use_libc`) that Cargo's `--filter-platform`/`--target` graph
+# resolution cannot evaluate without actually running that build script for
+# the real target -- which only happens on a *native* (host == target) run.
+# This is the same class of problem Gap 6 (native carrier evidence) already
+# solves for compiled artifacts: a foreign/cross-compiled resolution of this
+# one target is not authoritative, and only a run on an actual matching host
+# is. Unlike Gap 6's native carriers, this file otherwise fails-closed on
+# every OTHER byte, so rather than exempting the whole file on a non-matching
+# host, only the ambiguous target's own membership slice is excluded from the
+# byte-freshness comparison below -- see
+# `_strip_host_ambiguous_cargo_target_membership()`.
+LINUX_X86_64_TARGET_TRIPLE = "x86_64-unknown-linux-gnu"
+
+
+def _host_is_linux_x86_64() -> bool:
+    return platform.system() == "Linux" and platform.machine() in ("x86_64", "amd64")
+
+
+def _strip_host_ambiguous_cargo_target_membership(node: Any, triple: str) -> Any:
+    """Recursively drop every dict key exactly equal to `triple` from a parsed
+    cargo_dependency_inventory.json payload (or sub-tree of one): each
+    per-package `membership`/`target_membership` dict and the top-level
+    `membership_by_target` dict all key their per-triple entry by the literal
+    triple string, so one generic recursive strip covers all three shapes."""
+    if isinstance(node, dict):
+        return {
+            key: _strip_host_ambiguous_cargo_target_membership(value, triple)
+            for key, value in node.items()
+            if key != triple
+        }
+    if isinstance(node, list):
+        return [_strip_host_ambiguous_cargo_target_membership(item, triple) for item in node]
+    return node
+
 
 def check_evidence_is_freshly_regenerable() -> list[str]:
     errors: list[str] = []
@@ -342,6 +393,24 @@ def check_evidence_is_freshly_regenerable() -> list[str]:
             errors.append(f"{filename}: regeneration raised {exc!r}")
             continue
         fresh_text = json.dumps(fresh_payload, indent=2, sort_keys=True, ensure_ascii=True) + "\n"
+        if fresh_text != committed_text and filename == "cargo_dependency_inventory.json" and not _host_is_linux_x86_64():
+            committed_payload = json.loads(committed_text, object_pairs_hook=_reject_duplicate_keys)
+            stripped_fresh = _strip_host_ambiguous_cargo_target_membership(fresh_payload, LINUX_X86_64_TARGET_TRIPLE)
+            stripped_committed = _strip_host_ambiguous_cargo_target_membership(
+                committed_payload, LINUX_X86_64_TARGET_TRIPLE
+            )
+            if stripped_fresh == stripped_committed:
+                print(
+                    f"[note] docs/evidence/{filename}: this host is "
+                    f"{platform.system()}/{platform.machine()}, not linux/x86_64, so the "
+                    f"{LINUX_X86_64_TARGET_TRIPLE} membership slice was excluded from this "
+                    "freshness comparison (see the comment above "
+                    "LINUX_X86_64_TARGET_TRIPLE in this file); every other byte matched "
+                    "exactly. Re-run this checker on an actual linux/x86_64 host (e.g. "
+                    "the legal-evidence-scan CI job) for a fully authoritative result.",
+                    file=sys.stderr,
+                )
+                continue
         if fresh_text != committed_text:
             errors.append(
                 f"docs/evidence/{filename} is stale: regenerating it from the "
