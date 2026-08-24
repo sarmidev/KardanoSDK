@@ -217,7 +217,7 @@ offset/vaddr/filesz/memsz/align, `.dynstr.sh_size == DT_STRSZ`,
 indices resolved to globally unique `vna_other`/`vd_ndx` values,
 canonical dynsym entry 0, Versym 0 only for the null entry / local /
 undefined weak import, fail-closed `readelf --version-info` and
-`--dyn-syms` corroboration, `UINT64_MAX` checked add/mul, and a
+`--dyn-syms --wide` corroboration, `UINT64_MAX` checked add/mul, and a
 two-pass path scan. Permissions stay `contents: read`. Uploads use
 `if-no-files-found: error`. The job does not write CHECKSUMS or
 committed `src/`. ubuntu-24.04 artifacts and Linux runs `32675120131`

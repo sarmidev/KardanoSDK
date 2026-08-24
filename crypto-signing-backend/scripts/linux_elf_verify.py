@@ -48,8 +48,9 @@ Policy (documented, not a strength claim):
   must not use 0. Base indices greater than 1 resolve uniquely to one
   ``vna_other`` or one ``vd_ndx``. Every ``vna_other`` is globally
   unique across files. Dynsym entry 0 is the canonical null symbol.
-  ``readelf --version-info`` index maps and ``readelf --dyn-syms``
-  sign records must match exactly. The required sign export is
+  ``readelf --version-info`` index maps and ``readelf --dyn-syms --wide``
+  sign records must match exactly (``--wide`` avoids 80-column wraps).
+  The required sign export is
   unhidden and uses global/unversioned or a matching Verdef
 - ELF64 arithmetic uses ``UINT64_MAX``; ``_checked_add`` / ``_checked_mul``
   reject negatives and sums that exceed ``UINT64_MAX``
@@ -1003,6 +1004,17 @@ def parse_readelf_dynsym_records(text: str) -> list[ReadelfDynsymRecord]:
         if match is None:
             raise ElfError(f"readelf --dyn-syms line {line_no} has malformed columns")
         raw_name = match.group(8) or ""
+        ndx = match.group(7)
+        if (
+            match.group(4) == "FUNC"
+            and match.group(5) in {"GLOBAL", "WEAK"}
+            and ndx != "UND"
+            and ndx.isdigit()
+            and not raw_name
+        ):
+            raise ElfError(
+                f"readelf --dyn-syms line {line_no} is missing a symbol name"
+            )
         version = None
         name = raw_name
         if "@@" in raw_name:
@@ -1910,9 +1922,9 @@ def verify_linux_x86_64_cdylib(
                     "readelf --version-info Name/Version indices do not match the parser: "
                     f"{tool_need} vs {record.verneed_indices}"
                 )
-        dynsyms = _run([readelf_bin, "--dyn-syms", str(path)])
+        dynsyms = _run([readelf_bin, "--dyn-syms", "--wide", str(path)])
         if dynsyms.returncode != 0:
-            raise ElfError(f"readelf --dyn-syms exited {dynsyms.returncode}")
+            raise ElfError(f"readelf --dyn-syms --wide exited {dynsyms.returncode}")
         require_exact_sign_readelf(
             parse_readelf_dynsym_records((dynsyms.stdout or "") + (dynsyms.stderr or "")),
             record.verdef_indices,

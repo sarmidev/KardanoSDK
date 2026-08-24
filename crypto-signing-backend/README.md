@@ -255,7 +255,7 @@ Verdef `vd_ndx` (defined). `vna_other` is globally unique across
 files. Versym 0 is only for dynsym entry 0, `STB_LOCAL`, or the
 undefined `STB_WEAK` unversioned import. Dynsym entry 0 is the
 canonical null symbol. `readelf --version-info` index maps and
-`readelf --dyn-syms` sign records must match exactly. The sign
+`readelf --dyn-syms --wide` sign records must match exactly. The sign
 export is unhidden and global/unversioned or a matching Verdef.
 ELF64 add/mul checks operands against `UINT64_MAX` before summing.
 Runs `32675120131` and `32675524925` are superseded; a fresh Phase B

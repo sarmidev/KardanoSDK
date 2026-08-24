@@ -1054,6 +1054,15 @@ class LinuxElfVerifyTests(unittest.TestCase):
             (
                 dict(
                     dynsym_text=(
+                        "     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 \n"
+                        f"{SIGN}\n"
+                    )
+                ),
+                "missing a symbol name",
+            ),
+            (
+                dict(
+                    dynsym_text=(
                         "     0: 0000000000000000     0 NOTYPE  LOCAL  DEFAULT  UND \n"
                         f"     1: 0000000000001000    16 FUNC    GLOBAL DEFAULT   12 {SIGN} extra\n"
                     )
