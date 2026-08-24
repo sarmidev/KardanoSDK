@@ -21,15 +21,29 @@ Policy (documented, not a strength claim):
 - checked header/section/directory/RVA→file mapping; no overlap or
   wrap; no unexpected overlay past the last section raw end
 - required UniFFI sign export is exact, defined, unique, named, and
-  maps to a non-zero in-image RVA; ``dumpbin /EXPORTS`` must match
+  maps to a non-zero RVA in a ``IMAGE_SCN_CNT_CODE`` +
+  ``IMAGE_SCN_MEM_EXECUTE`` section without ``IMAGE_SCN_MEM_WRITE``;
+  the RVA must sit inside that section's raw and virtual ranges.
+  Forwarder RVAs inside the export-directory range are rejected.
+  ``dumpbin /EXPORTS`` must match the name and RVA and must not
+  report a forwarder
+- every nonempty data directory is parsed: export, import, resource,
+  exception, base reloc, TLS, load config, IAT, debug. Security
+  (file-offset), delay-load, bound import, CLR, architecture, global
+  pointer, and reserved must be empty. Unknown nonempty directories
+  fail. ``SizeOfImage`` must equal the canonical aligned section
+  virtual extent
 - import DLLs are a non-empty subset of the rustc 1.97 MSVC system
   allowlist (case-insensitive); delay-load and Authenticode directories
   are empty; no unexpected import names
-- no CODEVIEW/PDB debug directory, no ``RSDS``/``.pdb``, no embedded
-  workspace/home/temp roots. ``/Brepro`` may emit ``IMAGE_DEBUG_TYPE_REPRO``
-  (and other non-PDB MSVC metadata types). COFF ``TimeDateStamp`` is
-  recorded; VS 2022 ``/Brepro`` may emit a hash, not 0; A==B is the
-  reproducibility gate
+- no CODEVIEW/PDB debug directory, no ``RSDS``/``.pdb``. The only
+  allowed debug type is ``IMAGE_DEBUG_TYPE_REPRO``. COFF
+  ``TimeDateStamp`` is recorded; VS 2022 ``/Brepro`` may emit a hash,
+  not 0; A==B is the reproducibility gate
+- path scan rejects ASCII and UTF-16LE drive-root (``C:\\``) and UNC
+  (``\\\\server\\share``) candidates from any byte offset, plus
+  documented build roots. Only explicitly documented runtime strings
+  are allowed, with component boundaries
 - subsystem ``IMAGE_SUBSYSTEM_WINDOWS_GUI`` as rustc 1.97.0 + MSVC
   emit for this cdylib; DLL characteristics include ``DYNAMIC_BASE``
   and ``NX_COMPAT`` and only the documented extra bits
@@ -107,7 +121,10 @@ DIR_RESERVED = 15
 IMAGE_NUMBEROF_DIRECTORY_ENTRIES = 16
 
 IMAGE_SCN_CNT_CODE = 0x00000020
+IMAGE_SCN_CNT_INITIALIZED_DATA = 0x00000040
 IMAGE_SCN_MEM_EXECUTE = 0x20000000
+IMAGE_SCN_MEM_READ = 0x40000000
+IMAGE_SCN_MEM_WRITE = 0x80000000
 
 DOS_HEADER_SIZE = 64
 COFF_HEADER_SIZE = 20
@@ -123,15 +140,19 @@ IMAGE_DEBUG_TYPE_ILTCG = 14
 IMAGE_DEBUG_TYPE_REPRO = 16
 IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS = 20
 # rustc 1.97 + VS 2022 /DEBUG:NONE /Brepro. CODEVIEW/PDB is refused.
-ALLOWED_DEBUG_TYPES = frozenset(
-    {
-        IMAGE_DEBUG_TYPE_REPRO,
-        IMAGE_DEBUG_TYPE_VC_FEATURE,
-        IMAGE_DEBUG_TYPE_POGO,
-        IMAGE_DEBUG_TYPE_ILTCG,
-        IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS,
-    }
-)
+# Deterministic policy: IMAGE_DEBUG_TYPE_REPRO only.
+ALLOWED_DEBUG_TYPES = frozenset({IMAGE_DEBUG_TYPE_REPRO})
+RUNTIME_FUNCTION_SIZE = 12
+BASE_RELOC_BLOCK_HEADER = 8
+TLS_DIRECTORY64_SIZE = 40
+RESOURCE_DIRECTORY_SIZE = 16
+RESOURCE_ENTRY_SIZE = 8
+LOAD_CONFIG_MIN_SIZE = 0x40
+LOAD_CONFIG_MAX_SIZE = 0x200
+MAX_RUNTIME_FUNCTIONS = 65536
+MAX_RELOC_BLOCKS = 4096
+MAX_RESOURCE_DEPTH = 8
+PAGE_SIZE = 0x1000
 DATA_DIRECTORY_SIZE = 8
 UINT32_MAX = 0xFFFFFFFF
 UINT64_MAX = 0xFFFFFFFFFFFFFFFF
@@ -214,15 +235,22 @@ ALLOWED_REMAP_PREFIXES = (
     "/runner-temp",
     "/runner-workspace",
 )
+# No Windows drive/UNC runtime strings are documented for this cdylib.
+ALLOWED_WINDOWS_RUNTIME_PATHS: tuple[str, ...] = ()
 
 DUMPBIN_MACHINE_RE = re.compile(r"\b8664 machine \(x64\)", re.IGNORECASE)
 DUMPBIN_PE32PLUS_RE = re.compile(r"\b20B magic #\s*\(PE32\+\)", re.IGNORECASE)
 DUMPBIN_DLL_RE = re.compile(r"^\s+DLL\s*$", re.MULTILINE)
 DUMPBIN_EXPORT_RE = re.compile(
-    r"^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)\s*$",
+    r"^\s+\d+\s+[0-9A-Fa-f]+\s+([0-9A-Fa-f]+)\s+(\S+)\s*$",
     re.MULTILINE,
 )
+DUMPBIN_FORWARDER_RE = re.compile(r"\(forwarded to", re.IGNORECASE)
 DUMPBIN_DEPENDENT_RE = re.compile(r"^\s+([\w\-]+\.dll)\s*$", re.IGNORECASE | re.MULTILINE)
+_DRIVE_LETTERS = frozenset(range(ord("A"), ord("Z") + 1)) | frozenset(
+    range(ord("a"), ord("z") + 1)
+)
+_PATH_SEPARATORS = frozenset({ord("\\"), ord("/")})
 
 
 class PeError(RuntimeError):
@@ -302,6 +330,73 @@ def _checked_mul(left: int, right: int, *, limit: int = UINT64_MAX) -> int:
     if total > limit:
         raise PeError("checked mul overflowed")
     return total
+
+
+def _align_up(value: int, align: int, *, limit: int = UINT32_MAX) -> int:
+    if align <= 0 or align & (align - 1):
+        raise PeError("alignment is not a power of two")
+    if value < 0:
+        raise PeError("checked align rejected a negative operand")
+    if value == 0:
+        return 0
+    total = _checked_add(value, align - 1, limit=UINT64_MAX)
+    aligned = total & ~(align - 1)
+    if aligned > limit:
+        raise PeError("aligned value overflowed")
+    return aligned
+
+
+def _ranges_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
+    return left[0] < right[1] and right[0] < left[1]
+
+
+def section_containing_rva(sections: list[Section], rva: int) -> Section:
+    hits = [
+        section
+        for section in sections
+        if section.virtual_address
+        <= rva
+        <= _checked_add(section.virtual_address, max(section.virtual_size, 1) - 1, limit=UINT32_MAX)
+    ]
+    if len(hits) != 1:
+        raise PeError(f"RVA 0x{rva:x} is not in exactly one section")
+    return hits[0]
+
+
+def canonical_size_of_image(
+    sections: list[Section], size_of_headers: int, section_alignment: int
+) -> int:
+    extent = _align_up(size_of_headers, section_alignment)
+    for section in sections:
+        virt_end = _checked_add(
+            section.virtual_address, max(section.virtual_size, 1), limit=UINT32_MAX
+        )
+        extent = max(extent, _align_up(virt_end, section_alignment))
+    if extent == 0 or extent > UINT32_MAX:
+        raise PeError("canonical SizeOfImage is out of range")
+    return extent
+
+
+def require_code_export_target(
+    sections: list[Section], rva: int, export_dir: DataDirectory
+) -> Section:
+    if rva == 0:
+        raise PeError("sign export RVA is zero")
+    export_end = _checked_add(export_dir.rva, export_dir.size, limit=UINT32_MAX)
+    if export_dir.rva and export_dir.rva <= rva < export_end:
+        raise PeError("sign export is a forwarder RVA inside the export directory")
+    section = section_containing_rva(sections, rva)
+    if not (section.characteristics & IMAGE_SCN_CNT_CODE):
+        raise PeError("sign export section is not IMAGE_SCN_CNT_CODE")
+    if not (section.characteristics & IMAGE_SCN_MEM_EXECUTE):
+        raise PeError("sign export section is not IMAGE_SCN_MEM_EXECUTE")
+    if section.characteristics & IMAGE_SCN_MEM_WRITE:
+        raise PeError("sign export section is writable")
+    delta = rva - section.virtual_address
+    if delta >= section.size_of_raw_data:
+        raise PeError("sign export RVA is outside the section raw range")
+    rva_to_offset(sections, rva, 1)
+    return section
 
 
 def _u16(data: bytes, offset: int) -> int:
@@ -518,6 +613,8 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
         va_end = _checked_add(section.virtual_address, max(section.virtual_size, 1), limit=UINT32_MAX)
         va_ranges.append((section.virtual_address, va_end))
         if section.size_of_raw_data:
+            if section.size_of_raw_data % file_alignment != 0:
+                raise PeError(f"section {name!r} SizeOfRawData is not FileAlignment-aligned")
             if section.pointer_to_raw_data == 0 or section.pointer_to_raw_data % file_alignment != 0:
                 raise PeError(f"section {name!r} PointerToRawData is unaligned")
             raw_end = _checked_add(
@@ -530,6 +627,11 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
         sections.append(section)
     parse_elf_style_ranges(raw_ranges, "section raw")
     parse_elf_style_ranges(va_ranges, "section VA")
+    expected_image = canonical_size_of_image(sections, size_of_headers, section_alignment)
+    if size_of_image != expected_image:
+        raise PeError(
+            f"SizeOfImage 0x{size_of_image:x} != canonical 0x{expected_image:x}"
+        )
     if last_raw_end != len(data):
         if last_raw_end > len(data):
             raise PeError("section raw data extends past the file")
@@ -538,24 +640,17 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
             raise PeError("unexpected non-zero overlay/trailing data")
         raise PeError("unexpected overlay/trailing data after last section")
 
-    _require_empty_directory(directories, DIR_SECURITY, "Authenticode/certificate")
-    _require_debug_directory(data, sections, directories[DIR_DEBUG])
-    _require_empty_directory(directories, DIR_ARCHITECTURE, "architecture")
-    _require_empty_directory(directories, DIR_GLOBALPTR, "global pointer")
-    _require_empty_directory(directories, DIR_BOUND_IMPORT, "bound import")
-    _require_empty_directory(directories, DIR_DELAY_IMPORT, "delay-load import")
-    _require_empty_directory(directories, DIR_CLR, "CLR")
-    if directories[DIR_RESERVED].rva or directories[DIR_RESERVED].size:
-        raise PeError("reserved data directory must be empty")
-
+    _validate_all_data_directories(
+        data, sections, directories, image_base=image_base, file_size=len(data)
+    )
     exports = _parse_exports(data, sections, directories[DIR_EXPORT])
-    imports = _parse_imports(data, sections, directories[DIR_IMPORT])
+    imports = _parse_imports(
+        data, sections, directories[DIR_IMPORT], iat=directories[DIR_IAT]
+    )
     sign = [item for item in exports if item.name == SIGN_SYMBOL]
     if len(sign) != 1:
         raise PeError("required sign export is missing, duplicated, or hidden")
-    if sign[0].rva == 0:
-        raise PeError("sign export RVA is zero")
-    rva_to_offset(sections, sign[0].rva, 1)
+    require_code_export_target(sections, sign[0].rva, directories[DIR_EXPORT])
 
     dll_names = [item.name.lower() for item in imports]
     if not dll_names:
@@ -599,6 +694,241 @@ def parse_pe32_plus_x86_64_dll(data: bytes) -> PeRecord:
     )
 
 
+def _validate_all_data_directories(
+    data: bytes,
+    sections: list[Section],
+    directories: list[DataDirectory],
+    *,
+    image_base: int,
+    file_size: int,
+) -> None:
+    if len(directories) != IMAGE_NUMBEROF_DIRECTORY_ENTRIES:
+        raise PeError("data directory count is not 16")
+    _require_empty_directory(directories, DIR_SECURITY, "Authenticode/certificate")
+    if directories[DIR_SECURITY].rva or directories[DIR_SECURITY].size:
+        raise PeError("Authenticode/certificate directory must be empty")
+    _require_empty_directory(directories, DIR_ARCHITECTURE, "architecture")
+    _require_empty_directory(directories, DIR_GLOBALPTR, "global pointer")
+    _require_empty_directory(directories, DIR_BOUND_IMPORT, "bound import")
+    _require_empty_directory(directories, DIR_DELAY_IMPORT, "delay-load import")
+    _require_empty_directory(directories, DIR_CLR, "CLR")
+    if directories[DIR_RESERVED].rva or directories[DIR_RESERVED].size:
+        raise PeError("reserved data directory must be empty")
+    _require_debug_directory(data, sections, directories[DIR_DEBUG])
+    _require_resource_directory(data, sections, directories[DIR_RESOURCE])
+    _require_exception_directory(data, sections, directories[DIR_EXCEPTION])
+    _require_basereloc_directory(data, sections, directories[DIR_BASERELOC])
+    _require_tls_directory(data, sections, directories[DIR_TLS], image_base=image_base)
+    _require_load_config_directory(data, sections, directories[DIR_LOAD_CONFIG])
+    _require_iat_directory(data, sections, directories[DIR_IAT])
+    # Export/import are required and parsed by the callers. Map them here so a
+    # nonempty unimplemented slot cannot slip through.
+    if directories[DIR_EXPORT].rva == 0 or directories[DIR_EXPORT].size == 0:
+        raise PeError("export directory is missing")
+    if directories[DIR_IMPORT].rva == 0 or directories[DIR_IMPORT].size == 0:
+        raise PeError("import directory is missing")
+    rva_to_offset(sections, directories[DIR_EXPORT].rva, min(directories[DIR_EXPORT].size, EXPORT_DIRECTORY_SIZE))
+    rva_to_offset(sections, directories[DIR_IMPORT].rva, min(directories[DIR_IMPORT].size, IMPORT_DESCRIPTOR_SIZE))
+    _ = file_size
+
+
+def _require_mapped_directory(
+    sections: list[Section], entry: DataDirectory, label: str
+) -> int:
+    if entry.rva == 0 and entry.size == 0:
+        return -1
+    if entry.rva == 0 or entry.size == 0:
+        raise PeError(f"{label} data directory is truncated")
+    return rva_to_offset(sections, entry.rva, entry.size)
+
+
+def _require_resource_directory(
+    data: bytes, sections: list[Section], entry: DataDirectory
+) -> None:
+    base = _require_mapped_directory(sections, entry, "resource")
+    if base < 0:
+        return
+    _walk_resource_directory(data, sections, entry.rva, entry.size, 0, 0, set())
+
+
+def _walk_resource_directory(
+    data: bytes,
+    sections: list[Section],
+    root_rva: int,
+    root_size: int,
+    rel: int,
+    depth: int,
+    seen: set[int],
+) -> None:
+    if depth > MAX_RESOURCE_DEPTH:
+        raise PeError("resource directory nesting exceeds MAX_RESOURCE_DEPTH")
+    if rel in seen:
+        raise PeError("resource directory has a cycle")
+    seen.add(rel)
+    dir_rva = _checked_add(root_rva, rel, limit=UINT32_MAX)
+    off = rva_to_offset(sections, dir_rva, RESOURCE_DIRECTORY_SIZE)
+    named = _u16(data, off + 12)
+    ids = _u16(data, off + 14)
+    count = _checked_add(named, ids, limit=UINT32_MAX)
+    table_size = _checked_add(
+        RESOURCE_DIRECTORY_SIZE, _checked_mul(count, RESOURCE_ENTRY_SIZE, limit=UINT32_MAX)
+    )
+    if _checked_add(rel, table_size, limit=UINT32_MAX) > root_size:
+        raise PeError("resource directory table exceeds the resource data directory")
+    rva_to_offset(sections, dir_rva, table_size)
+    for index in range(count):
+        entry_off = _checked_add(
+            off,
+            _checked_add(
+                RESOURCE_DIRECTORY_SIZE,
+                _checked_mul(index, RESOURCE_ENTRY_SIZE, limit=UINT32_MAX),
+            ),
+        )
+        offset_to_data = _u32(data, entry_off + 4)
+        child = offset_to_data & 0x7FFFFFFF
+        if offset_to_data & 0x80000000:
+            _walk_resource_directory(
+                data, sections, root_rva, root_size, child, depth + 1, seen
+            )
+        else:
+            leaf_rva = _checked_add(root_rva, child, limit=UINT32_MAX)
+            leaf_off = rva_to_offset(sections, leaf_rva, 16)
+            data_rva = _u32(data, leaf_off)
+            data_size = _u32(data, leaf_off + 4)
+            if data_size:
+                rva_to_offset(sections, data_rva, data_size)
+
+
+def _require_exception_directory(
+    data: bytes, sections: list[Section], entry: DataDirectory
+) -> None:
+    if entry.rva == 0 and entry.size == 0:
+        return
+    if entry.rva == 0 or entry.size == 0:
+        raise PeError("exception data directory is truncated")
+    if entry.size % RUNTIME_FUNCTION_SIZE != 0:
+        raise PeError("exception data directory size is not a multiple of 12")
+    count = entry.size // RUNTIME_FUNCTION_SIZE
+    if count == 0 or count > MAX_RUNTIME_FUNCTIONS:
+        raise PeError("exception entry count is out of range")
+    base = rva_to_offset(sections, entry.rva, entry.size)
+    ranges: list[tuple[int, int]] = []
+    for index in range(count):
+        off = _checked_add(base, _checked_mul(index, RUNTIME_FUNCTION_SIZE, limit=UINT32_MAX))
+        begin = _u32(data, off)
+        end = _u32(data, off + 4)
+        unwind = _u32(data, off + 8)
+        if begin == 0 or end == 0 or begin >= end:
+            raise PeError("exception runtime function range is inverted")
+        section = section_containing_rva(sections, begin)
+        if not (
+            section.characteristics & IMAGE_SCN_CNT_CODE
+            and section.characteristics & IMAGE_SCN_MEM_EXECUTE
+        ):
+            raise PeError("exception BeginAddress is not in an executable section")
+        if section.characteristics & IMAGE_SCN_MEM_WRITE:
+            raise PeError("exception BeginAddress is in a writable section")
+        rva_to_offset(sections, begin, 1)
+        rva_to_offset(sections, end - 1, 1)
+        if unwind:
+            rva_to_offset(sections, unwind, 1)
+        ranges.append((begin, end))
+    parse_elf_style_ranges(ranges, "exception")
+
+
+def _require_basereloc_directory(
+    data: bytes, sections: list[Section], entry: DataDirectory
+) -> None:
+    if entry.rva == 0 and entry.size == 0:
+        return
+    if entry.rva == 0 or entry.size == 0:
+        raise PeError("base reloc data directory is truncated")
+    base = rva_to_offset(sections, entry.rva, entry.size)
+    cursor = 0
+    blocks = 0
+    pages: list[int] = []
+    while cursor < entry.size:
+        if entry.size - cursor < BASE_RELOC_BLOCK_HEADER:
+            raise PeError("base reloc block header is truncated")
+        off = _checked_add(base, cursor, limit=UINT32_MAX)
+        page_rva = _u32(data, off)
+        block_size = _u32(data, off + 4)
+        if block_size < BASE_RELOC_BLOCK_HEADER or block_size % 4 != 0:
+            raise PeError("base reloc SizeOfBlock is malformed")
+        end = _checked_add(cursor, block_size, limit=UINT32_MAX)
+        if end > entry.size:
+            raise PeError("base reloc block exceeds the data directory")
+        if page_rva % PAGE_SIZE != 0:
+            raise PeError("base reloc page RVA is not 4KiB-aligned")
+        section_containing_rva(sections, page_rva)
+        if page_rva in pages:
+            raise PeError("base reloc page RVA is duplicated")
+        pages.append(page_rva)
+        blocks += 1
+        if blocks > MAX_RELOC_BLOCKS:
+            raise PeError("too many base reloc blocks")
+        cursor = end
+    if cursor != entry.size:
+        raise PeError("base reloc directory is not fully consumed")
+
+
+def _require_tls_directory(
+    data: bytes,
+    sections: list[Section],
+    entry: DataDirectory,
+    *,
+    image_base: int,
+) -> None:
+    if entry.rva == 0 and entry.size == 0:
+        return
+    if entry.size < TLS_DIRECTORY64_SIZE:
+        raise PeError("TLS directory is smaller than IMAGE_TLS_DIRECTORY64")
+    off = rva_to_offset(sections, entry.rva, entry.size)
+    start_va = _u64(data, off)
+    end_va = _u64(data, off + 8)
+    index_va = _u64(data, off + 16)
+    callbacks_va = _u64(data, off + 24)
+    if start_va or end_va:
+        if start_va < image_base or end_va < start_va:
+            raise PeError("TLS raw-data VA range is inverted")
+        start_rva = start_va - image_base
+        end_rva = end_va - image_base
+        if end_rva > start_rva:
+            rva_to_offset(sections, start_rva, end_rva - start_rva)
+    if index_va:
+        if index_va < image_base:
+            raise PeError("TLS AddressOfIndex is below ImageBase")
+        rva_to_offset(sections, index_va - image_base, 4)
+    if callbacks_va:
+        if callbacks_va < image_base:
+            raise PeError("TLS AddressOfCallBacks is below ImageBase")
+        rva_to_offset(sections, callbacks_va - image_base, 8)
+
+
+def _require_load_config_directory(
+    data: bytes, sections: list[Section], entry: DataDirectory
+) -> None:
+    if entry.rva == 0 and entry.size == 0:
+        return
+    if entry.size < 4 or entry.size > LOAD_CONFIG_MAX_SIZE:
+        raise PeError("load config directory size is out of range")
+    off = rva_to_offset(sections, entry.rva, entry.size)
+    cfg_size = _u32(data, off)
+    if cfg_size < LOAD_CONFIG_MIN_SIZE or cfg_size > entry.size:
+        raise PeError("load config Size field is inconsistent")
+
+
+def _require_iat_directory(
+    data: bytes, sections: list[Section], entry: DataDirectory
+) -> None:
+    if entry.rva == 0 and entry.size == 0:
+        return
+    if entry.size % 8 != 0:
+        raise PeError("IAT directory size is not a multiple of 8")
+    rva_to_offset(sections, entry.rva, entry.size)
+    _ = data
+
+
 def _parse_exports(
     data: bytes, sections: list[Section], directory: DataDirectory
 ) -> list[ExportRecord]:
@@ -621,12 +951,29 @@ def _parse_exports(
     dll_name = _ascii_z(data, rva_to_offset(sections, name_rva, 1))
     if dll_name.lower() != STABLE_DLL_NAME.lower():
         raise PeError(f"export DLL name {dll_name!r} != {STABLE_DLL_NAME!r}")
-    func_off = rva_to_offset(sections, funcs_rva, _checked_mul(nfuncs, 4, limit=UINT32_MAX))
-    name_off = rva_to_offset(sections, names_rva, _checked_mul(nnames, 4, limit=UINT32_MAX))
-    ord_off = rva_to_offset(sections, ords_rva, _checked_mul(nnames, 2, limit=UINT32_MAX))
+    func_bytes = _checked_mul(nfuncs, 4, limit=UINT32_MAX)
+    name_bytes = _checked_mul(nnames, 4, limit=UINT32_MAX)
+    ord_bytes = _checked_mul(nnames, 2, limit=UINT32_MAX)
+    func_off = rva_to_offset(sections, funcs_rva, func_bytes)
+    name_off = rva_to_offset(sections, names_rva, name_bytes)
+    ord_off = rva_to_offset(sections, ords_rva, ord_bytes)
+    table_ranges = [
+        (funcs_rva, _checked_add(funcs_rva, func_bytes, limit=UINT32_MAX)),
+        (names_rva, _checked_add(names_rva, name_bytes, limit=UINT32_MAX)),
+        (ords_rva, _checked_add(ords_rva, ord_bytes, limit=UINT32_MAX)),
+    ]
+    parse_elf_style_ranges(table_ranges, "export table")
+    header_range = (
+        directory.rva,
+        _checked_add(directory.rva, EXPORT_DIRECTORY_SIZE, limit=UINT32_MAX),
+    )
+    for start, end in table_ranges:
+        if _ranges_overlap(header_range, (start, end)):
+            raise PeError("export tables overlap the export directory header")
     seen_names: set[str] = set()
     seen_ordinals: set[int] = set()
     exports: list[ExportRecord] = []
+    export_end = _checked_add(directory.rva, directory.size, limit=UINT32_MAX)
     for index in range(nnames):
         export_name_rva = _u32(data, _checked_add(name_off, _checked_mul(index, 4, limit=UINT32_MAX)))
         name_index = _u16(data, _checked_add(ord_off, _checked_mul(index, 2, limit=UINT32_MAX)))
@@ -643,12 +990,17 @@ def _parse_exports(
         seen_ordinals.add(ordinal)
         if func_rva == 0:
             raise PeError(f"export {name} has a zero RVA")
+        if directory.rva <= func_rva < export_end:
+            raise PeError(f"export {name} is a forwarder RVA inside the export directory")
         exports.append(ExportRecord(name=name, ordinal=ordinal, rva=func_rva))
     return exports
 
 
 def _parse_imports(
-    data: bytes, sections: list[Section], directory: DataDirectory
+    data: bytes,
+    sections: list[Section],
+    directory: DataDirectory,
+    iat: DataDirectory | None = None,
 ) -> list[ImportDll]:
     if directory.rva == 0 or directory.size < IMPORT_DESCRIPTOR_SIZE:
         raise PeError("import directory is missing")
@@ -674,6 +1026,10 @@ def _parse_imports(
         thunk_rva = ilt_rva or iat_rva
         if thunk_rva == 0:
             raise PeError(f"import {dll_name} has no ILT/IAT")
+        if iat is not None and iat.rva and iat.size:
+            iat_end = _checked_add(iat.rva, iat.size, limit=UINT32_MAX)
+            if iat_rva == 0 or not (iat.rva <= iat_rva < iat_end):
+                raise PeError(f"import {dll_name} FirstThunk is outside the IAT directory")
         functions = _parse_thunks(data, sections, thunk_rva)
         imports.append(ImportDll(name=dll_name, functions=functions))
     else:
@@ -711,6 +1067,90 @@ def _is_allowed_remap(path: str) -> bool:
     return False
 
 
+def _consume_ascii_until_control(data: bytes, start: int) -> bytes:
+    end = start
+    while end < len(data) and end - start < MAX_PATH_CANDIDATE:
+        if data[end] < 32:
+            break
+        end += 1
+    return data[start:end]
+
+
+def _consume_utf16le_until_control(data: bytes, start: int) -> bytes:
+    end = start
+    while end + 1 < len(data) and (end - start) // 2 < MAX_PATH_CANDIDATE:
+        code = data[end] | (data[end + 1] << 8)
+        if code < 32:
+            break
+        if data[end + 1] != 0:
+            break
+        end += 2
+    return data[start:end]
+
+
+def _is_drive_root_ascii(data: bytes, index: int) -> bool:
+    if index + 3 > len(data):
+        return False
+    return (
+        data[index] in _DRIVE_LETTERS
+        and data[index + 1] == ord(":")
+        and data[index + 2] in _PATH_SEPARATORS
+    )
+
+
+def _is_unc_ascii(data: bytes, index: int) -> bool:
+    if index + 4 > len(data):
+        return False
+    sep = data[index]
+    if sep not in _PATH_SEPARATORS or data[index + 1] != sep:
+        return False
+    if data[index + 2] < 32 or data[index + 2] in _PATH_SEPARATORS:
+        return False
+    return True
+
+
+def _is_drive_root_utf16le(data: bytes, index: int) -> bool:
+    if index + 6 > len(data):
+        return False
+    if data[index] not in _DRIVE_LETTERS or data[index + 1] != 0:
+        return False
+    return data[index + 2 : index + 6] in {b":\x00\\\x00", b":\x00/\x00"}
+
+
+def _is_unc_utf16le(data: bytes, index: int) -> bool:
+    if index + 8 > len(data):
+        return False
+    if data[index : index + 4] not in {b"\\\x00\\\x00", b"/\x00/\x00"}:
+        return False
+    if data[index + 4] < 32 or data[index + 4] in _PATH_SEPARATORS or data[index + 5] != 0:
+        return False
+    return True
+
+
+def _unc_has_share(raw: bytes, *, wide: bool) -> bool:
+    text = raw.decode("utf-16le" if wide else "ascii", errors="replace")
+    normalized = text.replace("/", "\\")
+    parts = [part for part in normalized.split("\\") if part]
+    return len(parts) >= 2
+
+
+def _windows_runtime_allowed(text: str) -> bool:
+    normalized = text.replace("\\", "/")
+    if _is_allowed_remap(normalized):
+        return True
+    for allowed in ALLOWED_WINDOWS_RUNTIME_PATHS:
+        allowed_n = allowed.replace("\\", "/").rstrip("/")
+        if normalized == allowed_n or normalized.startswith(allowed_n + "/"):
+            return True
+    return False
+
+
+def _add_path_hit(hits: list[str], raw: bytes, *, wide: bool = False) -> None:
+    text = raw.decode("utf-16le" if wide else "ascii", errors="replace")[:MAX_PATH_DISPLAY]
+    if text and text not in hits and not _windows_runtime_allowed(text):
+        hits.append(text)
+
+
 def scan_windows_forbidden_paths(
     data: bytes, extra_forbidden_roots: tuple[bytes, ...] = ()
 ) -> list[str]:
@@ -727,17 +1167,37 @@ def scan_windows_forbidden_paths(
             index = data.find(root, start)
             if index < 0:
                 break
-            end = index
-            while end < len(data) and end - index < MAX_PATH_CANDIDATE:
-                byte = data[end]
-                if byte < 32:
-                    break
-                end += 1
-            fragment = data[index:end].decode("ascii", errors="replace")[:MAX_PATH_DISPLAY]
-            if fragment and fragment not in hits:
-                hits.append(fragment)
+            fragment = _consume_ascii_until_control(data, index)
+            display = fragment.decode("ascii", errors="replace")[:MAX_PATH_DISPLAY]
+            if display and display not in hits:
+                hits.append(display)
             start = index + 1
-    # Slash-byte pass: a '/' starts a path only after a stop byte or BOF.
+    index = 0
+    while index < len(data):
+        if _is_drive_root_ascii(data, index):
+            raw = _consume_ascii_until_control(data, index)
+            _add_path_hit(hits, raw)
+            index += 1
+            continue
+        if _is_unc_ascii(data, index):
+            raw = _consume_ascii_until_control(data, index)
+            if _unc_has_share(raw, wide=False):
+                _add_path_hit(hits, raw)
+            index += 1
+            continue
+        if _is_drive_root_utf16le(data, index):
+            raw = _consume_utf16le_until_control(data, index)
+            _add_path_hit(hits, raw, wide=True)
+            index += 1
+            continue
+        if _is_unc_utf16le(data, index):
+            raw = _consume_utf16le_until_control(data, index)
+            if _unc_has_share(raw, wide=True):
+                _add_path_hit(hits, raw, wide=True)
+            index += 1
+            continue
+        index += 1
+    # Slash-byte pass: a '/' starts a Unix remap/host path after a stop byte or BOF.
     start = 0
     while True:
         index = data.find(b"/", start)
@@ -747,18 +1207,17 @@ def scan_windows_forbidden_paths(
         if index and prev >= 32 and prev not in {0x20, ord("\\")}:
             start = index + 1
             continue
-        end = index
-        while end < len(data) and end - index < MAX_PATH_CANDIDATE:
-            byte = data[end]
-            if byte < 32 or byte in {0x20, ord("\\")}:
+        raw = _consume_ascii_until_control(data, index)
+        # Truncate at space/backslash already handled by control? space is 0x20.
+        trimmed = bytearray()
+        for byte in raw:
+            if byte in {0x20, ord("\\")}:
                 break
-            end += 1
+            trimmed.append(byte)
+        raw = bytes(trimmed)
         try:
-            candidate = data[index:end].decode("ascii")
+            candidate = raw.decode("ascii")
         except UnicodeDecodeError:
-            raw = data[index:end]
-            # Binary `/` plus non-ASCII is not a path unless it contains a
-            # documented build root or a later `/` (absolute-looking).
             if any(root in raw for root in roots) or b"/" in raw[1:]:
                 display = raw.decode("ascii", errors="replace")[:MAX_PATH_DISPLAY]
                 if display not in hits:
@@ -767,7 +1226,6 @@ def scan_windows_forbidden_paths(
             continue
         if len(candidate) >= 2 and not _is_allowed_remap(candidate):
             if candidate[1:2].isalpha() and candidate not in hits:
-                # "/letter..." without a later slash is not treated as a path.
                 if "/" in candidate[1:]:
                     hits.append(candidate[:MAX_PATH_DISPLAY])
         start = index + 1
@@ -819,10 +1277,19 @@ def find_dumpbin() -> str | None:
 
 
 def parse_dumpbin_exports(text: str) -> list[str]:
-    names = DUMPBIN_EXPORT_RE.findall(text)
+    names = [name for _rva, name in DUMPBIN_EXPORT_RE.findall(text)]
     if not names:
         raise PeError("dumpbin /EXPORTS listed no names")
     return names
+
+
+def parse_dumpbin_export_rvas(text: str) -> list[tuple[str, int]]:
+    records = []
+    for rva, name in DUMPBIN_EXPORT_RE.findall(text):
+        records.append((name, int(rva, 16)))
+    if not records:
+        raise PeError("dumpbin /EXPORTS listed no names")
+    return records
 
 
 def parse_dumpbin_dependents(text: str) -> list[str]:
@@ -838,12 +1305,15 @@ def require_dumpbin_corroboration(record: PeRecord, text: str) -> None:
         raise PeError("dumpbin headers do not report DLL")
     if "delay" in text.lower() and "delay load" in text.lower():
         raise PeError("dumpbin reports delay-load imports")
-    exports = parse_dumpbin_exports(text)
-    sign_hits = [name for name in exports if name == SIGN_SYMBOL]
+    if DUMPBIN_FORWARDER_RE.search(text):
+        raise PeError("dumpbin reports a forwarded export")
+    export_rvas = parse_dumpbin_export_rvas(text)
+    sign_hits = [(name, rva) for name, rva in export_rvas if name == SIGN_SYMBOL]
     if len(sign_hits) != 1:
         raise PeError("dumpbin sign export is missing, duplicated, or renamed")
-    if any(name != SIGN_SYMBOL and name == sign_hits[0] for name in exports):
-        raise PeError("dumpbin sign export is not unique")
+    parsed_sign = record.sign_exports[0] if record.sign_exports else None
+    if parsed_sign is None or parsed_sign.rva != sign_hits[0][1]:
+        raise PeError("parser/dumpbin sign export RVA mismatch")
     parsed_names = {item.name for item in record.exports}
     if SIGN_SYMBOL not in parsed_names:
         raise PeError("parser/dumpbin sign export mismatch")

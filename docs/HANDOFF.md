@@ -93,7 +93,7 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). Phase C promotion not started. |
+| 7 | `fix/native-build-and-platform-evidence` | Gate 3 Windows | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE/path/linker re-review fixes landed; Phase C promotion not started. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -107,16 +107,24 @@ Date: 2026-08-24
   `fix/native-build-and-platform-evidence`.** Linux promotion GO at
   `58f82a2`. JNA 5.19.1 resource is
   `win32-x86-64/kardano_ed25519_bip32_signing.dll`. Fail-closed PE32+
-  verifier + `dumpbin` corroboration. Two independent `windows-2022`
-  jobs; CHECKSUMS stays 9 rows. Phase B equality from run
-  `32715104620` at `04c52dc`: A==B SHA-256
-  `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`
-  (263680 bytes). Artifacts A `9515642236`, B `9515642439`, report
-  `9515785476`, expire 2026-09-07. `:crypto-signing-backend:jvmTest`
-  passed on the candidate. `:crypto:jvmTest` / `:wallet:jvmTest` failed
-  because `bip32-ed25519` 1.8.8 ships no `win32-x86-64` derivation
-  wrapper. Phase C promotion is NO-GO pending independent review.
-  Do not merge/tag or start the legal packet.
+  verifier + `dumpbin` corroboration now requires: sign export in a
+  `CNT_CODE`+`MEM_EXECUTE` non-writable section (forwarder RVA
+  rejected); canonical `SizeOfImage`; every nonempty data directory
+  parsed (security/delay/CLR/bound-import empty; debug
+  `IMAGE_DEBUG_TYPE_REPRO` only); ASCII and UTF-16LE drive-root/UNC
+  path scan. `windows-2022` jobs pin MSVC `14.44.35207`
+  `Hostx64/x64` `link.exe` and record `ImageVersion` without an
+  immutable-image claim. CHECKSUMS stays 9 rows. Prior Phase B
+  equality from run `32715104620` at `04c52dc` (SHA-256
+  `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`,
+  artifacts A `9515642236` / B `9515642439` / report `9515785476`,
+  expire 2026-09-07) is superseded for PE re-review by the next
+  Windows A/B run on this tip. Workflow KAT is
+  `:crypto-signing-backend:jvmTest` only. `:crypto`/`:wallet` JVM
+  tests remain blocked by `bip32-ed25519` 1.8.8 missing
+  `win32-x86-64`. Identus is not being built. Phase C promotion is
+  NO-GO. Do not merge/tag, download/promote the DLL, or start the
+  legal packet.
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence`.**
   Gate 1 is GO at `d09db44`. Gate 2 Linux x86-64 JVM uses JNA prefix

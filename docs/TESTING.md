@@ -232,20 +232,26 @@ CHECKSUMS row. Promoted from run `32678079715` (artifacts
 `9503309381` / `9503308946` / `9503350346`, expire 2026-09-07).
 
 `windows-jvm-rebuild-evidence.yml` rebuilds `x86_64-pc-windows-msvc`
-twice on pinned `windows-2022` (ImageOS `win22`, not `windows-latest`),
-records OS/MSVC/dumpbin evidence, compares SHA-256 + PE32+ reports
-(AMD64, PE32+, `IMAGE_FILE_DLL`, exact sign export, allowlisted
-imports, empty delay-load/Authenticode, no CODEVIEW/PDB, recorded
-`/Brepro` `TimeDateStamp` and allowed non-PDB debug metadata
-(VS 2022 may emit a hash stamp and `IMAGE_DEBUG_TYPE_REPRO`; A==B
-is the gate),
-`DYNAMIC_BASE`+`NX_COMPAT`, no overlay). Slash-byte path scan does
-not treat `/` plus non-ASCII as a host path unless a documented
-root or a later `/` is present. Then runs the same four
-`jvmTest` tasks via `gradlew.bat`. The DLL is placed only on the
-runner JNA path for those tests. Permissions stay `contents: read`.
-Uploads use `if-no-files-found: error`. CHECKSUMS and committed `src/`
-are unchanged. Promotion waits for independent review.
+twice on pinned `windows-2022` (ImageOS `win22`, not `windows-latest`;
+`ImageVersion` is recorded and is not an immutable-image claim).
+Jobs select MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe` via
+`vswhere`, prepend that directory, require `where.exe link` to match,
+and pass `-Clinker=` so cargo `--verbose` names that `link.exe`.
+Toolset drift fails until reviewed. Compares SHA-256 + PE32+ reports
+(AMD64, PE32+, `IMAGE_FILE_DLL`, canonical `SizeOfImage`, exact sign
+export in a `CNT_CODE`+`MEM_EXECUTE` non-writable section, no
+forwarder RVA, every nonempty data directory parsed, allowlisted
+imports, empty delay-load/Authenticode/CLR/bound-import, no
+CODEVIEW/PDB, `IMAGE_DEBUG_TYPE_REPRO` only, recorded `/Brepro`
+`TimeDateStamp`, `DYNAMIC_BASE`+`NX_COMPAT`, no overlay). Path scan
+rejects ASCII and UTF-16LE drive-root and UNC candidates from any
+byte offset. Then runs `:crypto-signing-backend:jvmTest` via
+`gradlew.bat`. `:crypto`/`:wallet` JVM tests are not run here
+(`bip32-ed25519` 1.8.8 has no `win32-x86-64` wrapper). The DLL is
+placed only on the runner JNA path for that test. Permissions stay
+`contents: read`. Uploads use `if-no-files-found: error`. CHECKSUMS
+and committed `src/` are unchanged. Promotion waits for independent
+review.
 
 `native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
 Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare

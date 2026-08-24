@@ -310,6 +310,9 @@ def collect_provenance(module_root: Path, env: dict[str, str]) -> dict[str, obje
         "linux_image_os": toolchain.EXPECTED_LINUX_IMAGE_OS,
         "windows_runs_on": toolchain.EXPECTED_WINDOWS_RUNS_ON,
         "windows_image_os": toolchain.EXPECTED_WINDOWS_IMAGE_OS,
+        "windows_msvc_toolset": toolchain.EXPECTED_MSVC_TOOLSET,
+        "windows_hosted_image_immutable": False,
+        "image_version": os.environ.get("ImageVersion", ""),
         "rust_channel": toolchain.RUST_CHANNEL,
         "expected_xcode": {
             "version": toolchain.EXPECTED_XCODE_VERSION,
@@ -624,30 +627,45 @@ def rebuild_windows_jvm(
     if rust_target != toolchain.WINDOWS_JVM_TARGET:
         raise RebuildError(f"unexpected windows rust target {rust_target}")
     _ensure_target(rust_target, module_root=module_root, env=env, recorder=recorder)
+    linker = env.get("KARDANO_MSVC_LINK")
+    if not linker:
+        raise RebuildError(
+            "KARDANO_MSVC_LINK is unset; activate_pinned_msvc_linker must run first"
+        )
     target_dir = Path(env["CARGO_TARGET_DIR"])
     output = target_dir / rust_target / "release" / spec.filename
     started = time.monotonic()
-    recorder.run(
-        [
+    rustc_args = [
             "cargo",
             "rustc",
             "--locked",
+            "--verbose",
             "--release",
             "--lib",
             "--target",
             rust_target,
             "--",
+            f"-Clinker={linker}",
             "-Cdebuginfo=0",
             "-Cstrip=symbols",
             "-Clink-arg=/Brepro",
             "-Clink-arg=/DEBUG:NONE",
             "-Clink-arg=/INCREMENTAL:NO",
-        ],
+    ]
+    completed = recorder.run(
+        rustc_args,
         cwd=module_root,
         env=env,
         name=f"cargo-rustc-{rust_target}",
         outputs=[output],
     )
+    log_text = (completed.stdout or "") + "\n" + (completed.stderr or "")
+    linker_norm = linker.replace("/", "\\").lower()
+    log_norm = log_text.replace("/", "\\").lower()
+    if linker_norm not in log_norm and "hostx64\\x64\\link.exe" not in log_norm:
+        raise RebuildError(
+            f"cargo --verbose log does not mention pinned link.exe {linker}"
+        )
     dest = copy_fresh_output(output, staging, spec.relative_path, started_monotonic=started)
     record = natives.inspect_artifact(spec, dest)
     natives.write_inspect_evidence(record, staging / "evidence")

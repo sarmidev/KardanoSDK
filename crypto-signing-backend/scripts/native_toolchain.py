@@ -8,6 +8,7 @@ does not hide unmatched source bytes.
 
 from __future__ import annotations
 
+import glob
 import os
 import platform
 import re
@@ -24,6 +25,17 @@ EXPECTED_LINUX_RUNS_ON = "ubuntu-22.04"
 WINDOWS_JVM_TARGET = "x86_64-pc-windows-msvc"
 EXPECTED_WINDOWS_IMAGE_OS = "win22"
 EXPECTED_WINDOWS_RUNS_ON = "windows-2022"
+# Observed on windows-2022 rustc 1.97.0 Phase B (run 32715104620).
+# Fail on drift until an independent review changes this pin.
+# Hosted ImageVersion is recorded; it is not an immutable-image claim.
+EXPECTED_MSVC_TOOLSET = "14.44.35207"
+EXPECTED_MSVC_LINK_VERSION_PREFIX = "14.44."
+MSVC_HOST_ARCH = "Hostx64"
+MSVC_TARGET_ARCH = "x64"
+VSWHERE_DEFAULT = Path(
+    r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+)
+WINDOWS_KITS_ROOT = Path(r"C:\Program Files (x86)\Windows Kits\10")
 # Consumer/runtime floor is the pinned runner's glibc. Ubuntu 22.04 is 2.35.
 # Measured at rebuild time; do not assume. musl and older glibc are out of scope.
 EXPECTED_LINUX_GLIBC_BASELINE = (2, 35, 0)
@@ -79,6 +91,160 @@ def require_native_linux_x86_64() -> None:
             "linux-jvm rebuilds require x86_64-unknown-linux-gnu; "
             f"host machine {machine} is refused (Linux ARM is out of scope)"
         )
+
+
+def parse_link_version(text: str) -> str:
+    match = re.search(r"Version\s+(\d+\.\d+\.\d+(?:\.\d+)?)", text)
+    return match.group(1) if match else ""
+
+
+def parse_msvc_toolset_from_path(path: Path) -> str:
+    parts = Path(str(path).replace("\\", "/")).parts
+    for index, part in enumerate(parts):
+        if part == "MSVC" and index + 1 < len(parts):
+            return parts[index + 1]
+    return ""
+
+
+def find_vswhere() -> Path | None:
+    found = shutil.which("vswhere") or shutil.which("vswhere.exe")
+    if found:
+        return Path(found)
+    if VSWHERE_DEFAULT.is_file():
+        return VSWHERE_DEFAULT
+    return None
+
+
+def discover_msvc_link(
+    *,
+    expected_toolset: str = EXPECTED_MSVC_TOOLSET,
+    vswhere_output: str | None = None,
+    glob_matches: list[str] | None = None,
+) -> Path:
+    pattern = rf"**\VC\Tools\MSVC\{expected_toolset}\bin\{MSVC_HOST_ARCH}\{MSVC_TARGET_ARCH}\link.exe"
+    lines: list[str] = []
+    if vswhere_output is not None:
+        lines = [line.strip() for line in vswhere_output.splitlines() if line.strip()]
+    else:
+        vswhere = find_vswhere()
+        if vswhere is not None:
+            completed = subprocess.run(
+                [str(vswhere), "-products", "*", "-find", pattern],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            lines = [
+                line.strip() for line in (completed.stdout or "").splitlines() if line.strip()
+            ]
+    for candidate in lines:
+        path = Path(candidate)
+        if path.is_file():
+            toolset = parse_msvc_toolset_from_path(path)
+            if toolset != expected_toolset:
+                raise ToolchainError(
+                    f"MSVC toolset {toolset} != pinned {expected_toolset} "
+                    "(review before changing EXPECTED_MSVC_TOOLSET)"
+                )
+            return path
+    matches = glob_matches
+    if matches is None:
+        matches = sorted(
+            glob.glob(
+                rf"C:\Program Files\Microsoft Visual Studio\2022\*\VC\Tools\MSVC\{expected_toolset}\bin\{MSVC_HOST_ARCH}\{MSVC_TARGET_ARCH}\link.exe"
+            )
+        )
+    if matches and Path(matches[-1]).is_file():
+        return Path(matches[-1])
+    raise ToolchainError(
+        f"MSVC toolset {expected_toolset} Hostx64/x64 link.exe was not found; "
+        "review before changing EXPECTED_MSVC_TOOLSET"
+    )
+
+
+def first_where(name: str, env: dict[str, str]) -> Path | None:
+    where = shutil.which("where.exe", path=env.get("PATH")) or shutil.which(
+        "where", path=env.get("PATH")
+    )
+    if where is None:
+        return None
+    completed = subprocess.run(
+        [where, name],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    lines = [line.strip() for line in (completed.stdout or "").splitlines() if line.strip()]
+    return Path(lines[0]) if lines else None
+
+
+def discover_windows_sdk(*, kits_root: Path | None = None) -> dict[str, object]:
+    root = kits_root if kits_root is not None else WINDOWS_KITS_ROOT
+    include = root / "Include"
+    versions: list[str] = []
+    if include.is_dir():
+        versions = sorted(path.name for path in include.iterdir() if path.name.startswith("10.0."))
+    version = versions[-1] if versions else ""
+    return {
+        "root": str(root) if root.is_dir() else "",
+        "versions": versions,
+        "version": version,
+        "bin": str(root / "bin" / version / "x64") if version else "",
+    }
+
+
+def activate_pinned_msvc_linker(
+    env: dict[str, str],
+    *,
+    link_path: Path | None = None,
+    where_first: Path | None = None,
+    banner: str | None = None,
+    kits_root: Path | None = None,
+) -> dict[str, object]:
+    """Select one explicit MSVC Hostx64/x64 link.exe and put it first on PATH."""
+    link = link_path if link_path is not None else discover_msvc_link()
+    host_dir = link.parent
+    if host_dir.name != MSVC_TARGET_ARCH or host_dir.parent.name != MSVC_HOST_ARCH:
+        raise ToolchainError(f"link.exe is not {MSVC_HOST_ARCH}/{MSVC_TARGET_ARCH}: {link}")
+    toolset = parse_msvc_toolset_from_path(link)
+    if toolset != EXPECTED_MSVC_TOOLSET:
+        raise ToolchainError(
+            f"MSVC toolset {toolset} != pinned {EXPECTED_MSVC_TOOLSET} "
+            "(review before changing EXPECTED_MSVC_TOOLSET)"
+        )
+    env["PATH"] = f"{host_dir}{os.pathsep}{env.get('PATH', '')}"
+    env["KARDANO_MSVC_LINK"] = str(link)
+    env["KARDANO_MSVC_TOOLSET"] = toolset
+    env["CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER"] = str(link)
+    first = where_first if where_first is not None else first_where("link", env)
+    if first is None:
+        raise ToolchainError("where.exe link returned no results after PATH prepend")
+    if first.resolve() != link.resolve():
+        raise ToolchainError(
+            f"where.exe link first result {first} != pinned {link}"
+        )
+    text = banner if banner is not None else (
+        _capture([str(link)], env=env) + "\n" + _capture([str(link), "/?"], env=env)
+    )
+    version = parse_link_version(text)
+    if not version.startswith(EXPECTED_MSVC_LINK_VERSION_PREFIX):
+        raise ToolchainError(
+            f"link.exe Version {version!r} is not {EXPECTED_MSVC_LINK_VERSION_PREFIX}x "
+            f"(pinned toolset folder {EXPECTED_MSVC_TOOLSET})"
+        )
+    sdk = discover_windows_sdk(kits_root=kits_root)
+    return {
+        "msvc_toolset": toolset,
+        "link_path": str(link),
+        "link_version": version,
+        "link_banner": text[:2000],
+        "windows_sdk": sdk,
+        "image_os": os.environ.get("ImageOS", env.get("ImageOS", "")),
+        "image_version": os.environ.get("ImageVersion", env.get("ImageVersion", "")),
+        "hosted_image_immutable": False,
+        "where_link": str(first),
+    }
 
 
 def require_native_windows_x86_64() -> None:
@@ -493,17 +659,22 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
                 f"host glibc {host_glibc[0]}.{host_glibc[1]} is older than "
                 f"documented baseline {EXPECTED_LINUX_GLIBC_LABEL}"
             )
+    windows_msvc: dict[str, object] = {}
     if needs_windows:
         require_native_windows_x86_64()
+        windows_msvc = activate_pinned_msvc_linker(env)
         windows_os = platform.platform()
-        windows_cl = _capture(["cl"])
-        windows_link = _capture(["link"])
+        windows_cl = _capture(["cl"], env=env)
+        windows_link = str(windows_msvc.get("link_banner") or "")
         from windows_pe_verify import find_dumpbin
 
         dumpbin = find_dumpbin()
-        windows_dumpbin = _capture([dumpbin]) if dumpbin else ""
+        windows_dumpbin = _capture([dumpbin], env=env) if dumpbin else ""
         if not dumpbin:
             raise ToolchainError("dumpbin is required on the Windows rebuild host")
+        rustc_verbose_after = _capture(["rustc", "--version", "--verbose"], env=env)
+        if rustc_verbose_after:
+            windows_msvc["rustc_verbose_after_linker_pin"] = rustc_verbose_after
     if os.environ.get("GITHUB_ACTIONS") == "true":
         if needs_linux:
             if image_os != EXPECTED_LINUX_IMAGE_OS:
@@ -552,8 +723,11 @@ def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> 
         "windows_cl": windows_cl,
         "windows_link": windows_link,
         "windows_dumpbin": windows_dumpbin,
+        "windows_msvc": windows_msvc,
         "windows_runs_on": EXPECTED_WINDOWS_RUNS_ON if needs_windows else "",
         "windows_image_os": EXPECTED_WINDOWS_IMAGE_OS if needs_windows else "",
+        "windows_image_version": os.environ.get("ImageVersion", ""),
+        "windows_hosted_image_immutable": False,
     }
 
 
