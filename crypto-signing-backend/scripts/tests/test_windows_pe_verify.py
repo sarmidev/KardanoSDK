@@ -1077,6 +1077,17 @@ class DebugReferenceTests(unittest.TestCase):
         record = pe.parse_pe32_plus_x86_64_dll(build_pe(debug_type=pe.IMAGE_DEBUG_TYPE_POGO))
         self.assertIn("entries=1", record.debug_entries[0].detail)
 
+    def test_zero_signature_pogo_is_accepted(self) -> None:
+        # Observed on windows-2022 run 32724069174 (LIEF ZERO).
+        record = pe.parse_pe32_plus_x86_64_dll(
+            build_pe(
+                debug_type=pe.IMAGE_DEBUG_TYPE_POGO,
+                debug_payload=pogo_payload(signature=pe.IMAGE_DEBUG_POGO_SIGNATURE_ZERO),
+            )
+        )
+        self.assertIn("sig=0x00000000", record.debug_entries[0].detail)
+        self.assertIn("entries=1", record.debug_entries[0].detail)
+
     def test_pogo_malformed_signature_and_entries_are_rejected(self) -> None:
         cases = [
             pogo_payload(signature=0x41414141),

@@ -44,9 +44,11 @@ Policy (documented, not a strength claim):
   (https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#debug-type).
   Non-empty REPRO must be the MSVC 32-byte hash form (length 32,
   ``SizeOfData == 36``). POGO is not in that PE/COFF table; dumpbin
-  labels type 13 ``coffgrp`` and MSVC emits ``LTCG``/``PGI``/``PGO``/
-  ``PGU`` signatures plus RVA/size/NUL-name entries padded to 4
-  bytes. Unknown signatures and unimplemented types fail. COFF
+  labels type 13 ``coffgrp``. Observed MSVC/LIEF signatures are
+  ``ZERO`` (``0x00000000``, windows-2022 run ``32724069174``),
+  ``LTCG``/``PGI``/``PGO``/``PGU``, then RVA/size/NUL-name entries
+  padded to 4 bytes. Unknown signatures and unimplemented types fail.
+  COFF
   ``TimeDateStamp`` is recorded; VS 2022 ``/Brepro`` may emit a hash,
   not 0; A==B is the reproducibility gate
 - path scan rejects ASCII and UTF-16LE drive-root (``C:\\``) and UNC
@@ -163,14 +165,20 @@ ALLOWED_DEBUG_TYPES = frozenset(
 # little-endian uint32 length + hash bytes. MSVC writes length 32.
 REPRO_HASH_LENGTH = 32
 REPRO_HASH_PAYLOAD_SIZE = 4 + REPRO_HASH_LENGTH
-# dumpbin /HEADERS labels type 13 "coffgrp" and prints the 4-byte
-# signature (e.g. 4C544347 LTCG). PE/COFF does not define this payload.
+# dumpbin /HEADERS labels type 13 "coffgrp". PE/COFF does not define
+# the payload. LIEF Pogo::SIGNATURES and saferwall/pe debug.go accept
+# ZERO plus LTCG/PGI/PGO/PGU; rustc 1.97 + MSVC 14.44 /DEBUG:NONE
+# /Brepro on windows-2022 run 32724069174 emitted ZERO (0x00000000).
+# https://lief.re/doc/latest/doxygen/classLIEF_1_1PE_1_1Pogo.html
+# https://github.com/saferwall/pe/blob/main/debug.go
+IMAGE_DEBUG_POGO_SIGNATURE_ZERO = 0x00000000
 IMAGE_DEBUG_POGO_SIGNATURE_LTCG = 0x4C544347
 IMAGE_DEBUG_POGO_SIGNATURE_PGI = 0x50474900
 IMAGE_DEBUG_POGO_SIGNATURE_PGO = 0x50474F00
 IMAGE_DEBUG_POGO_SIGNATURE_PGU = 0x50475500
 ALLOWED_POGO_SIGNATURES = frozenset(
     {
+        IMAGE_DEBUG_POGO_SIGNATURE_ZERO,
         IMAGE_DEBUG_POGO_SIGNATURE_LTCG,
         IMAGE_DEBUG_POGO_SIGNATURE_PGI,
         IMAGE_DEBUG_POGO_SIGNATURE_PGO,
@@ -592,8 +600,10 @@ def _require_repro_payload(payload: bytes) -> str:
 
 
 def _require_pogo_payload(payload: bytes, sections: list[Section]) -> str:
-    # dumpbin coffgrp / MSVC POGO: 4-byte signature + 4-byte-aligned
-    # IMAGE_DEBUG_POGO_ENTRY { RVA, Size, name\\0, pad }.
+    # dumpbin coffgrp / MSVC POGO: 4-byte signature (ZERO/LTCG/PGI/PGO/
+    # PGU) + 4-byte-aligned IMAGE_DEBUG_POGO_ENTRY { RVA, Size, name\\0,
+    # pad }. ZERO is LIEF Pogo::SIGNATURES::ZERO; the candidate emitted
+    # it under /DEBUG:NONE /Brepro (run 32724069174).
     if len(payload) < 4:
         raise PeError("POGO payload is shorter than the 4-byte signature")
     signature = struct.unpack_from("<I", payload, 0)[0]
@@ -695,7 +705,15 @@ def _require_debug_directory(
         if debug_type == IMAGE_DEBUG_TYPE_REPRO:
             detail = _require_repro_payload(payload)
         else:
-            detail = _require_pogo_payload(payload, sections)
+            try:
+                detail = _require_pogo_payload(payload, sections)
+            except PeError as error:
+                head = payload[:16].hex()
+                raise PeError(
+                    f"{error} (type={debug_type} SizeOfData={size_of_data} "
+                    f"AddressOfRawData=0x{address_of_raw:x} "
+                    f"PointerToRawData=0x{pointer_to_raw:x} head={head})"
+                ) from error
         records.append(
             _debug_payload_record(
                 debug_type, size_of_data, address_of_raw, pointer_to_raw, payload, detail

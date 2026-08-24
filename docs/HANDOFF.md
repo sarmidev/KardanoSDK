@@ -116,8 +116,9 @@ Date: 2026-08-24
   (function RVAs outside that span; forwarders rejected); debug
   REPRO/POGO payloads parsed against Microsoft PE/COFF Debug Type
   (REPRO empty or `uint32` length + 32-byte hash) and MSVC
-  `coffgrp` signatures `LTCG`/`PGI`/`PGO`/`PGU` (CODEVIEW/PDB
-  rejected); resource structural interval registry (exact same-kind
+  `coffgrp` signatures `ZERO`/`LTCG`/`PGI`/`PGO`/`PGU` (CODEVIEW/PDB
+  rejected; run `32724069174` showed candidate POGO `ZERO`);
+  resource structural interval registry (exact same-kind
   reuse only; partial overlap and cycles rejected); TLS
   callback array NUL-terminated with executable non-writable targets.
   `windows-2022` jobs select exact MSVC `14.44.35207` /
