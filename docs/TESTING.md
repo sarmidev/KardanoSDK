@@ -191,7 +191,9 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
   must match A==B and that row. Linux ARM, musl, and older glibc are out
   of scope. Windows x86-64 JVM is candidate-only (JNA prefix
   `win32-x86-64/`, `windows-2022` / ImageOS `win22`) and is not a
-  CHECKSUMS row.
+  CHECKSUMS row. Rebuild jobs pin rustc 1.97.0 by placing the rustup
+  toolchain `bin` first on PATH; hosted images may otherwise expose
+  rustc 1.97.1.
 
 Native rebuild comparison (does not overwrite committed binaries):
 

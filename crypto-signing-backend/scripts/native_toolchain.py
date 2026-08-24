@@ -378,8 +378,45 @@ def select_xcode_app() -> Path:
     )
 
 
+def _find_rustup(env: dict[str, str]) -> str | None:
+    cargo_home = Path(env.get("CARGO_HOME") or (Path.home() / ".cargo"))
+    names = ("rustup.exe", "rustup") if os.name == "nt" else ("rustup",)
+    for name in names:
+        candidate = cargo_home / "bin" / name
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("rustup", path=env.get("PATH"))
+
+
+def activate_pinned_rustc(env: dict[str, str]) -> Path | None:
+    """Prefer the pinned rustc bin over an image-provided newer rustc on PATH."""
+    env["RUSTUP_TOOLCHAIN"] = RUST_CHANNEL
+    rustup = _find_rustup(env)
+    if rustup is None:
+        return None
+    env.setdefault("CARGO_HOME", str(Path.home() / ".cargo"))
+    env.setdefault("RUSTUP_HOME", str(Path.home() / ".rustup"))
+    completed = subprocess.run(
+        [rustup, "run", RUST_CHANNEL, "rustc", "--print", "sysroot"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    sysroot = Path((completed.stdout or "").strip())
+    toolchain_bin = sysroot / "bin"
+    rustc_name = "rustc.exe" if os.name == "nt" else "rustc"
+    if completed.returncode != 0 or not (toolchain_bin / rustc_name).is_file():
+        raise ToolchainError(
+            f"pinned rustc {RUST_CHANNEL} is not installed via rustup"
+        )
+    env["PATH"] = f"{toolchain_bin}{os.pathsep}{env.get('PATH', '')}"
+    return toolchain_bin
+
+
 def assert_pinned_toolchain(env: dict[str, str], *, groups: tuple[str, ...]) -> dict[str, object]:
     """Fail if rustc/Xcode/runner pins do not match the documented values."""
+    activate_pinned_rustc(env)
     rustc_text = _capture(["rustc", "--version", "--verbose"], env=env)
     rustc_release = parse_rustc_release(rustc_text)
     rustc_commit = parse_rustc_commit(rustc_text)

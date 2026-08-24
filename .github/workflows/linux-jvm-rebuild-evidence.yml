@@ -24,6 +24,7 @@ env:
   EXPECTED_RUSTC: "1.97.0"
   EXPECTED_LINUX_TARGET: x86_64-unknown-linux-gnu
   EXPECTED_GLIBC_BASELINE: "2.35"
+  RUSTUP_TOOLCHAIN: "1.97.0"
 
 jobs:
   linux-jvm-build-a:
@@ -59,11 +60,21 @@ jobs:
           --dest "$RUNNER_TEMP/rustup-init"
           --cargo-home "$HOME/.cargo"
           --channel 1.97.0
-      - name: Put rustup on PATH
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          SYSROOT="$(rustup run "$EXPECTED_RUSTC" rustc --print sysroot)"
+          if [ -z "$SYSROOT" ] || [ ! -x "$SYSROOT/bin/rustc" ]; then
+            echo "rustc $EXPECTED_RUSTC sysroot missing"
+            exit 1
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$SYSROOT/bin" >> "$GITHUB_PATH"
+          echo "RUSTUP_TOOLCHAIN=$EXPECTED_RUSTC" >> "$GITHUB_ENV"
       - name: Require rustc 1.97.0 and host triple
         run: |
           rustc --version --verbose
+          command -v rustc
           RELEASE=$(rustc --version | awk '{print $2}')
           if [ "$RELEASE" != "$EXPECTED_RUSTC" ]; then
             echo "rustc $RELEASE != $EXPECTED_RUSTC"
@@ -74,7 +85,7 @@ jobs:
             echo "rustc host $HOST != $EXPECTED_LINUX_TARGET"
             exit 1
           fi
-          rustup component add llvm-tools-preview
+          rustup component add llvm-tools-preview --toolchain "$EXPECTED_RUSTC"
       - name: Rebuild Linux JVM into staging A
         run: >-
           python3 crypto-signing-backend/scripts/rebuild_into_staging.py
@@ -120,11 +131,21 @@ jobs:
           --dest "$RUNNER_TEMP/rustup-init"
           --cargo-home "$HOME/.cargo"
           --channel 1.97.0
-      - name: Put rustup on PATH
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          SYSROOT="$(rustup run "$EXPECTED_RUSTC" rustc --print sysroot)"
+          if [ -z "$SYSROOT" ] || [ ! -x "$SYSROOT/bin/rustc" ]; then
+            echo "rustc $EXPECTED_RUSTC sysroot missing"
+            exit 1
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$SYSROOT/bin" >> "$GITHUB_PATH"
+          echo "RUSTUP_TOOLCHAIN=$EXPECTED_RUSTC" >> "$GITHUB_ENV"
       - name: Require rustc 1.97.0 and host triple
         run: |
           rustc --version --verbose
+          command -v rustc
           RELEASE=$(rustc --version | awk '{print $2}')
           if [ "$RELEASE" != "$EXPECTED_RUSTC" ]; then
             echo "rustc $RELEASE != $EXPECTED_RUSTC"
@@ -135,7 +156,7 @@ jobs:
             echo "rustc host $HOST != $EXPECTED_LINUX_TARGET"
             exit 1
           fi
-          rustup component add llvm-tools-preview
+          rustup component add llvm-tools-preview --toolchain "$EXPECTED_RUSTC"
       - name: Rebuild Linux JVM into staging B
         run: >-
           python3 crypto-signing-backend/scripts/rebuild_into_staging.py

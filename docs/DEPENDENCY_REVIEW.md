@@ -347,7 +347,7 @@ copied from CI log text. Lockfiles were not rewritten for this miss.
 | Item | Value |
 |---|---|
 | Toolchain file | `crypto-signing-backend/rust-toolchain.toml` |
-| Channel | `1.97.0` (README pin; rustup resolved `1.97.0 (2d8144b78 2026-07-07)`) |
+| Channel | `1.97.0` (README pin; rustup resolved `1.97.0 (2d8144b78 2026-07-07)`). Hosted images may expose rustc `1.97.1` first; rebuild jobs activate the `1.97.0` toolchain `bin`. |
 | Direct crates | `ed25519-bip32 = "=0.4.2"`, `uniffi = "=0.29.5"` |
 | Lockfile | `crypto-signing-backend/Cargo.lock` (unchanged by the exact-pin edit) |
 | Rebuild flags | every documented `cargo` / `cargo ndk` rebuild uses `--locked` |

@@ -28,6 +28,20 @@ class HostTripleTests(unittest.TestCase):
         with self.assertRaises(rustup.InstallError):
             rustup.host_triple("Windows", "ARM64")
 
+    def test_rustc_release_is_exact_token(self) -> None:
+        self.assertEqual(
+            rustup.parse_rustc_release("rustc 1.97.0 (2d8144b78 2026-07-07)"),
+            "1.97.0",
+        )
+        self.assertEqual(
+            rustup.parse_rustc_release("rustc 1.97.1 (8bab26f4f 2026-07-14)"),
+            "1.97.1",
+        )
+        self.assertNotEqual(
+            rustup.parse_rustc_release("rustc 1.97.1 (8bab26f4f 2026-07-14)"),
+            "1.97.0",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

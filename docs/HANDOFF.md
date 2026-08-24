@@ -109,7 +109,8 @@ Date: 2026-08-24
   `win32-x86-64/kardano_ed25519_bip32_signing.dll`. Fail-closed PE32+
   verifier + `dumpbin` corroboration. Two independent `windows-2022`
   jobs; CHECKSUMS stays 9 rows. Phase C promotion waits for review.
-  Do not merge/tag or start the legal packet.
+  Hosted images now expose rustc 1.97.1 on PATH; jobs activate the
+  pinned 1.97.0 toolchain bin. Do not merge/tag or start the legal packet.
 
 - **Native rebuild evidence on `fix/native-build-and-platform-evidence`.**
   Gate 1 is GO at `d09db44`. Gate 2 Linux x86-64 JVM uses JNA prefix

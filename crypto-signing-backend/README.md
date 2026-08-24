@@ -232,6 +232,9 @@ and `cargo metadata --locked` only.
 
 Pinned rebuild toolchain: rustc `1.97.0` (commit `2d8144b7880597b6e6d3dfd63a9a9efae3f533d3`),
 cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`.
+Hosted GitHub images may ship rustc `1.97.1` first on PATH; rebuild
+workflows activate the rustup `1.97.0` toolchain `bin` directory and
+set `RUSTUP_TOOLCHAIN=1.97.0` so the pin is the rustc that cargo sees.
 
 The first harness commit on this branch (`6cb6810`) is historical review debt: it
 defaulted to the module `target/` and treated missing inspection tools as optional.

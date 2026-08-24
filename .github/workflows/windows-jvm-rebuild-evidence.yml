@@ -21,6 +21,7 @@ env:
   EXPECTED_IMAGE_OS: win22
   EXPECTED_RUSTC: "1.97.0"
   EXPECTED_WINDOWS_TARGET: x86_64-pc-windows-msvc
+  RUSTUP_TOOLCHAIN: "1.97.0"
 
 jobs:
   windows-jvm-build-a:
@@ -57,14 +58,26 @@ jobs:
           --dest "$env:RUNNER_TEMP/kardano-rustup-init.exe"
           --cargo-home "$env:USERPROFILE/.cargo"
           --channel 1.97.0
-      - name: Put rustup on PATH
-        run: Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE/.cargo/bin"
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+          $env:PATH = "$cargoBin;$env:PATH"
+          $rustup = Join-Path $cargoBin "rustup.exe"
+          $sysroot = & $rustup run $env:EXPECTED_RUSTC rustc --print sysroot
+          if (-not $sysroot) {
+            Write-Error "rustc $($env:EXPECTED_RUSTC) sysroot missing"
+            exit 1
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $cargoBin
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $sysroot.Trim() "bin")
+          Add-Content -Path $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=$($env:EXPECTED_RUSTC)"
       - name: Require rustc 1.97.0 and host triple
         run: |
           rustc --version --verbose
           $release = (rustc --version).Split(" ")[1]
           if ($release -ne $env:EXPECTED_RUSTC) {
             Write-Error "rustc $release != $($env:EXPECTED_RUSTC)"
+            Get-Command rustc | Format-List
             exit 1
           }
           $hostTriple = (rustc -vV | Select-String "^host:").ToString().Split(" ", 2)[1]
@@ -72,7 +85,7 @@ jobs:
             Write-Error "rustc host $hostTriple != $($env:EXPECTED_WINDOWS_TARGET)"
             exit 1
           }
-          rustup component add llvm-tools-preview
+          rustup component add llvm-tools-preview --toolchain $env:EXPECTED_RUSTC
       - name: Rebuild Windows JVM into staging A
         run: >
           python crypto-signing-backend/scripts/rebuild_into_staging.py
@@ -118,14 +131,26 @@ jobs:
           --dest "$env:RUNNER_TEMP/kardano-rustup-init.exe"
           --cargo-home "$env:USERPROFILE/.cargo"
           --channel 1.97.0
-      - name: Put rustup on PATH
-        run: Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE/.cargo/bin"
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+          $env:PATH = "$cargoBin;$env:PATH"
+          $rustup = Join-Path $cargoBin "rustup.exe"
+          $sysroot = & $rustup run $env:EXPECTED_RUSTC rustc --print sysroot
+          if (-not $sysroot) {
+            Write-Error "rustc $($env:EXPECTED_RUSTC) sysroot missing"
+            exit 1
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $cargoBin
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $sysroot.Trim() "bin")
+          Add-Content -Path $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=$($env:EXPECTED_RUSTC)"
       - name: Require rustc 1.97.0 and host triple
         run: |
           rustc --version --verbose
           $release = (rustc --version).Split(" ")[1]
           if ($release -ne $env:EXPECTED_RUSTC) {
             Write-Error "rustc $release != $($env:EXPECTED_RUSTC)"
+            Get-Command rustc | Format-List
             exit 1
           }
           $hostTriple = (rustc -vV | Select-String "^host:").ToString().Split(" ", 2)[1]
@@ -133,7 +158,7 @@ jobs:
             Write-Error "rustc host $hostTriple != $($env:EXPECTED_WINDOWS_TARGET)"
             exit 1
           }
-          rustup component add llvm-tools-preview
+          rustup component add llvm-tools-preview --toolchain $env:EXPECTED_RUSTC
       - name: Rebuild Windows JVM into staging B
         run: >
           python crypto-signing-backend/scripts/rebuild_into_staging.py

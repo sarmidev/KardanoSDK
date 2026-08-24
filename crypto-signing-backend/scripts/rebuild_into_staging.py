@@ -382,7 +382,14 @@ def _ensure_llvm_tools(
     recorder: CommandRecorder,
 ) -> None:
     recorder.run(
-        ["rustup", "component", "add", "llvm-tools-preview"],
+        [
+            "rustup",
+            "component",
+            "add",
+            "llvm-tools-preview",
+            "--toolchain",
+            toolchain.RUST_CHANNEL,
+        ],
         cwd=module_root,
         env=env,
         name="rustup-component-llvm-tools-preview",
@@ -397,7 +404,14 @@ def _ensure_target(
     recorder: CommandRecorder,
 ) -> None:
     recorder.run(
-        ["rustup", "target", "add", rust_target],
+        [
+            "rustup",
+            "target",
+            "add",
+            rust_target,
+            "--toolchain",
+            toolchain.RUST_CHANNEL,
+        ],
         cwd=module_root,
         env=env,
         name=f"rustup-target-add-{rust_target}",

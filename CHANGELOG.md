@@ -92,6 +92,8 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   `windows-2022` / rustc 1.97.0 / `x86_64-pc-windows-msvc`, fail-closed
   PE32+ verifier plus `dumpbin` corroboration, two independent
   candidate jobs. Not a CHECKSUMS row. Windows ARM is out of scope.
+  Hosted images may expose rustc 1.97.1 first on PATH; rebuild jobs
+  activate the pinned 1.97.0 toolchain bin and set `RUSTUP_TOOLCHAIN`.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in

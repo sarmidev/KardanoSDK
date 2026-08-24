@@ -80,6 +80,15 @@ def download(url: str) -> bytes:
         return response.read()
 
 
+def parse_rustc_release(text: str) -> str:
+    """Return the rustc release token. '1.97.0' is not a prefix of '1.97.1'."""
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "rustc":
+            return parts[1]
+    return ""
+
+
 def rustc_matches(channel: str) -> bool:
     rustc = shutil_which("rustc")
     if rustc is None:
@@ -90,7 +99,78 @@ def rustc_matches(channel: str) -> bool:
         text=True,
         check=False,
     )
-    return completed.returncode == 0 and channel in (completed.stdout or "")
+    return completed.returncode == 0 and parse_rustc_release(completed.stdout or "") == channel
+
+
+def rustup_home_for(cargo_home: Path) -> Path:
+    return cargo_home.parent / "rustup"
+
+
+def rustup_process_env(cargo_home: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    env["CARGO_HOME"] = str(cargo_home)
+    env["RUSTUP_HOME"] = str(rustup_home_for(cargo_home))
+    env["PATH"] = f"{cargo_home / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+    return env
+
+
+def rustc_binary_name() -> str:
+    return "rustc.exe" if os.name == "nt" else "rustc"
+
+
+def pinned_toolchain_bin(channel: str, cargo_home: Path) -> Path:
+    rustup = rustup_bin(cargo_home)
+    if rustup is None:
+        raise InstallError(f"rustup missing at {cargo_home / 'bin'}")
+    completed = subprocess.run(
+        [str(rustup), "run", channel, "rustc", "--print", "sysroot"],
+        env=rustup_process_env(cargo_home),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    sysroot = Path((completed.stdout or "").strip())
+    toolchain_bin = sysroot / "bin"
+    rustc = toolchain_bin / rustc_binary_name()
+    if completed.returncode != 0 or not rustc.is_file():
+        detail = (completed.stderr or completed.stdout or "").strip()
+        raise InstallError(f"rustc {channel} sysroot missing: {detail}")
+    return toolchain_bin
+
+
+def activate_pinned_toolchain(channel: str, cargo_home: Path) -> Path:
+    """Put the pinned rustc bin ahead of any image-provided rustc on PATH.
+
+    GitHub-hosted images may ship rustc 1.97.1 as a standalone binary that
+    stays first even after rustup installs 1.97.0 and rustup default is set.
+    Subsequent CI steps read GITHUB_PATH / GITHUB_ENV when present.
+    """
+    toolchain_bin = pinned_toolchain_bin(channel, cargo_home)
+    cargo_bin = cargo_home / "bin"
+    github_path = os.environ.get("GITHUB_PATH")
+    if github_path:
+        # GITHUB_PATH prepends each line; the last line becomes first on PATH.
+        with open(github_path, "a", encoding="utf-8") as handle:
+            handle.write(f"{cargo_bin}\n")
+            handle.write(f"{toolchain_bin}\n")
+    github_env = os.environ.get("GITHUB_ENV")
+    if github_env:
+        with open(github_env, "a", encoding="utf-8") as handle:
+            handle.write(f"RUSTUP_TOOLCHAIN={channel}\n")
+            handle.write(f"CARGO_HOME={cargo_home}\n")
+            handle.write(f"RUSTUP_HOME={rustup_home_for(cargo_home)}\n")
+    rustc = toolchain_bin / rustc_binary_name()
+    completed = subprocess.run(
+        [str(rustc), "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    release = parse_rustc_release(completed.stdout or "")
+    if completed.returncode != 0 or release != channel:
+        raise InstallError(f"activated rustc {release!r} != {channel}")
+    print(f"activated rustc {channel} at {toolchain_bin}")
+    return toolchain_bin
 
 
 def shutil_which(name: str) -> str | None:
@@ -152,10 +232,7 @@ def rustup_bin(cargo_home: Path) -> Path | None:
 
 
 def ensure_toolchain(channel: str, cargo_home: Path) -> None:
-    env = os.environ.copy()
-    env["CARGO_HOME"] = str(cargo_home)
-    env["RUSTUP_HOME"] = str(cargo_home.parent / "rustup")
-    env["PATH"] = f"{cargo_home / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+    env = rustup_process_env(cargo_home)
     rustup = rustup_bin(cargo_home)
     if rustup is None:
         raise InstallError(f"rustup missing after rustup-init at {cargo_home / 'bin'}")
@@ -166,11 +243,14 @@ def ensure_toolchain(channel: str, cargo_home: Path) -> None:
     )
     if completed.returncode != 0:
         raise InstallError(f"rustup toolchain install {channel} failed")
-    subprocess.run(
+    completed = subprocess.run(
         [str(rustup), "default", channel],
         env=env,
         check=False,
     )
+    if completed.returncode != 0:
+        raise InstallError(f"rustup default {channel} failed")
+    activate_pinned_toolchain(channel, cargo_home)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -196,12 +276,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--skip-if-present",
         action="store_true",
-        help="Exit 0 when rustc --version already contains --channel.",
+        help="Exit 0 when rustc --version equals --channel exactly.",
     )
     args = parser.parse_args(argv)
     try:
         if args.skip_if_present and rustc_matches(args.channel):
             print(f"rustc {args.channel} already on PATH; rustup-init not downloaded")
+            if rustup_bin(args.cargo_home) is not None:
+                activate_pinned_toolchain(args.channel, args.cargo_home)
             return 0
         existing = rustup_bin(args.cargo_home)
         if existing is not None:

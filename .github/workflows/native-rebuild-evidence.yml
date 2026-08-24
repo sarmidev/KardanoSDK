@@ -21,6 +21,7 @@ env:
   EXPECTED_XCODE: "26.6"
   EXPECTED_XCODE_BUILD: 17F113
   EXPECTED_RUSTC: "1.97.0"
+  RUSTUP_TOOLCHAIN: "1.97.0"
 
 jobs:
   artifact-catalog-tests:
@@ -42,8 +43,17 @@ jobs:
           --dest "$RUNNER_TEMP/rustup-init"
           --cargo-home "$HOME/.cargo"
           --channel 1.97.0
-      - name: Put rustup on PATH
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          SYSROOT="$(rustup run "$EXPECTED_RUSTC" rustc --print sysroot)"
+          if [ -z "$SYSROOT" ] || [ ! -x "$SYSROOT/bin/rustc" ]; then
+            echo "rustc $EXPECTED_RUSTC sysroot missing"
+            exit 1
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$SYSROOT/bin" >> "$GITHUB_PATH"
+          echo "RUSTUP_TOOLCHAIN=$EXPECTED_RUSTC" >> "$GITHUB_ENV"
       - name: Cargo metadata --locked
         working-directory: crypto-signing-backend
         run: cargo metadata --locked --format-version 1 >/dev/null
@@ -82,17 +92,27 @@ jobs:
           --dest "$RUNNER_TEMP/rustup-init"
           --cargo-home "$HOME/.cargo"
           --channel 1.97.0
-      - name: Put rustup on PATH
-        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          SYSROOT="$(rustup run "$EXPECTED_RUSTC" rustc --print sysroot)"
+          if [ -z "$SYSROOT" ] || [ ! -x "$SYSROOT/bin/rustc" ]; then
+            echo "rustc $EXPECTED_RUSTC sysroot missing"
+            exit 1
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          echo "$SYSROOT/bin" >> "$GITHUB_PATH"
+          echo "RUSTUP_TOOLCHAIN=$EXPECTED_RUSTC" >> "$GITHUB_ENV"
       - name: Require rustc 1.97.0 and llvm-tools
         run: |
           rustc --version --verbose
+          command -v rustc
           RELEASE=$(rustc --version | awk '{print $2}')
           if [ "$RELEASE" != "$EXPECTED_RUSTC" ]; then
             echo "rustc $RELEASE != $EXPECTED_RUSTC"
             exit 1
           fi
-          rustup component add llvm-tools-preview
+          rustup component add llvm-tools-preview --toolchain "$EXPECTED_RUSTC"
           HOST=$(rustc -vV | awk '/^host:/{print $2}')
           LLVM_NM="$(rustc --print sysroot)/lib/rustlib/${HOST}/bin/llvm-nm"
           test -x "$LLVM_NM"
