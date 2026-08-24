@@ -1,5 +1,7 @@
 {
+  "artifact_maven_central_url": "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/bcprov-jdk18on-1.85.2.jar",
   "artifact_sha256": "986b0fb92ec10e0c66b43e036ce0077e6150cfaecd1db9fb92b56672e157afe5",
+  "artifact_size_bytes": 10280518,
   "coordinate": "org.bouncycastle:bcprov-jdk18on:1.85.2",
   "max_major_version": 69,
   "members_at_max_major_version": [
@@ -172,6 +174,6 @@
       "size_bytes": 231
     }
   ],
-  "method": "Point-in-time inspection (2026-08-24) of the actual resolved org.bouncycastle:bcprov-jdk18on:1.85.2 .jar in the local Gradle module cache: Python `zipfile` for member discovery, this file's own bounded 8-byte header read for each member's raw major/minor version fields, and this file's own _validate_java_class_structure() (full JVMS \u00a74 structural walk, not just the magic bytes) required to pass for every one of the 7163 scanned members. This table is static; it is not re-derived from a live artifact fetch on every run (see docs/LEGAL_REVIEW.md \u00a78 for why), but cross_check_java_class_version_evidence_against_local_cache() independently re-verifies it byte-for-byte against the real resolved artifact whenever a warm Gradle cache has it, and fails generation/checking outright on any drift: wrong whole-archive SHA-256, wrong member count, wrong observed maximum major_version, or a different member set at that maximum. max_major_version is exactly MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION -- the ceiling and this evidence are reviewed and moved together, never independently.",
+  "method": "Point-in-time inspection (2026-08-24, re-verified 2026-08-25 via a live Maven Central fetch) of the actual resolved org.bouncycastle:bcprov-jdk18on:1.85.2 .jar: Python `zipfile` for member discovery, this file's own bounded 8-byte header read for each member's raw major/minor version fields, and this file's own _validate_java_class_structure() (full JVMS \u00a74 structural walk, not just the magic bytes) required to pass for every one of the 7163 scanned members. This table is static; the evidence FILE's content is not re-derived from a live fetch on every run (a fixed, reviewed snapshot, not a moving target), but live_verify_java_class_version_evidence() unconditionally re-verifies it byte-for-byte against a real resolved jar -- an explicit --bcprov-jar path, an already-verified path from the KARDANO_LEGAL_EVIDENCE_BCPROV_JAR environment variable, or (the default) a fresh pinned-host, SHA-256-and-size-verified download from Maven Central -- every single time this function runs, with no cold-cache/no-op skip branch. It fails generation/checking outright on any drift: wrong whole-archive SHA-256, wrong member count, wrong observed maximum major_version, or a different member set at that maximum. max_major_version is exactly MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION -- the ceiling and this evidence are reviewed and moved together, never independently.",
   "total_class_members_scanned": 7163
 }
