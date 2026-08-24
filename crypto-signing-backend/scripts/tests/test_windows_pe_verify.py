@@ -637,6 +637,10 @@ class CanonicalDirectoryTests(unittest.TestCase):
         rdata_target = build_pe(exception_entries=((0x21F0, 0x21F4, 0x21F0),))
         with self.assertRaises(pe.PeError):
             pe.parse_pe32_plus_x86_64_dll(rdata_target)
+        padded = bytearray(build_pe(exception_entries=((0x1010, 0x1300, 0x1010),)))
+        # Enlarge .text VirtualSize so EndAddress can sit in virtual-only padding.
+        struct.pack_into("<I", padded, _section_table_off(bytes(padded)) + 8, 0x400)
+        pe.parse_pe32_plus_x86_64_dll(bytes(padded))
 
     def test_reloc_malformed_and_unaligned_blocks(self) -> None:
         good_block = struct.pack("<II", 0x1000, 12) + struct.pack("<H", 0) + b"\x00\x00"

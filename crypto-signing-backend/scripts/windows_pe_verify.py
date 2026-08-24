@@ -441,18 +441,30 @@ def _ascii_z(data: bytes, offset: int, *, limit: int = 512) -> str:
         raise PeError("non-ASCII PE string") from error
 
 
-def rva_to_offset(sections: list[Section], rva: int, size: int = 1) -> int:
+def rva_to_offset(
+    sections: list[Section],
+    rva: int,
+    size: int = 1,
+    *,
+    allow_virtual: bool = False,
+) -> int:
     if rva == 0:
         raise PeError("RVA 0 cannot be mapped")
     last = _checked_add(rva, size - 1 if size else 0, limit=UINT32_MAX)
     for section in sections:
         va_end = _checked_add(section.virtual_address, max(section.virtual_size, 1) - 1, limit=UINT32_MAX)
         if section.virtual_address <= rva <= va_end:
+            if last > va_end:
+                raise PeError("RVA range exceeds section virtual size")
             delta = rva - section.virtual_address
             if delta >= section.size_of_raw_data:
+                if allow_virtual:
+                    return _checked_add(
+                        section.pointer_to_raw_data, section.size_of_raw_data, limit=UINT32_MAX
+                    )
                 raise PeError("RVA lands in virtual-only section padding")
             raw_end = _checked_add(delta, size if size else 1, limit=UINT32_MAX)
-            if raw_end > section.size_of_raw_data:
+            if raw_end > section.size_of_raw_data and not allow_virtual:
                 raise PeError("RVA range exceeds section raw data")
             return _checked_add(section.pointer_to_raw_data, delta, limit=UINT32_MAX)
     raise PeError(f"RVA 0x{rva:x} is not in any section")
@@ -493,7 +505,7 @@ def _require_debug_directory(
                 if end > len(data):
                     raise PeError("debug payload PointerToRawData is out of range")
             elif address_of_raw:
-                rva_to_offset(sections, address_of_raw, size_of_data)
+                rva_to_offset(sections, address_of_raw, size_of_data, allow_virtual=True)
 
 
 def parse_elf_style_ranges(ranges: list[tuple[int, int]], label: str) -> None:
@@ -837,9 +849,9 @@ def _require_exception_directory(
         if section.characteristics & IMAGE_SCN_MEM_WRITE:
             raise PeError("exception BeginAddress is in a writable section")
         rva_to_offset(sections, begin, 1)
-        rva_to_offset(sections, end - 1, 1)
+        rva_to_offset(sections, end - 1, 1, allow_virtual=True)
         if unwind:
-            rva_to_offset(sections, unwind, 1)
+            rva_to_offset(sections, unwind, 1, allow_virtual=True)
         ranges.append((begin, end))
     parse_elf_style_ranges(ranges, "exception")
 
@@ -868,7 +880,7 @@ def _require_basereloc_directory(
             raise PeError("base reloc block exceeds the data directory")
         if page_rva % PAGE_SIZE != 0:
             raise PeError("base reloc page RVA is not 4KiB-aligned")
-        section_containing_rva(sections, page_rva)
+        rva_to_offset(sections, page_rva, 1, allow_virtual=True)
         if page_rva in pages:
             raise PeError("base reloc page RVA is duplicated")
         pages.append(page_rva)
@@ -891,7 +903,7 @@ def _require_tls_directory(
         return
     if entry.size < TLS_DIRECTORY64_SIZE:
         raise PeError("TLS directory is smaller than IMAGE_TLS_DIRECTORY64")
-    off = rva_to_offset(sections, entry.rva, entry.size)
+    off = rva_to_offset(sections, entry.rva, TLS_DIRECTORY64_SIZE)
     start_va = _u64(data, off)
     end_va = _u64(data, off + 8)
     index_va = _u64(data, off + 16)
@@ -902,15 +914,15 @@ def _require_tls_directory(
         start_rva = start_va - image_base
         end_rva = end_va - image_base
         if end_rva > start_rva:
-            rva_to_offset(sections, start_rva, end_rva - start_rva)
+            rva_to_offset(sections, start_rva, end_rva - start_rva, allow_virtual=True)
     if index_va:
         if index_va < image_base:
             raise PeError("TLS AddressOfIndex is below ImageBase")
-        rva_to_offset(sections, index_va - image_base, 4)
+        rva_to_offset(sections, index_va - image_base, 4, allow_virtual=True)
     if callbacks_va:
         if callbacks_va < image_base:
             raise PeError("TLS AddressOfCallBacks is below ImageBase")
-        rva_to_offset(sections, callbacks_va - image_base, 8)
+        rva_to_offset(sections, callbacks_va - image_base, 8, allow_virtual=True)
 
 
 def _require_load_config_directory(
@@ -920,7 +932,8 @@ def _require_load_config_directory(
         return
     if entry.size < 4 or entry.size > LOAD_CONFIG_MAX_SIZE:
         raise PeError("load config directory size is out of range")
-    off = rva_to_offset(sections, entry.rva, entry.size)
+    off = rva_to_offset(sections, entry.rva, 4)
+    rva_to_offset(sections, entry.rva, entry.size, allow_virtual=True)
     cfg_size = _u32(data, off)
     if cfg_size < LOAD_CONFIG_MIN_SIZE or cfg_size > entry.size:
         raise PeError("load config Size field is inconsistent")
@@ -933,7 +946,8 @@ def _require_iat_directory(
         return
     if entry.size % 8 != 0:
         raise PeError("IAT directory size is not a multiple of 8")
-    rva_to_offset(sections, entry.rva, entry.size)
+    rva_to_offset(sections, entry.rva, 8)
+    rva_to_offset(sections, entry.rva, entry.size, allow_virtual=True)
     _ = data
 
 
