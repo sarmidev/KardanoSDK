@@ -1,0 +1,113 @@
+Kardano SDK
+Copyright (c) Sarmidev, project owner and contributors.
+
+This distribution contains software from the following third-party
+projects. This file is a factual attribution record generated as part of
+the evidence packet described in docs/LEGAL_REVIEW.md. It is not legal
+advice and does not constitute counsel approval of any release.
+
+Full license texts are in LICENSES/. The mapping of each component below to
+its license, use, and evidence source is maintained in
+docs/THIRD_PARTY_NOTICES.md; do not treat this NOTICE file as the sole
+source of truth if the two ever disagree — file a correction instead of
+trusting whichever was edited more recently.
+
+================================================================================
+Apache License, Version 2.0 (see LICENSES/Apache-2.0.txt)
+================================================================================
+
+The following are used under the Apache License, Version 2.0:
+
+- Kotlin and Kotlin Multiplatform, standard libraries and build plugins.
+  Copyright JetBrains s.r.o. and Kotlin Programming Language contributors.
+- Ktor. Copyright JetBrains s.r.o.
+- kotlinx.serialization, kotlinx.coroutines, kotlinx.atomicfu.
+  Copyright JetBrains s.r.o. and contributors.
+- Compose Multiplatform and AndroidX libraries. Copyright The Android Open
+  Source Project / JetBrains s.r.o.
+- org.kotlincrypto.hash:blake2 / :sha2. Copyright KotlinCrypto contributors.
+- org.hyperledger.identus:bip32-ed25519 (part of the hyperledger-identus/apollo
+  monorepo). Copyright 2024 Input Output Global. Also redistributes a
+  compiled Rust native library per Android ABI
+  (libuniffi_ed25519_bip32_wrapper.so); see docs/THIRD_PARTY_NOTICES.md for
+  that library's own transitive dependency review.
+- com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings.
+  Copyright 2019 Ugljesa Jovanovic. Its JVM artifact also redistributes
+  compiled libsodium binaries for macOS/Linux/Windows; see the ISC entry
+  below for libsodium's own license.
+- net.java.dev.jna:jna 5.19.1 (dual Apache-2.0 OR LGPL-2.1; Kardano SDK
+  elects Apache-2.0 for this distribution). Copyright the JNA contributors.
+- ed25519-bip32 (Rust crate, 0.4.2) and cryptoxide (0.5.3, transitive; dual
+  MIT OR Apache-2.0; Kardano SDK elects Apache-2.0 for this distribution).
+  Compiled into all nine committed crypto-signing-backend native artifacts
+  listed in crypto-signing-backend/CHECKSUMS.sha256.
+
+================================================================================
+Bouncy Castle License (see LICENSES/BouncyCastle.txt)
+================================================================================
+
+- org.bouncycastle:bcprov-jdk18on 1.85.2.
+  Copyright (c) 2000 - 2026 The Legion of the Bouncy Castle Inc.
+
+================================================================================
+Mozilla Public License, Version 2.0 (see LICENSES/MPL-2.0.txt)
+================================================================================
+
+MPL-2.0 is file-level, not whole-program, copyleft (MPL-2.0 3.1-3.2). Kardano
+SDK does not modify the Source Code Form of either project below; recipients
+are directed to the upstream repositories to obtain that Source Code Form.
+
+- com.goterl:lazysodium-android 5.2.0. Copyright the LazySodium Android
+  contributors (github.com/terl/lazysodium-android). Its Android .aar also
+  redistributes a compiled libsodium.so per ABI; see the ISC entry below.
+- uniffi (Rust crate, =0.29.5). Copyright the Mozilla UniFFI contributors
+  (github.com/mozilla/uniffi-rs). Its generated/compiled bindings code is
+  linked into all nine committed crypto-signing-backend native artifacts
+  listed in crypto-signing-backend/CHECKSUMS.sha256.
+
+================================================================================
+ISC License (see LICENSES/ISC-libsodium.txt)
+================================================================================
+
+- libsodium (C library; not a direct Gradle dependency of Kardano SDK).
+  Copyright (c) 2013-2026 Frank Denis. Bundled as a compiled native binary
+  inside both the IonSpin JVM artifact and the LazySodium Android artifact
+  above (github.com/jedisct1/libsodium).
+
+================================================================================
+Not distributed — no NOTICE/LICENSES entry required
+================================================================================
+
+The following are evaluated in docs/THIRD_PARTY_NOTICES.md and
+docs/LEGAL_REVIEW.md but are explicitly NOT part of any Kardano SDK release
+artifact, so no attribution text is included for them here:
+
+- Windows x86-64 JVM signing-backend candidate DLL
+  (win32-x86-64/kardano_ed25519_bip32_signing.dll). Candidate-only; has a
+  technical GO on native-artifact evidence but is withheld from
+  crypto-signing-backend/CHECKSUMS.sha256 and from any release pending
+  independent PE re-review and upstream hyperledger-identus/apollo issue #226.
+- The Identus apollo Android derivation-backend native library's Windows
+  build. Not produced upstream (Identus issue #226); Kardano SDK cannot
+  distribute what upstream has not published.
+- JUnit, androidx.test:runner, and other test-only dependencies (never
+  packaged into a distributed artifact).
+- Gitleaks CLI, GitHub Actions, and other CI-only tooling (never packaged
+  into a distributed artifact).
+
+================================================================================
+First-party assets
+================================================================================
+
+The Kardano SDK icon mark and its derived Android/iOS/Desktop/web assets are
+first-party artwork owned by Sarmidev (project owner); see
+docs/THIRD_PARTY_NOTICES.md "First-party assets" for the full derivation list.
+The Linux x86-64 signing cdylib
+(linux-x86-64/libkardano_ed25519_bip32_signing.so) is first-party, in-tree
+Rust output, not a third-party redistributed binary.
+
+--------------------------------------------------------------------------------
+This NOTICE file is provided for informational purposes and does not modify
+any license above. Do not treat this file, LICENSES/, or docs/LEGAL_REVIEW.md
+as legal advice or as counsel's approval to release. See docs/LEGAL_REVIEW.md
+for the open review gates.
