@@ -47,9 +47,15 @@ jobs:
           rustup toolchain install 1.97.0 --profile minimal --no-self-update
           rustup default 1.97.0
       - name: Capture pre-generation worktree state
+        # A fresh actions/checkout has an empty `git status --porcelain`/
+        # `git diff`/`git diff --cached` by construction; this is captured
+        # anyway (rather than assumed) so the later "touched anything
+        # outside docs/evidence/" step is checking against a real recorded
+        # baseline, not an assumption about checkout behavior.
         run: |
-          git status --porcelain=v1 > /tmp/worktree-before.txt
-          git diff --binary > /tmp/tracked-diff-before.patch
+          git status --porcelain=v1 | tee /tmp/worktree-before.txt
+          git diff --exit-code
+          git diff --cached --exit-code
           sha256sum crypto-signing-backend/Cargo.lock > /tmp/cargo-lock-before.sha256
       - name: Bootstrap Cargo registry over the network (--locked only, no lockfile edits)
         # This is the ONLY step in this job that is allowed real network
@@ -106,18 +112,16 @@ jobs:
         # step above ran with CARGO_NET_OFFLINE=true, so a script that tried
         # to silently re-resolve or fetch would have failed loudly instead.
         # This step independently re-diffs the ENTIRE tracked worktree
-        # (not just docs/evidence/) against the pre-generation snapshot and
-        # fails if anything other than docs/evidence/ changed -- e.g. a
-        # generator bug that rewrote Cargo.lock, a gradle.lockfile, or any
-        # other tracked source file would be caught here even if every
-        # narrower check above happened to miss it.
+        # against the pre-generation baseline captured above, EXCLUDING
+        # docs/evidence/ (which is expected, and separately checked above),
+        # and fails if anything else changed -- e.g. a generator bug that
+        # rewrote Cargo.lock, a gradle.lockfile, or any other tracked
+        # source file would be caught here even if every narrower check
+        # above happened to miss it.
         run: |
-          git status --porcelain=v1 | awk '{print $2}' | grep -v '^docs/evidence/' > /tmp/worktree-after-non-evidence.txt || true
-          if [ -s /tmp/worktree-after-non-evidence.txt ]; then
-            echo "Tracked files outside docs/evidence/ changed during legal-evidence generation:"
-            cat /tmp/worktree-after-non-evidence.txt
-            exit 1
-          fi
+          git diff --exit-code -- . ':(exclude)docs/evidence'
+          git status --porcelain=v1 -- . ':(exclude)docs/evidence' | tee /tmp/worktree-after-non-evidence.txt
+          test ! -s /tmp/worktree-after-non-evidence.txt
           cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/cargo-lock-before-final.hash
           sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/cargo-lock-final.hash
           diff /tmp/cargo-lock-before-final.hash /tmp/cargo-lock-final.hash
