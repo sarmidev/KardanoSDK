@@ -475,17 +475,26 @@ Date: 2026-08-24
   `GITHUB_EVENT_PATH`/`GITHUB_SHA`/`GITHUB_REPOSITORY`/`GITHUB_BASE_REF`/
   `GITHUB_HEAD_REF` set; a readable, valid (no duplicate key) event
   payload; `GITHUB_SHA == HEAD`; same-repository `base`/`head` (no fork
-  exception); `main` base ref; matching head ref; `pull_request.
-  merge_commit_sha` (when present) equal to `HEAD`; `HEAD`'s exact two
+  exception); `main` base ref; matching head ref; `HEAD`'s exact two
   parents matched, in exact GitHub order, against the event's own
   `base.sha`/`head.sha`; and a byte-identical merge tree. Any doubt --
   missing env, unreadable/malformed/duplicate-key event, wrong
   repo/ref/SHA, wrong parent order, or a tree mismatch -- denies the
   exception and falls back to the strict "HEAD's own first parent must
   be `evidence_commit`" path, which a genuine merge commit fails.
-  `check_full_source_scope_seal()` is kept as GitHub-event-independent
-  defense in depth, documented as not itself binding the exception to
-  the event. `scripts.tests.test_check_release_evidence
+  Deliberately does NOT cross-check `pull_request.merge_commit_sha`: a
+  same-day real-PR run (Verify 32855140709) found that field is a
+  snapshot of GitHub's ephemeral test-merge SHA taken at webhook-
+  delivery time and legitimately lags the actual `refs/pull/*/merge`
+  commit `actions/checkout` fetches moments later for an ordinary
+  `synchronize` push (see `actions/checkout#919` and Ken Muse's "The
+  Many SHAs of a GitHub Pull Request") -- an earlier exact-match
+  requirement on this field failed closed on that genuine, correctly-
+  shaped run; the parent-order/tree checks above name real,
+  already-pushed branch tips instead and remain the sole binding
+  mechanism. `check_full_source_scope_seal()` is kept as GitHub-event-
+  independent defense in depth, documented as not itself binding the
+  exception to the event. `scripts.tests.test_check_release_evidence
   .ScopeBindingSealCheckTests` gained the positive GitHub shape plus
   every named adversarial escape (octopus/one-parent, swapped/unrelated
   parents, a genuine tree mismatch, a forged same-tree candidate built

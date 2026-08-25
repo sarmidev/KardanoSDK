@@ -343,8 +343,21 @@ def _github_pull_request_merge_head(head: str, parents: list[str]) -> str | None
     - `event["pull_request"]["base"]["ref"] == "main" ==
       GITHUB_BASE_REF`, and `event["pull_request"]["head"]["ref"]` is a
       non-empty string equal to `GITHUB_HEAD_REF`.
-    - `event["pull_request"]["merge_commit_sha"]`, if present at all,
-      equals `head` too.
+    - Deliberately does NOT cross-check
+      `event["pull_request"]["merge_commit_sha"]` against `head`: that
+      field is a snapshot of GitHub's ephemeral test-merge SHA taken at
+      webhook-delivery time, and is well documented (see
+      https://github.com/actions/checkout/issues/919 and
+      https://www.kenmuse.com/blog/the-many-shas-of-a-github-pull-request/)
+      to legitimately lag the actual `refs/pull/*/merge` commit
+      `actions/checkout` fetches moments later for an ordinary
+      `synchronize` push -- an EXACT-match requirement here was tried and
+      empirically found to fail closed on a genuine, correctly-shaped PR
+      run (Verify run 32855140709 on this exact repository) for exactly
+      that reason. The parent-order/tree checks below are NOT subject to
+      this staleness (`base.sha`/`head.sha` name real, already-pushed
+      branch tips, not an ephemeral merge SHA) and remain the sole
+      binding mechanism.
     - `head` has EXACTLY two parents (already checked by the caller
       before this is invoked), in exact GitHub order:
       `parents[0] == event["pull_request"]["base"]["sha"]` and
@@ -402,10 +415,6 @@ def _github_pull_request_merge_head(head: str, parents: list[str]) -> str | None
         return None
     head_ref = head_side.get("ref")
     if not isinstance(head_ref, str) or not head_ref or head_ref != os.environ["GITHUB_HEAD_REF"]:
-        return None
-
-    merge_commit_sha = pr.get("merge_commit_sha")
-    if merge_commit_sha is not None and merge_commit_sha != head:
         return None
 
     base_sha = base.get("sha")

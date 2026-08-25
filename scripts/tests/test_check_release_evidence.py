@@ -2270,7 +2270,7 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
     def test_matching_merge_commit_sha_in_event_still_passes(self) -> None:
         # When `pull_request.merge_commit_sha` IS provided and correctly
         # names the actual merge commit (GITHUB_SHA/`head`), the exception
-        # still applies -- the field is optional, not disqualifying.
+        # still applies -- the field is optional and not itself checked.
         self._seal()
         seal = _git_output(self.repo, "rev-parse", "HEAD")
         subject = _git_output(self.repo, "rev-parse", "HEAD^^")
@@ -2281,7 +2281,20 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
         with self._github_pull_request_env(event_path=event_path, head=merge_commit):
             self.assertEqual(checker.check_scope_binding_seal(), [])
 
-    def test_stale_merge_commit_sha_in_event_is_rejected(self) -> None:
+    def test_stale_merge_commit_sha_in_event_does_not_deny_the_exception(self) -> None:
+        # `pull_request.merge_commit_sha` is a snapshot of GitHub's
+        # ephemeral test-merge SHA taken at webhook-delivery time and is
+        # well documented to legitimately lag the actual refs/pull/*/merge
+        # commit `actions/checkout` fetches moments later for an ordinary
+        # `synchronize` push (see actions/checkout#919 and Ken Muse's "The
+        # Many SHAs of a GitHub Pull Request"). An earlier version of this
+        # exception required this field to exactly equal `head` and was
+        # empirically found to fail closed on a genuine, correctly-shaped
+        # PR run for exactly that reason (Verify run 32855140709 on this
+        # repository) -- this field is deliberately NOT cross-checked at
+        # all now; only the parent-order/tree checks (which name real,
+        # already-pushed branch tips, not an ephemeral merge SHA) bind the
+        # exception.
         self._seal()
         seal = _git_output(self.repo, "rev-parse", "HEAD")
         subject = _git_output(self.repo, "rev-parse", "HEAD^^")
@@ -2290,10 +2303,7 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
             base_sha=subject, head_sha=seal, merge_commit_sha="d" * 40
         )
         with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
+            self.assertEqual(checker.check_scope_binding_seal(), [])
 
     def test_duplicate_json_key_in_event_is_rejected(self) -> None:
         self._seal()
