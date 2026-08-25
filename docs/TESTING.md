@@ -112,6 +112,32 @@ Run tests per module. iOS simulator tests require macOS with Xcode.
 - Android host (JVM-hosted) tests: `./gradlew :shared:testAndroidHostTest`
 - iOS simulator tests: `./gradlew :shared:iosSimulatorArm64Test`
 
+Playground operation-lifecycle coverage lives in `:shared`:
+
+- `PlaygroundViewModelTest` (jvmTest) — a slow fake query discarded after ResetFlow, after a
+  live-provider toggle, and after a project-id change (only the latest generation applies).
+  `NonCancellable` gated fakes also complete after Job cancellation so generation / request-token
+  / address-identity checks — not cooperative cancellation — discard stale UTxO and params
+  results after ResetFlow, address edit/fill, repeated loads, and provider-configuration changes.
+  Repeated same-generation Funds, Build, Sign, and Submit requests discard the first
+  `NonCancellable` completion; Wallet restore is synchronous and has no request token.
+  Upstream reruns discard in-flight and completed downstream results (Funds clears
+  Build/Sign/Submit; Build clears Sign/Submit; Sign clears Submit) so Continue cannot
+  advance on a stale later step.
+  Toggle-off and project-id change invalidate the live factory cache before the next lookup.
+- `PlaygroundReducerTest` (commonTest) — diagnostic and guided-operation request tokens
+  increment on each start and on ResetFlow / provider-configuration change; starting Funds,
+  Build, or Sign clears completed downstream guided results and increments those tokens;
+  ResetFlow converts diagnostic Loading to Empty and keeps completed diagnostic results;
+  stale token/address applies are no-ops.
+- `PlaygroundProviderFactoryTest` (commonTest) — Mock vs LivePreprod mode, live-cache reuse,
+  cache drop when the id changes or live mode is disabled, and explicit `invalidateLiveCache()`
+  without an intervening mock lookup (dummy ids never appear in assertion messages).
+- `PlaygroundTransactionDraftPresenterTest` — `InsufficientFunds` includes
+  `excludedNativeAssetUtxoCount` / `excludedNativeAssetLovelace` when those fields are non-zero.
+- `PlaygroundMockFlowDesktopTest` (jvmTest) — the seeded guided mock flow is unchanged
+  (Funds/Build/Sign succeed; Submit still reports submission not supported).
+
 The full Phase 1 target matrix is intentionally not equivalent across platforms:
 
 - Android is the runtime validation surface for the Playground.

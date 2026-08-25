@@ -65,8 +65,16 @@ internal object PlaygroundReducer {
             },
         )
 
-        is PlaygroundIntent.ToggleLiveBlockfrost -> state.copy(useLiveBlockfrost = intent.enabled)
-        is PlaygroundIntent.UpdateProjectId -> state.copy(projectId = intent.value)
+        is PlaygroundIntent.ToggleLiveBlockfrost -> if (state.useLiveBlockfrost == intent.enabled) {
+            state
+        } else {
+            bumpGenerationAndClearProviderResults(state).copy(useLiveBlockfrost = intent.enabled)
+        }
+        is PlaygroundIntent.UpdateProjectId -> if (state.projectId == intent.value) {
+            state
+        } else {
+            bumpGenerationAndClearProviderResults(state).copy(projectId = intent.value)
+        }
 
         is PlaygroundIntent.ToggleTechnicalDetails -> state.copy(
             technicalDetailsExpanded = if (intent.step in state.technicalDetailsExpanded) {
@@ -82,9 +90,12 @@ internal object PlaygroundReducer {
         // Resets the five guided-flow step results (and the Wallet step's loading flag), and
         // (Block 1.12-pre-e) returns demoStep/section to the start of the demo — serving both a
         // mid-demo "Start over" control and the Summary screen's "Run the demo again" control.
-        // Provider selection, technicalDetailsExpanded, and diagnostics inputs/results are
-        // intentionally preserved so resetting the flow does not also clear an in-progress
-        // diagnostics exploration or provider configuration.
+        // Provider selection, technicalDetailsExpanded, and diagnostics inputs plus *completed*
+        // diagnostic results are preserved. In-flight diagnostic Loading values are converted
+        // to Empty so a cancelled load cannot leave the explorer stuck on "Working…".
+        // [PlaygroundState.flowGeneration], guided-operation request tokens, and diagnostic
+        // request tokens increment so any in-flight Funds/Build/Sign/Submit/diagnostic result
+        // is discarded when it arrives; the reducer itself stays pure and does not cancel Jobs.
         is PlaygroundIntent.ResetFlow -> state.copy(
             wallet = WalletPresentation.Empty,
             walletLoading = false,
@@ -94,16 +105,26 @@ internal object PlaygroundReducer {
             submit = SubmitTransactionPresentation.Empty,
             demoStep = PlaygroundStep.WALLET,
             section = PlaygroundSection.DEMO,
+            flowGeneration = state.flowGeneration + 1,
+            fundsRequestToken = state.fundsRequestToken + 1,
+            draftRequestToken = state.draftRequestToken + 1,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
+            providerUtxos = idleDiagnosticUtxos(state.providerUtxos),
+            providerParams = idleDiagnosticParams(state.providerParams),
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+            providerParamsRequestToken = state.providerParamsRequestToken + 1,
         )
 
         is PlaygroundIntent.UpdateAddressInput -> state.copy(addressInput = intent.value)
         is PlaygroundIntent.UpdateHexInput -> state.copy(hexInput = intent.value)
         is PlaygroundIntent.UpdateCborInput -> state.copy(cborInput = intent.value)
         is PlaygroundIntent.UpdateProviderAddressInput ->
-            state.copy(providerAddressInput = intent.value)
+            applyProviderAddressChange(state, intent.value)
 
-        is PlaygroundIntent.FillSeedAddress -> state.copy(
-            providerAddressInput = when (intent.kind) {
+        is PlaygroundIntent.FillSeedAddress -> applyProviderAddressChange(
+            state,
+            when (intent.kind) {
                 SeedAddressKind.WITH_UTXOS -> InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS
                 SeedAddressKind.EMPTY -> InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY
             },
@@ -128,40 +149,133 @@ internal object PlaygroundReducer {
 
     fun startWalletLoading(state: PlaygroundState): PlaygroundState = state.copy(walletLoading = true)
 
+    /**
+     * Marks Funds loading and invalidates every downstream guided step (Build/Sign/Submit) in
+     * the same transition — completed results and in-flight Loading values both become Empty,
+     * and those request tokens increment so a late completion cannot reappear.
+     */
     fun startFundsLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(funds = WalletBalancePresentation.Loading)
+        state.copy(
+            funds = WalletBalancePresentation.Loading,
+            fundsRequestToken = state.fundsRequestToken + 1,
+            draft = TransactionDraftPresentation.Empty,
+            signed = SignedTransactionPresentation.Empty,
+            submit = SubmitTransactionPresentation.Empty,
+            draftRequestToken = state.draftRequestToken + 1,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
+        )
 
+    /**
+     * Marks Build loading and invalidates Sign/Submit in the same transition.
+     */
     fun startDraftLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(draft = TransactionDraftPresentation.Loading)
+        state.copy(
+            draft = TransactionDraftPresentation.Loading,
+            draftRequestToken = state.draftRequestToken + 1,
+            signed = SignedTransactionPresentation.Empty,
+            submit = SubmitTransactionPresentation.Empty,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
+        )
 
+    /**
+     * Marks Sign loading and invalidates Submit in the same transition.
+     */
     fun startSignedLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(signed = SignedTransactionPresentation.Loading)
+        state.copy(
+            signed = SignedTransactionPresentation.Loading,
+            signedRequestToken = state.signedRequestToken + 1,
+            submit = SubmitTransactionPresentation.Empty,
+            submitRequestToken = state.submitRequestToken + 1,
+        )
 
     fun startSubmitLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(submit = SubmitTransactionPresentation.Loading)
+        state.copy(
+            submit = SubmitTransactionPresentation.Loading,
+            submitRequestToken = state.submitRequestToken + 1,
+        )
 
     fun startProviderUtxosLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(providerUtxos = ProviderUtxosPresentation.Loading)
+        state.copy(
+            providerUtxos = ProviderUtxosPresentation.Loading,
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+        )
 
     fun startProviderParamsLoading(state: PlaygroundState): PlaygroundState =
-        state.copy(providerParams = ProviderParamsPresentation.Loading)
+        state.copy(
+            providerParams = ProviderParamsPresentation.Loading,
+            providerParamsRequestToken = state.providerParamsRequestToken + 1,
+        )
 
     // --- Result transitions (fold a *Presentation result back into state) ---
 
     fun applyWalletResult(state: PlaygroundState, result: WalletPresentation): PlaygroundState =
         state.copy(wallet = result, walletLoading = false)
 
-    fun applyFundsResult(state: PlaygroundState, result: WalletBalancePresentation): PlaygroundState =
+    /**
+     * Folds [result] into [state] only when [generation] still matches
+     * [PlaygroundState.flowGeneration] **and** [requestToken] still matches the step's
+     * request token. A stale generation is a no-op after ResetFlow or a provider-configuration
+     * change; a stale token is a no-op after a repeated same-step request that still shares
+     * the current generation. Defaulting both to the current values keeps existing synchronous
+     * tests applying immediately.
+     */
+    fun applyFundsResult(
+        state: PlaygroundState,
+        result: WalletBalancePresentation,
+        generation: Long = state.flowGeneration,
+        requestToken: Long = state.fundsRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.fundsRequestToken
+    ) {
+        state
+    } else {
         state.copy(funds = result)
+    }
 
-    fun applyDraftResult(state: PlaygroundState, result: TransactionDraftPresentation): PlaygroundState =
+    fun applyDraftResult(
+        state: PlaygroundState,
+        result: TransactionDraftPresentation,
+        generation: Long = state.flowGeneration,
+        requestToken: Long = state.draftRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.draftRequestToken
+    ) {
+        state
+    } else {
         state.copy(draft = result)
+    }
 
-    fun applySignedResult(state: PlaygroundState, result: SignedTransactionPresentation): PlaygroundState =
+    fun applySignedResult(
+        state: PlaygroundState,
+        result: SignedTransactionPresentation,
+        generation: Long = state.flowGeneration,
+        requestToken: Long = state.signedRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.signedRequestToken
+    ) {
+        state
+    } else {
         state.copy(signed = result)
+    }
 
-    fun applySubmitResult(state: PlaygroundState, result: SubmitTransactionPresentation): PlaygroundState =
+    fun applySubmitResult(
+        state: PlaygroundState,
+        result: SubmitTransactionPresentation,
+        generation: Long = state.flowGeneration,
+        requestToken: Long = state.submitRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.submitRequestToken
+    ) {
+        state
+    } else {
         state.copy(submit = result)
+    }
 
     fun applyAddressResult(state: PlaygroundState, result: AddressPresentation): PlaygroundState =
         state.copy(addressResult = result)
@@ -175,10 +289,87 @@ internal object PlaygroundReducer {
     fun applyProviderUtxosResult(
         state: PlaygroundState,
         result: ProviderUtxosPresentation,
-    ): PlaygroundState = state.copy(providerUtxos = result)
+        generation: Long = state.flowGeneration,
+        requestToken: Long = state.providerUtxosRequestToken,
+        address: String = state.providerAddressInput,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.providerUtxosRequestToken ||
+        address != state.providerAddressInput
+    ) {
+        state
+    } else {
+        state.copy(providerUtxos = result)
+    }
 
     fun applyProviderParamsResult(
         state: PlaygroundState,
         result: ProviderParamsPresentation,
-    ): PlaygroundState = state.copy(providerParams = result)
+        generation: Long = state.flowGeneration,
+        requestToken: Long = state.providerParamsRequestToken,
+    ): PlaygroundState = if (
+        generation != state.flowGeneration ||
+        requestToken != state.providerParamsRequestToken
+    ) {
+        state
+    } else {
+        state.copy(providerParams = result)
+    }
+
+    /**
+     * Increments [PlaygroundState.flowGeneration] and clears every provider-backed step/diagnostic
+     * result. Wallet restore is local (not provider-backed) and is left in place. Pure — no Job
+     * cancellation happens here.
+     */
+    private fun bumpGenerationAndClearProviderResults(state: PlaygroundState): PlaygroundState =
+        state.copy(
+            flowGeneration = state.flowGeneration + 1,
+            funds = WalletBalancePresentation.Empty,
+            draft = TransactionDraftPresentation.Empty,
+            signed = SignedTransactionPresentation.Empty,
+            submit = SubmitTransactionPresentation.Empty,
+            providerUtxos = ProviderUtxosPresentation.Empty,
+            providerParams = ProviderParamsPresentation.Empty,
+            fundsRequestToken = state.fundsRequestToken + 1,
+            draftRequestToken = state.draftRequestToken + 1,
+            signedRequestToken = state.signedRequestToken + 1,
+            submitRequestToken = state.submitRequestToken + 1,
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+            providerParamsRequestToken = state.providerParamsRequestToken + 1,
+        )
+
+    /**
+     * An actual explorer-address change increments the UTxO request token and clears the UTxO
+     * result so a previous address's rows cannot remain under the new field value. Protocol
+     * parameters are address-independent and are left in place. Same-value updates are a no-op.
+     */
+    private fun applyProviderAddressChange(
+        state: PlaygroundState,
+        newAddress: String,
+    ): PlaygroundState {
+        if (state.providerAddressInput == newAddress) return state
+        return state.copy(
+            providerAddressInput = newAddress,
+            providerUtxosRequestToken = state.providerUtxosRequestToken + 1,
+            providerUtxos = ProviderUtxosPresentation.Empty,
+        )
+    }
+
+    private fun idleDiagnosticUtxos(
+        current: ProviderUtxosPresentation,
+    ): ProviderUtxosPresentation =
+        if (current is ProviderUtxosPresentation.Loading) {
+            ProviderUtxosPresentation.Empty
+        } else {
+            current
+        }
+
+    private fun idleDiagnosticParams(
+        current: ProviderParamsPresentation,
+    ): ProviderParamsPresentation =
+        if (current is ProviderParamsPresentation.Loading) {
+            ProviderParamsPresentation.Empty
+        } else {
+            current
+        }
 }

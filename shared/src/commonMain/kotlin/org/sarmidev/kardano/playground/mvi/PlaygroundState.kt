@@ -81,8 +81,31 @@ internal enum class RoadmapPhase {
  * [useLiveBlockfrost] and [projectId] mirror the existing "Use live Blockfrost (preprod)"
  * toggle and `project_id` field: the default is the in-memory mock; enabling the toggle with a
  * non-blank [projectId] switches both the query and submit provider to live Blockfrost preprod
- * (see [org.sarmidev.kardano.playground.data.PlaygroundProviderFactory]). [projectId] is held
- * only in this in-memory state — never persisted, saved, or logged.
+ * (see [org.sarmidev.kardano.playground.data.PlaygroundProviderFactory]). [projectId] is the
+ * session field the visitor typed. The provider factory also retains the last live id as an
+ * in-memory cache key so a repeated live request can reuse the same Blockfrost client; that
+ * cache is dropped immediately when the id changes or live mode is disabled
+ * ([org.sarmidev.kardano.playground.data.PlaygroundProviderFactory.invalidateLiveCache]).
+ * Neither copy is persisted or logged.
+ *
+ * ### Operation generations
+ *
+ * [flowGeneration] is a monotonic counter. [PlaygroundIntent.ResetFlow], an actual live-provider
+ * toggle change, and an actual [projectId] change each increment it. [PlaygroundViewModel]
+ * captures the generation when a Funds/Build/Sign/Submit/diagnostic operation starts and ignores
+ * any result whose generation is no longer current, so a slow request cannot overwrite the
+ * visitor's newer configuration.
+ *
+ * [fundsRequestToken], [draftRequestToken], [signedRequestToken], and [submitRequestToken]
+ * increment on each start of that guided operation, whenever an *upstream* guided step starts
+ * (Funds clears Build/Sign/Submit; Build clears Sign/Submit; Sign clears Submit), and whenever
+ * ResetFlow or an actual provider-configuration change invalidates in-flight work. Starting an
+ * upstream step also sets those downstream presentations to Empty (completed results included)
+ * so Continue cannot advance on a stale later step. A repeated same-step request therefore
+ * cannot be overwritten by a slower first call that still shares [flowGeneration]. Wallet
+ * restore is synchronous (no Job), so it has no request token. The reducer stays a pure
+ * function of `(state, intent)` — it never cancels work; the ViewModel holds/cancels
+ * [kotlinx.coroutines.Job]s.
  *
  * ### Diagnostics (Address Parser, Hex Decoder, CBOR Decoder, generic Provider explorer)
  *
@@ -90,6 +113,11 @@ internal enum class RoadmapPhase {
  * [providerAddressInput]/[providerUtxos]/[providerParams] back the standalone diagnostic tools
  * shown below the guided flow — unrelated to the fixture wallet, kept for structural
  * exploration of `:core`/`:provider` APIs.
+ *
+ * [providerUtxosRequestToken] increments on each UTxO load and on an actual explorer-address
+ * change (typed or seed-fill) so a result for address A cannot apply after the field shows B,
+ * and a repeated load cannot overwrite a newer one. [providerParamsRequestToken] increments on
+ * each protocol-parameters load for the same reason. Both are independent of [flowGeneration].
  *
  * ### Technical details
  *
@@ -117,12 +145,22 @@ internal enum class RoadmapPhase {
 internal data class PlaygroundState(
     val useLiveBlockfrost: Boolean,
     val projectId: String,
+    /**
+     * Monotonic operation-generation counter. Incremented by ResetFlow and by actual provider-
+     * configuration changes (live toggle or project-id string). Provider-backed results whose
+     * captured generation no longer matches this value are discarded.
+     */
+    val flowGeneration: Long = 0L,
     val wallet: WalletPresentation,
     val walletLoading: Boolean,
     val funds: WalletBalancePresentation,
     val draft: TransactionDraftPresentation,
     val signed: SignedTransactionPresentation,
     val submit: SubmitTransactionPresentation,
+    val fundsRequestToken: Long = 0L,
+    val draftRequestToken: Long = 0L,
+    val signedRequestToken: Long = 0L,
+    val submitRequestToken: Long = 0L,
     val technicalDetailsExpanded: Set<PlaygroundStep>,
     val addressInput: String,
     val addressResult: AddressPresentation,
@@ -133,6 +171,8 @@ internal data class PlaygroundState(
     val providerAddressInput: String,
     val providerUtxos: ProviderUtxosPresentation,
     val providerParams: ProviderParamsPresentation,
+    val providerUtxosRequestToken: Long = 0L,
+    val providerParamsRequestToken: Long = 0L,
     val codeExamplesExpanded: Boolean = false,
     val section: PlaygroundSection = PlaygroundSection.WELCOME,
     val selectedRoadmapPhase: RoadmapPhase? = RoadmapPhase.PHASE_1,
@@ -157,12 +197,17 @@ internal data class PlaygroundState(
         fun initial(): PlaygroundState = PlaygroundState(
             useLiveBlockfrost = false,
             projectId = "",
+            flowGeneration = 0L,
             wallet = WalletPresentation.Empty,
             walletLoading = false,
             funds = WalletBalancePresentation.Empty,
             draft = TransactionDraftPresentation.Empty,
             signed = SignedTransactionPresentation.Empty,
             submit = SubmitTransactionPresentation.Empty,
+            fundsRequestToken = 0L,
+            draftRequestToken = 0L,
+            signedRequestToken = 0L,
+            submitRequestToken = 0L,
             technicalDetailsExpanded = emptySet(),
             addressInput = "",
             addressResult = AddressPresentation.Empty,
@@ -173,6 +218,8 @@ internal data class PlaygroundState(
             providerAddressInput = InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS,
             providerUtxos = ProviderUtxosPresentation.Empty,
             providerParams = ProviderParamsPresentation.Empty,
+            providerUtxosRequestToken = 0L,
+            providerParamsRequestToken = 0L,
             codeExamplesExpanded = false,
             section = PlaygroundSection.WELCOME,
             selectedRoadmapPhase = RoadmapPhase.PHASE_1,

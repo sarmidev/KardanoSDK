@@ -414,7 +414,13 @@ private fun AdvancedDisclosure(state: PlaygroundState, dispatch: (PlaygroundInte
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(
             onClick = { expanded = !expanded },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .disclosureSemantics(
+                    expanded = expanded,
+                    label = if (expanded) "Advanced expanded" else "Advanced collapsed",
+                    onToggle = { expanded = !expanded },
+                ),
         ) {
             Text(
                 if (expanded) {

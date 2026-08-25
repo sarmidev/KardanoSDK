@@ -36,7 +36,9 @@ The mock contains deterministic ADA-only sample UTxOs, so the first four steps c
 network request. The last step honestly reports **"Nothing was sent — and that's the honest
 answer"**: this demo runs offline, so there is no network to send to, and the SDK says so rather
 than imitating a network acceptance. The closing **Summary** screen recaps what actually happened
-and offers **Run the demo again**.
+and offers **Run the demo again**. **Start over** (and changing the live-network switch or
+project id) increments an operation generation so a slow in-flight request cannot overwrite the
+newer screen.
 
 The wallet behind this demo is a cited public test fixture. The UI does not display its mnemonic,
 seed, or raw private-key material. Signing accepts only that fixture (recognized by its published
@@ -67,8 +69,10 @@ The Playground can query and submit only to Blockfrost preprod. Before enabling 
 1. On the **Demo** screen, open the collapsed **"Advanced: connect to a test network"**
    disclosure.
 2. Create a Blockfrost preprod project id in your own Blockfrost account.
-3. Enter the project id in the masked field; it remains in non-persistent UI state and is never
-   shown, saved, or logged.
+3. Enter the project id in the masked field. It stays in session memory (`PlaygroundState` plus
+   an in-memory factory cache key used only to reuse or drop the live Blockfrost client). It is
+   never shown, saved, or logged. Changing the id or turning live mode off drops that cache
+   immediately, not only on the next provider lookup.
 4. Use only test ADA and test addresses.
 
 The switch alone does not activate network requests. Until the project id is non-blank, the

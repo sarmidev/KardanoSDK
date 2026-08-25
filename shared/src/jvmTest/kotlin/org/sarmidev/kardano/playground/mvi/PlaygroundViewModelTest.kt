@@ -3,18 +3,25 @@ package org.sarmidev.kardano.playground.mvi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.sarmidev.kardano.playground.LabeledRow
+import org.sarmidev.kardano.playground.PlaygroundProviderMode
+import org.sarmidev.kardano.playground.ProviderParamsPresentation
+import org.sarmidev.kardano.playground.ProviderUtxosPresentation
 import org.sarmidev.kardano.playground.SignedTransactionPresentation
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
 import org.sarmidev.kardano.playground.TransactionDraftPresentation
 import org.sarmidev.kardano.playground.WalletBalancePresentation
 import org.sarmidev.kardano.playground.data.PlaygroundProviderFactory
 import org.sarmidev.kardano.playground.domain.BuildTransactionDraftUseCase
+import org.sarmidev.kardano.playground.domain.LoadProviderParamsUseCase
+import org.sarmidev.kardano.playground.domain.LoadProviderUtxosUseCase
 import org.sarmidev.kardano.playground.domain.QueryWalletFundsUseCase
 import org.sarmidev.kardano.playground.domain.RestoreWalletUseCase
 import org.sarmidev.kardano.playground.domain.SignTransactionUseCase
@@ -25,6 +32,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -63,6 +71,8 @@ class PlaygroundViewModelTest {
         buildTransactionDraft: BuildTransactionDraftUseCase = BuildTransactionDraftUseCase.Default,
         signTransaction: SignTransactionUseCase = SignTransactionUseCase.Default,
         submitTransaction: SubmitTransactionUseCase = SubmitTransactionUseCase.Default,
+        loadProviderUtxos: LoadProviderUtxosUseCase = LoadProviderUtxosUseCase.Default,
+        loadProviderParams: LoadProviderParamsUseCase = LoadProviderParamsUseCase.Default,
         providerFactory: PlaygroundProviderFactory = PlaygroundProviderFactory(),
     ): PlaygroundViewModel = PlaygroundViewModel(
         restoreWallet = RestoreWalletUseCase.Default,
@@ -70,6 +80,8 @@ class PlaygroundViewModelTest {
         buildTransactionDraft = buildTransactionDraft,
         signTransaction = signTransaction,
         submitTransaction = submitTransaction,
+        loadProviderUtxos = loadProviderUtxos,
+        loadProviderParams = loadProviderParams,
         providerFactory = providerFactory,
     )
 
@@ -258,6 +270,84 @@ class PlaygroundViewModelTest {
     }
 
     @Test
+    fun queryFunds_slowResultAfterResetFlow_isDiscarded() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(queryWalletFunds = QueryWalletFundsUseCase { pending.await() })
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+        assertEquals(0L, vm.state.value.flowGeneration)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+    }
+
+    @Test
+    fun queryFunds_slowResultAfterProviderToggle_isDiscarded() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(queryWalletFunds = QueryWalletFundsUseCase { pending.await() })
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertTrue(vm.state.value.useLiveBlockfrost)
+    }
+
+    @Test
+    fun queryFunds_projectIdChangeDuringRequest_onlyLatestGenerationApplies() = runTest {
+        val first = CompletableDeferred<WalletBalancePresentation>()
+        val second = CompletableDeferred<WalletBalancePresentation>()
+        var calls = 0
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                calls++
+                if (calls == 1) first.await() else second.await()
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("newer-id"))
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        val latest = WalletBalancePresentation.Success(
+            rows = listOf(LabeledRow("Balance", "latest")),
+            providerMode = PlaygroundProviderMode.Mock,
+            flowGeneration = 1L,
+        )
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        first.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        second.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "latest"))))
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+        assertEquals("newer-id", vm.state.value.projectId)
+    }
+
+    @Test
     fun queryFunds_afterEnablingLiveBlockfrostWithProjectId_usesTheLiveProviderFromTheFactory() = runTest {
         val factory = PlaygroundProviderFactory()
         var received: ChainQueryProvider? = null
@@ -275,5 +365,585 @@ class PlaygroundViewModelTest {
 
         val expectedLive = factory.queryProvider(useLive = true, projectId = "test-project-id")
         assertTrue(received === expectedLive, "expected the same live provider instance the factory returns")
+        val funds = assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+        assertEquals(PlaygroundProviderMode.LivePreprod, funds.providerMode)
+        assertEquals(vm.state.value.flowGeneration, funds.flowGeneration)
+    }
+
+    @Test
+    fun queryFunds_defaultState_stampsMockProvenance() = runTest {
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "0 lovelace")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+
+        val funds = assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+        assertEquals(PlaygroundProviderMode.Mock, funds.providerMode)
+        assertEquals(0L, funds.flowGeneration)
+        assertEquals(0L, vm.state.value.flowGeneration)
+    }
+
+    // --- Non-cooperative cancellation: identity checks discard stale results ---
+
+    @Test
+    fun queryFunds_nonCancellableResultAfterResetFlow_isDiscardedByGeneration() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertEquals(1L, vm.state.value.flowGeneration)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+    }
+
+    @Test
+    fun queryFunds_nonCancellableResultAfterProviderToggle_isDiscardedByGeneration() = runTest {
+        val pending = CompletableDeferred<WalletBalancePresentation>()
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+
+        pending.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(WalletBalancePresentation.Empty, vm.state.value.funds)
+        assertTrue(vm.state.value.useLiveBlockfrost)
+    }
+
+    @Test
+    fun loadProviderUtxos_nonCancellableResultAfterAddressEdit_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderUtxosPresentation>()
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+        val originalAddress = vm.state.value.providerAddressInput
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+        assertEquals(1L, vm.state.value.providerUtxosRequestToken)
+
+        vm.dispatch(PlaygroundIntent.UpdateProviderAddressInput("addr_test1other"))
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+        assertEquals("addr_test1other", vm.state.value.providerAddressInput)
+
+        pending.complete(
+            ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale-for-previous-address"))),
+        )
+        advanceUntilIdle()
+
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertTrue(originalAddress != vm.state.value.providerAddressInput)
+    }
+
+    @Test
+    fun loadProviderUtxos_nonCancellableResultAfterFillSeedAddress_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderUtxosPresentation>()
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        vm.dispatch(PlaygroundIntent.FillSeedAddress(SeedAddressKind.EMPTY))
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+
+        pending.complete(ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+    }
+
+    @Test
+    fun loadProviderUtxos_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<ProviderUtxosPresentation>()
+        val second = CompletableDeferred<ProviderUtxosPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(1L, vm.state.value.providerUtxosRequestToken)
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        first.complete(ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale"))))
+        advanceUntilIdle()
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        val latest = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+    }
+
+    @Test
+    fun loadProviderParams_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<ProviderParamsPresentation>()
+        val second = CompletableDeferred<ProviderParamsPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            loadProviderParams = LoadProviderParamsUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(1L, vm.state.value.providerParamsRequestToken)
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(2L, vm.state.value.providerParamsRequestToken)
+
+        first.complete(ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "stale"))))
+        advanceUntilIdle()
+        assertEquals(ProviderParamsPresentation.Loading, vm.state.value.providerParams)
+
+        val latest = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.providerParams)
+    }
+
+    @Test
+    fun loadProviderUtxos_nonCancellableResultAfterResetFlow_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderUtxosPresentation>()
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ ->
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(ProviderUtxosPresentation.Loading, vm.state.value.providerUtxos)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+        assertEquals(2L, vm.state.value.providerUtxosRequestToken)
+
+        pending.complete(ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(ProviderUtxosPresentation.Empty, vm.state.value.providerUtxos)
+    }
+
+    @Test
+    fun loadProviderParams_nonCancellableResultAfterProjectIdChange_isDiscarded() = runTest {
+        val pending = CompletableDeferred<ProviderParamsPresentation>()
+        val vm = viewModel(
+            loadProviderParams = LoadProviderParamsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(ProviderParamsPresentation.Loading, vm.state.value.providerParams)
+
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("newer-id"))
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+        assertEquals(2L, vm.state.value.providerParamsRequestToken)
+
+        pending.complete(ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+    }
+
+    @Test
+    fun resetFlow_preservesCompletedDiagnosticsAndClearsLoading() = runTest {
+        val pending = CompletableDeferred<ProviderParamsPresentation>()
+        val utxos = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "kept")))
+        val vm = viewModel(
+            loadProviderUtxos = LoadProviderUtxosUseCase { _, _ -> utxos },
+            loadProviderParams = LoadProviderParamsUseCase {
+                withContext(NonCancellable) { pending.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.LoadProviderUtxos)
+        assertEquals(utxos, vm.state.value.providerUtxos)
+
+        vm.dispatch(PlaygroundIntent.LoadProviderParams)
+        assertEquals(ProviderParamsPresentation.Loading, vm.state.value.providerParams)
+
+        vm.dispatch(PlaygroundIntent.ResetFlow)
+        assertEquals(utxos, vm.state.value.providerUtxos)
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+
+        pending.complete(ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "stale"))))
+        advanceUntilIdle()
+        assertEquals(ProviderParamsPresentation.Empty, vm.state.value.providerParams)
+        assertEquals(utxos, vm.state.value.providerUtxos)
+    }
+
+    @Test
+    fun toggleLiveOff_invalidatesFactoryCacheImmediately() = runTest {
+        val factory = PlaygroundProviderFactory()
+        val vm = viewModel(providerFactory = factory)
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("session-id"))
+        val first = factory.queryProvider(useLive = true, projectId = "session-id")
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(false))
+        val second = factory.queryProvider(useLive = true, projectId = "session-id")
+
+        assertTrue(first !== second, "disabling live mode must drop the cache before the next lookup")
+    }
+
+    @Test
+    fun updateProjectId_invalidatesFactoryCacheImmediately() = runTest {
+        val factory = PlaygroundProviderFactory()
+        val vm = viewModel(providerFactory = factory)
+
+        vm.dispatch(PlaygroundIntent.ToggleLiveBlockfrost(true))
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("session-id-a"))
+        val first = factory.queryProvider(useLive = true, projectId = "session-id-a")
+
+        vm.dispatch(PlaygroundIntent.UpdateProjectId("session-id-b"))
+        val rebuilt = factory.queryProvider(useLive = true, projectId = "session-id-a")
+
+        assertTrue(first !== rebuilt, "an actual project-id change must drop the cache immediately")
+    }
+
+    @Test
+    fun queryFunds_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<WalletBalancePresentation>()
+        val second = CompletableDeferred<WalletBalancePresentation>()
+        var calls = 0
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(1L, vm.state.value.fundsRequestToken)
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(2L, vm.state.value.fundsRequestToken)
+        assertEquals(0L, vm.state.value.flowGeneration)
+
+        first.complete(WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale"))))
+        advanceUntilIdle()
+        assertEquals(WalletBalancePresentation.Loading, vm.state.value.funds)
+
+        val latest = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.funds)
+        assertEquals(2L, vm.state.value.fundsRequestToken)
+    }
+
+    @Test
+    fun buildDraft_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<TransactionDraftPresentation>()
+        val second = CompletableDeferred<TransactionDraftPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(1L, vm.state.value.draftRequestToken)
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(2L, vm.state.value.draftRequestToken)
+
+        first.complete(TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "stale"))))
+        advanceUntilIdle()
+        assertEquals(TransactionDraftPresentation.Loading, vm.state.value.draft)
+
+        val latest = TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.draft)
+    }
+
+    @Test
+    fun signTransaction_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<SignedTransactionPresentation>()
+        val second = CompletableDeferred<SignedTransactionPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            signTransaction = SignTransactionUseCase {
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(1L, vm.state.value.signedRequestToken)
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(2L, vm.state.value.signedRequestToken)
+
+        first.complete(SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "stale"))))
+        advanceUntilIdle()
+        assertEquals(SignedTransactionPresentation.Loading, vm.state.value.signed)
+
+        val latest = SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.signed)
+    }
+
+    @Test
+    fun submitTransaction_repeatedNonCancellableLoads_onlyLatestTokenApplies() = runTest {
+        val first = CompletableDeferred<SubmitTransactionPresentation>()
+        val second = CompletableDeferred<SubmitTransactionPresentation>()
+        var calls = 0
+        val vm = viewModel(
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                withContext(NonCancellable) {
+                    calls++
+                    if (calls == 1) first.await() else second.await()
+                }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertEquals(1L, vm.state.value.submitRequestToken)
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertEquals(2L, vm.state.value.submitRequestToken)
+
+        first.complete(SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "stale"))))
+        advanceUntilIdle()
+        assertEquals(SubmitTransactionPresentation.Loading, vm.state.value.submit)
+
+        val latest = SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "latest")))
+        second.complete(latest)
+        advanceUntilIdle()
+        assertEquals(latest, vm.state.value.submit)
+    }
+
+    // --- Upstream rerun invalidates downstream guided steps ---
+
+    @Test
+    fun buildInFlight_rerunFunds_discardsStaleDraft() = runTest {
+        val pendingDraft = CompletableDeferred<TransactionDraftPresentation>()
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1")))
+            },
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                withContext(NonCancellable) { pendingDraft.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(TransactionDraftPresentation.Loading, vm.state.value.draft)
+        val draftTokenAtStart = vm.state.value.draftRequestToken
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(TransactionDraftPresentation.Empty, vm.state.value.draft)
+        assertEquals(draftTokenAtStart + 1, vm.state.value.draftRequestToken)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.BUILD)))
+
+        pendingDraft.complete(TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(TransactionDraftPresentation.Empty, vm.state.value.draft)
+        assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+    }
+
+    @Test
+    fun signInFlight_rerunBuild_discardsStaleSignedAndSubmit() = runTest {
+        val pendingSigned = CompletableDeferred<SignedTransactionPresentation>()
+        val vm = viewModel(
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                withContext(NonCancellable) { pendingSigned.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(SignedTransactionPresentation.Loading, vm.state.value.signed)
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+
+        pendingSigned.complete(SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
+    }
+
+    @Test
+    fun submitInFlight_rerunSign_discardsStaleSubmit() = runTest {
+        val pendingSubmit = CompletableDeferred<SubmitTransactionPresentation>()
+        val vm = viewModel(
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                withContext(NonCancellable) { pendingSubmit.await() }
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertEquals(SubmitTransactionPresentation.Loading, vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+
+        pendingSubmit.complete(SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "stale"))))
+        advanceUntilIdle()
+
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+    }
+
+    @Test
+    fun rerunningFunds_clearsPreviouslyCompletedDraftSignAndSubmit() = runTest {
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1")))
+            },
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+        assertIs<SubmitTransactionPresentation.Success>(vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertEquals(TransactionDraftPresentation.Empty, vm.state.value.draft)
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.BUILD)))
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SIGN)))
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SUBMIT)))
+    }
+
+    @Test
+    fun rerunningBuild_clearsPreviouslyCompletedSignAndSubmit() = runTest {
+        val vm = viewModel(
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+        assertIs<SubmitTransactionPresentation.Success>(vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertEquals(SignedTransactionPresentation.Empty, vm.state.value.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SIGN)))
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SUBMIT)))
+    }
+
+    @Test
+    fun rerunningSign_clearsPreviouslyCompletedSubmit() = runTest {
+        val vm = viewModel(
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+            submitTransaction = SubmitTransactionUseCase { _, _ ->
+                SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.SubmitTransaction)
+        assertIs<SubmitTransactionPresentation.Success>(vm.state.value.submit)
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertEquals(SubmitTransactionPresentation.Empty, vm.state.value.submit)
+        assertIs<SignedTransactionPresentation.Success>(vm.state.value.signed)
+        assertFalse(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SUBMIT)))
+    }
+
+    @Test
+    fun sequentialGuidedSteps_stillAllowContinueOnEachResolvedStep() = runTest {
+        val vm = viewModel(
+            queryWalletFunds = QueryWalletFundsUseCase {
+                WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1")))
+            },
+            buildTransactionDraft = BuildTransactionDraftUseCase {
+                TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1")))
+            },
+            signTransaction = SignTransactionUseCase {
+                SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1")))
+            },
+        )
+
+        vm.dispatch(PlaygroundIntent.QueryFunds)
+        assertTrue(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.FUNDS)))
+
+        vm.dispatch(PlaygroundIntent.BuildDraft)
+        assertTrue(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.BUILD)))
+        assertIs<WalletBalancePresentation.Success>(vm.state.value.funds)
+
+        vm.dispatch(PlaygroundIntent.SignTransaction)
+        assertTrue(PlaygroundDemoFlow.canContinue(vm.state.value.copy(demoStep = PlaygroundStep.SIGN)))
+        assertIs<TransactionDraftPresentation.Success>(vm.state.value.draft)
     }
 }

@@ -102,17 +102,37 @@ internal sealed interface WalletPresentation {
 internal sealed interface ProviderUtxosPresentation {
     data object Empty : ProviderUtxosPresentation
     data object Loading : ProviderUtxosPresentation
-    data class Success(val rows: List<LabeledRow>) : ProviderUtxosPresentation
-    data class NoUtxos(val message: String) : ProviderUtxosPresentation
-    data class Failure(val message: String) : ProviderUtxosPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderUtxosPresentation
+    data class NoUtxos(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderUtxosPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderUtxosPresentation
 }
 
 /** Result of presenting a [ChainQueryProvider.getProtocolParameters] call. */
 internal sealed interface ProviderParamsPresentation {
     data object Empty : ProviderParamsPresentation
     data object Loading : ProviderParamsPresentation
-    data class Success(val rows: List<LabeledRow>) : ProviderParamsPresentation
-    data class Failure(val message: String) : ProviderParamsPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderParamsPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : ProviderParamsPresentation
 }
 
 /**
@@ -121,14 +141,25 @@ internal sealed interface ProviderParamsPresentation {
  * Carries only public metadata: the generated `addr_test1...` address, the queried UTxO
  * count, and the summed balance in lovelace. Never the mnemonic, entropy, seed, root/private
  * key bytes, or a raw public key. A zero balance/UTxO count is a normal [Success], not a
- * failure — the default in-memory mock provider has no fake UTxOs seeded for the generated
- * wallet address (ADR-0013 §7), so it is expected to show `0`.
+ * failure. The Playground factory mock
+ * ([org.sarmidev.kardano.playground.data.PlaygroundMockSampleData]) seeds fake ADA-only UTxOs
+ * for the demo wallet address so the guided flow can continue offline. The raw
+ * [InMemoryChainQueryProvider] default still has no UTxOs for that address (ADR-0013 §7) and
+ * is what presenter unit tests use to assert the honest-empty path.
  */
 internal sealed interface WalletBalancePresentation {
     data object Empty : WalletBalancePresentation
     data object Loading : WalletBalancePresentation
-    data class Success(val rows: List<LabeledRow>) : WalletBalancePresentation
-    data class Failure(val message: String) : WalletBalancePresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : WalletBalancePresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : WalletBalancePresentation
 }
 
 /**
@@ -147,8 +178,16 @@ internal sealed interface WalletBalancePresentation {
 internal sealed interface TransactionDraftPresentation {
     data object Empty : TransactionDraftPresentation
     data object Loading : TransactionDraftPresentation
-    data class Success(val rows: List<LabeledRow>) : TransactionDraftPresentation
-    data class Failure(val message: String) : TransactionDraftPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : TransactionDraftPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : TransactionDraftPresentation
 }
 
 /**
@@ -167,8 +206,16 @@ internal sealed interface TransactionDraftPresentation {
 internal sealed interface SignedTransactionPresentation {
     data object Empty : SignedTransactionPresentation
     data object Loading : SignedTransactionPresentation
-    data class Success(val rows: List<LabeledRow>) : SignedTransactionPresentation
-    data class Failure(val message: String) : SignedTransactionPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SignedTransactionPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SignedTransactionPresentation
 }
 
 /**
@@ -187,8 +234,16 @@ internal sealed interface SignedTransactionPresentation {
 internal sealed interface SubmitTransactionPresentation {
     data object Empty : SubmitTransactionPresentation
     data object Loading : SubmitTransactionPresentation
-    data class Success(val rows: List<LabeledRow>) : SubmitTransactionPresentation
-    data class Failure(val message: String) : SubmitTransactionPresentation
+    data class Success(
+        val rows: List<LabeledRow>,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SubmitTransactionPresentation
+    data class Failure(
+        val message: String,
+        val providerMode: PlaygroundProviderMode = PlaygroundProviderMode.Mock,
+        val flowGeneration: Long = 0L,
+    ) : SubmitTransactionPresentation
 }
 
 // ---------------------------------------------------------------------------
@@ -628,10 +683,11 @@ internal object PlaygroundPresenter {
      * Delegates entirely to `:wallet` ([ReadOnlyWallet]); this presenter does not reimplement
      * mnemonic parsing, key derivation, hashing, address generation, or balance summation —
      * it only formats the result. Provider-agnostic: the caller decides whether [provider] is
-     * the in-memory mock (fake/test-only, and expected to show a zero balance for this
-     * generated address per ADR-0013 §7) or a live provider (for example Blockfrost preprod,
-     * which can show a non-zero balance only after the generated address is funded from a
-     * preprod faucet).
+     * the Playground factory mock (seeded with fake ADA-only UTxOs for this address), the raw
+     * [InMemoryChainQueryProvider] default (honest empty for this address, ADR-0013 §7), or a
+     * live provider (for example Blockfrost preprod, which can show a non-zero balance only
+     * after the generated address is funded from a preprod faucet). A zero balance is still a
+     * normal [WalletBalancePresentation.Success].
      */
     suspend fun presentWalletBalance(provider: ChainQueryProvider): WalletBalancePresentation {
         val wallet = when (val result = ReadOnlyWallet.restore(TestWalletFixture.words, Network.TESTNET)) {
@@ -757,13 +813,11 @@ internal object PlaygroundPresenter {
      * itself — it only builds the request and formats the result. **No signing, no witness
      * construction, no transaction id hashing, no submission**: [TransactionDraft] is a
      * structural, unsigned artifact only (ADR-0014 §2). Provider-agnostic: the caller decides
-     * whether [provider] is the in-memory mock (fake/test-only) or a live provider (for example
-     * Blockfrost preprod). Under the default [InMemoryChainQueryProvider], the restored
-     * wallet's self-generated address has no fake UTxOs seeded for it (same honest-empty
-     * behavior as [presentWalletBalance], ADR-0013 §7), so this normally reports the resulting
-     * [TxBuildError.NoInputs] as a [TransactionDraftPresentation.Failure] — not a crash. Fund
-     * that address via a live Blockfrost preprod faucet to see a
-     * [TransactionDraftPresentation.Success].
+     * whether [provider] is the Playground factory mock (seeded; Build/Sign can complete
+     * offline), the raw [InMemoryChainQueryProvider] default (honest empty for this address,
+     * ADR-0013 §7, so this reports [TxBuildError.NoInputs] as a
+     * [TransactionDraftPresentation.Failure]), or a live provider. Fund that address via a live
+     * Blockfrost preprod faucet to see a live [TransactionDraftPresentation.Success].
      */
     suspend fun presentTransactionDraft(provider: ChainQueryProvider): TransactionDraftPresentation =
         when (val outcome = buildTransactionDraft(provider)) {
@@ -864,7 +918,8 @@ internal object PlaygroundPresenter {
      * no ADA-only UTxO to build from at all (see that variant's KDoc). A wallet with a *mix* of
      * ADA-only and native-asset UTxOs never reaches this branch: [TransactionBuilder.build]
      * builds from the ADA-only ones instead, or reports [TxBuildError.InsufficientFunds] (whose
-     * message below is unchanged) if even those cannot cover `payment + fee`. If a future block
+     * message now includes the excluded-native-asset advisory when those fields are non-zero)
+     * if even those cannot cover `payment + fee`. If a future block
      * adds a second, unrelated cause for [TxBuildError.UnsupportedFeature], this mapping must be
      * revisited to distinguish them (for example by inspecting
      * [TxBuildError.UnsupportedFeature.detail]).
@@ -879,8 +934,7 @@ internal object PlaygroundPresenter {
         is TxBuildError.FeeEstimateDidNotConverge ->
             "Fee estimate did not converge: encoded ${error.encodedFee}, " +
                 "recomputed ${error.recomputedFee} lovelace"
-        is TxBuildError.InsufficientFunds ->
-            "Insufficient funds: need ${error.required} lovelace, have ${error.available} lovelace"
+        is TxBuildError.InsufficientFunds -> presentInsufficientFunds(error)
         is TxBuildError.InvalidOutputAmount ->
             "Payment amount ${error.amount} lovelace is below the minimum ADA " +
                 "(${error.minRequired}) for this output"
@@ -902,6 +956,19 @@ internal object PlaygroundPresenter {
         is TxBuildError.InvalidSignatureLength ->
             "Invalid signature length: expected ${error.expectedBytes}B, got ${error.actualBytes}B"
         is TxBuildError.EmptyWitnessSet -> "Witness set is empty"
+    }
+
+    /**
+     * Formats [TxBuildError.InsufficientFunds], including the W8-2 excluded-native-asset
+     * advisory when those fields are non-zero so a caller can tell "not enough spendable ADA"
+     * from "value exists but is locked in UTxOs this ADA-only builder cannot spend".
+     */
+    internal fun presentInsufficientFunds(error: TxBuildError.InsufficientFunds): String {
+        val base =
+            "Insufficient funds: need ${error.required} lovelace, have ${error.available} lovelace"
+        if (error.excludedNativeAssetUtxoCount <= 0) return base
+        return "$base (${error.excludedNativeAssetUtxoCount} native-asset UTxO(s) holding " +
+            "${error.excludedNativeAssetLovelace} lovelace were excluded from this ADA-only build)"
     }
 
     // --- Signed Transaction (not submitted; Block 1.10c) ---

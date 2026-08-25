@@ -78,8 +78,12 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   helpers `PlaygroundViewModel` uses around each use-case/presenter call. Being pure and
   coroutine-free, it is exercised directly and synchronously by `PlaygroundReducerTest`
   (`commonTest`, native-free — runs on every target including `:shared:testAndroidHostTest`).
-  `ResetFlow` clears only the five guided-flow step results (and the Wallet step's loading flag);
-  provider selection and diagnostics inputs/results are intentionally preserved.
+  `ResetFlow` clears the five guided-flow step results (and the Wallet step's loading flag);
+  provider selection, diagnostics inputs, and *completed* diagnostic results are preserved.
+  In-flight diagnostic Loading values become Empty. UTxO/params request tokens increment on
+  ResetFlow, each load, and (UTxOs) an actual explorer-address change. Starting Funds, Build,
+  or Sign also clears completed and in-flight downstream guided-step results in the same
+  transition and increments those request tokens.
 - `playground/mvi/PlaygroundViewModel.kt` — an `androidx.lifecycle.ViewModel` (already a
   `commonMain` dependency via `libs.androidx.lifecycle.viewmodelCompose`/`-runtimeCompose`; no new
   architecture library was added) exposing `state: StateFlow<PlaygroundState>` and
@@ -88,18 +92,25 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   where a provider call is involved — and fold the result back into state through the matching
   reducer helper. This class holds no derivation, hashing, address-generation, balance,
   coin-selection, fee/change, signing, or submission logic of its own.
-- `playground/domain/PlaygroundUseCases.kt` — five small `fun interface`s
+- `playground/domain/PlaygroundUseCases.kt` — seven small `fun interface`s
   (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`, `BuildTransactionDraftUseCase`,
-  `SignTransactionUseCase`, `SubmitTransactionUseCase`), each a thin, directly-injectable wrapper
-  over the matching existing `PlaygroundPresenter` function (`.Default` delegates to it). They
-  exist so `PlaygroundViewModel` can be unit-tested with fakes (see `PlaygroundViewModelTest`,
-  `jvmTest`) without reimplementing or duplicating any `:wallet`/`:tx`/`:provider` call.
+  `SignTransactionUseCase`, `SubmitTransactionUseCase`, `LoadProviderUtxosUseCase`,
+  `LoadProviderParamsUseCase`), each a thin, directly-injectable wrapper over the matching
+  existing `PlaygroundPresenter` function (`.Default` delegates to it). They exist so
+  `PlaygroundViewModel` can be unit-tested with fakes — including `NonCancellable` completions
+  after Job cancellation — without reimplementing or duplicating any `:wallet`/`:tx`/`:provider`
+  call (see `PlaygroundViewModelTest`, `jvmTest`).
 - `playground/data/PlaygroundProviderFactory.kt` — moves the provider-selection logic (mock by
-  default; live Blockfrost preprod once the toggle is on and `project_id` is non-blank, cached
-  per `project_id` the same way the previous `remember(projectId)` block was) out of the Compose
-  layer, so `PlaygroundViewModel` can build a `ChainQueryProvider`/`TxSubmitProvider` pair from
-  `PlaygroundState` without a `remember`. The `project_id` string is still never stored, saved,
-  or logged.
+  default; live Blockfrost preprod once the toggle is on and `project_id` is non-blank) out of
+  the Compose layer, so `PlaygroundViewModel` can build a `ChainQueryProvider`/`TxSubmitProvider`
+  pair from `PlaygroundState` without a `remember`. Live clients are cached by the last non-blank
+  id. The internal `invalidateLiveCache()` factory method drops that cache immediately and is
+  invoked by `PlaygroundViewModel` on an actual project-id change and when live mode is
+  disabled — not only on the next lookup. The session field lives in `PlaygroundState`; the
+  factory also keeps an in-memory cache key. Neither copy is persisted or logged.
+  Provider-backed results carry `PlaygroundProviderMode` (`Mock` / `LivePreprod`) plus the
+  captured `flowGeneration`. Funds/Build/Sign/Submit also carry a per-operation request token
+  so a repeated same-step request cannot be overwritten by a slower first call.
 - `PlaygroundPresenter.kt` is **retained unchanged as the display-mapping layer** — every use
   case and every diagnostics intent still calls into it, and every existing `PlaygroundPresenter`
   test below (`PlaygroundPresenterTest`, `PlaygroundProviderPresenterTest`,
@@ -484,9 +495,10 @@ input and output counts, the fee and (if present) change amounts in lovelace, th
 size in bytes, and a truncated hex preview of the body bytes — always labeled as an unsigned
 draft. On failure (for example no UTxOs, insufficient funds, or an amount below minimum ADA) the
 screen shows a message distinguishing the cause, mapped from `:tx`'s typed `TxBuildError`. Under
-the default `InMemoryChainQueryProvider`, the restored wallet's address has no fake UTxOs seeded
-for it — same honest-empty behavior as the Wallet Balance section (ADR-0013 §7) — so this section
-normally reports "no UTxOs" as the expected mock result, not a failure; a live Blockfrost preprod
+the raw `InMemoryChainQueryProvider` default, the restored wallet's address has no fake UTxOs
+seeded for it — same honest-empty behavior as presenter tests for Wallet Balance (ADR-0013 §7).
+The Playground factory mock (`PlaygroundMockSampleData`) seeds fake ADA-only UTxOs for that
+address so the guided demo can complete Funds/Build/Sign offline. A live Blockfrost preprod
 provider can build a real draft only after that address is funded with test ADA from a preprod
 faucet. **No signing, no witness construction, no transaction id hashing, and no submission**
 anywhere in this checkpoint — see
@@ -530,10 +542,11 @@ screen shows a message distinguishing the cause, covering both the same draft-bu
 the Transaction Draft section can report and every `WalletError`
 `ReadOnlyWallet.signTestnetFixtureTransaction` itself can return (a signing failure or a
 witness/transaction-assembly failure). Under the
-default `InMemoryChainQueryProvider`, the restored wallet's address has no fake UTxOs seeded for
-it — same honest-empty behavior as the sections above — so this section normally reports "no
-UTxOs" as the expected mock result, not a failure; a live Blockfrost preprod provider can sign a
-real draft only after that address is funded with test ADA from a preprod faucet. **No
+raw `InMemoryChainQueryProvider` default, the restored wallet's address has no fake UTxOs seeded
+for it — same honest-empty behavior as the presenter tests above. The Playground factory mock
+seeds that address, so the guided Sign step can complete offline. A live Blockfrost preprod
+provider can sign a real draft only after that address is funded with test ADA from a preprod
+faucet. **No
 submission anywhere in this checkpoint** — submitting a transaction is Block 1.11, see
 [docs/DECISIONS/0015-transaction-signing.md](../docs/DECISIONS/0015-transaction-signing.md).
 
@@ -654,15 +667,21 @@ call, which these tests must not perform.
 The MVI layer added in Block 1.12-pre-a follows the same split. `PlaygroundReducerTest`
 (`commonTest`) drives `PlaygroundReducer` directly — pure, non-suspend, no coroutine, no native
 call — covering the default mock initial state, provider-selection and technical-details
-transitions, `ResetFlow`'s keep-vs-clear behavior, and every `applyXResult` helper (including
-the ADA-only/native-asset draft-failure message from Block 1.11d/1.11d-2 flowing through
-unchanged). `PlaygroundViewModelTest` (`jvmTest`-only) drives `PlaygroundViewModel.dispatch`
-with every guided-flow use case faked (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`,
-`BuildTransactionDraftUseCase`, `SignTransactionUseCase`, `SubmitTransactionUseCase`), covering
-each step's success/failure folding (including the submit step's accepted/local-id match and
-mismatch cases), the funds step's loading flag while its fake use case is still in flight, and
-that `PlaygroundProviderFactory` selects the same mock-or-live provider instance the ViewModel
-passes to a use case. It is `jvmTest`-only because `androidx.lifecycle.ViewModel.viewModelScope`
+transitions, `ResetFlow`'s keep-vs-clear behavior (completed diagnostics kept; Loading
+converted to Empty), diagnostic and guided-operation request-token / address-identity
+applies, and every `applyXResult` helper (including the ADA-only/native-asset draft-failure
+message from Block 1.11d/1.11d-2 flowing through unchanged). `PlaygroundViewModelTest`
+(`jvmTest`-only) drives `PlaygroundViewModel.dispatch` with every guided-flow and
+diagnostic-load use case faked (`RestoreWalletUseCase`, `QueryWalletFundsUseCase`,
+`BuildTransactionDraftUseCase`, `SignTransactionUseCase`, `SubmitTransactionUseCase`,
+`LoadProviderUtxosUseCase`, `LoadProviderParamsUseCase`), covering each step's
+success/failure folding (including the submit step's accepted/local-id match and mismatch
+cases), the funds step's loading flag while its fake use case is still in flight,
+`NonCancellable` stale-result discard for ResetFlow / address edit/fill / repeated Funds,
+Build, Sign, Submit, UTxO and params loads / provider-configuration changes, immediate
+live-cache invalidation, and that `PlaygroundProviderFactory` selects the same mock-or-live
+provider instance the ViewModel passes to a use case. It is `jvmTest`-only because
+`androidx.lifecycle.ViewModel.viewModelScope`
 needs a `Dispatchers.Main` implementation to dispatch on, which `kotlinx-coroutines-test`
 (already a `jvmTest` dependency) supplies via `Dispatchers.setMain`; no native `:crypto`/`:wallet`
 call is reached by any fake used here. See [docs/TESTING.md](../docs/TESTING.md) for the testing

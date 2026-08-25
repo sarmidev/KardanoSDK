@@ -54,6 +54,33 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   branch is reachable with valid input today; they now return a typed error instead of throwing,
   closing the gap between that guarantee and this module's own never-throw policy.
 
+- Playground operation lifecycle: a monotonic `flowGeneration` discards stale Funds/Build/Sign/
+  Submit/diagnostic results after ResetFlow or an actual provider-configuration change; in-flight
+  jobs are cancelled. Provider explorer UTxO and protocol-parameter loads also carry a request
+  token (and the explorer address for UTxOs) so a result for address A cannot apply after the
+  field shows B, and a repeated load cannot overwrite a newer one. Funds, Build, Sign, and
+  Submit each carry their own request token so a repeated same-step request cannot be
+  overwritten by a slower first call that still shares `flowGeneration`. Starting Funds
+  clears Build/Sign/Submit (completed results included) and increments those tokens;
+  starting Build clears Sign/Submit; starting Sign clears Submit — so Continue cannot
+  advance on a stale later step after an upstream rerun. Wallet restore is
+  synchronous and has no request token. ResetFlow converts in-flight
+  diagnostic Loading values to Empty and keeps completed diagnostic results. Provider-backed
+  results now carry `PlaygroundProviderMode` (`Mock` / `LivePreprod`) and that generation. The
+  live Blockfrost client cache is dropped immediately on an actual project-id change and when
+  live mode is disabled (the internal `PlaygroundProviderFactory.invalidateLiveCache`
+  method), not only on the next lookup. The project id remains session-only (state plus an
+  in-memory cache key) and is never persisted or logged.
+- `PlaygroundPresenter.presentTxBuildError` now includes `InsufficientFunds`'s excluded
+  native-asset UTxO count and lovelace when those fields are non-zero.
+- Playground Compose semantics: headings on section/step titles; polite live regions for
+  loading, success, and the honest informational stop; assertive live regions for errors;
+  expanded/collapsed state plus expand/collapse actions on Technical details, Advanced,
+  roadmap phases, and other disclosures.
+- Public landing page hash targets (`#approach`, `#try-the-playground`, and the other section
+  ids) reserve space under the sticky header via one `scroll-padding-top` offset
+  (`--anchor-scroll-offset`), raised at the 860px and 560px breakpoints when header/nav wrap.
+
 ### Changed
 
 - **Breaking:** `TransactionDraft` now carries `network: Network` and

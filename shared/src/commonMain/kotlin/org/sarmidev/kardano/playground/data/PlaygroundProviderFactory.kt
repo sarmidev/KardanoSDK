@@ -1,5 +1,6 @@
 package org.sarmidev.kardano.playground.data
 
+import org.sarmidev.kardano.playground.PlaygroundProviderMode
 import org.sarmidev.kardano.provider.ChainQueryProvider
 import org.sarmidev.kardano.provider.InMemoryChainQueryProvider
 import org.sarmidev.kardano.provider.InMemoryTxSubmitProvider
@@ -20,12 +21,15 @@ import org.sarmidev.kardano.provider.blockfrost.BlockfrostTxSubmitProvider
  * Passing `useLive = true` with a non-blank `projectId` switches both to live Blockfrost preprod
  * ([BlockfrostChainQueryProvider]/[BlockfrostTxSubmitProvider]) built from the same
  * `project_id`. A blank `projectId` falls back to the mock even when `useLive` is `true`, same
- * as before.
+ * as before. [mode] reports that effective choice as [PlaygroundProviderMode].
  *
- * The live providers are rebuilt only when `projectId` actually changes (simple
- * last-value cache), mirroring the previous `remember(projectId) { ... }` memoization. The
- * `project_id` string itself is never stored, saved, or logged by this class — it is only held
- * long enough to construct a [BlockfrostConfig].
+ * Live providers are cached by the last non-blank project id so a repeated live request can
+ * reuse the same Blockfrost client. [invalidateLiveCache] drops that cache immediately and is
+ * invoked by [org.sarmidev.kardano.playground.mvi.PlaygroundViewModel] on an actual project-id
+ * change and when live mode is disabled — not only on the next [queryProvider]/[submitProvider]
+ * lookup. Lookups that are not live still call [invalidateLiveCache] as a defensive fallback.
+ * The cache key is a second in-memory copy of the id. The id is never persisted or logged: this
+ * class has no logger, no disk write, and no string interpolation of the id into messages.
  *
  * This is sample/diagnostic wiring in `:shared`, not part of the SDK public API.
  */
@@ -42,31 +46,53 @@ internal class PlaygroundProviderFactory {
     private var cachedLiveQueryProvider: ChainQueryProvider? = null
     private var cachedLiveSubmitProvider: TxSubmitProvider? = null
 
+    /**
+     * Effective provider mode: [PlaygroundProviderMode.LivePreprod] only when [useLive] is `true`
+     * and [projectId] is non-blank after trim; otherwise [PlaygroundProviderMode.Mock].
+     */
+    fun mode(useLive: Boolean, projectId: String): PlaygroundProviderMode =
+        if (useLive && projectId.trim().isNotBlank()) {
+            PlaygroundProviderMode.LivePreprod
+        } else {
+            PlaygroundProviderMode.Mock
+        }
+
     /** The active query provider: mock unless [useLive] is `true` and [projectId] is non-blank. */
     fun queryProvider(useLive: Boolean, projectId: String): ChainQueryProvider {
-        if (!useLive) return mockQueryProvider
+        if (mode(useLive, projectId) != PlaygroundProviderMode.LivePreprod) {
+            invalidateLiveCache()
+            return mockQueryProvider
+        }
         refreshLiveProvidersIfNeeded(projectId)
         return cachedLiveQueryProvider ?: mockQueryProvider
     }
 
     /** The active submit provider: mock unless [useLive] is `true` and [projectId] is non-blank. */
     fun submitProvider(useLive: Boolean, projectId: String): TxSubmitProvider {
-        if (!useLive) return mockSubmitProvider
+        if (mode(useLive, projectId) != PlaygroundProviderMode.LivePreprod) {
+            invalidateLiveCache()
+            return mockSubmitProvider
+        }
         refreshLiveProvidersIfNeeded(projectId)
         return cachedLiveSubmitProvider ?: mockSubmitProvider
     }
 
     private fun refreshLiveProvidersIfNeeded(projectId: String) {
         val trimmed = projectId.trim()
-        if (trimmed == cachedProjectId) return
+        if (trimmed == cachedProjectId && cachedLiveQueryProvider != null) return
         cachedProjectId = trimmed
-        if (trimmed.isBlank()) {
-            cachedLiveQueryProvider = null
-            cachedLiveSubmitProvider = null
-            return
-        }
         val config = BlockfrostConfig(projectId = trimmed)
         cachedLiveQueryProvider = BlockfrostChainQueryProvider.create(config)
         cachedLiveSubmitProvider = BlockfrostTxSubmitProvider.create(config)
+    }
+
+    /**
+     * Drops the cached live Blockfrost clients and the in-memory project-id cache key.
+     * Does not log or persist the id. May be called when nothing is cached.
+     */
+    fun invalidateLiveCache() {
+        cachedProjectId = null
+        cachedLiveQueryProvider = null
+        cachedLiveSubmitProvider = null
     }
 }

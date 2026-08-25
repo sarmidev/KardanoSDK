@@ -13,6 +13,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
@@ -49,7 +51,11 @@ internal fun SummarySection(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = DemoCopy.Summary.SCOPE_HEADING, style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = DemoCopy.Summary.SCOPE_HEADING,
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.semantics { heading() },
+            )
             DemoCopy.Summary.SCOPE_LINES.forEach { line ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                     Text(

@@ -18,6 +18,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.sarmidev.kardano.playground.AddressPresentation
 import org.sarmidev.kardano.playground.CborPresentation
@@ -46,14 +48,25 @@ internal fun DiagnosticsSection(state: PlaygroundState, dispatch: (PlaygroundInt
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = "Diagnostics", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Diagnostics",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { heading() },
+                )
                 Text(
                     text = "Structural tools for :core/:provider APIs — separate from the flow above.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = { expanded = !expanded }) {
+            TextButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.disclosureSemantics(
+                    expanded = expanded,
+                    label = if (expanded) "Diagnostics expanded" else "Diagnostics collapsed",
+                    onToggle = { expanded = !expanded },
+                ),
+            ) {
                 Text(if (expanded) "Hide" else "Show")
             }
         }

@@ -219,6 +219,23 @@ class PlaygroundDemoFlowTest {
     }
 
     @Test
+    fun friendlyReason_insufficientFundsWithExcludedNativeAssets_mentionsUnspendableTokens() {
+        val message = PlaygroundPresenter.presentTxBuildError(
+            TxBuildError.InsufficientFunds(
+                required = 5_000_000L,
+                available = 1_000_000L,
+                excludedNativeAssetUtxoCount = 2,
+                excludedNativeAssetLovelace = 70_000_000L,
+            ),
+        )
+        assertEquals(
+            "This wallet's spendable test ADA isn't enough, and some value is held in tokens " +
+                "this demo can't spend.",
+            PlaygroundDemoFlow.friendlyReason(PlaygroundStep.BUILD, message),
+        )
+    }
+
+    @Test
     fun friendlyReason_allNativeAssetUnsupportedFeature_mapsToPlainSentence() {
         val message = PlaygroundPresenter.presentTxBuildError(
             TxBuildError.UnsupportedFeature("all 1 candidate UTxO(s) carry native assets/tokens"),

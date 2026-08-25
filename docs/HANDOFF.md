@@ -605,6 +605,105 @@ Date: 2026-08-23
 
 Summary:
 
+- **Final-review Medium lifecycle race on `fix/playground-operation-lifecycle` (one additive
+  commit; prior commits preserved) — DONE.** No SDK protocol behavior changed.
+  - **Commit 8 — upstream rerun invalidates downstream guided steps.** Starting Funds
+    clears Build/Sign/Submit (completed and Loading) and increments those tokens in one
+    reducer transition; starting Build clears Sign/Submit; starting Sign clears Submit.
+    The ViewModel cancels the matching downstream Jobs. `NonCancellable` tests prove a
+    late downstream completion is discarded and Continue cannot advance on the emptied
+    later step. Sequential Funds→Build→Sign continue-gating is unchanged.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. The factory cache key remains a second in-memory copy of the project id.
+
+### Session Summary (Second independent-review NO-GO fixes)
+
+Date: 2026-08-23
+
+Summary:
+
+- **Second independent-review NO-GO fixes on `fix/playground-operation-lifecycle` (one
+  additive commit; prior commits preserved) — DONE.** No SDK protocol behavior changed.
+  - **Commit 7 — guided-operation request identity and documentation corrections.**
+    Funds/Build/Sign/Submit each increment a per-operation request token on start and on
+    ResetFlow / actual provider-configuration change. Apply requires matching generation
+    **and** token so a non-cooperative first call cannot overwrite a newer same-step
+    request. Wallet restore is synchronous (no Job) and has no token. The factory
+    `invalidateLiveCache()` KDoc no longer uses a restricted adjective; HANDOFF/docs now
+    call it an internal factory method (the containing class is `internal`), not public.
+    `NonCancellable` tests cover repeated Funds, Build, Sign, and Submit.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. The factory cache key remains a second in-memory copy of the project id.
+
+### Session Summary (First independent-review NO-GO fixes)
+
+Date: 2026-08-23
+
+Summary:
+
+- **Independent-review NO-GO fixes on `fix/playground-operation-lifecycle` (two additive
+  commits; the original four commits are preserved) — DONE.** No SDK protocol behavior changed.
+  - **Commit 5 — diagnostics identity, reset normalization, immediate cache drop, race tests.**
+    Provider explorer UTxO/params loads carry request tokens (UTxOs also capture the explorer
+    address). Actual address edit/fill increments the UTxO token, clears the UTxO result, and
+    cancels the in-flight UTxO job. Apply only when generation, token, and address still match.
+    ResetFlow converts diagnostic Loading → Empty and keeps completed diagnostic results.
+    `PlaygroundProviderFactory.invalidateLiveCache()` is an internal factory method and is
+    invoked synchronously on an actual project-id change and when live mode is disabled.
+    `NonCancellable` gated fakes
+    prove identity checks discard stale results after ResetFlow, address edit/fill, repeated
+    UTxO/params loads, and provider-configuration changes. The project id is never logged or
+    persisted.
+  - **Commit 6 — landing anchor offset.** One scroll-offset mechanism (`--anchor-scroll-offset`
+    + `scroll-padding-top` on `html`); the previous simultaneous `scroll-margin-top` on section
+    ids is removed. The variable is raised at the existing 860px / 560px breakpoints for a
+    wrapped header/nav. Site docs do not claim untested browser/hash behavior.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. The factory cache key remains a second in-memory copy of the project id.
+
+### Session Summary (Playground operation lifecycle)
+
+Date: 2026-08-23
+
+Summary:
+
+- **Playground operation lifecycle on `fix/playground-operation-lifecycle` (four commits) — DONE.**
+  Started from clean `origin/main` at `a632b7d` after confirming Prompt 1 (pre-release core
+  contracts, through `43a30e0`) and Prompt 2 (signing-scope enforcement, through `a632b7d`)
+  were already merged. No SDK protocol behavior changed.
+  - **Commit 1 — operation generations and cancellation.** `PlaygroundState.flowGeneration`
+    increments on ResetFlow and on actual live-toggle / project-id changes. The ViewModel
+    captures generation at Funds/Build/Sign/Submit/diagnostic start, ignores stale results,
+    and cancels in-flight Jobs. Provider-backed step results clear when provider configuration
+    changes. The reducer stays a pure function of `(state, intent)`.
+  - **Commit 2 — provider cache and provenance.** Explicit `PlaygroundProviderMode.Mock` /
+    `LivePreprod`. Provider-backed presentations carry mode + generation. Live Blockfrost
+    clients are dropped when the project id changes or live mode is disabled. Docs no longer
+    claim only `PlaygroundState` holds the id; the factory cache key is also in-memory, never
+    persisted or logged.
+  - **Commit 3 — accessibility semantics.** Headings, polite/assertive live regions,
+    disclosure `stateDescription` plus expand/collapse actions, and combined title+outcome
+    descriptions. Compose 1.11 has no boolean `expanded` property; expand/collapse actions
+    are the supported equivalent.
+  - **Commit 4 — presentation and site polish.** `InsufficientFunds` excluded-native-asset
+    fields are shown; stale mock / `LovelaceDisplay` KDoc corrected; landing hash targets
+    offset under the sticky header; CHANGELOG, HANDOFF, QUICKSTART, TESTING, shared/README,
+    site/README updated.
+  - **Residual limitations.** TalkBack, VoiceOver, 200% font, 360dp, light/dark, in-flight
+    Reset, Mock→Live→Mock, and landing keyboard/hash navigation still need an owner device
+    pass. A cancelled request can still complete in a non-cancellable use case; generation
+    matching drops that result. The factory cache key is a second in-memory copy of the
+    project id.
+
+### Session Summary (Signing-scope enforcement)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Signing-scope enforcement on `fix/signing-scope-enforcement` (five commits) — DONE.**
   Closes the compiled-artifact signing gap (ADR-0018 Option 3 / W7-1), not merely the
   rename/opt-in signal. Started from clean `origin/main` at `43a30e0` (Prompt 1 already

@@ -2,6 +2,8 @@ package org.sarmidev.kardano.playground.mvi
 
 import org.sarmidev.kardano.playground.LabeledRow
 import org.sarmidev.kardano.playground.MOCK_SUBMISSION_NOT_SUPPORTED_MESSAGE
+import org.sarmidev.kardano.playground.ProviderParamsPresentation
+import org.sarmidev.kardano.playground.ProviderUtxosPresentation
 import org.sarmidev.kardano.playground.SignedTransactionPresentation
 import org.sarmidev.kardano.playground.SubmitTransactionPresentation
 import org.sarmidev.kardano.playground.TransactionDraftPresentation
@@ -34,6 +36,13 @@ class PlaygroundReducerTest {
 
         assertFalse(state.useLiveBlockfrost)
         assertEquals("", state.projectId)
+        assertEquals(0L, state.flowGeneration)
+        assertEquals(0L, state.providerUtxosRequestToken)
+        assertEquals(0L, state.providerParamsRequestToken)
+        assertEquals(0L, state.fundsRequestToken)
+        assertEquals(0L, state.draftRequestToken)
+        assertEquals(0L, state.signedRequestToken)
+        assertEquals(0L, state.submitRequestToken)
         assertEquals(WalletPresentation.Empty, state.wallet)
         assertFalse(state.walletLoading)
         assertEquals(WalletBalancePresentation.Empty, state.funds)
@@ -193,26 +202,90 @@ class PlaygroundReducerTest {
     // --- Provider selection: project id + live toggle ---
 
     @Test
-    fun updateProjectId_updatesOnlyProjectId() {
-        val state = PlaygroundState.initial()
+    fun updateProjectId_sameValue_isNoOp() {
+        val state = PlaygroundState.initial().copy(projectId = "abc123", flowGeneration = 4L)
 
         val next = PlaygroundReducer.reduce(state, PlaygroundIntent.UpdateProjectId("abc123"))
 
-        assertEquals("abc123", next.projectId)
-        assertFalse(next.useLiveBlockfrost)
+        assertEquals(state, next)
     }
 
     @Test
-    fun toggleLiveBlockfrost_updatesOnlyTheToggle() {
-        val state = PlaygroundState.initial().copy(projectId = "abc123")
+    fun updateProjectId_actualChange_incrementsGenerationAndClearsProviderResults() {
+        val dirty = PlaygroundState.initial().copy(
+            funds = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "0 lovelace"))),
+            draft = TransactionDraftPresentation.Failure("stale draft"),
+            signed = SignedTransactionPresentation.Loading,
+            submit = SubmitTransactionPresentation.Loading,
+            providerUtxos = ProviderUtxosPresentation.Loading,
+            providerParams = ProviderParamsPresentation.Loading,
+            wallet = WalletPresentation.Success(
+                rows = listOf(LabeledRow("Generated address", "addr_test1abc")),
+                fingerprintMatchesVector = true,
+            ),
+            flowGeneration = 2L,
+        )
+
+        val next = PlaygroundReducer.reduce(dirty, PlaygroundIntent.UpdateProjectId("abc123"))
+
+        assertEquals("abc123", next.projectId)
+        assertEquals(3L, next.flowGeneration)
+        assertEquals(1L, next.fundsRequestToken)
+        assertEquals(1L, next.draftRequestToken)
+        assertEquals(1L, next.signedRequestToken)
+        assertEquals(1L, next.submitRequestToken)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(1L, next.providerParamsRequestToken)
+        assertEquals(WalletBalancePresentation.Empty, next.funds)
+        assertEquals(TransactionDraftPresentation.Empty, next.draft)
+        assertEquals(SignedTransactionPresentation.Empty, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
+        assertEquals(ProviderParamsPresentation.Empty, next.providerParams)
+        assertEquals(dirty.wallet, next.wallet, "wallet restore is local and must survive a project-id change")
+    }
+
+    @Test
+    fun toggleLiveBlockfrost_sameValue_isNoOp() {
+        val state = PlaygroundState.initial().copy(useLiveBlockfrost = true, flowGeneration = 1L)
 
         val next = PlaygroundReducer.reduce(state, PlaygroundIntent.ToggleLiveBlockfrost(true))
 
+        assertEquals(state, next)
+    }
+
+    @Test
+    fun toggleLiveBlockfrost_actualChange_incrementsGenerationAndClearsProviderResults() {
+        val dirty = PlaygroundState.initial().copy(
+            projectId = "abc123",
+            funds = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "0 lovelace"))),
+            draft = TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1"))),
+            flowGeneration = 0L,
+        )
+
+        val next = PlaygroundReducer.reduce(dirty, PlaygroundIntent.ToggleLiveBlockfrost(true))
+
         assertTrue(next.useLiveBlockfrost)
         assertEquals("abc123", next.projectId)
+        assertEquals(1L, next.flowGeneration)
+        assertEquals(1L, next.fundsRequestToken)
+        assertEquals(1L, next.draftRequestToken)
+        assertEquals(1L, next.signedRequestToken)
+        assertEquals(1L, next.submitRequestToken)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(1L, next.providerParamsRequestToken)
+        assertEquals(WalletBalancePresentation.Empty, next.funds)
+        assertEquals(TransactionDraftPresentation.Empty, next.draft)
 
         val backOff = PlaygroundReducer.reduce(next, PlaygroundIntent.ToggleLiveBlockfrost(false))
         assertFalse(backOff.useLiveBlockfrost)
+        assertEquals(2L, backOff.flowGeneration)
+        assertEquals(2L, backOff.fundsRequestToken)
+        assertEquals(2L, backOff.draftRequestToken)
+        assertEquals(2L, backOff.signedRequestToken)
+        assertEquals(2L, backOff.submitRequestToken)
+        assertEquals(2L, backOff.providerUtxosRequestToken)
+        assertEquals(2L, backOff.providerParamsRequestToken)
     }
 
     // --- Technical details toggling ---
@@ -299,6 +372,62 @@ class PlaygroundReducerTest {
         assertEquals(setOf(PlaygroundStep.BUILD), reset.technicalDetailsExpanded)
         assertEquals("addr_test1xyz", reset.addressInput)
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, reset.providerAddressInput)
+        assertEquals(1L, reset.flowGeneration, "ResetFlow must bump generation so in-flight results are stale")
+        assertEquals(1L, reset.fundsRequestToken)
+        assertEquals(1L, reset.draftRequestToken)
+        assertEquals(1L, reset.signedRequestToken)
+        assertEquals(1L, reset.submitRequestToken)
+        assertEquals(1L, reset.providerUtxosRequestToken)
+        assertEquals(1L, reset.providerParamsRequestToken)
+    }
+
+    @Test
+    fun resetFlow_convertsDiagnosticLoadingToEmptyButKeepsCompletedResults() {
+        val utxosDone = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "2")))
+        val dirty = PlaygroundState.initial().copy(
+            providerUtxos = utxosDone,
+            providerParams = ProviderParamsPresentation.Loading,
+            providerUtxosRequestToken = 4L,
+            providerParamsRequestToken = 2L,
+        )
+
+        val reset = PlaygroundReducer.reduce(dirty, PlaygroundIntent.ResetFlow)
+
+        assertEquals(utxosDone, reset.providerUtxos, "completed UTxO result must survive ResetFlow")
+        assertEquals(ProviderParamsPresentation.Empty, reset.providerParams)
+        assertEquals(5L, reset.providerUtxosRequestToken)
+        assertEquals(3L, reset.providerParamsRequestToken)
+    }
+
+    @Test
+    fun applyFundsResult_staleGeneration_isIgnored() {
+        val result = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1 lovelace")))
+        val current = PlaygroundState.initial().copy(flowGeneration = 3L)
+
+        val next = PlaygroundReducer.applyFundsResult(current, result, generation = 2L)
+
+        assertEquals(current, next)
+    }
+
+    @Test
+    fun applyFundsResult_currentGeneration_isApplied() {
+        val result = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "1 lovelace")))
+        val current = PlaygroundState.initial().copy(flowGeneration = 3L)
+
+        val next = PlaygroundReducer.applyFundsResult(current, result, generation = 3L)
+
+        assertEquals(result, next.funds)
+        assertEquals(3L, next.flowGeneration)
+    }
+
+    @Test
+    fun applyFundsResult_staleToken_isIgnored() {
+        val result = WalletBalancePresentation.Success(listOf(LabeledRow("Balance", "stale")))
+        val current = PlaygroundState.initial().copy(fundsRequestToken = 3L)
+
+        val next = PlaygroundReducer.applyFundsResult(current, result, requestToken = 2L)
+
+        assertEquals(current, next)
     }
 
     // --- Diagnostics text inputs + seed fill ---
@@ -318,6 +447,8 @@ class PlaygroundReducerTest {
             PlaygroundIntent.FillSeedAddress(SeedAddressKind.WITH_UTXOS),
         )
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_WITH_UTXOS, next.providerAddressInput)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
     }
 
     @Test
@@ -328,20 +459,221 @@ class PlaygroundReducerTest {
             PlaygroundIntent.FillSeedAddress(SeedAddressKind.EMPTY),
         )
         assertEquals(InMemoryChainQueryProvider.SEED_ADDRESS_EMPTY, next.providerAddressInput)
+        assertEquals(1L, next.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
+    }
+
+    @Test
+    fun updateProviderAddressInput_sameValue_isNoOp() {
+        val state = PlaygroundState.initial().copy(providerUtxosRequestToken = 3L)
+
+        val next = PlaygroundReducer.reduce(
+            state,
+            PlaygroundIntent.UpdateProviderAddressInput(state.providerAddressInput),
+        )
+
+        assertEquals(state, next)
+    }
+
+    @Test
+    fun updateProviderAddressInput_actualChange_incrementsUtxoTokenAndClearsResult() {
+        val dirty = PlaygroundState.initial().copy(
+            providerUtxos = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "1"))),
+            providerParams = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "44"))),
+            providerUtxosRequestToken = 2L,
+        )
+
+        val next = PlaygroundReducer.reduce(
+            dirty,
+            PlaygroundIntent.UpdateProviderAddressInput("addr_test1changed"),
+        )
+
+        assertEquals("addr_test1changed", next.providerAddressInput)
+        assertEquals(3L, next.providerUtxosRequestToken)
+        assertEquals(ProviderUtxosPresentation.Empty, next.providerUtxos)
+        assertEquals(dirty.providerParams, next.providerParams, "params are address-independent")
+    }
+
+    @Test
+    fun applyProviderUtxosResult_staleTokenOrAddress_isIgnored() {
+        val result = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "stale")))
+        val current = PlaygroundState.initial().copy(
+            providerUtxosRequestToken = 2L,
+            providerAddressInput = "addr-b",
+        )
+
+        assertEquals(
+            current,
+            PlaygroundReducer.applyProviderUtxosResult(
+                current,
+                result,
+                requestToken = 1L,
+                address = "addr-b",
+            ),
+        )
+        assertEquals(
+            current,
+            PlaygroundReducer.applyProviderUtxosResult(
+                current,
+                result,
+                requestToken = 2L,
+                address = "addr-a",
+            ),
+        )
+    }
+
+    @Test
+    fun applyProviderParamsResult_staleToken_isIgnored() {
+        val result = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "1")))
+        val current = PlaygroundState.initial().copy(providerParamsRequestToken = 3L)
+
+        val next = PlaygroundReducer.applyProviderParamsResult(current, result, requestToken = 2L)
+
+        assertEquals(current, next)
+    }
+
+    @Test
+    fun applyProviderUtxosResult_currentIdentity_isApplied() {
+        val result = ProviderUtxosPresentation.Success(listOf(LabeledRow("UTxOs", "current")))
+        val current = PlaygroundState.initial().copy(
+            providerUtxosRequestToken = 2L,
+            providerAddressInput = "addr-b",
+        )
+
+        val next = PlaygroundReducer.applyProviderUtxosResult(
+            current,
+            result,
+            requestToken = 2L,
+            address = "addr-b",
+        )
+
+        assertEquals(result, next.providerUtxos)
+    }
+
+    @Test
+    fun applyProviderParamsResult_currentToken_isApplied() {
+        val result = ProviderParamsPresentation.Success(listOf(LabeledRow("minFeeA", "44")))
+        val current = PlaygroundState.initial().copy(providerParamsRequestToken = 3L)
+
+        val next = PlaygroundReducer.applyProviderParamsResult(current, result, requestToken = 3L)
+
+        assertEquals(result, next.providerParams)
     }
 
     // --- Loading transitions ---
 
     @Test
     fun startFundsLoading_setsFundsToLoading() {
-        val next = PlaygroundReducer.startFundsLoading(PlaygroundState.initial())
+        val next = PlaygroundReducer.startFundsLoading(
+            PlaygroundState.initial().copy(fundsRequestToken = 2L),
+        )
         assertEquals(WalletBalancePresentation.Loading, next.funds)
+        assertEquals(3L, next.fundsRequestToken)
+    }
+
+    @Test
+    fun startFundsLoading_clearsCompletedDownstreamAndIncrementsTheirTokens() {
+        val dirty = PlaygroundState.initial().copy(
+            draft = TransactionDraftPresentation.Success(listOf(LabeledRow("Fee", "1"))),
+            signed = SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1"))),
+            submit = SubmitTransactionPresentation.Loading,
+            draftRequestToken = 3L,
+            signedRequestToken = 2L,
+            submitRequestToken = 1L,
+        )
+
+        val next = PlaygroundReducer.startFundsLoading(dirty)
+
+        assertEquals(WalletBalancePresentation.Loading, next.funds)
+        assertEquals(TransactionDraftPresentation.Empty, next.draft)
+        assertEquals(SignedTransactionPresentation.Empty, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(4L, next.draftRequestToken)
+        assertEquals(3L, next.signedRequestToken)
+        assertEquals(2L, next.submitRequestToken)
+    }
+
+    @Test
+    fun startDraftLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startDraftLoading(
+            PlaygroundState.initial().copy(draftRequestToken = 1L),
+        )
+        assertEquals(TransactionDraftPresentation.Loading, next.draft)
+        assertEquals(2L, next.draftRequestToken)
+    }
+
+    @Test
+    fun startDraftLoading_clearsCompletedSignAndSubmitAndIncrementsTheirTokens() {
+        val dirty = PlaygroundState.initial().copy(
+            signed = SignedTransactionPresentation.Success(listOf(LabeledRow("Witnesses", "1"))),
+            submit = SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted"))),
+            signedRequestToken = 5L,
+            submitRequestToken = 4L,
+        )
+
+        val next = PlaygroundReducer.startDraftLoading(dirty)
+
+        assertEquals(TransactionDraftPresentation.Loading, next.draft)
+        assertEquals(SignedTransactionPresentation.Empty, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(6L, next.signedRequestToken)
+        assertEquals(5L, next.submitRequestToken)
+    }
+
+    @Test
+    fun startSignedLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startSignedLoading(
+            PlaygroundState.initial().copy(signedRequestToken = 4L),
+        )
+        assertEquals(SignedTransactionPresentation.Loading, next.signed)
+        assertEquals(5L, next.signedRequestToken)
+    }
+
+    @Test
+    fun startSignedLoading_clearsCompletedSubmitAndIncrementsItsToken() {
+        val dirty = PlaygroundState.initial().copy(
+            submit = SubmitTransactionPresentation.Success(listOf(LabeledRow("Status", "submitted"))),
+            submitRequestToken = 7L,
+        )
+
+        val next = PlaygroundReducer.startSignedLoading(dirty)
+
+        assertEquals(SignedTransactionPresentation.Loading, next.signed)
+        assertEquals(SubmitTransactionPresentation.Empty, next.submit)
+        assertEquals(8L, next.submitRequestToken)
+    }
+
+    @Test
+    fun startSubmitLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startSubmitLoading(
+            PlaygroundState.initial().copy(submitRequestToken = 0L),
+        )
+        assertEquals(SubmitTransactionPresentation.Loading, next.submit)
+        assertEquals(1L, next.submitRequestToken)
     }
 
     @Test
     fun startWalletLoading_setsWalletLoadingFlag() {
         val next = PlaygroundReducer.startWalletLoading(PlaygroundState.initial())
         assertTrue(next.walletLoading)
+    }
+
+    @Test
+    fun startProviderUtxosLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startProviderUtxosLoading(
+            PlaygroundState.initial().copy(providerUtxosRequestToken = 4L),
+        )
+        assertEquals(ProviderUtxosPresentation.Loading, next.providerUtxos)
+        assertEquals(5L, next.providerUtxosRequestToken)
+    }
+
+    @Test
+    fun startProviderParamsLoading_incrementsRequestToken() {
+        val next = PlaygroundReducer.startProviderParamsLoading(
+            PlaygroundState.initial().copy(providerParamsRequestToken = 1L),
+        )
+        assertEquals(ProviderParamsPresentation.Loading, next.providerParams)
+        assertEquals(2L, next.providerParamsRequestToken)
     }
 
     // --- applyX: fold a *Presentation result back into state ---
