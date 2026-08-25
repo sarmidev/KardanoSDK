@@ -39,7 +39,7 @@ before/after code.
 | ID | Severity | Title | Status |
 |---|---|---|---|
 | W1-1 | Low | Uncommitted typo in `:core` KDoc mixed into a working tree | **Resolved, no code change needed** — the typo was never committed (`git show 094ec8c:...CborValue.kt` already read correctly); the stray edit was discarded. Recorded in the prior audit's own §8.2. |
-| W1-2 | Informational | `docs/HANDOFF.md` is a large, growing internal log in the public tree | **Open, by decision** — no remediation commit exists; the project has not decided to prune or relocate it. Not a defect; a curation choice deferred. |
+| W1-2 | Informational | `docs/HANDOFF.md` is a large, growing internal log in the public tree | **Resolved on `fix/release-docs-and-scanners`** — historical content moved verbatim to `docs/archive/handoff/`; living handoff is the current resume. See §7. |
 | W3-1 | Informational | Benign "Expression is unused" warnings in generated UniFFI bindings | **Confirmed still present, expected** — reproduced verbatim in this batch's own fresh builds (§4); no remediation needed per the original finding's own text. |
 | W3-2 | Informational | Audit-methodology note (cache-hit correction) | **N/A** — a note about the prior audit's own method, not a code finding. |
 | W3-3 | Low | CI runs no lint step despite AGP providing one for free | **Open** — `verify.yml` still does not invoke `androidApp:lint`; this batch ran it manually (§4) but did not wire it into CI. Not in this batch's authorized scope. |
@@ -98,8 +98,8 @@ a defect this pass found* — it is the same disclosed residual risk carried for
 recorded under its own finding ID so it is tracked independently of W9-1 (which is otherwise
 fully resolved).
 
-**NF-3 (Low) — The landing page's accessibility semantics were spot-checked, not re-audited in
-full.** This batch re-confirmed the specific W9-6 fix (`tabindex="-1"` on `#main-content`, still
+**NF-3 (Low) — The landing page's accessibility semantics were spot-checked, not repeated as a
+full accessibility pass.** This batch re-confirmed the specific W9-6 fix (`tabindex="-1"` on `#main-content`, still
 present) but did not repeat the prior audit's full `aria-labelledby`/heading-order/alt-text pass
 across `site/index.html`. No regression was found in the spots checked; a full re-audit was out
 of this batch's scope (no `site/**` files were touched by any of this batch's five commits).
@@ -118,7 +118,7 @@ supply chain is pinned." Recorded so the distinction is explicit rather than ass
 
 **NF-5 (Low) — The restricted-claim (banned-word) scanner has real, reproducible false
 negatives at word-boundary edges, discovered by this batch's own writing.** While drafting this
-batch's CHANGELOG/KDoc, two banned-word occurrences of "safe" were caught only by manually
+batch's CHANGELOG/KDoc, two restricted-claim occurrences were caught only by manually
 re-running the exact scan script from `verify.yml` locally (§5, Verification) — the scanner
 itself is sound (it did fire and both occurrences were fixed before this commit), but this
 exercise surfaced two structural gaps in the scan's design, not in its execution:
@@ -128,7 +128,7 @@ exercise surfaced two structural gaps in the scan's design, not in its execution
    wired to this same script today.
 2. The `NEGATION_QUALIFIER`/`HYPHEN_QUALIFIER` exemptions are narrow enough that a
    grammatically valid but still-restricted claim (e.g. "keeps X reliably free of the class of
-   bug Y" rephrasing a "safe" claim without the literal word) would not be caught at all — this
+   bug Y" rephrasing a restricted claim without the literal word) would not be caught at all — this
    is a fundamental limitation of a fixed word-list scan, not a bug in this instance's pattern,
    but it means the scan is a floor, not a ceiling, on claim-language discipline.
 
@@ -171,7 +171,7 @@ it were fresh evidence (the same discipline the prior audit's W3-2 finding estab
 | V6 | `./gradlew --no-daemon :androidApp:lintDebug` | `BUILD SUCCESSFUL`. **0 errors, 36 warnings** (`androidApp/build/reports/lint-results-debug.txt`) — all 36 are pre-existing hygiene items (dependency-version-freshness notices, launcher-icon shape/monochrome-tag suggestions, one densityless-drawable note), none touch this batch's changed files. |
 | V7 | `cd crypto-signing-backend && shasum -a 256 -c CHECKSUMS.sha256` | **8/8 OK** — every committed native signing-backend binary's SHA-256 matches the manifest from W5-2's remediation, unchanged by this batch. |
 | V8 | `git diff --check` | Exit `0`, no output — no whitespace errors in this batch's diff. |
-| V9 | Restricted-claim (banned-word) scan — the exact script from `.github/workflows/verify.yml`'s `restricted-claim-scan` job, run locally against this batch's changed tracked files | Initially **caught 2 real occurrences of "safe"** in this batch's own draft `Bech32.kt` KDoc and `CHANGELOG.md` wording (see NF-5); both reworded to factual language ("enforce this bound structurally" instead of "safe by construction") and the scan passes clean on the corrected text. |
+| V9 | Restricted-claim (banned-word) scan — the exact script from `.github/workflows/verify.yml`'s `restricted-claim-scan` job, run locally against this batch's changed tracked files | Initially **caught 2 real restricted-claim occurrences** in this batch's own draft `Bech32.kt` KDoc and `CHANGELOG.md` wording (see NF-5); both reworded to factual language ("enforce this bound structurally" instead of a construction-time restricted claim) and the scan passes clean on the corrected text. |
 
 **Not exercised by this batch** (unchanged residual risk from the prior audit's §6, restated
 here rather than re-derived): a live GitHub Actions run of `Verify`/`deploy-site` (this
@@ -236,3 +236,23 @@ messages and in `CHANGELOG.md`'s Unreleased section; summarized here for the aud
 describes should be read as a certification of any kind.** It is a record of what was checked,
 what was found, and what remains open, as of `fix/pre-release-core-contracts`'s branch point
 from `origin/main@f43ad944`.
+
+---
+
+## 7. Later stacked-remediation status (2026-08-23)
+
+Sections 1–6 remain the Prompt 1 batch record. This section only updates **current**
+status pointers for findings later remediations addressed. It does not rewrite the
+original evidence or reopen resolved-as-of-Prompt-1 items.
+
+| ID | Status as of `fix/release-docs-and-scanners` (docs-reconciliation commit) |
+|---|---|
+| W4-1 | **Further reconciled** — ADR-0015's header now matches the completed 1.10c §9 result note (the Prompt 1-era `f5289d8` note had updated §9; the header still said 1.10c remained open). |
+| W4-2 | **Further reconciled** — ADR-0017's header and Non-goals now point at the shipped 1.11b/1.11c result note; the original 1.11a-only decision text is unchanged. |
+| W4-3 | **Resolved** — `docs/PROJECT_BRIEF.md` now links the full delivery record to `docs/DELIVERY_RECORD.md`. `docs/ROADMAP.md` remains the overview. |
+| W4-4 | **Resolved** — module README status lines now use the accepted factual wording ("Not independently reviewed") already used by the root README / `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`. Provider READMEs keep the testnet/preprod qualifier. |
+| W5-5 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — `BlockfrostConfig` is no longer a `data class`; equality is referential and `toString` stays redacted. |
+| W8-3 | **Resolved** on stacked `fix/provider-boundaries-and-timeouts` — explicit Ktor `HttpTimeout` bounds and no Ktor request retry. |
+| W1-2 | **Resolved** — historical HANDOFF content is preserved verbatim under `docs/archive/handoff/`; the living `docs/HANDOFF.md` is the current resume. `scripts/check_handoff_archive.py` restores the six documented link rewrites at the byte level and hashes the original bytes. `.gitattributes` scopes `whitespace=-blank-at-eof` to that archive file only. |
+| NF-5 | **Further remediated** — match-by-match scanner with `path:line:column`, longest phrase first, sentence-bounded negation, and Markdown-emphasis normalization. Hyphen compounds are not exempt. Evolving ADRs and the append-only Phase 1 log are scanned; unavoidable historical wording is allowlisted per occurrence (path + 1-based physical line + line SHA-256 + phrase + occurrence index; inserting a line before an allowlisted hit is fail-closed). Whole-file exclusions remain only for immutable archived snapshots and circular policy/test data. Suffix matching is case-insensitive. Tracked files come from `git ls-files -z`. CI runs the unit tests before the scan. |
+| W9-3 (secret-scan half) | **Resolved** — Gitleaks CLI `v8.30.1` is installed from the official checksums file and scans full history with redacted output. Allowlists are match-level AND entries: the cited CIP-19 hex **and** a root-anchored `^…$` path, including `scripts/gitleaks_allowlist.py` so the helper's own historical assignment is not a finding. A local full-history run on 2026-08-23 reported `no leaks found` (96 commits, 0 findings). CI runs the helper/installer/allowlist tests before install and scan. |

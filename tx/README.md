@@ -6,7 +6,7 @@ with coin selection and fee/change in Block 1.9b-2, and extended with witness-se
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Not for real funds.
+Phase 1 — pre-alpha, experimental. Not independently reviewed. Not for real funds.
 
 ## Role
 

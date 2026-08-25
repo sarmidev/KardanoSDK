@@ -5,7 +5,7 @@ with scoped transaction-signing orchestration in Block 1.10b (ADR-0015).
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Not for real funds.
+Phase 1 — pre-alpha, experimental. Not independently reviewed. Not for real funds.
 
 ## Role
 

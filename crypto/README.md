@@ -8,7 +8,7 @@ ADR-0015/ADR-0016).
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Not audited. Not for real funds.
+Phase 1 — pre-alpha, experimental. Not independently reviewed. Not for real funds.
 
 Block 1.6b is complete on JVM and Android, with executed CIP-3/BIP-39 vectors. On iOS, the
 `:crypto:compileKotlinIosSimulatorArm64` and `:crypto:compileKotlinIosArm64` compile targets

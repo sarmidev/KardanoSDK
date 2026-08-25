@@ -2,10 +2,10 @@
 
 | Field   | Value                                                                 |
 |---------|------------------------------------------------------------------------|
-| Status  | **Accepted**; Block 1.10b (`:crypto` `Signing`, `:tx` witness/transaction assembly, `:wallet` signing orchestration) **implemented and verified** — see §9 result note. Block 1.10c (Playground checkpoint) remains open. |
+| Status  | **Accepted**; Block 1.10b (`:crypto` `Signing`, `:tx` witness/transaction assembly, `:wallet` signing orchestration) **implemented and verified**, and Block 1.10c (Playground checkpoint) **is complete** — see §9 result note and `docs/PHASE_1_PLAN.md`'s 1.10c entry. |
 | Scope   | Block 1.10a — signing ownership/module boundary, exact signing scope, fixture-only enforcement boundary, signing message, signing artifact, crypto-backend gate, error model, test/vector policy, Playground checkpoint, guardrail reconciliation, sub-block split |
-| Phase   | Phase 1 (Block 1.10a/1.10b)                                            |
-| Updated | 2026-08-23 — §2a enforcement amended by ADR-0019; original §2a text left as the Block 1.10 decision. |
+| Phase   | Phase 1 (Block 1.10a/1.10b/1.10c)                                       |
+| Updated | 2026-08-23 — header reconciled to the completed 1.10c result note; §2a enforcement amended by ADR-0019; original §2a text left as the Block 1.10 decision. |
 
 ---
 

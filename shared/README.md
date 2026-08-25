@@ -5,7 +5,7 @@ builds the iOS `Shared` framework that the Xcode app consumes.
 
 ## Status
 
-Phase 1 — pre-alpha, experimental. Not for real funds.
+Phase 1 — pre-alpha, experimental. Not independently reviewed. Not for real funds.
 
 ## Role today
 
@@ -63,7 +63,7 @@ existing Material3 cards/buttons/dividers style, only reordering and regrouping 
   `TransactionDraftPresentation`, `SignedTransactionPresentation`, `SubmitTransactionPresentation`,
   `AddressPresentation`, `HexPresentation`, `CborPresentation`, `ProviderUtxosPresentation`,
   `ProviderParamsPresentation`) rather than introducing a parallel display model — those types
-  already carry only public, display-safe metadata (see each type's KDoc), so this state holds no
+  already carry only public metadata suitable for display (see each type's KDoc), so this state holds no
   new SDK semantics of its own. A `PlaygroundStep` enum (`WALLET`, `FUNDS`, `BUILD`, `SIGN`,
   `SUBMIT`) identifies the five guided-flow steps for the technical-details toggle.
 - `playground/mvi/PlaygroundIntent.kt` — a sealed `PlaygroundIntent` covering every user action:

@@ -139,18 +139,39 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   site is live and points readers who want certainty at Settings → Pages (W9-5).
 - `docs/DECISIONS/0015-transaction-signing.md` §9's own result note no longer says Block 1.10c
   "remains open"; it now points at `docs/PHASE_1_PLAN.md`'s 1.10c entry, which every other
-  document already described as complete (W4-1). `docs/DECISIONS/0017-transaction-submission-boundary.md`
+  document already described as complete (W4-1). The ADR header now matches that completed
+  1.10c result note. `docs/DECISIONS/0017-transaction-submission-boundary.md`
   gained a dated result note recording that its deferred Blockfrost-submission/`:shared`-checkpoint
-  work has since shipped, mirroring ADR-0015 §9's own pattern (W4-2). Both ADRs' original
-  at-the-time-of-writing text is otherwise left unchanged.
+  work has since shipped, mirroring ADR-0015 §9's own pattern (W4-2). The ADR-0017 header and
+  Non-goals now point at that shipped 1.11b/1.11c result note. Both ADRs' original
+  at-the-time-of-writing decision text is otherwise left unchanged.
+- `docs/PROJECT_BRIEF.md` now links the full delivery record to `docs/DELIVERY_RECORD.md`
+  (W4-3). `docs/ROADMAP.md` remains the overview.
+- Module README status lines now use the same factual wording as the root README /
+  `docs/SECURITY.md` / `docs/PROJECT_BRIEF.md`: "Not independently reviewed" (W4-4). Provider
+  READMEs keep the testnet/preprod qualifier.
+- `docs/HANDOFF.md` is now the living resume (current context, recent sessions, active
+  risks, branch-stack status). The previous full handoff is preserved verbatim at
+  `docs/archive/handoff/2026-08-23-pre-curation.md` and checked by
+  `scripts/check_handoff_archive.py` (W1-2).
 - CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
   full commit SHA with a version comment instead of a floating major-version tag, so a
   compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).
-- `verify.yml` gained a `restricted-claim-scan` job: a plain grep/bash step (no new Action or
-  dependency) that fails the build if a tracked doc/markdown/source file contains a banned word
-  outside a short, individually-justified exclusion list (frozen historical records, the policy
-  definitions themselves, and four narrow non-claim occurrences). This is a claim-language scan
-  only, not secret/credential scanning (W9-3).
+- `verify.yml` gained a `restricted-claim-scan` job that runs the restricted-claim
+  and archive unit tests, the HANDOFF archive byte check, then
+  `scripts/check_restricted_claims.py`. The script classifies each phrase match on its
+  own (never a whole-line exclusion), reports `path:line:column`, and prefers the
+  longest phrase. Whole-file exclusions are limited to immutable archived
+  snapshots and circular policy/test data. Historical wording in evolving ADRs
+  and append-only logs is allowlisted per occurrence (path, physical line,
+  line hash, phrase, and phrase occurrence). This is a claim-language
+  scan only, not credential scanning (W9-3 / NF-5).
+- `verify.yml` gained a `credential-scan` job that runs the Gitleaks helper /
+  installer / allowlist tests, installs the Gitleaks CLI (`v8.30.1`,
+  checksum-verified from the official GitHub release checksums file), and scans
+  complete git history with redacted output. Allowlists are match-level only
+  for the cited CIP-19 payment-credential hex **and** an exact repo-root path,
+  including the helper that historically embedded that vector (W9-3).
 - The Playground demo is now a linear, guided story (Welcome → five-step Demo → Summary) with
   plain-language copy, one primary action per step, and technical detail (hashes, fees, CBOR,
   UTxOs, witnesses) collapsed behind an optional "Technical details" toggle, replacing the earlier

@@ -1,0 +1,29 @@
+# Gitleaks configuration for Kardano SDK.
+# Extends the default rule set. Allowlists are match-level only:
+# the exact cited CIP-19 payment-credential hex AND an exact repo-root path.
+# No directory, rule-wide, or commit exclusions.
+
+title = "Kardano SDK"
+
+[extend]
+useDefault = true
+
+# Cited CIP-19 Blake2b-224 payment credential (public spec vector, not a key).
+# generic-api-key flags the `cip19PaymentCredential = "<hex>"` assignment and
+# the helper's historical assignment of the same value.
+[[rules]]
+id = "generic-api-key"
+
+    [[rules.allowlists]]
+    description = "Cited CIP-19 payment-credential hex in exact repo-root paths only"
+    condition = "AND"
+    regexTarget = "secret"
+    regexes = [
+      '''(?i)^9493315cd92eb5d8c4304e67b7e16ae36d61d34502694657811a2c8e$''',
+    ]
+    paths = [
+      '''^wallet/src/jvmTest/kotlin/org/sarmidev/kardano/wallet/ReadOnlyWalletRestoreDesktopTest\.kt$''',
+      '''^crypto/src/androidDeviceTest/kotlin/org/sarmidev/kardano/crypto/derivation/PublicKeyProjectionDeviceTest\.kt$''',
+      '''^crypto/src/androidDeviceTest/kotlin/org/sarmidev/kardano/crypto/PublicKeyProjectionDeviceTest\.kt$''',
+      '''^scripts/gitleaks_allowlist\.py$''',
+    ]

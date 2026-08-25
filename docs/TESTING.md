@@ -176,9 +176,51 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
 - JVM signing runtime coverage currently requires the committed macOS native artifacts. Linux and
   Windows JVM signing artifacts are not included.
 
-Documentation checks (no banned marketing/security words; keyword presence):
+Documentation and claim-language checks:
 
 ```bash
 rg -n "TESTING|fixtures|test vector|commonTest|jvmTest|iosSimulatorArm64Test|testAndroidHostTest" README.md docs/ core/README.md shared/README.md
-rg -n -i "secure|safe|hardened|audited|production-ready|guaranteed|cryptographically safe|bank-grade|battle-tested" README.md docs/ core/README.md shared/README.md
+python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive
+python3 scripts/check_handoff_archive.py
+python3 scripts/check_restricted_claims.py
 ```
+
+`scripts/check_restricted_claims.py` classifies each restricted-claim phrase
+match on its own (never a whole-line exclusion), reports `path:line:column`,
+and prefers the longest phrase. It enumerates tracked files with
+`git ls-files -z` and compares suffixes case-insensitively (`.md`, `.mdc`,
+`.html`, `.kt`, `.kts`, `.swift`, `.xml`, `.properties`, `.toml`, `.yaml`,
+`.yml`, `.json`) while reporting the original path. Whole-file exclusions are
+limited to immutable archived snapshots and circular policy/test data.
+Historical wording in evolving ADRs and append-only logs is allowlisted per
+occurrence (path + 1-based physical line number + SHA-256 of the exact line +
+phrase + 1-based occurrence on that line). Duplicating an allowlisted line
+elsewhere, or inserting a line before it, is a finding until the allowlist is
+re-reviewed (fail-closed). Hyphen compounds are not exempt. CI runs the unit
+tests and the archive byte check before the scan. It does not scan credentials.
+
+`scripts/check_handoff_archive.py` restores the six documented archive link
+rewrites at the byte level (no newline normalization) and hashes the result
+with SHA-256. The archived snapshot keeps its original trailing blank line;
+`.gitattributes` scopes `whitespace=-blank-at-eof` to that file only so
+`git diff --check` stays clean without a global whitespace suppress.
+
+Full-history credential scan (Gitleaks CLI, not a third-party Action wrapper):
+
+```bash
+python3 -m unittest scripts.tests.test_gitleaks_allowlist
+python3 scripts/install_gitleaks.py
+python3 scripts/check_gitleaks.py
+```
+
+The installer verifies the official `gitleaks_*_checksums.txt` digest and the
+selected archive digest, reads the expected member into memory, and writes the
+binary through an exclusive temporary sibling. It loops `os.write` until every
+byte is written, sets mode `0755` with `fchmod` on the open temp descriptor,
+then atomically replaces a validated non-symlink destination. It refuses a
+destination symlink and a world-writable archive member.
+The binary is written to `.gitleaks-bin/` (gitignored) and is never committed.
+CI runs the helper/installer/allowlist tests before install and scan. Output
+is redacted. Allowlists are match-level only (cited CIP-19 payment-credential
+hex **and** an exact repo-root path, including the helper). See
+`.gitleaks.toml` and `docs/RELEASING.md`.

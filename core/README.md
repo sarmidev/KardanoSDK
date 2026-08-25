@@ -5,7 +5,7 @@ logic will live as Phase 0 progresses.
 
 ## Status
 
-Phase 0 — pre-alpha, experimental. Not audited. Not for real funds.
+Phase 0 — pre-alpha, experimental. Not independently reviewed. Not for real funds.
 
 ## Purpose
 
