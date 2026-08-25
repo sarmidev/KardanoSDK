@@ -289,8 +289,8 @@ Date: 2026-08-24
 - **Legal-evidence packet NO-GO fix: fail-closed live bcprov verification
   (same branch, prior legal commits preserved as-is).** A 2026-08-25
   independent review found `java_class_version_evidence.json`'s live
-  verifier used the same "cold local Gradle cache is a safe no-op" pattern
-  `maven_native_carriers_inventory()` uses, but this repo's own
+  verifier used the same "cold local Gradle cache is a harmless no-op"
+  pattern `maven_native_carriers_inventory()` uses, but this repo's own
   legal-evidence-scan CI job never populates a Gradle cache at all -- so
   the check silently returned success with nothing actually verified on
   the one job it needed to be authoritative in. Fix:

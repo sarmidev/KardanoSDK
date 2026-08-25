@@ -462,7 +462,7 @@ coordinate+version before relying on this table for a release decision.
 **`java_class_version_evidence.json` is the one deliberate exception --
 live-verified every run, network access included by design.** A
 2026-08-25 independent review found the opposite tradeoff (the same
-"local-cache cross-check, cold cache is a safe no-op" pattern
+"local-cache cross-check, cold cache is a harmless no-op" pattern
 `maven_native_carriers_inventory()` uses above) meant this evidence's own
 live check silently returned success with nothing actually checked on this
 repo's own legal-evidence-scan CI job, which never populates a Gradle
