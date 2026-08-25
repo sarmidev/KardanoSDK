@@ -1905,166 +1905,76 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
             any("is not current HEAD" in e and "immediate parent" in e for e in errors)
         )
 
-    # -- GitHub `pull_request` merge-ref exception: event-bound hardening --
+    # -- Merge commits at HEAD are always rejected, in every mode --------
     #
-    # A later independent review found the original tree-shape-only
-    # acceptance (any two-parent commit whose tree matched a parent that
-    # was the seal) could not distinguish a genuine GitHub merge-ref from
-    # any other two-parent commit built to have the same shape -- octopus
-    # merges, swapped/unrelated parents, and a fabricated same-tree merge
-    # candidate all needed to be rejected. `_github_pull_request_merge_head()`
-    # now validates the current GITHUB_EVENT_NAME/GITHUB_EVENT_PATH event
-    # payload (repository identity, base/head ref+sha, exact GitHub parent
-    # order) BEFORE any tree comparison, and denies the exception outright
-    # on a stale/forged/mismatched/missing event or env var -- these tests
-    # exercise both the positive shape and every named adversarial escape.
-
-    _GITHUB_REPOSITORY = "sarmidev/KardanoSDK"
-
-    def _write_github_event(
-        self,
-        *,
-        base_sha: str,
-        head_sha: str,
-        repo_full_name: str | None = None,
-        base_repo_full_name: str | None = None,
-        head_repo_full_name: str | None = None,
-        base_ref: str = "main",
-        head_ref: str = "feature",
-        merge_commit_sha: str | None = None,
-        duplicate_key: bool = False,
-    ) -> Path:
-        # `merge_commit_sha` (when present at all) is the ACTUAL merge
-        # commit GitHub creates for refs/pull/*/merge -- i.e. the commit
-        # this checker is running against (GITHUB_SHA/`head`), never the
-        # PR head branch commit itself. Tests that want the positive
-        # "where provided" cross-check must pass the real merge commit
-        # explicitly; omitting it (the default) exercises the "not
-        # provided" branch, which every other positive test relies on.
-        repo_full_name = repo_full_name if repo_full_name is not None else self._GITHUB_REPOSITORY
-        base_repo_full_name = base_repo_full_name if base_repo_full_name is not None else repo_full_name
-        head_repo_full_name = head_repo_full_name if head_repo_full_name is not None else repo_full_name
-        pr: dict[str, object] = {
-            "base": {
-                "sha": base_sha,
-                "ref": base_ref,
-                "repo": {"full_name": base_repo_full_name},
-            },
-            "head": {
-                "sha": head_sha,
-                "ref": head_ref,
-                "repo": {"full_name": head_repo_full_name},
-            },
-        }
-        if merge_commit_sha is not None:
-            pr["merge_commit_sha"] = merge_commit_sha
-        event = {"repository": {"full_name": repo_full_name}, "pull_request": pr}
-        event_path = self.repo / "event.json"
-        if duplicate_key:
-            event_path.write_text(
-                '{"repository": {"full_name": "x"}, "repository": {"full_name": "x"}}\n',
-                encoding="utf-8",
-            )
-        else:
-            event_path.write_text(json.dumps(event), encoding="utf-8")
-        return event_path
-
-    def _github_pull_request_env(
-        self,
-        *,
-        event_path: Path,
-        head: str,
-        event_name: str = "pull_request",
-        repository: str | None = None,
-        base_ref: str = "main",
-        head_ref: str = "feature",
-    ):
-        env = {
-            "GITHUB_EVENT_NAME": event_name,
-            "GITHUB_EVENT_PATH": str(event_path),
-            "GITHUB_SHA": head,
-            "GITHUB_REPOSITORY": repository if repository is not None else self._GITHUB_REPOSITORY,
-            "GITHUB_BASE_REF": base_ref,
-            "GITHUB_HEAD_REF": head_ref,
-        }
-        return mock.patch.dict(os.environ, env, clear=False)
+    # A 2026-08-25 independent review found the prior GitHub `pull_request`
+    # merge-ref exception was a checker-level special case that widened
+    # what this strict seal check accepted based on trusting environment
+    # variables and an event payload the checker itself parsed. That
+    # exception has been removed entirely: `check_scope_binding_seal()`
+    # now NEVER inspects `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH`/any other
+    # GitHub env var, and literal HEAD's own first parent must always be
+    # `evidence_commit` -- no two-(or more-)parent merge commit at HEAD
+    # can ever pass, no matter what event, env, or payload accompanies it.
+    # Selecting a different, already-validated commit to check (e.g. a
+    # future `push` to `main` whose HEAD is a genuine merge) is entirely
+    # the job of the separate `scripts/select_seal_checkout_head.py`,
+    # which must `git checkout --detach` that commit BEFORE this checker
+    # ever runs -- see its own dedicated test module. These tests prove
+    # this checker rejects a merge commit at HEAD unconditionally, with
+    # or without any GitHub-shaped environment/event present.
 
     def _merge_seal_into_base(self, seal: str, subject: str, *, message: str = "Merge seal into base") -> str:
         _git(self.repo, "checkout", "-q", "-B", "base", subject)
         _git(self.repo, "merge", "--no-ff", "-q", "-m", message, seal)
         return _git_output(self.repo, "rev-parse", "HEAD")
 
-    def test_github_style_merge_ref_of_seal_tip_passes(self) -> None:
-        # GitHub pull_request jobs check out refs/pull/*/merge: a two-parent
-        # merge of the PR head into the base. When the PR head is the seal
-        # commit, the event payload's base.sha/head.sha exactly match the
-        # merge's actual parents in GitHub order, the repository/ref/SHA
-        # all cross-check, and the merge tree equals that seal, this is the
-        # same sealed tip, not a later commit on top of it.
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(base_sha=subject, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            self.assertEqual(checker.check_scope_binding_seal(), [])
-
-    def test_github_style_merge_ref_of_post_seal_commit_is_rejected(self) -> None:
-        # The event binding is genuine and internally consistent, but the
-        # PR head named by the event is a commit ON TOP OF the seal, not
-        # the seal itself -- its own first parent is not evidence_commit,
-        # so it still fails downstream exactly like the non-PR case does.
-        self._seal()
-        (self.repo / "UNRELATED4.txt").write_text("x\n", encoding="utf-8")
-        _git(self.repo, "add", "-A")
-        _git(self.repo, "commit", "-q", "-m", "later commit on top of the seal")
-        extra = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^^")
-        merge_commit = self._merge_seal_into_base(extra, subject, message="Merge extra into base")
-        event_path = self._write_github_event(base_sha=subject, head_sha=extra)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_no_github_event_env_falls_back_to_strict_and_is_rejected(self) -> None:
-        # No GITHUB_EVENT_NAME/GITHUB_EVENT_PATH at all: an otherwise
-        # perfectly shaped merge-ref of the seal tip must NOT be granted
-        # the exception -- the strict "HEAD's own first parent must be
-        # evidence_commit" path applies, and a real merge commit's first
-        # parent is the base branch, not the seal.
+    def test_merge_commit_of_seal_tip_at_head_is_rejected(self) -> None:
+        # Even a "GitHub merge-ref shaped" two-parent merge whose second
+        # parent is the exact seal commit must fail: HEAD's own first
+        # parent (the base branch tip) is not evidence_commit.
         self._seal()
         seal = _git_output(self.repo, "rev-parse", "HEAD")
         subject = _git_output(self.repo, "rev-parse", "HEAD^^")
         self._merge_seal_into_base(seal, subject)
-        with mock.patch.dict(
-            os.environ,
-            {},
-            clear=False,
-        ):
-            for name in checker._REQUIRED_PULL_REQUEST_ENV_VARS:
-                os.environ.pop(name, None)
-            errors = checker.check_scope_binding_seal()
+        errors = checker.check_scope_binding_seal()
         self.assertTrue(
             any("is not current HEAD" in e and "immediate parent" in e for e in errors)
         )
 
-    def test_non_pull_request_event_name_is_rejected(self) -> None:
+    def test_merge_commit_of_seal_tip_with_full_github_env_is_still_rejected(self) -> None:
+        # Even with a fully GitHub-pull_request-shaped event payload and
+        # every relevant env var set to values that would have satisfied
+        # the old exception exactly, the checker must still reject the
+        # merge commit: it no longer reads any of these at all.
         self._seal()
         seal = _git_output(self.repo, "rev-parse", "HEAD")
         subject = _git_output(self.repo, "rev-parse", "HEAD^^")
         merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(base_sha=subject, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit, event_name="push"):
+        event = {
+            "repository": {"full_name": "sarmidev/KardanoSDK"},
+            "pull_request": {
+                "base": {"sha": subject, "ref": "main", "repo": {"full_name": "sarmidev/KardanoSDK"}},
+                "head": {"sha": seal, "ref": "feature", "repo": {"full_name": "sarmidev/KardanoSDK"}},
+            },
+        }
+        event_path = self.repo / "event.json"
+        event_path.write_text(json.dumps(event), encoding="utf-8")
+        env = {
+            "GITHUB_EVENT_NAME": "pull_request",
+            "GITHUB_EVENT_PATH": str(event_path),
+            "GITHUB_SHA": merge_commit,
+            "GITHUB_REPOSITORY": "sarmidev/KardanoSDK",
+            "GITHUB_BASE_REF": "main",
+            "GITHUB_HEAD_REF": "feature",
+        }
+        with mock.patch.dict(os.environ, env, clear=False):
             errors = checker.check_scope_binding_seal()
         self.assertTrue(
             any("is not current HEAD" in e and "immediate parent" in e for e in errors)
         )
 
-    def test_octopus_merge_is_rejected(self) -> None:
-        # A three-parent (octopus) merge is never eligible for the
-        # exception, no matter what the event payload claims.
+    def test_octopus_merge_at_head_is_rejected(self) -> None:
         self._seal()
         seal = _git_output(self.repo, "rev-parse", "HEAD")
         subject = _git_output(self.repo, "rev-parse", "HEAD^^")
@@ -2076,257 +1986,7 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
         third = _git_output(self.repo, "rev-parse", "HEAD")
         _git(self.repo, "checkout", "-q", "base")
         _git(self.repo, "merge", "--no-ff", "-q", "-m", "Octopus merge", seal, third)
-        merge_commit = _git_output(self.repo, "rev-parse", "HEAD")
-        event_path = self._write_github_event(base_sha=subject, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_swapped_parents_is_rejected(self) -> None:
-        # Merge order is [base, head] in real git parent order; if the
-        # event's base.sha/head.sha are swapped relative to the actual
-        # parents, the exact-order check must reject it.
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(base_sha=seal, head_sha=subject)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_unrelated_parent_in_event_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        _git(self.repo, "checkout", "-q", "--orphan", "unrelated5")
-        (self.repo / "UNRELATED5.txt").write_text("x\n", encoding="utf-8")
-        _git(self.repo, "add", "-A")
-        _git(self.repo, "commit", "-q", "-m", "unrelated root")
-        unrelated = _git_output(self.repo, "rev-parse", "HEAD")
-        _git(self.repo, "checkout", "-q", "base")
-        event_path = self._write_github_event(base_sha=unrelated, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_genuine_tree_mismatch_is_rejected(self) -> None:
-        # A real conflict-resolution merge whose tree differs from the PR
-        # head's own tree must not be silently accepted as "the same
-        # sealed tip".
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        _git(self.repo, "checkout", "-q", "-B", "base", subject)
-        (self.repo / "BASE_ONLY.txt").write_text("base-only change\n", encoding="utf-8")
-        _git(self.repo, "add", "-A")
-        _git(self.repo, "commit", "-q", "-m", "base-only change before merging seal")
-        _git(self.repo, "merge", "--no-ff", "-q", "-m", "Merge seal into base", seal)
-        merge_commit = _git_output(self.repo, "rev-parse", "HEAD")
-        event_path = self._write_github_event(base_sha=subject, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_forged_same_tree_candidate_with_wrong_parent_order_is_rejected(self) -> None:
-        # Build a commit with the SAME tree as a genuine merge but with
-        # its two parents in the wrong (non-GitHub) order via
-        # `git commit-tree` directly -- tree-shape equality alone must
-        # not be sufficient; exact parent-order/event-SHA matching is
-        # required first.
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        genuine_merge = self._merge_seal_into_base(seal, subject)
-        tree = _git_output(self.repo, "rev-parse", f"{genuine_merge}^{{tree}}")
-        forged = _git_output(
-            self.repo,
-            "commit-tree",
-            tree,
-            "-p",
-            seal,
-            "-p",
-            subject,
-            "-m",
-            "forged same-tree candidate with swapped parents",
-        )
-        _git(self.repo, "checkout", "-q", "-B", "forged-branch", forged)
-        event_path = self._write_github_event(base_sha=subject, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head=forged):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_wrong_base_sha_in_event_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(base_sha="a" * 40, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_wrong_head_sha_in_event_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(base_sha=subject, head_sha="b" * 40)
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_stale_event_wrong_github_sha_is_rejected(self) -> None:
-        # GITHUB_SHA does not match the actual HEAD being checked -- the
-        # event describes some other checkout, not this one.
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(base_sha=subject, head_sha=seal)
-        with self._github_pull_request_env(event_path=event_path, head="c" * 40):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_wrong_repository_in_event_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(
-            base_sha=subject, head_sha=seal, repo_full_name="someone-else/OtherRepo"
-        )
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_wrong_base_ref_in_event_is_rejected(self) -> None:
-        # Base ref is not main -- this scope-binding exception only ever
-        # applies to a pull_request targeting main.
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(base_sha=subject, head_sha=seal, base_ref="develop")
-        with self._github_pull_request_env(
-            event_path=event_path, head=merge_commit, base_ref="develop"
-        ):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_head_ref_env_mismatch_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(
-            base_sha=subject, head_sha=seal, head_ref="feature-a"
-        )
-        with self._github_pull_request_env(
-            event_path=event_path, head=merge_commit, head_ref="feature-b"
-        ):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_fork_head_repository_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(
-            base_sha=subject,
-            head_sha=seal,
-            head_repo_full_name="someone-else/KardanoSDK",
-        )
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_matching_merge_commit_sha_in_event_still_passes(self) -> None:
-        # When `pull_request.merge_commit_sha` IS provided and correctly
-        # names the actual merge commit (GITHUB_SHA/`head`), the exception
-        # still applies -- the field is optional and not itself checked.
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(
-            base_sha=subject, head_sha=seal, merge_commit_sha=merge_commit
-        )
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            self.assertEqual(checker.check_scope_binding_seal(), [])
-
-    def test_stale_merge_commit_sha_in_event_does_not_deny_the_exception(self) -> None:
-        # `pull_request.merge_commit_sha` is a snapshot of GitHub's
-        # ephemeral test-merge SHA taken at webhook-delivery time and is
-        # well documented to legitimately lag the actual refs/pull/*/merge
-        # commit `actions/checkout` fetches moments later for an ordinary
-        # `synchronize` push (see actions/checkout#919 and Ken Muse's "The
-        # Many SHAs of a GitHub Pull Request"). An earlier version of this
-        # exception required this field to exactly equal `head` and was
-        # empirically found to fail closed on a genuine, correctly-shaped
-        # PR run for exactly that reason (Verify run 32855140709 on this
-        # repository) -- this field is deliberately NOT cross-checked at
-        # all now; only the parent-order/tree checks (which name real,
-        # already-pushed branch tips, not an ephemeral merge SHA) bind the
-        # exception.
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(
-            base_sha=subject, head_sha=seal, merge_commit_sha="d" * 40
-        )
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            self.assertEqual(checker.check_scope_binding_seal(), [])
-
-    def test_duplicate_json_key_in_event_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        event_path = self._write_github_event(
-            base_sha=subject, head_sha=seal, duplicate_key=True
-        )
-        with self._github_pull_request_env(event_path=event_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
-        self.assertTrue(
-            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
-        )
-
-    def test_missing_event_path_file_is_rejected(self) -> None:
-        self._seal()
-        seal = _git_output(self.repo, "rev-parse", "HEAD")
-        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
-        merge_commit = self._merge_seal_into_base(seal, subject)
-        missing_path = self.repo / "does-not-exist-event.json"
-        with self._github_pull_request_env(event_path=missing_path, head=merge_commit):
-            errors = checker.check_scope_binding_seal()
+        errors = checker.check_scope_binding_seal()
         self.assertTrue(
             any("is not current HEAD" in e and "immediate parent" in e for e in errors)
         )

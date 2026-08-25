@@ -414,26 +414,47 @@ worktree bytes:
   `evidence_tree`/`subject_tree` are exactly those commits' own trees.
 - `subject_commit` is EXACTLY `evidence_commit`'s immediate parent (not
   merely some ancestor).
-- `evidence_commit` is the effective seal tip's exact immediate parent.
-  The tip is current `HEAD` itself, or — only when
-  `_github_pull_request_merge_head()` validates HEAD as a genuine,
-  fully event-bound GitHub `pull_request` merge-ref of exactly the sealed
-  branch (current `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH` event payload;
-  same repository; `main` base ref; matching head ref; `HEAD`'s exact two
-  parents matched, in exact GitHub order, against the event's own
-  `base.sha`/`head.sha`; a byte-identical merge tree — never by tree
-  shape alone) — the validated PR-head parent, which is the seal commit.
-  A stale, forged, mismatched, or missing event/env never grants this;
-  it falls back to the strict tip-only path, which a genuine merge
-  commit fails (its own first parent is the base branch, not the seal).
-  An extra commit on top of the seal still fails and requires a fresh
-  subject/evidence/seal sequence. `scripts.tests.test_check_release_evidence
-  .ScopeBindingSealCheckTests` covers the positive GitHub shape and every
-  named adversarial escape (octopus/one-parent, swapped/unrelated
-  parents, a genuine tree mismatch, a forged same-tree candidate with the
-  wrong parent order, wrong/stale base/head/event SHAs, a wrong
-  repository/ref, a fork-repository head, a post-seal commit named as the
-  PR head, and no event env at all).
+- `evidence_commit` is EXACTLY literal `HEAD`'s immediate parent —
+  unconditionally, with no merge-ref or other exception of any kind. A
+  2026-08-25 independent review removed a prior checker-level GitHub
+  `pull_request` merge-ref exception (`_github_pull_request_merge_head()`/
+  `_effective_seal_tip()`) once `.github/workflows/verify.yml`'s
+  `legal-evidence-scan` job was changed to check out the exact PR head SHA
+  directly (`github.event.pull_request.head.sha`) rather than the default
+  `refs/pull/*/merge` ref — this checker now never inspects
+  `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH`/any GitHub env var, and literal
+  `HEAD`'s own first parent must always be `evidence_commit`. An extra
+  commit on top of the seal, or ANY two-(or more-)parent merge commit at
+  `HEAD`, still fails and requires a fresh subject/evidence/seal sequence.
+  `scripts.tests.test_check_release_evidence.ScopeBindingSealCheckTests`
+  proves a merge commit at `HEAD` is rejected unconditionally, with or
+  without a fully GitHub-`pull_request`-shaped event/env present (octopus
+  merges included).
+
+  Validating a commit OTHER than literal `HEAD` — a future `push` to
+  `refs/heads/main` whose `HEAD` is a genuine merge commit — is handled
+  entirely outside this checker, by the separate, fail-closed
+  `scripts/select_seal_checkout_head.py`, run before this checker in the
+  `legal-evidence-scan` job. It validates the trusted GitHub push event
+  (repository, `ref == refs/heads/main`, non-forced/non-deleted/
+  non-created, `before`/`after`, `GITHUB_SHA == after == HEAD`, exact
+  parent order against `before`, and a byte-identical tree between `HEAD`
+  and its second parent) and, only on success, `git checkout --detach`s
+  that validated second parent (the sealed PR-head candidate) so this
+  checker then sees that literal commit as `HEAD`. Any octopus merge,
+  wrong parent order/SHA, non-fast push-event state, or genuine
+  tree-changing (conflict-resolution) merge fails that selector script
+  closed, with no checkout and no fallback — this checker is never
+  weakened to accommodate it. `scripts.tests.test_select_seal_checkout_head`
+  covers the positive shape and every named adversarial escape (missing/
+  malformed env and event fields, symlinked/oversized/duplicate-key event
+  files, wrong repository/ref/before/after/SHA, octopus/one-parent,
+  swapped/unrelated parents, a genuine tree mismatch, and a forged
+  same-tree candidate with the wrong event parent). See
+  `docs/RELEASING.md` and `docs/TESTING.md` for the reviewer-facing
+  summary of both mechanisms, and their own module docstrings for the
+  documented trusted-GitHub-runner boundary this relies on (never a claim
+  that a forged local environment is impossible to construct).
 - Every sealed evidence file's CURRENT bytes match both the recorded digest
   in `scope_binding.json` AND the actual bytes committed at
   `evidence_commit`'s tree (`git show <evidence_commit>:<path>`) — so a

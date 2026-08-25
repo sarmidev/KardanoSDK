@@ -376,31 +376,75 @@ CI runs the default `ci-structural` mode so an open counsel/upstream gate
 does not turn ordinary `Verify` red.
 
 `docs/evidence/scope_binding.json`'s two-commit seal
-(`check_scope_binding_seal()`) normally requires the seal commit to be the
-EXACT current tip (`HEAD`'s own immediate parent must be `evidence_commit`).
-The one exception is a genuine GitHub `pull_request` merge-ref checkout
-(`refs/pull/*/merge`): `_github_pull_request_merge_head()` grants it ONLY
-when the current process's `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH` name a
-readable, valid (no duplicate key) `pull_request` event whose payload
-cross-checks, self-consistently, against `GITHUB_SHA`/`GITHUB_REPOSITORY`/
-`GITHUB_BASE_REF`/`GITHUB_HEAD_REF` AND against `HEAD`'s actual two parents
-in exact GitHub order (`parents[0] == pull_request.base.sha`,
-`parents[1] == pull_request.head.sha`) AND a byte-identical merge tree --
-same repository only (no fork exception), `main` base ref only. A stale,
-forged, mismatched, or missing event/env never grants the exception; it
-silently falls back to the strict tip-only path, which a genuine merge
-commit fails (its own first parent is the base branch, not the seal).
+(`check_scope_binding_seal()`) unconditionally requires the seal commit to
+be the EXACT current literal tip (`HEAD`'s own immediate parent must be
+`evidence_commit`) -- there is no merge-ref or any other exception in this
+checker at all; it never inspects `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH`
+or any other GitHub env var. A 2026-08-25 independent review removed a
+prior checker-level `pull_request` merge-ref exception
+(`_github_pull_request_merge_head()`/`_effective_seal_tip()`) once
+`.github/workflows/verify.yml`'s `legal-evidence-scan` job was changed to
+check out the exact PR head SHA
+(`ref: ${{ github.event_name == 'pull_request' &&
+github.event.pull_request.head.sha || github.sha }}`) directly, rather
+than the default `refs/pull/*/merge` ref -- the checker no longer needs to
+accept a merge-ref commit at all, because literal `HEAD` already IS the
+sealed PR head commit in that case. Every OTHER test/build job in the
+workflow may keep the default merge-ref checkout; only `legal-evidence-scan`
+pins the exact head SHA.
+`scripts.tests.test_verify_workflow_legal_head` parses the real workflow
+file (Ruby stdlib Psych, no new dependency) to assert this checkout
+expression and step ordering structurally.
 `scripts.tests.test_check_release_evidence.ScopeBindingSealCheckTests`
-exercises the positive GitHub shape plus every named adversarial escape
-(octopus/one-parent, swapped/unrelated parents, a genuine tree mismatch, a
-forged same-tree candidate with the wrong parent order, a wrong/stale
-base/head/event SHA, a stale `GITHUB_SHA`, a wrong repository/ref, a
-fork-repository head, a post-seal commit named as the PR head, and no
-event env at all) against a disposable temp git repo.
+now proves a two-(or more-)parent merge commit at literal `HEAD` is
+rejected unconditionally, in every mode, with or without a fully
+GitHub-`pull_request`-shaped event/env present (octopus merges included) --
+since the checker no longer reads any of it.
+
+Selecting a commit OTHER than literal `HEAD` to check -- the one
+legitimate remaining case, a future `push` to `refs/heads/main` whose
+`HEAD` is a genuine merge commit -- is handled entirely OUTSIDE
+`check_release_evidence.py`, by a small, separate, fail-closed script,
+`scripts/select_seal_checkout_head.py`, run as its own workflow step
+immediately after checkout and before any evidence/seal check. It leaves
+`HEAD` unchanged for an ordinary branch push, a `pull_request` job
+(already checked out at the exact head SHA above), or a non-merge push
+directly to `main`. Only for a `push` to `refs/heads/main` whose `HEAD`
+has exactly two parents does it validate the trusted GitHub push event
+named by `GITHUB_EVENT_PATH` -- `event.repository.full_name ==
+GITHUB_REPOSITORY`, `event.ref == GITHUB_REF == refs/heads/main`,
+`event.forced`/`event.deleted`/`event.created` are all exactly `False`,
+`event.before`/`event.after` are each a 40-hex-char SHA-1, `event.after ==
+GITHUB_SHA == git rev-parse HEAD`, `HEAD`'s first parent exactly equals
+`event.before` (exact order, not merely present among the parents), and
+`HEAD`'s own tree is byte-identical to its second parent's tree (so no
+conflict-resolution edit slipped in during the merge) -- and, only on
+success, `git checkout --detach`s that validated second parent (the
+sealed PR-head candidate) so every later step in the job runs the strict
+checks against that literal commit instead. Trusted-runner boundary: the
+event FILE handling fails closed on a symlink, a non-regular file, a
+file over 1 MiB, malformed/non-UTF-8/duplicate-key JSON, or a non-object
+top level, and `GITHUB_ACTIONS == "true"` plus the expected
+`GITHUB_SERVER_URL`/`GITHUB_API_URL` values are checked as
+defense-in-depth -- but none of this is a claim that a forged local
+environment cannot be constructed; the actual trust boundary is that this
+script only ever runs as a step inside a GitHub-hosted Actions job. An
+octopus merge, wrong parent order/SHA, a forced/deleted/created push
+event, or a genuine tree-changing merge all fail this script closed (no
+checkout performed, no fallback to a different commit) -- exactly the
+intended "a main-branch merge without a fresh seal must fail" behavior.
+`scripts.tests.test_select_seal_checkout_head` (33 tests) exercises the
+positive GitHub shape plus every named adversarial case: missing
+`GITHUB_ACTIONS`/`GITHUB_EVENT_PATH`/`GITHUB_REPOSITORY`/`GITHUB_SHA`, a
+missing/symlinked/oversized/malformed/duplicate-key/non-object event
+file, wrong repository/ref/before/after/SHA, a forced/deleted/created
+push event, an ordinary one-parent push (no-op), an octopus merge, a
+swapped parent order, an unrelated `before`, a genuine conflict-resolution
+tree mismatch, a forged same-tree candidate built with `git commit-tree`
+naming the wrong event parent, and a mismatched server/API URL.
 `check_full_source_scope_seal()` remains additional, GitHub-event-
 independent defense in depth (it unconditionally diffs `subject_commit`
-against current `HEAD`); it is not itself what binds the merge-ref
-exception to the event.
+against current `HEAD`).
 
 Dependency lock and verification (regenerate only when coordinates
 change; do not hand-edit generated checksums):

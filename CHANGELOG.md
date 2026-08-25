@@ -267,15 +267,30 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
-- `check_scope_binding_seal()` treats a GitHub `pull_request` two-parent
-  merge-ref as that seal tip ONLY when `_github_pull_request_merge_head()`
-  validates it as fully event-bound: the current `GITHUB_EVENT_NAME`/
-  `GITHUB_EVENT_PATH` event payload, same repository, `main` base ref,
-  matching head ref, `HEAD`'s exact two parents matched in exact GitHub
-  order against the event's own `base.sha`/`head.sha`, and a
-  byte-identical merge tree -- never by tree shape alone. A stale,
-  forged, mismatched, or missing event/env falls back to the strict
-  tip-only path. An extra commit on top of the seal still fails.
+- `.github/workflows/verify.yml`'s `legal-evidence-scan` job now checks
+  out the exact `pull_request` head SHA
+  (`github.event.pull_request.head.sha`) directly, instead of the default
+  `refs/pull/*/merge` ref; every other test/build job keeps the default
+  merge-ref checkout. `check_scope_binding_seal()` in
+  `scripts/check_release_evidence.py` no longer has any GitHub
+  `pull_request` merge-ref exception at all -- literal `HEAD`'s own
+  immediate parent must always be `evidence_commit`, unconditionally, and
+  the checker never inspects any GitHub event or env var. A new, separate
+  script, `scripts/select_seal_checkout_head.py`, is the one remaining
+  place event-bound merge validation exists, and only for a future `push`
+  to `main` whose `HEAD` is a genuine two-parent merge commit: it
+  validates the trusted GitHub push event (repository, `ref ==
+  refs/heads/main`, non-forced/non-deleted/non-created, `before`/`after`,
+  `GITHUB_SHA == after == HEAD`, exact parent order against `before`, and
+  a byte-identical tree between `HEAD` and its second parent) and, only on
+  success, `git checkout --detach`s that validated second parent (the
+  sealed PR-head candidate) before the legal job's checks run. An
+  octopus merge, wrong parent order/SHA, a forced/deleted/created push
+  event, or a genuine tree-changing (conflict-resolution) merge fails
+  that selector script closed, with no checkout performed. (Supersedes
+  the previous checker-level `pull_request` merge-ref exception --
+  `_github_pull_request_merge_head()`/`_effective_seal_tip()` -- which is
+  removed.)
 - Android lint is now a CI gate (`:androidApp:lintDebug` and
   `lintRelease`, `warningsAsErrors`). Online freshness detectors
   (`GradleDependency`, `NewerVersionAvailable`,

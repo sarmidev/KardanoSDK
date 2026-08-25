@@ -101,7 +101,69 @@ Stacked remediations, each additive (no amend / no force-push):
 
 ### Last Session Summary
 
-Date: 2026-08-24
+Date: 2026-08-25
+
+- **Checker-level `pull_request` merge-ref exception removed entirely;
+  `verify.yml`'s `legal-evidence-scan` job now checks out the exact PR
+  head SHA directly, on
+  `fix/native-build-and-platform-evidence` (same branch, after PR #14).**
+  A 2026-08-25 independent review found the merge-ref exception
+  documented in the "Merge-ref seal exception tightened" bullet below
+  was itself an unjustified checker-level special case: the workflow can
+  simply check out `github.event.pull_request.head.sha` directly for
+  `pull_request` instead of the default `refs/pull/*/merge` ref, making
+  the exception unnecessary. Fix, split across two independent
+  mechanisms:
+  1. `.github/workflows/verify.yml`'s `legal-evidence-scan` job's
+     checkout now pins `ref: ${{ github.event_name == 'pull_request' &&
+     github.event.pull_request.head.sha || github.sha }}` (still
+     `fetch-depth: 0`); every OTHER test/build job in the workflow keeps
+     the default merge-ref checkout, which is fine for ordinary
+     test/build purposes. `scripts.tests.test_verify_workflow_legal_head`
+     parses the real workflow file (Ruby stdlib Psych, no new
+     dependency) to assert this structurally.
+  2. `scripts/check_release_evidence.py`'s `check_scope_binding_seal()`
+     no longer has ANY merge-ref/event exception:
+     `_github_pull_request_merge_head()`/`_effective_seal_tip()`/
+     `_read_github_event()`/`_REQUIRED_PULL_REQUEST_ENV_VARS` are all
+     deleted; literal HEAD's own first parent must always be
+     `evidence_commit`, unconditionally, and this checker never inspects
+     `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH` at all. A new, small,
+     separate script, `scripts/select_seal_checkout_head.py`, is the ONE
+     place event-bound merge validation still exists -- and only for a
+     future `push` to `main` whose HEAD is a genuine two-parent merge
+     commit: it validates the trusted GitHub push event (repository,
+     `ref == refs/heads/main`, non-forced/non-deleted/non-created,
+     `before`/`after`, `GITHUB_SHA == after == HEAD`, exact parent order
+     against `before`, and a byte-identical tree between HEAD and its
+     second parent) and, only on success, `git checkout --detach`s that
+     validated second parent (the sealed PR-head candidate) BEFORE the
+     legal job's evidence/seal checks run. Any GitHub-shaped octopus
+     merge, wrong parent order/SHA, forced/deleted/created push, or
+     tree-changing (conflict-resolution) merge fails this script closed,
+     with no checkout performed and no fallback -- exactly the intended
+     "main-branch merge without a fresh seal must fail" behavior. The
+     event-file handling documents its trusted-runner boundary explicitly
+     (symlink/non-regular/oversize/duplicate-key rejection, a 1 MiB cap,
+     `GITHUB_ACTIONS`/server/API-URL checks as defense-in-depth only --
+     never a claim that a forged local environment cannot be built, only
+     that this script is never run outside a GitHub-hosted job).
+     `scripts.tests.test_select_seal_checkout_head` (33 tests) exercises
+     the positive shape plus every named adversarial case: missing/
+     malformed env and event fields, symlinked/oversize/duplicate-key
+     event files, wrong repo/ref/before/after/SHA, one-parent (ordinary),
+     octopus, swapped/unrelated parents, a genuine conflict-resolution
+     tree mismatch, and a forged same-tree candidate with the wrong event
+     parent. `scripts.tests.test_check_release_evidence
+     .ScopeBindingSealCheckTests` replaces the old merge-ref-exception
+     tests with tests proving a merge commit at HEAD is rejected in every
+     mode, with or without a fully GitHub-pull_request-shaped environment
+     present (since the checker no longer reads any of it). This work
+     also performs a fresh subject/evidence/seal commit sequence (new
+     code + tests as the subject commit, then a regenerated
+     `docs/evidence/` commit, then a re-seal commit) and does not mark
+     Prompt 7, the Windows candidate, or any release as GO, and does not
+     start Prompt 8.
 
 - **Legal-evidence packet (non-counsel scope) on
   `fix/native-build-and-platform-evidence`, starting from clean tip
@@ -507,6 +569,16 @@ Date: 2026-08-24
   merged tree plus the hardening code itself. Still does not mark
   Prompt 7, the Windows candidate, or any release as GO, and does not
   start Prompt 8.
+  **Historical/superseded note (added later, not rewriting the entry
+  above):** the entire checker-level `pull_request` merge-ref exception
+  this bullet made more event-bound (`_github_pull_request_merge_head()`/
+  `_effective_seal_tip()`) was REMOVED on 2026-08-25 (see the
+  "Checker-level `pull_request` merge-ref exception removed entirely"
+  bullet above) -- the workflow now checks out the exact PR head SHA
+  directly instead, so the checker never needs to accept a merge-ref
+  commit at all. None of this bullet's adversarial-test coverage was
+  lost; it was ported to prove a merge commit at HEAD is rejected
+  unconditionally instead.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope

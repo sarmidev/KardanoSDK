@@ -29,12 +29,24 @@ tag plus release notes that identify the source revision, verified targets, and 
    `python3 scripts/install_gitleaks.py`. This does not replace an owner-authenticated
    GitHub secret-scanning pass.
    - `docs/evidence/scope_binding.json`'s seal must be the exact tip of the
-     branch pushed for review. A GitHub PR check run against the
-     `refs/pull/*/merge` ref is the one narrow exception, and only when it
-     is fully bound to the actual `pull_request` event (see
-     `docs/TESTING.md` and `_github_pull_request_merge_head()` in
-     `scripts/check_release_evidence.py`); it never accepts a merge-ref by
-     tree shape alone, and never accepts any commit added after the seal.
+     branch under review; `scripts/check_release_evidence.py`'s
+     `check_scope_binding_seal()` checks this unconditionally against
+     literal `HEAD` -- there is no merge-ref or other exception in that
+     checker at all, and it never inspects any GitHub event or env var.
+     GitHub's own `legal-evidence-scan` PR check checks out the exact
+     `pull_request` head SHA (`github.event.pull_request.head.sha`), not
+     the default `refs/pull/*/merge` ref, so this checker's strict
+     literal-HEAD requirement always evaluates the sealed PR head
+     directly; a merge commit that ends up at literal HEAD (a stray
+     ordinary push or a fabricated ref) is always rejected. See
+     `docs/TESTING.md` for the separate `scripts/
+     select_seal_checkout_head.py`, which handles the one legitimate
+     event-bound exception (a future `push` to `main` whose HEAD is a
+     genuine merge commit) entirely outside this checker, by validating
+     the trusted GitHub push event and `checkout --detach`ing the sealed
+     PR-head parent BEFORE the checker ever runs -- it never accepts a
+     merge-ref by tree shape alone, and never accepts any commit added
+     after the seal.
 4. Confirm the public README, quickstart, roadmap, and security-reporting path match delivered
    behavior.
 5. Run the CI-equivalent test matrix and record platform limitations.

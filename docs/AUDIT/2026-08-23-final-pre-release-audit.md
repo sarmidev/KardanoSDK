@@ -405,3 +405,28 @@ remains an open, unaccepted, merely-**proposed** election — see
 `scripts/check_release_evidence.py::check_no_completed_election_wording`.
 This addendum does not certify anything or mark this audit, Prompt 7, or
 any release as GO.
+
+### 8.4 Addendum — 2026-08-25, checker-level PR merge-ref exception removed
+
+A 2026-08-25 independent review found the checker-level GitHub
+`pull_request` merge-ref exception described in earlier revisions of
+`docs/LEGAL_REVIEW.md`/`docs/TESTING.md`
+(`_github_pull_request_merge_head()`/`_effective_seal_tip()` in
+`scripts/check_release_evidence.py`) was an unjustified checker-level
+special case: `.github/workflows/verify.yml`'s `legal-evidence-scan` job
+can simply check out the exact `pull_request` head SHA
+(`github.event.pull_request.head.sha`) directly instead of the default
+`refs/pull/*/merge` ref. That checkout change has been made, the checker
+exception has been removed entirely (`check_scope_binding_seal()` now
+requires literal `HEAD`'s own immediate parent to be `evidence_commit`
+unconditionally, with no GitHub-event inspection of any kind), and a new,
+separate, fail-closed script, `scripts/select_seal_checkout_head.py`, now
+handles the one legitimate remaining event-bound case (a future `push` to
+`main` whose `HEAD` is a genuine merge commit) entirely outside the
+checker, by `git checkout --detach`ing a validated sealed PR-head parent
+before the checker ever runs. See `docs/HANDOFF.md`, `docs/RELEASING.md`,
+`docs/TESTING.md`, and `docs/LEGAL_REVIEW.md` §12 for the full detail. This
+addendum, like every one above, does not certify anything or mark this
+audit, Prompt 7, or any release as GO; the counsel review, upstream
+`hyperledger-identus/apollo` issue #226, and every per-election reviewer
+acceptance remain open gates.
