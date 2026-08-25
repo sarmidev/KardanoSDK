@@ -262,3 +262,171 @@ original evidence or reopen resolved-as-of-Prompt-1 items.
 | W5-4 | **Formally accepted** on the same branch (ADR-0020) — remaining 0.x pins are reviewed with current versions, KAT evidence, monitoring triggers, and replacement criteria. Castle 1.85.2 and JNA 5.19.1 were upgraded. Upstream maturity is unchanged. |
 | W3-3 / lock + verification | **Further remediated** on `fix/build-and-ci-reproducibility` — STRICT lockfiles, SHA-256 metadata, Cargo `--locked`. Verify `32654915900` failed on four cold-cache Maven Central metadata files; publisher-hashed rows were added. Verify `32655202142` (https://github.com/sarmidev/KardanoSDK/actions/runs/32655202142) is green on all six jobs. |
 | W3-3 / lint CI | **Closed** — Debug and Release lint run in `verify.yml` with `warningsAsErrors`. Freshness detectors and `OldTargetApi` (ADR-0021) are the only disables. Monochrome adaptive layer and nodpi splash remain. Legacy square launchers use a generated rounded-rect silhouette, not a 1px inset. |
+
+---
+
+## 8. Prompt 7 native rematch (2026-08-23, stacked)
+
+**Historical (W5-2, commit `40ab80c`).** That CHECKSUMS file described the
+original eight host-path-tied binaries. It was a tamper check, not proof
+of cross-host rebuild identity or of source provenance.
+
+**Current (replacement commit `5582637`).** CHECKSUMS now describes the
+UUID-normalized eight-artifact set matched by clean `macos-26` run
+`32662613270` at `f62205e`. Those rows are not the W5-2 host-path hashes.
+
+On `fix/native-build-and-platform-evidence`:
+
+- Link remapping and a stable `@rpath` install name make Darwin *unsigned*
+  code/data match across local `26.2` and `macos-26` `26.5.2`.
+- `ld`'s `LC_UUID` does not. Apple TN3178 states there is no Apple command
+  that sets `LC_UUID` after link. `-no_uuid` matches hashes and is refused
+  by macos-26 `dyld`.
+- The post-link normalizer derives an RFC 9562 version-8 UUID from
+  `hashlib.sha256` of a documented canonical image (zero `LC_UUID`; exclude
+  validated `LC_CODE_SIGNATURE` command/blob and restore
+  `ncmds`/`sizeofcmds`/`__LINKEDIT` filesize/vmsize). A verifying ad-hoc
+  signature with the exact identifier is not sufficient unless `LC_UUID`
+  equals that digest. Signature bytes are a separate fact from the UUID
+  and from CHECKSUMS.
+- Android and iOS candidates already matched a clean runner (6/8).
+  Run `32662613270` then matched Darwin UUID + arm64 signature as well
+  (8/8). Those candidate bytes replaced `src/` and CHECKSUMS in `5582637`.
+  The follow-up harness still accepts those Darwin bytes, so they were
+  not rewritten. A later re-review required every Apple dylib dependency
+  command (`LC_LOAD_DYLIB` `0xc`, `LC_LOAD_WEAK_DYLIB` `0x18|LC_REQ_DYLD`,
+  `LC_REEXPORT_DYLIB` `0x1f|LC_REQ_DYLD`, `LC_LAZY_LOAD_DYLIB` `0x20`,
+  `LC_LOAD_UPWARD_DYLIB` `0x23|LC_REQ_DYLD`, from Xcode 26.6 `loader.h`)
+  to be parsed and allowlisted; only one `LC_LOAD_DYLIB` of
+  `/usr/lib/libSystem.B.dylib` is accepted. Verify now runs
+  `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` and
+  `:androidApp:assembleDebug`/`assembleRelease` in addition to the
+  existing iOS compiles and Android lint. Device runtime remains an
+  open owner/manual gate bound to W5-2 checksums. Gate 1 is GO at
+  `d09db44`. Gate 2 Linux x86-64 JVM is a native `ubuntu-22.04` candidate
+  path (`linux-x86-64/libkardano_ed25519_bip32_signing.so`, glibc 2.35
+  baseline measured at runtime) with a fail-closed ELF64 verifier
+  (full-string `GLIBC_*` tuples, Verneed bound to one `SHT_GNU_verneed`,
+  exact `.dynamic`/`PT_DYNAMIC` and `DT_STRTAB`/`DT_VERSYM` relations,
+  raw-byte plus slash-byte path scan; invalid UTF-8 fails on a
+  forbidden root or an unapproved absolute-looking path; `/proc` is a
+  runtime prefix)   and two-build identity. Linux Phase C promotion from run
+  `32678079715` landed at `58f82a2` (SHA-256
+  `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`;
+  artifacts `9503309381` / `9503308946` / `9503350346`, expire
+  2026-09-07). Versym indices resolve to unique `vna_other`/`vd_ndx`;
+  ELF64 add/mul is `UINT64_MAX`-checked; raw known roots require a
+  following `/`, path stop, or EOF. Versym 0 / dynsym 0 / globally
+  unique `vna_other`/`vd_ndx` / readelf sign records coupled to the
+  parsed sign Versym.
+  Linux ARM, musl, and older glibc remain out of scope. Windows x86-64
+  JVM is candidate-only (`win32-x86-64/`, `windows-2022`) and is not a
+  CHECKSUMS row.
+
+## 8. Addendum — 2026-08-24, legal-evidence packet (non-counsel scope)
+
+Prompt 7's legal-evidence work landed on `fix/native-build-and-platform-evidence`
+at `c65a20a` and after: root `NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`,
+and generated inventories under `docs/evidence/`
+(`scripts/generate_legal_evidence.py`, checked by
+`scripts/check_release_evidence.py`). This addendum **does not** change any
+finding above, does not certify anything, and does not mark this audit,
+Prompt 7, or any release as GO.
+
+- The 9-row `crypto-signing-backend/CHECKSUMS.sha256` state described in §7
+  above is unchanged by this addendum; the legal-evidence packet cross-checks
+  that exact 9-row set (not 8, not 10) and fails closed on any drift.
+- The Windows x86-64 JVM candidate remains exactly as described in §7:
+  candidate-only, not a CHECKSUMS row, not distributed. This addendum adds an
+  explicit statement of that fact to `docs/THIRD_PARTY_NOTICES.md` and
+  `docs/LEGAL_REVIEW.md` §9; it does not change the gate.
+- Upstream `hyperledger-identus/apollo` issue #226 (no published
+  `win32-x86-64` build) remains open and unresolved by this addendum.
+- Owner/counsel review of `docs/LEGAL_REVIEW.md` has not occurred; that field
+  is recorded as an explicit open gate, not a passed check.
+
+### 8.1 Addendum — 2026-08-24, legal-evidence packet NO-GO fixes (round 1)
+
+An independent review returned NO-GO on the §8 packet for factual and
+fail-closed gaps (a false "no MIT-only distributed component" framing, a
+single-closure Cargo heuristic instead of per-target-triple graphs, legal
+conclusions about UniFFI/MPL obligations being "satisfied", and several
+generator/checker gaps). The items that review named are addressed by
+additional commits on the same branch (see `docs/HANDOFF.md` and
+`CHANGELOG.md` for the itemized list); none of §1–§7 above changes, and this
+addendum still does not certify anything or mark this audit, Prompt 7, or
+any release as GO. A second independent review found this round incomplete
+— see §8.2 below; **do not read this section as "all gaps fixed."**
+
+### 8.2 Addendum — 2026-08-24, legal-evidence packet NO-GO fixes (round 2)
+
+The round-1 fixes above did not satisfy a second independent review, which
+found further engineering gaps still open after round 1: Gradle license
+resolution depended on a pre-populated local cache (cold CI would not
+reproduce it — confirmed by observing the `legal-evidence-scan` CI job
+actually fail on the round-1 tip); only 3 of the ~27 target-linked Cargo
+packages with a non-single-license SPDX expression had an election row; the
+`docs/evidence/` freshness check globbed only top-level JSON files, not the
+full recursive tree; native-carrier evidence recorded member path/size but
+not member SHA-256/platform/arch or a distribution-status classification
+(and separately, JNA's own embedded-native count was wrong — 27, not 25);
+several release-checker mandatory-field/schema gaps; and this file's own
+round-1 addendum above overclaimed "all are fixed." Round 2's fixes are
+itemized in `docs/HANDOFF.md`/`CHANGELOG.md` for that session. This
+addendum, like round 1, does not certify anything or mark this audit,
+Prompt 7, or any release as GO. The counsel review, upstream
+`hyperledger-identus/apollo` issue #226, the Windows PE re-review, and every
+per-election reviewer acceptance remain open gates in
+`docs/LEGAL_REVIEW.md` — release mode of `scripts/check_release_evidence.py`
+is expected to keep failing until a human resolves them.
+
+### 8.3 Addendum — 2026-08-24, PE re-review passage above is now historical/superseded
+
+**The "Windows PE re-review" clause in §8.2 immediately above is historical
+and superseded; it is not this document's current position.** The
+independent PE (native-artifact structural) technical review that §8.2
+described as an open gate is now COMPLETE, as of commit `c65a20a` (fresh
+independent A/B run, `docs/HANDOFF.md` Branch-Stack Status row 7 and
+`docs/LEGAL_REVIEW.md` §14/§15). Completion of that technical review is a
+narrow structural finding only — it is not a legal or counsel
+determination, does not promote the Windows x86-64 signing-backend
+candidate, and does not imply any DLL is distributed. The Windows
+candidate and Phase C promotion remain **NO-GO**, but solely because of the
+two gates below, which are the only remaining full-path blockers for that
+candidate:
+
+- Upstream `hyperledger-identus/apollo` issue #226 (no published
+  `win32-x86-64` `bip32-ed25519` build) — still open and unresolved.
+- Owner/counsel review of `docs/LEGAL_REVIEW.md` — still not occurred.
+
+Every per-election reviewer acceptance (Cargo §5a and Gradle §5b) also
+remains an open, unaccepted, merely-**proposed** election — see
+`docs/LEGAL_REVIEW.md` §5a/§14 and
+`scripts/check_release_evidence.py::check_no_completed_election_wording`.
+This addendum does not certify anything or mark this audit, Prompt 7, or
+any release as GO.
+
+### 8.4 Addendum — 2026-08-25, checker-level PR merge-ref exception removed
+
+A 2026-08-25 independent review found the checker-level GitHub
+`pull_request` merge-ref exception described in earlier revisions of
+`docs/LEGAL_REVIEW.md`/`docs/TESTING.md`
+(`_github_pull_request_merge_head()`/`_effective_seal_tip()` in
+`scripts/check_release_evidence.py`) was an unjustified checker-level
+special case: `.github/workflows/verify.yml`'s `legal-evidence-scan` job
+can simply check out the exact `pull_request` head SHA
+(`github.event.pull_request.head.sha`) directly instead of the default
+`refs/pull/*/merge` ref. That checkout change has been made, the checker
+exception has been removed entirely (`check_scope_binding_seal()` now
+requires literal `HEAD`'s own immediate parent to be `evidence_commit`
+unconditionally, with no GitHub-event inspection of any kind), and a new,
+separate, fail-closed script, `scripts/select_seal_checkout_head.py`, now
+handles the one legitimate remaining event-bound case (a future `push` to
+`main` whose `HEAD` is a genuine merge commit) entirely outside the
+checker, by `git checkout --detach`ing a validated sealed PR-head parent
+before the checker ever runs. See `docs/HANDOFF.md`, `docs/RELEASING.md`,
+`docs/TESTING.md`, and `docs/LEGAL_REVIEW.md` §12 for the full detail. This
+addendum, like every one above, does not certify anything or mark this
+audit, Prompt 7, or any release as GO; the counsel review, upstream
+`hyperledger-identus/apollo` issue #226, and every per-election reviewer
+acceptance remain open gates.

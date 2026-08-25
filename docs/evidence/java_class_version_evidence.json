@@ -1,0 +1,179 @@
+{
+  "artifact_maven_central_url": "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/bcprov-jdk18on-1.85.2.jar",
+  "artifact_sha256": "986b0fb92ec10e0c66b43e036ce0077e6150cfaecd1db9fb92b56672e157afe5",
+  "artifact_size_bytes": 10280518,
+  "coordinate": "org.bouncycastle:bcprov-jdk18on:1.85.2",
+  "max_major_version": 69,
+  "members_at_max_major_version": [
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi$HKDFwithSHA256.class",
+      "sha256": "684b2b75d3e1edf14b61cb80dd96569a350b3aaeb87260253bdd084ad78327a0",
+      "size_bytes": 576
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi$HKDFwithSHA384.class",
+      "sha256": "cc9bd91cae86950551f2f8fa6213c04fd151a4df557a6560c3b603c20bdc7db7",
+      "size_bytes": 576
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi$HKDFwithSHA512.class",
+      "sha256": "e62269c9686688d2952cad6ea6ecbf8c8e4a449d25b01223835455f5c825284b",
+      "size_bytes": 576
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/hkdf/HKDFSpi.class",
+      "sha256": "f85c537c7c6f61761216ea31ddfa8ba6f68ba9be55d19c5b16f1f5e930875bbc",
+      "size_bytes": 3947
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2with8BIT.class",
+      "sha256": "e06c05b971bb2e6fe9e8dbc9c862e01d014da96ac4d51826ab88255d187d9c4c",
+      "size_bytes": 739
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withGOST3411.class",
+      "sha256": "7ef4714d612cf474b206fa94c339a4c748d738e4c9268b7f9ec91515dec0b265",
+      "size_bytes": 594
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA224.class",
+      "sha256": "315c1073d3b4b5c5e35e6a1fc799c48bddcc1b5e4c0947dcfd93bb5565d64beb",
+      "size_bytes": 588
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA256.class",
+      "sha256": "a1dd374e1e91a0384eb30e4a588e043a23f4bd2fb728a9a77e38686917a2ad6f",
+      "size_bytes": 588
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA384.class",
+      "sha256": "4bc3257c6f93d06db155285ad762166e6777ec15e01cae2c8530d5244241237a",
+      "size_bytes": 588
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_224.class",
+      "sha256": "521b1da50a3eba6260c78df4eccc44d3fd1a74285bcddfc2fdce2cf9ac49a4b3",
+      "size_bytes": 600
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_256.class",
+      "sha256": "a1d54f34294da8a22e6724d1781e003563d5486d961d865f75e928f80f208483",
+      "size_bytes": 600
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_384.class",
+      "sha256": "b0d57673adf31a1926864d57dd49743a7ac1630e9b7c21976686f53f73f63504",
+      "size_bytes": 600
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA3_512.class",
+      "sha256": "ca04a30ba4b4abf8cc7192f69c4715c6fdbd0d57df51e320f239511ab90f69fb",
+      "size_bytes": 600
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA512.class",
+      "sha256": "d7804e2f671b2422c90d5b67b633918bb2967c52193ea56eeb9721c18045b132",
+      "size_bytes": 588
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA512_224.class",
+      "sha256": "1590d5acaa83d81fe2ad24c87725efa92b764abe4b32ff99c27474b47fa4f62c",
+      "size_bytes": 607
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSHA512_256.class",
+      "sha256": "6052992aa05284b15b0c3b86ccc15ba69d246f02470e13b5ba745b316e0c0e2e",
+      "size_bytes": 607
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withSM3.class",
+      "sha256": "dba4695b7e5c2783d2eff4ced412adc125e470d53adb192db6cbcec002264e57",
+      "size_bytes": 579
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi$PBKDF2withUTF8.class",
+      "sha256": "7302e64cf2daaf7330468759be8a5db58ed8204da731b607f6e6023b7079b155",
+      "size_bytes": 582
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/pbkdf2/PBKDF2Spi.class",
+      "sha256": "c4e1257aa1abbff1fde8cd0ace5a8805c066b9e88e60396a6aab9c73d425a74a",
+      "size_bytes": 3992
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/scrypt/ScryptSpi$ScryptWithUTF8.class",
+      "sha256": "f29201b0a6b4a72b327be8ff72794e8de2f0ed7aa7839d6e36583ca5be9f4e77",
+      "size_bytes": 446
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/provider/kdf/scrypt/ScryptSpi.class",
+      "sha256": "90d6cc65d5e56684b8c78dd18f59bbc1272a818955d23ff8b0eec92eb19bb142",
+      "size_bytes": 2497
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/spec/PBKDF2ParameterSpec.class",
+      "sha256": "ae49383adeac2ac730ca41577ff6939c118e4190ff8d7bf3b5c0ab173cd3fbb0",
+      "size_bytes": 340
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/spec/ScryptParameterSpec.class",
+      "sha256": "9cb161188533fdc08a937ef3ecbe810e1761957e1b24cbad719983260f658339",
+      "size_bytes": 255
+    },
+    {
+      "major_version": 69,
+      "minor_version": 0,
+      "path": "META-INF/versions/25/org/bouncycastle/jcajce/util/SpiUtil.class",
+      "sha256": "8357487278ffb208c738ce9f96e76d3e6f959d50a0fcc0d344ca6b39bbf6a72d",
+      "size_bytes": 231
+    }
+  ],
+  "method": "Point-in-time inspection (2026-08-24, re-verified 2026-08-25 via a live Maven Central fetch) of the actual resolved org.bouncycastle:bcprov-jdk18on:1.85.2 .jar: Python `zipfile` for member discovery, this file's own bounded 8-byte header read for each member's raw major/minor version fields, and this file's own _validate_java_class_structure() (full JVMS \u00a74 structural walk, not just the magic bytes) required to pass for every one of the 7163 scanned members. This table is static; the evidence FILE's content is not re-derived from a live fetch on every run (a fixed, reviewed snapshot, not a moving target), but live_verify_java_class_version_evidence() unconditionally re-verifies it byte-for-byte against a real resolved jar -- an explicit --bcprov-jar path, an already-verified path from the KARDANO_LEGAL_EVIDENCE_BCPROV_JAR environment variable, or (the default) a fresh pinned-host, SHA-256-and-size-verified download from Maven Central -- every single time this function runs, with no cold-cache/no-op skip branch. It fails generation/checking outright on any drift: wrong whole-archive SHA-256, wrong member count, wrong observed maximum major_version, or a different member set at that maximum. max_major_version is exactly MAX_SUPPORTED_JAVA_CLASS_MAJOR_VERSION -- the ceiling and this evidence are reviewed and moved together, never independently.",
+  "total_class_members_scanned": 7163
+}

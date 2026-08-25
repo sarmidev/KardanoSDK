@@ -56,6 +56,8 @@ This batch upgrades from the exact patch pins above, not from a moving
 | `actions/configure-pages` | v6.0.0 | `45bfe0192ca1faeb007ade9deae92b16b8254a0d` | node24 | javascript |
 | `actions/upload-pages-artifact` | v5.0.0 | `fc324d3547104276b827a68afc52ff2a11cc49c9` | composite | composite |
 | `actions/deploy-pages` | v5.0.0 | `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128` | node24 | javascript |
+| `actions/upload-artifact` | v7.0.1 | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | node24 | javascript |
+| `actions/download-artifact` | v8.0.1 | `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c` | node24 | javascript |
 
 Release pages:
 
@@ -65,6 +67,8 @@ Release pages:
 - https://github.com/actions/configure-pages/releases/tag/v6.0.0
 - https://github.com/actions/upload-pages-artifact/releases/tag/v5.0.0
 - https://github.com/actions/deploy-pages/releases/tag/v5.0.0
+- https://github.com/actions/upload-artifact/releases/tag/v7.0.1
+- https://github.com/actions/download-artifact/releases/tag/v8.0.1
 
 `checkout` v7.0.1, `setup-java` v5.7.0, `configure-pages` v6.0.0, and
 `deploy-pages` v5.0.0 are javascript Actions (`runs.using: node24`).
@@ -74,6 +78,10 @@ Their `action.yml` files contain no nested `uses:`.
 `workflow_run` unless `allow-unsafe-pr-checkout` is set. This repository
 does not use those events. Runner requirement for the Node 24 Actions is
 `>= 2.327.1`; GitHub-hosted `ubuntu-latest` and `macos-latest` meet that.
+
+`windows-jvm-rebuild-evidence.yml` reuses the same `checkout`,
+`setup-java`, `setup-gradle`, `upload-artifact`, and `download-artifact`
+pins. No new Action SHA was added.
 
 `setup-java` v5.7.0 was `releases/latest` on 2026-08-23. A `v4.9.1`
 backport was published on 2026-08-04 and is not this pin. The workflows
@@ -125,6 +133,18 @@ The other composite steps are inline `run:` archive commands (no further
 and is newer than the composite's v7.0.0 pin. This repo does not rewrite
 the official Pages packaging steps; it records that transitive SHA and
 requires it to stay pinned.
+
+`native-rebuild-evidence.yml` uses `actions/upload-artifact` as a
+first-party workflow pin at v7.0.1 (same SHA as above). That Action's
+`action.yml` is javascript (`runs.using: node24`) with no nested `uses:`.
+The job uploads staging reports and rebuilt copies only; it never writes
+those files back over the committed natives.
+
+`linux-jvm-rebuild-evidence.yml` adds `actions/download-artifact` v8.0.1
+(`3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c`, `releases/latest` on
+2026-08-23). That Action is javascript (`runs.using: node24`) with no
+nested `uses:`. The compare job downloads same-run candidate A/B
+uploads only; permissions stay `contents: read`.
 
 `configure-pages` and `deploy-pages` are javascript Actions and have no
 nested `uses:`.
@@ -272,8 +292,9 @@ Asset disposition after Debug+Release lint (`No issues found.`):
 | `IconLocation` | Moved splash PNGs to `drawable-nodpi/` and `drawable-night-nodpi/` |
 | `IconLauncherShape` on 10 legacy `ic_launcher.png` squares | Regenerated from `kardano_mark_{light,dark}.png` via `scripts/generate_legacy_launcher_icons.py`: 12.5% transparent margin and a rounded-rect brand-fill silhouette. Adaptive XML, monochrome, splash, and round mipmaps were not changed. Owner visual check remains for pre-API-26 tiles. |
 
-`verify.yml` job `android-lint` runs both variants. Existing
-claim / archive / Gitleaks / action-pin jobs are unchanged.
+`verify.yml` job `android-lint` runs lint Debug/Release, then
+assemble Debug/Release. Existing claim / archive / Gitleaks /
+action-pin jobs are unchanged.
 
 Re-running `resolveAndLockAll --write-locks` on 2026-08-23 produced
 byte-identical SHA-256 hashes for every lockfile. Do not hand-edit
@@ -326,7 +347,8 @@ copied from CI log text. Lockfiles were not rewritten for this miss.
 | Item | Value |
 |---|---|
 | Toolchain file | `crypto-signing-backend/rust-toolchain.toml` |
-| Channel | `1.97.0` (README pin; rustup resolved `1.97.0 (2d8144b78 2026-07-07)`) |
+| Channel | `1.97.0` (README pin; rustup resolved `1.97.0 (2d8144b78 2026-07-07)`). Hosted images may expose rustc `1.97.1` first; rebuild jobs activate the `1.97.0` toolchain `bin`. |
+| Windows MSVC | Toolset folder `14.44.35207` (`Hostx64/x64` `link.exe` Version `14.44.35228.0`) and Windows SDK `10.0.26100.0`, observed on `windows-2022` Phase B run `32715104620`. Exact version and required include/lib/bin paths are asserted. Drift fails until reviewed. `ImageVersion` is recorded; the hosted image is not claimed immutable. |
 | Direct crates | `ed25519-bip32 = "=0.4.2"`, `uniffi = "=0.29.5"` |
 | Lockfile | `crypto-signing-backend/Cargo.lock` (unchanged by the exact-pin edit) |
 | Rebuild flags | every documented `cargo` / `cargo ndk` rebuild uses `--locked` |

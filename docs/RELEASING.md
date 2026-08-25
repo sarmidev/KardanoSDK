@@ -6,11 +6,47 @@ tag plus release notes that identify the source revision, verified targets, and 
 ## Before the first public release
 
 1. Confirm the copyright owner named in `LICENSE`.
-2. Complete the third-party notice review in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+2. Complete the third-party notice review in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+   the root `NOTICE` and `LICENSES/` texts, and the evidence checklist in
+   [LEGAL_REVIEW.md](LEGAL_REVIEW.md). Regenerate `docs/evidence/` with
+   `python3 scripts/generate_legal_evidence.py` and confirm
+   `python3 scripts/check_release_evidence.py` (default `ci-structural` mode)
+   passes. Before an actual release, also run
+   `python3 scripts/check_release_evidence.py --mode release`, which
+   additionally fails while any `docs/LEGAL_REVIEW.md` field still carries one
+   of the three named `ALLOWED_OPEN_GATE_MARKERS` strings (counsel review,
+   Identus issue #226, per-election reviewer acceptance) — it is expected to
+   fail until every one of those gates is actually resolved by a human. The
+   independent PE (native-artifact structural) technical review is a
+   separate, already-COMPLETE gate (commit `c65a20a`); its completion is a
+   technical finding only, not a legal approval, and does not promote the
+   Windows candidate or imply any DLL is distributed. None of these is legal
+   advice or counsel
+   approval; `LEGAL_REVIEW.md` records the counsel gate as open until an
+   actual reviewer signs off.
 3. Verify repository history contains no API keys, real mnemonics, private keys, or live-fund
    addresses. Run `python3 scripts/check_gitleaks.py` after
    `python3 scripts/install_gitleaks.py`. This does not replace an owner-authenticated
    GitHub secret-scanning pass.
+   - `docs/evidence/scope_binding.json`'s seal must be the exact tip of the
+     branch under review; `scripts/check_release_evidence.py`'s
+     `check_scope_binding_seal()` checks this unconditionally against
+     literal `HEAD` -- there is no merge-ref or other exception in that
+     checker at all, and it never inspects any GitHub event or env var.
+     GitHub's own `legal-evidence-scan` PR check checks out the exact
+     `pull_request` head SHA (`github.event.pull_request.head.sha`), not
+     the default `refs/pull/*/merge` ref, so this checker's strict
+     literal-HEAD requirement always evaluates the sealed PR head
+     directly; a merge commit that ends up at literal HEAD (a stray
+     ordinary push or a fabricated ref) is always rejected. See
+     `docs/TESTING.md` for the separate `scripts/
+     select_seal_checkout_head.py`, which handles the one legitimate
+     event-bound exception (a future `push` to `main` whose HEAD is a
+     genuine merge commit) entirely outside this checker, by validating
+     the trusted GitHub push event and `checkout --detach`ing the sealed
+     PR-head parent BEFORE the checker ever runs -- it never accepts a
+     merge-ref by tree shape alone, and never accepts any commit added
+     after the seal.
 4. Confirm the public README, quickstart, roadmap, and security-reporting path match delivered
    behavior.
 5. Run the CI-equivalent test matrix and record platform limitations.
@@ -125,6 +161,7 @@ patch releases, not `@v4`) and the Pages upload composite's transitive
 | upload-pages-artifact | `v5.0.0` `fc324d3547104276b827a68afc52ff2a11cc49c9` |
 | deploy-pages | `v5.0.0` `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128` |
 | Transitive Pages upload | `actions/upload-artifact` `v7.0.0` `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f` |
+| First-party report upload | `actions/upload-artifact` `v7.0.1` `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` (`native-rebuild-evidence.yml` only) |
 
 `gradle/actions` v6.3.0 remains unused because its default cache provider
 is a separate commercial component with a Terms of Use gate.
@@ -142,6 +179,41 @@ Before a release that changes a catalog version, regenerate lock
 state and verification metadata, review the generated diff, and keep
 `Cargo.lock` matched to the exact `Cargo.toml` pins. Do not rewrite
 generated checksums by hand.
+
+## Legal-evidence packet (Prompt 7)
+
+`docs/LEGAL_REVIEW.md` is a distribution-evidence checklist and template for
+owner/counsel review — never a legal opinion, never a release approval.
+Regenerate and check it before any release-candidate review:
+
+```bash
+python3 scripts/generate_legal_evidence.py   # writes docs/evidence/*
+python3 scripts/check_release_evidence.py     # fails closed on drift/placeholders
+python3 -m unittest discover -s scripts/tests -p "test_*.py"
+```
+
+Both commands above resolve an actual `org.bouncycastle:bcprov-jdk18on:1.85.2`
+`.jar` to live-scan for `docs/evidence/java_class_version_evidence.json` --
+by default a fresh download from Maven Central (no local Gradle cache
+required), whose request and response URL must be byte-identical to the
+one pinned `https://repo1.maven.org/...` URL (exact scheme/host/port/
+path, no query/fragment/userinfo, no redirect followed -- not even to the
+same host) and whose bytes are SHA-256-and-size-verified before being
+written exclusively (never over, or through a symlink at, anything
+already at the destination path); an already-verified local copy can be
+supplied instead via `--bcprov-jar PATH` (generator only) or the
+`KARDANO_LEGAL_EVIDENCE_BCPROV_JAR` environment variable (both commands). A
+missing or unreachable jar, or any provenance mismatch, is a hard
+failure, never a silent pass -- this is deliberate: the point of this
+evidence file is that it is live-verified against real resolved artifact
+bytes every time, not merely a static claim.
+
+The checker fails if: a `NOTICE`/`LICENSES/` reference is broken; the native
+inventory does not exactly match `crypto-signing-backend/CHECKSUMS.sha256`
+(9 rows); any `docs/evidence/*.json` file is stale relative to the current
+tracked tree; or `docs/LEGAL_REVIEW.md` contains a generic placeholder
+instead of a named, falsifiable open-gate marker. A passing run is evidence
+hygiene, not a release decision.
 
 ## Publishing artifacts later
 

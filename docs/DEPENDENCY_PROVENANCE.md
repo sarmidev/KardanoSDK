@@ -11,6 +11,16 @@ test is recorded only as enforcement evidence.
 Windows-classified artifacts are not in this record. Prompt 7 owns
 Windows runner support.
 
+**2026-08-24 addendum.** Prompt 7's legal-evidence packet
+(`docs/LEGAL_REVIEW.md`, `docs/evidence/`) generates a deterministic,
+regenerable Gradle/Cargo dependency inventory from the same lockfiles/
+`Cargo.lock` this page cites — see
+`docs/evidence/gradle_dependency_inventory.json` and
+`docs/evidence/cargo_dependency_inventory.json`. That inventory classifies
+coordinates into source/runtime/test-only/build-tooling buckets; it does not
+re-verify publisher checksums (that remains this page's job) and it is not
+legal advice.
+
 ## Method
 
 1. Read the SHA-256 value from `gradle/verification-metadata.xml`.
@@ -37,7 +47,7 @@ User-Agent for fetches: `kardano-provenance`.
 | Kotlin stdlib 2.4.10 | https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.4.10/kotlin-stdlib-2.4.10.jar | hash-of-download vs metadata | **match** `4ec0293bc3751423b203f1d8493251c57c42e73eb6377a6b8560d0974ff0a6df` |
 | Kotlin compiler embeddable 2.4.10 | https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.4.10/kotlin-compiler-embeddable-2.4.10.jar | hash-of-download vs metadata | **match** `9309638a2ee03e6bde9ef4b7444055a94b84ab906563675d71ff9aecb64da913` |
 | Kotlin Gradle plugin `2.4.10-gradle813` | https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/2.4.10/kotlin-gradle-plugin-2.4.10-gradle813.jar | hash-of-download vs metadata | **match** `13e22c869df3972db9496b47bf2815fbcfb61e0439f96cbd8d6aeb912b481375` |
-| Signing natives (8 files) | `crypto-signing-backend/CHECKSUMS.sha256` vs bytes on disk | local SHA-256 of each committed binary | **match** all eight rows |
+| Signing natives (9 files) | `crypto-signing-backend/CHECKSUMS.sha256` vs bytes on disk | local SHA-256 of each committed binary | **match** all nine rows after Phase C Linux promotion (`cb439099…4ed5` from run `32678079715`) |
 | Guava parent POM `33.3.1-jre` | https://repo1.maven.org/maven2/com/google/guava/guava-parent/33.3.1-jre/guava-parent-33.3.1-jre.pom and `.sha1` (no `.sha256` sidecar) | downloaded POM SHA-256; SHA-1 vs publisher `.sha1` | **match** SHA-256 `55441db27e8869dfefe053059bdf478bdc7e95585642bf391f0023345fd56287`; SHA-1 `94729a0ed1dc35f623edd13afa6c1c2fe9a15d7c` |
 | JUnit BOM `5.10.2` Gradle module | https://repo1.maven.org/maven2/org/junit/junit-bom/5.10.2/junit-bom-5.10.2.module.sha256 | sidecar vs downloaded module | **match** `de23b114b3e4119a8fe6eb17bed5a3852816698bace67071579d6d927ebb080a` |
 | JUnit BOM `5.11.0-M2` Gradle module | https://repo1.maven.org/maven2/org/junit/junit-bom/5.11.0-M2/junit-bom-5.11.0-M2.module.sha256 | sidecar vs downloaded module | **match** `86477abcf490d6ca059aa9973cb108d22a506f49d1a5569bb32cc6cbf43c2cce` |

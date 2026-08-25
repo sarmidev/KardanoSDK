@@ -34,27 +34,54 @@ A Gobley-free single module is required because Gobley `0.3.7` cannot coexist wi
 The Rust crate (`Cargo.toml`, `Cargo.lock`) is retained in-tree only for offline regeneration; it
 is `publish = false` and is **not** compiled by Gradle.
 
-### JVM native coverage is macOS-only (deliberate scope, ADR-0016 §9)
+### JVM native coverage (JNA resource prefixes)
 
-JNA loads the committed cdylib per host from `src/jvmMain/resources/<jna-prefix>/`. There is **no
-CI** in this repo and the SDK is developed/verified on macOS, so only the macOS cdylibs are
-committed:
+JNA 5.19.1 loads the cdylib from `src/jvmMain/resources/<jna-prefix>/`. The generated
+`Native.register("kardano_ed25519_bip32_signing")` call uses that prefix; this module
+does not invent a second loader path.
 
-- `darwin-aarch64` — **runtime-verified** here (`jvmTest` runs on the macOS arm64 dev host).
-- `darwin-x86-64` — cross-built on macOS, **not** runtime-verified on this arm64 host.
-- **Linux / Windows JVM hosts are not covered** — no committed cdylib for those prefixes, so JNA
-  loading would fail there. Broadening host coverage (or publishing a multi-host artifact) is
-  future work (ADR-0016 §9, Option R3). This module does not claim general cross-host JVM
-  verification.
+- `darwin-aarch64` — committed; **runtime-verified** here (`jvmTest` on the macOS arm64 host).
+- `darwin-x86-64` — committed; cross-built on macOS, **not** runtime-verified on this arm64 host.
+- `linux-x86-64` — committed JNA prefix for Linux x86-64
+  (`libkardano_ed25519_bip32_signing.so`). Built only on native Ubuntu
+  22.04 x86-64 (`x86_64-unknown-linux-gnu`, ImageOS `ubuntu22`).
+  Documented runtime floor is glibc 2.35, measured from `ldd --version`
+  on the runner. Promoted from run `32678079715` at
+  `85670a7206b692c110624b4ef9a69dbfff319ca3` (SHA-256
+  `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`).
+  Linux ARM, musl, and older glibc are out of scope.
+- **Windows x86-64** — candidate-only. JNA 5.19.1 prefix is
+  `win32-x86-64/` and the mapped name is
+  `kardano_ed25519_bip32_signing.dll` (no `lib` prefix). Rebuilt only
+  on native `windows-2022` (`x86_64-pc-windows-msvc`, ImageOS `win22`).
+  Jobs pin MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe`
+  Version `14.44.35228.0` and Windows SDK `10.0.26100.0` (fail on
+  drift until reviewed) and record `ImageVersion` without claiming the
+  hosted image is immutable. Its independent PE (native-artifact
+  structural) technical review is complete (commit `c65a20a`); it remains
+  not in `CHECKSUMS.sha256` and unpromoted solely because of the still-open
+  upstream Identus issue #226 (plus any separate manual/release decision) --
+  PE technical-review completion is not a legal approval and does not mean
+  this DLL is distributed. Windows ARM is out of scope.
 
-## Verified (ADR-0016 §7d / §9f) — all four legs against this real module
+## Verified (ADR-0016 §7d / §9f) — legs against this real module
 
-| Leg | Command | Result |
-|---|---|---|
-| JVM KAT (through JNA bindings) | `./gradlew :crypto-signing-backend:jvmTest` | 4/4 pass (macOS arm64) |
-| Android real-runtime KAT (through packaged Kotlin/JNA bindings) | `./gradlew :crypto-signing-backend:connectedAndroidDeviceTest` | 4/4 on `SM-A356B` (Android 15, physical) + 4/4 on `kardano_api24` (API 24 emulator = SDK `minSdk`) |
-| iOS compile + link | `./gradlew :crypto-signing-backend:compileKotlinIosArm64` + `:linkDebugTestIosSimulatorArm64` | both `BUILD SUCCESSFUL`; the simulator test binary links the committed `.a` |
-| Symbol proof (per target) | `nm -gU` (macOS/iOS), `llvm-nm -D` (Android) | `kardano_ed25519_bip32_signing_fn_func_sign` exported on all 8 artifacts |
+Results below are date- and hash-bound. Current committed natives are the
+UUID-normalized set in `CHECKSUMS.sha256` (replacement commit `5582637`,
+2026-08-23). A passing compile or KAT is not a device-runtime claim.
+
+| Leg | Command | Result | Bound to |
+|---|---|---|---|
+| JVM KAT (through JNA bindings) | `./gradlew :crypto-signing-backend:jvmTest` | 4/4 pass (macOS arm64) on 2026-08-23 | current `CHECKSUMS.sha256` (`darwin-aarch64` `6462fe39…cc84`) |
+| iOS compile + simulator link | `./gradlew :crypto-signing-backend:compileKotlinIosArm64` + `:linkDebugTestIosSimulatorArm64` | both `BUILD SUCCESSFUL` on 2026-08-23; Verify `macos-signing-and-ios` runs the eight `compileKotlinIosArm64` tasks **and** `:crypto-signing-backend:linkDebugTestIosSimulatorArm64` | current iOS rows (`a933ee42…6fb2`, `a894136b…2056`) |
+| Eight `compileKotlinIosArm64` modules | `:core` `:crypto` `:crypto-signing-backend` `:provider` `:provider-blockfrost` `:wallet` `:tx` `:shared` | all `BUILD SUCCESSFUL` on 2026-08-23; same eight tasks run on Verify macOS | current iOS `.a` rows above |
+| Android packaging | `./gradlew :androidApp:assembleDebug` + `:androidApp:assembleRelease` | both `BUILD SUCCESSFUL` on 2026-08-23; Verify Ubuntu `android-lint` keeps `lintDebug`/`lintRelease` and now also runs both assemble tasks | current Android `.so` rows in `CHECKSUMS.sha256` |
+| Symbol proof (per target) | `nm -gU` (macOS/iOS), `llvm-nm -D` (Android), ELF `.dynsym` (Linux) | `kardano_ed25519_bip32_signing_fn_func_sign` exported on all 9 artifacts | current `CHECKSUMS.sha256` |
+| Android real-runtime KAT | `./gradlew :crypto-signing-backend:connectedAndroidDeviceTest` | 4/4 on `SM-A356B` (Android 15) + 4/4 on `kardano_api24` (API 24) | **historical only** — W5-2 `40ab80c` CHECKSUMS (host-path-tied Android `.so` rows `fdc2a0e2…`, `6c80eb89…`, `e6194b64…`, `5bbe657d…`). No post-replacement device or emulator run has occurred. Owner/manual gate. |
+
+No GitHub Actions emulator/device runner is added: `scripts/action_pin_inventory.py`
+has no already-approved SHA-pinned Android emulator action, and adding one
+would need a separate pin review. That absence is not a pass.
 
 The KAT is ADR-0016 §3 `D1_H0`: extended scalar signs `"Hello World"` ⇒ `D1_H0_SIGNATURE`
 (reproduced exactly), plus sign-then-verify, tampered-signature rejection, and wrong-length-xprv
@@ -127,13 +154,16 @@ shasum -a 256 \
   src/androidMain/jniLibs/x86_64/$LIB.so \
   src/jvmMain/resources/darwin-aarch64/$LIB.dylib \
   src/jvmMain/resources/darwin-x86-64/$LIB.dylib \
+  src/jvmMain/resources/linux-x86-64/$LIB.so \
   > CHECKSUMS.sha256
+# Linux row must come from a native ubuntu-22.04 rebuild, not a macOS host.
 ```
 
 ## Verifying the committed binaries (checksum manifest, W5-2)
 
-[`CHECKSUMS.sha256`](CHECKSUMS.sha256) records the SHA-256 of all 8 committed native binaries
-(the two iOS `.a`, the four Android `.so`, the two macOS JVM `.dylib`), so a consumer can confirm
+[`CHECKSUMS.sha256`](CHECKSUMS.sha256) records the SHA-256 of all 9 committed native binaries
+(the two iOS `.a`, the four Android `.so`, the two macOS JVM `.dylib`, and the
+Linux x86-64 JVM `.so`), so a consumer can confirm
 which exact bytes they are trusting without cloning the repository at every historical commit to
 diff them by hand. Verify from this module's directory:
 
@@ -143,12 +173,129 @@ shasum -a 256 -c CHECKSUMS.sha256
 
 **What this manifest does and does not prove.** A passing check confirms only that the binaries in
 your working tree are byte-identical to the ones this manifest was generated against — it is a
-tamper/corruption/transfer-integrity check, tied to a specific commit. **It does not prove, and
-this project does not claim, that these binaries were actually built from the visible Rust source**
-(`src/commonMain/rust/lib.rs` and the pinned `Cargo.lock`) — that would require an independent
-reproducible-build verification (rebuilding with the exact pinned toolchain in step 1 above and
-diffing the result against the committed binaries), which this project has not performed and which
-remains an open residual risk (see `docs/AUDIT/2026-08-22-pre-release-audit.md` §6 item 7).
+tamper/corruption/transfer-integrity check, tied to a specific commit. Independent rebuild
+comparison is a separate step (see "Staged rebuild comparison" below). The checksum file is
+never rewritten just to accept a rebuild whose bytes differ for an unexplained reason.
+
+## Staged rebuild comparison
+
+Scripts under `scripts/` rebuild the eight existing-family natives into a **fresh
+staging directory** with a staging-owned, required-empty `CARGO_TARGET_DIR`. They
+never reuse this module's `target/`. They use `cargo --locked` /
+`cargo ndk ... --locked`, remap workspace / Cargo / rustc / Xcode / NDK absolute
+roots, set Darwin `LC_ID_DYLIB` to `@rpath/libkardano_ed25519_bip32_signing.dylib`
+at link time, and record per-command stdout/stderr, timestamps, exit codes, output
+paths, `ar -tv` member hashes, `otool -l`, and an embedded-path scan. They do not
+copy into `src/`.
+
+```bash
+# from the repository root; staging must be empty or absent
+python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
+  --staging /tmp/kardano-native-rebuild \
+  --groups macos-jvm,android,ios \
+  --write-candidates crypto-signing-backend/rebuild-candidates \
+  --mode candidate \
+  --compare
+python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
+```
+
+Thin wrappers (`scripts/rebuild_macos_jvm.sh`, `rebuild_android.sh`, `rebuild_ios.sh`)
+select one group. Both Darwin JVM targets are built with explicit
+`--target aarch64-apple-darwin` and `--target x86_64-apple-darwin` regardless of
+host. Inspection is fail-closed: missing `nm`/`llvm-nm`/`lipo`/`file`/`otool`/`ar`,
+a nonzero tool exit, a missing `fn_func_sign` export, a wrong architecture, or a
+dylib install name other than `@rpath/libkardano_ed25519_bip32_signing.dylib` is a
+failed compare. Darwin JVM links pass `-Wl,-reproducible` and keep `LC_UUID`
+(macos-26 `dyld` rejects `-no_uuid`). Apple TN3178 has no tool that sets
+`LC_UUID` after link, so the rebuild then runs a fail-closed post-link
+normalizer. The SHA-256 input is a documented canonical image computed
+in memory (Python `hashlib.sha256` only): zero the 16 `LC_UUID` bytes;
+if a validated `LC_CODE_SIGNATURE` is present, exclude that command and
+its trailing `__LINKEDIT` blob and restore `ncmds` / `sizeofcmds` /
+`__LINKEDIT` filesize and page-aligned vmsize. `codesign --remove-signature`
+is not used as a hash inverse. The UUID is RFC 9562 version 8 from the
+first 16 digest bytes. arm64 is then ad-hoc signed with identifier
+exactly `org.sarmidev.kardano.ed25519-bip32-signing`, `--timestamp=none`,
+and `TeamIdentifier=not set`. A valid signature with that identifier is
+never accepted unless `LC_UUID` equals the canonical digest. x86_64
+stays unsigned. Inspected Mach-O commands match only their exact
+encodings (`LC_REQ_DYLD` is not masked). Candidate generation
+(`--write-candidates`) requires a clean tracked worktree
+(`git diff` and `git diff --cached`), records HEAD and tree SHA, and
+allows in-repo staging output only under the gitignored
+`.rebuild-staging/` directory. These are separate facts: link remapping,
+UUID normalization, ad-hoc signature bytes, CHECKSUMS identity, and
+source provenance. A matching checksum does not prove the bytes came
+from the visible Rust sources.
+
+`.github/workflows/native-rebuild-evidence.yml` pins `macos-26` and Xcode `26.6`
+(`17F113`). The image default NDK is `27.3.13750724`; the workflow unsets
+`ANDROID_NDK*` and installs revision `27.2.12479018` under a required-empty dest.
+A clean runner rebuilds into a fresh staging target and compares hashes,
+architectures, symbols, install names, and evidence against
+`CHECKSUMS.sha256` (or `rebuild-candidates/CANDIDATE_MANIFEST.sha256` if
+that rematch file is present). Uploads use `if-no-files-found: error`. The
+workflow does not replace committed natives. Ubuntu runs the harness tests
+and `cargo metadata --locked` only.
+
+Pinned rebuild toolchain: rustc `1.97.0` (commit `2d8144b7880597b6e6d3dfd63a9a9efae3f533d3`),
+cargo-ndk `4.1.2`, NDK `27.2.12479018`, Xcode `26.6` / `17F113`,
+Windows MSVC toolset `14.44.35207` (`Hostx64/x64` `link.exe`
+Version `14.44.35228.0`) and Windows SDK `10.0.26100.0`.
+Hosted GitHub images may ship rustc `1.97.1` first on PATH; rebuild
+workflows activate the rustup `1.97.0` toolchain `bin` directory and
+set `RUSTUP_TOOLCHAIN=1.97.0` so the pin is the rustc that cargo sees.
+
+The first harness commit on this branch (`6cb6810`) is historical review debt: it
+defaulted to the module `target/` and treated missing inspection tools as optional.
+Those bytes are not rewritten. Historical W5-2 `CHECKSUMS.sha256`
+(`40ab80c`) described the original eight host-path-tied binaries.
+Clean `macos-26` run `32662613270` at `f62205e` matched all eight
+UUID-normalized candidates; commit `5582637` replaced `src/` and
+`CHECKSUMS.sha256` with those bytes. Current CHECKSUMS is that
+replacement set, not the W5-2 host-path rows. A matching checksum is
+identity of those committed bytes, not proof of source provenance.
+The current verifier accepts both committed Darwin dylibs (canonical
+UUID match; arm64 ad-hoc exact-identifier). Linux x86-64 JVM rebuilds
+are native `ubuntu-22.04` only (`linux-jvm-rebuild-evidence.yml`); they
+are committed after Phase C promotion from run `32678079715`. Fresh
+Linux rebuilds must match A==B **and** this CHECKSUMS row. The ELF
+verifier is fail-closed on `.dynsym`
+export semantics, GNU version requirements (full-string
+`GLIBC_<major>.<minor>` or legacy `GLIBC_<major>.<minor>.<patch>` only;
+numeric compare against baseline `(2, 35, 0)`; `GLIBC_PRIVATE` and
+unparseable labels fail), Verneed/Vernaux chains bound to one
+`SHT_GNU_verneed` section, canonical section 0, one `.dynamic` /
+`PT_DYNAMIC` pair with exact offset/vaddr/filesz/memsz/align, `.dynstr`
+size equal to `DT_STRSZ`, `DT_VERSYM` bound to one allocated
+`.gnu.version`, and `.debug_*` / `.zdebug_*` / `.gnu_debuglink`
+material. `nm` corroboration uses `--defined-only --format=posix`
+exact records, not substring search. Every `.gnu.version` entry is
+parsed; the hidden bit is split from the base index; indices greater
+than 1 resolve uniquely to a Vernaux `vna_other` (undefined) or a
+Verdef `vd_ndx` (defined). `vna_other` is globally unique across
+files. Every `vd_ndx` is unique even when the name and flags match.
+Versym 0 is only for dynsym entry 0, `STB_LOCAL`, or the undefined
+`STB_WEAK` unversioned import. Dynsym entry 0 is the canonical null
+symbol. `readelf --dyn-syms --wide` sign records must match the
+parsed sign Versym (unversioned global vs Verdef name/`@@`/`@`/
+`(index)`). The sign export is unhidden and never a Vernaux.
+ELF64 add/mul checks operands against `UINT64_MAX` before summing.
+Promoted from Linux run `32678079715` (artifacts
+`linux-jvm-candidate-a` `9503309381`, `linux-jvm-candidate-b`
+`9503308946`, `linux-jvm-compare-report` `9503350346`, expire
+2026-09-07). SHA-256
+`cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`.
+Runs `32676885035` and `32677333260` are superseded.
+
+Recorded 2026-08-23: on the original macOS arm64 host, a clean
+`target/`-directory rebuild matched all eight then-current (W5-2)
+CHECKSUMS rows. The same recipe on GitHub `macos-latest` (run
+`32658155802`) rebuilt the macOS JVM and iOS artifacts and then failed
+byte-compare (Mach-O `LC_ID_DYLIB` was the absolute cargo output path;
+iOS archives also differed). The Android `cargo ndk` step on that
+runner failed before a compare. Those *historical* bytes were
+host-path-tied. They are not the current CHECKSUMS rows.
 
 **Regeneration rule:** this manifest must be regenerated in the *same commit* as any change to one
 or more of the 8 binaries above (step 6 in the regeneration recipe), never as a separate follow-up

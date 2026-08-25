@@ -22,8 +22,102 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   native signing-backend binaries, plus a "Verifying the committed binaries" section in
   `crypto-signing-backend/README.md` explaining what it does and does not prove (W5-2). It is a
   tamper/transfer-integrity check tied to a specific commit, not proof that the binaries were
-  built from the visible Rust source; independent reproducible-build verification remains an open
-  residual risk.
+  built from the visible Rust source. A staged rebuild harness
+  (`crypto-signing-backend/scripts/`) and `native-rebuild-evidence.yml` now rebuild those
+  eight targets into a fresh directory and compare them byte-for-byte; a mismatch is a
+  failed job, not a reason to rewrite CHECKSUMS. The first harness commit (`6cb6810`)
+  is historical review debt (module `target/` default, fail-open inspection). Later
+  commits on `fix/native-build-and-platform-evidence` require a staging-owned empty
+  `CARGO_TARGET_DIR`, remapped absolute source roots, a link-time
+  `@rpath/libkardano_ed25519_bip32_signing.dylib` install name, fail-closed
+  `nm`/`lipo`/`file` checks, and a pinned `macos-26` / Xcode 26.6 runner. Gate 1 is
+  still NO-GO. macos-26 image `ANDROID_NDK*` defaults to `27.3.13750724`;
+  the rebuild job ignores those names and fail-closes on any NDK other
+  than `27.2.12479018`. Python zip extract restores NDK clang execute
+  bits and Unix `clang -> clang-18` symlinks (CI `Exec format error` /
+  `clang-18: command not found`). Darwin JVM keeps `LC_UUID` and passes
+  `-Wl,-reproducible` (macos-26 dyld rejects `-no_uuid`). Clean run
+  `32660838357` matched Android and iOS. Run `32661414105` at `7ed38e4`
+  rematched those six again; Darwin `LC_UUID` stayed host-OS-bound
+  (local macOS `26.2` vs runner `26.5.2`). A fail-closed post-link
+  normalizer now writes an RFC 9562 v8 UUID from `hashlib.sha256` of
+  unsigned canonical bytes and re-signs arm64 ad hoc with a stable
+  identifier and no timestamp. Apple TN3178 has no tool that sets
+  `LC_UUID`. Clean `macos-26` run `32662613270` matched all eight UUID-normalized
+  candidates, including the arm64 ad-hoc signature; those bytes replaced
+  `src/` and `CHECKSUMS.sha256` in the same commit (`5582637`). The
+  normalizer no longer treats a verifying ad-hoc signature as already
+  done: every signed pass recomputes the UUID from a documented
+  canonical image (zero `LC_UUID`; exclude validated `LC_CODE_SIGNATURE`
+  command/blob and restore header/`__LINKEDIT` size fields) and requires
+  an exact identifier plus ad-hoc / no-timestamp / team-not-set fields.
+  Inspected Mach-O commands match exact encodings; `LC_REQ_DYLD` is not
+  masked. Candidate generation requires a clean tracked worktree and
+  records HEAD/tree SHA. Current Darwin bytes still match that
+  verifier, so CHECKSUMS was not rewritten by the follow-up harness
+  commit. Every Apple dylib dependency load command from Xcode 26.6
+  `loader.h` is now parsed fail-closed (not only `LC_LOAD_DYLIB`);
+  Verify runs `:crypto-signing-backend:linkDebugTestIosSimulatorArm64`
+  and `:androidApp:assembleDebug`/`assembleRelease` in addition to the
+  eight iOS compiles and Android lint. Gate 1 is GO at `d09db44`. Gate 2
+  Linux x86-64 JVM rebuilds on pinned `ubuntu-22.04` only (JNA prefix
+  `linux-x86-64/`, ImageOS `ubuntu22`, documented glibc floor 2.35
+  measured at runtime). The ELF64 verifier is fail-closed on exact
+  `.dynsym` export semantics; full-string `GLIBC_*` labels compared as
+  numeric tuples against `(2, 35, 0)`; Verneed/Vernaux chains bound to
+  one `SHT_GNU_verneed` section with terminal-zero and overlap checks;
+  canonical section 0; one `.dynamic`/`PT_DYNAMIC` pair with exact
+  offset/vaddr/filesz/memsz/align; `.dynstr.sh_size == DT_STRSZ`;
+  `DT_VERSYM` bound to one allocated `.gnu.version`; and debug-link
+  sections. Path policy is a raw-byte search for documented build roots
+  at any offset plus a slash-byte scan through NUL/control/whitespace/EOF
+  (exact prefix component boundary; invalid UTF-8 fails on a forbidden
+  root or an unapproved absolute-looking path; `/proc` is a runtime
+  prefix; `/tmp/untracked-host` and `/usr/local/private-build` fail).
+  Two independent candidate jobs plus JVM KAT must match before any
+  promotion review. Versym entries are parsed and resolved to unique
+  `vna_other`/`vd_ndx` values; ELF64 add/mul rejects values outside
+  `0..UINT64_MAX` and sums that overflow; raw known-root matches
+  require a following `/`, path stop, or EOF. Versym 0 is limited to
+  the null dynsym entry, `STB_LOCAL`, and undefined `STB_WEAK`;
+  `vna_other` is globally unique; every `vd_ndx` is unique even when
+  the name matches; `readelf` sign records must match the parsed
+  sign Versym (`@@`/`@`/`(index)`). Phase C promotion from run
+  `32678079715` at `85670a7` added the ninth CHECKSUMS row
+  `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`
+  (artifacts `9503309381` / `9503308946` / `9503350346`, expire
+  2026-09-07). Fresh Linux rebuilds must match A==B and that row.
+  Linux ARM, musl, and older glibc are out of scope. Windows x86-64
+  JVM is candidate-only: JNA 5.19.1 prefix `win32-x86-64/`, native
+  `windows-2022` / rustc 1.97.0 / `x86_64-pc-windows-msvc`, fail-closed
+  PE32+ verifier plus `dumpbin` corroboration, two independent
+  candidate jobs. Not a CHECKSUMS row. Windows ARM is out of scope.
+  Hosted images may expose rustc 1.97.1 first on PATH; rebuild jobs
+  activate the pinned 1.97.0 toolchain bin and set `RUSTUP_TOOLCHAIN`.
+  Windows jobs also pin MSVC toolset `14.44.35207` `Hostx64/x64`
+  `link.exe` Version `14.44.35228.0` and Windows SDK `10.0.26100.0`
+  (fail on drift) and record `ImageVersion` without an
+  immutable-image claim. PE policy requires a code/execute
+  non-writable sign export, canonical `SizeOfImage`, every nonempty
+  data directory, export/ILT/IAT/resource/TLS/debug internal
+  containment, `IMAGE_DEBUG_TYPE_REPRO` (PE/COFF empty or
+  `uint32`+32-byte hash) plus observed `IMAGE_DEBUG_TYPE_POGO`
+  `coffgrp` signatures (`ZERO`/`LTCG`/`PGI`/`PGO`/`PGU`),
+  resource structural interval tracking,
+  and ASCII/UTF-16LE
+  drive-root plus UNC path scanning. Phase B run `32715104620` at
+  `04c52dc` produced byte-identical candidates (SHA-256
+  `d0f36f6110f1662bb0c9998afb5598bebc4dc35c6abdc41865ab0fc4d7d905cc`);
+  not promoted. PE-policy rerun `32719231997` at `7f2cc78` reproduced
+  the same SHA-256 (artifacts A `9517151698` / B `9517151682` /
+  report `9517246164`, expire 2026-09-07). Those Windows artifacts
+  are superseded by run `32724622118` at `73da4f4` (artifacts A
+  `9519072053` / B `9519114103` / report `9519211566`, expire
+  2026-09-07; same SHA-256). Do not reuse older IDs
+  (`32722013030` / `32719231997` / `32720083778`) for re-review.
+  `:crypto-signing-backend:jvmTest` is the Windows KAT in this
+  workflow; `:crypto`/`:wallet` JVM tests still need the identus
+  derivation wrapper's missing Windows native.
 - `TxBuildError.InsufficientFunds` gained two additive fields, `excludedNativeAssetUtxoCount` and
   `excludedNativeAssetLovelace` (default `0`/`0L`, source-compatible with existing call sites), so
   a caller can distinguish "genuinely insufficient ADA" from "value exists but is locked in
@@ -97,9 +191,106 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - Public landing page hash targets (`#approach`, `#try-the-playground`, and the other section
   ids) reserve space under the sticky header via one `scroll-padding-top` offset
   (`--anchor-scroll-offset`), raised at the 860px and 560px breakpoints when header/nav wrap.
+- A distribution legal-evidence packet (Prompt 7, non-counsel scope): root `NOTICE`,
+  `LICENSES/` (verbatim Apache-2.0, MPL-2.0, and ISC license texts fetched 2026-08-24 from
+  each project's own canonical URL; the Bouncy Castle license text is a **manual
+  transcription**, not a fetched file — corrected below; see `LICENSES/README.md` for
+  source/checksum), `docs/LEGAL_REVIEW.md` (an owner/counsel evidence checklist and
+  template — not legal advice, not approval), and deterministic generated inventories under
+  `docs/evidence/` (`scripts/generate_legal_evidence.py`): per-module Gradle
+  source/runtime/test-only
+  classification from `*/gradle.lockfile`, `cargo metadata --locked` for the signing backend,
+  the committed UniFFI-generated binding files, an exact 9-artifact
+  `crypto-signing-backend/CHECKSUMS.sha256` cross-check, and a static Maven-native-carrier
+  catalog (Identus/IonSpin/LazySodium/libsodium). `scripts/check_release_evidence.py` fails
+  closed on a broken `NOTICE`/`LICENSES/` reference, a native-inventory mismatch, stale
+  generated evidence, or a generic placeholder in `docs/LEGAL_REVIEW.md`. `docs/
+  THIRD_PARTY_NOTICES.md` is reconciled with the locked graph (JNA and the `ed25519-bip32`/
+  `cryptoxide` dual licenses now record an explicit Apache-2.0 election; the `uniffi` crate's
+  MPL-2.0 file-level obligation is reviewed the same way as `lazysodium-android`) and states
+  explicitly that the Windows signing-backend candidate DLL and the Identus `apollo`
+  derivation-backend Windows native library are **not** distributed. This packet does not
+  mark Prompt 7, the Windows candidate, or any release as GO; both the counsel review and
+  upstream `hyperledger-identus/apollo` issue #226 remain open gates.
+- Legal-evidence packet fixes (same branch, additive commits, independent review found the
+  packet above NO-GO): `LICENSES/MIT.txt` and `LICENSES/Unicode-3.0.txt` (both fetched verbatim
+  from spdx.org) correct a prior implicit claim that no MIT-only component was distributed —
+  `org.slf4j:slf4j-api` is confirmed MIT-only from its own POM, and `scripts/license_catalog.py`
+  now records an explicit election for every Gradle runtime coordinate rather than assuming a
+  dual-license `OR` clause covers it. `docs/evidence/cargo_dependency_inventory.json` replaces
+  the earlier single-closure heuristic with a separate `cargo tree --locked --target <triple>`
+  graph for each of the 9 committed target triples, reporting target-linked normal deps,
+  proc-macro-and-support closures, host-build-only deps, and dev-only deps separately (46
+  packages total, 33 linked into at least one target, including 3 MIT-only linked crates and
+  `unicode-ident`'s `(MIT OR Apache-2.0) AND Unicode-3.0` compound expression called out
+  explicitly). Gradle modules are now discovered from `settings.gradle.kts`; JNA's 25 embedded
+  `libjnidispatch` natives, Skiko's dylibs, and the Identus/IonSpin/LazySodium native carriers
+  are catalogued with embedded path/hash/platform detail, and JNA is no longer classified as
+  Source-only. `docs/LEGAL_REVIEW.md` no longer states embedded UniFFI creates no obligation or
+  that MPL-2.0 handling is satisfied — both are OPEN counsel determinations — and
+  `LICENSES/BouncyCastle.txt` is now consistently described as a manual transcription of the
+  cited HTML (source HTML snapshot and hash committed separately from the transcription hash).
+  `scripts/generate_legal_evidence.py`/`scripts/check_release_evidence.py` reject symlinks,
+  parse locks/checksums byte-strictly, recompute `LEGAL_EVIDENCE_DIGEST.txt` exactly, and run in
+  `ci-structural` (allows four named `ALLOWED_OPEN_GATE_MARKERS`) or `release` (fails while any
+  remain) modes, with new unit tests for both. `docs/evidence/scope_binding.json` records the
+  evidence-generation-time subject commit/tree separately from the packet's own commit/tree.
+  Still non-counsel scope; still does not mark Prompt 7, the Windows candidate, or any release
+  as GO.
+- Legal-evidence packet fixes, round 2 (same branch, additive commits; a second independent
+  review found the round-1 fixes above still incomplete on 10 further points).
+  `scripts/license_catalog.py` (hand-curated) plus a new, mechanically harvested
+  `scripts/license_catalog_harvested.py` together resolve all 298 Gradle-runtime coordinates
+  with zero unresolved and no dependency on a pre-populated local Gradle cache, proven by a
+  cold, empty-`GRADLE_USER_HOME` test and CI step; `gradle_license_inventory()` now fails
+  generation rather than recording a silent unresolved list. Every one of the 27 (not 3)
+  target-linked Cargo packages with a non-single-license SPDX expression now has an explicit,
+  catalog-backed election row (`scripts/cargo_election_catalog.py`, a new
+  `parse_spdx_expression()` that also fixes legacy `MIT/Apache-2.0` slash-syntax packages like
+  `cryptoxide` being silently treated as single-license); `memchr`'s `Unlicense OR MIT` gets no
+  proposed election, and `LICENSES/Unlicense.txt` is committed. `docs/evidence/` freshness
+  checking is now a full recursive tree walk rejecting nested extras/symlinks, not a top-level
+  glob. `maven_native_carriers_inventory.json` now records each carrier's own artifact
+  SHA-256, a `distribution_status` enum, and per-embedded-native SHA-256/platform/arch, with a
+  corrected JNA embedded-native count of 27 (was 25). `LICENSES/README.md` is now required and
+  blank `docs/LEGAL_REVIEW.md` table cells now fail instead of passing silently.
+  `docs/evidence/scope_binding.json` is no longer written in the same commit as the evidence it
+  describes (self-referential, unverifiable); it is now a two-commit seal — an evidence-content
+  commit followed by a separate seal commit (`generate_legal_evidence.py --seal`) that records
+  the evidence commit's exact hash/tree, its immediate parent as the subject-source commit, and
+  a per-file SHA-256 digest — checked independently via git ancestry and
+  `git show <evidence_commit>:<path>`, never by silent regeneration. Cargo network access is now
+  bounded to one explicit `cargo fetch --locked` bootstrap step; generation itself always passes
+  `--offline` and runs with `CARGO_NET_OFFLINE=true`, and CI now diffs the entire tracked
+  worktree (not just `docs/evidence/`) before/after the whole job. Still non-counsel scope; still
+  does not mark Prompt 7, the Windows candidate, or any release as GO.
 
 ### Changed
 
+- `.github/workflows/verify.yml`'s `legal-evidence-scan` job now checks
+  out the exact `pull_request` head SHA
+  (`github.event.pull_request.head.sha`) directly, instead of the default
+  `refs/pull/*/merge` ref; every other test/build job keeps the default
+  merge-ref checkout. `check_scope_binding_seal()` in
+  `scripts/check_release_evidence.py` no longer has any GitHub
+  `pull_request` merge-ref exception at all -- literal `HEAD`'s own
+  immediate parent must always be `evidence_commit`, unconditionally, and
+  the checker never inspects any GitHub event or env var. A new, separate
+  script, `scripts/select_seal_checkout_head.py`, is the one remaining
+  place event-bound merge validation exists, and only for a future `push`
+  to `main` whose `HEAD` is a genuine two-parent merge commit: it
+  validates the trusted GitHub push event (repository, `ref ==
+  refs/heads/main`, non-forced/non-deleted/non-created, `before`/`after`,
+  `GITHUB_SHA == after == HEAD`, exact parent order against `before`, and
+  a byte-identical tree between `HEAD` and its second parent) and, only on
+  success, `git checkout --detach`s that validated second parent (the
+  sealed PR-head candidate) before the legal job's checks run. An
+  octopus merge, wrong parent order/SHA, a forced/deleted/created push
+  event, or a genuine tree-changing (conflict-resolution) merge fails
+  that selector script closed, with no checkout performed. (Supersedes
+  the previous checker-level `pull_request` merge-ref exception --
+  `_github_pull_request_merge_head()`/`_effective_seal_tip()` -- which is
+  removed.)
 - Android lint is now a CI gate (`:androidApp:lintDebug` and
   `lintRelease`, `warningsAsErrors`). Online freshness detectors
   (`GradleDependency`, `NewerVersionAvailable`,

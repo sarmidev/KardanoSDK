@@ -1,0 +1,3919 @@
+{
+  "license_elections": {
+    "accepted_and_component_count": 0,
+    "accepted_count": 0,
+    "all_mandatory_elections_accepted": false,
+    "mandatory_and_component_count": 0,
+    "mandatory_row_count": 27,
+    "method": "Every package whose Cargo.toml `license` field is not a single unambiguous SPDX license (i.e. contains OR, AND, or WITH, or is missing) gets one row here. AND-components are always mandatory regardless of any OR election elsewhere in the same expression (unicode-ident's Unicode-3.0 AND-component, for example, is not satisfied by electing either side of its (MIT OR Apache-2.0) OR-component) and carry their OWN `and_component_acceptance` status/reviewer/review_date entry, separate from the row's OR election -- accepting the OR side never implicitly accepts an AND-required component, and vice versa. A target-linked package with no catalog row fails generation rather than being silently treated as covered by some other package's election.",
+    "rows": [
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "anyhow",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.103"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": false,
+        "name": "autocfg",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "host_build_dependency_only"
+          ],
+          "aarch64-apple-ios": [
+            "host_build_dependency_only"
+          ],
+          "aarch64-apple-ios-sim": [
+            "host_build_dependency_only"
+          ],
+          "aarch64-linux-android": [
+            "host_build_dependency_only"
+          ],
+          "armv7-linux-androideabi": [
+            "host_build_dependency_only"
+          ],
+          "i686-linux-android": [
+            "host_build_dependency_only"
+          ],
+          "x86_64-apple-darwin": [
+            "host_build_dependency_only"
+          ],
+          "x86_64-linux-android": [
+            "host_build_dependency_only"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "host_build_dependency_only"
+          ]
+        },
+        "version": "1.5.1"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "bitflags",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.13.0"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "camino",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.2.4"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "cargo-platform",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.1.9"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "cfg-if",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.4"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "cryptoxide",
+        "note": "Uses the legacy pre-SPDX Cargo `license = \"MIT/Apache-2.0\"` slash syntax, parsed by parse_spdx_expression() as equivalent to `MIT OR Apache-2.0`.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.5.3"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "ed25519-bip32",
+        "note": "Direct dependency of crypto-signing-backend.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.4.2"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "equivalent",
+        "note": null,
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.2"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "errno",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.3.14"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "fastrand",
+        "note": null,
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.4.1"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "fs-err",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "2.11.0"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "getrandom",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.4.3"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "hashbrown",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.17.1"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "heck",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.5.0"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "indexmap",
+        "note": null,
+        "or_election_options": [
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.14.0"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "itoa",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.18"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "libc",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.2.186"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "linux-raw-sys",
+        "note": "Three-way expression `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; the proposed election is the plain Apache-2.0 branch (neither the LLVM-exception variant nor MIT).",
+        "or_election_options": [
+          "Apache-2.0 WITH LLVM-exception",
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "0.12.1"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "Unlicense OR MIT",
+        "linked_in_any_target": true,
+        "name": "memchr",
+        "note": "Unlicense OR MIT. No election is proposed here; LICENSES/Unlicense.txt is committed and referenced in NOTICE alongside LICENSES/MIT.txt so the Unlicense text is present unless/until a reviewer explicitly accepts an MIT election for this specific package.",
+        "or_election_options": [
+          "Unlicense",
+          "MIT"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.8.3"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "once_cell",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.21.4"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "proc-macro2",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.106"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "quote",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.46"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+        "linked_in_any_target": true,
+        "name": "rustix",
+        "note": "Three-way expression `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`; the proposed election is the plain Apache-2.0 branch (neither the LLVM-exception variant nor MIT).",
+        "or_election_options": [
+          "Apache-2.0 WITH LLVM-exception",
+          "Apache-2.0",
+          "MIT"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.1.4"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "semver",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.28"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "serde",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.228"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "serde_core",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.228"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "serde_derive",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.228"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "serde_json",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.0.150"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "siphasher",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "0.3.11"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "static_assertions",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "1.1.0"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "syn",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "2.0.118"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "tempfile",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "3.27.0"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": true,
+        "name": "thiserror",
+        "note": null,
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": "Apache-2.0",
+        "review_date": null,
+        "reviewer": null,
+        "status": "OPEN",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-apple-ios-sim": [
+            "linked_into_compiled_artifact"
+          ],
+          "aarch64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "armv7-linux-androideabi": [
+            "linked_into_compiled_artifact"
+          ],
+          "i686-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-apple-darwin": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-linux-android": [
+            "linked_into_compiled_artifact"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "linked_into_compiled_artifact"
+          ]
+        },
+        "version": "2.0.18"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT OR Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "thiserror-impl",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "2.0.18"
+      },
+      {
+        "and_component_acceptance": [],
+        "and_required_components": [],
+        "expression": "MIT/Apache-2.0",
+        "linked_in_any_target": false,
+        "name": "toml",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "0.5.11"
+      },
+      {
+        "and_component_acceptance": [
+          {
+            "component": "Unicode-3.0",
+            "review_date": null,
+            "reviewer": null,
+            "status": "NOT_APPLICABLE"
+          }
+        ],
+        "and_required_components": [
+          "Unicode-3.0"
+        ],
+        "expression": "(MIT OR Apache-2.0) AND Unicode-3.0",
+        "linked_in_any_target": false,
+        "name": "unicode-ident",
+        "note": "Not linked into any of the 9 committed native artifacts (build-dependency-only or proc-macro-and-support-closure only); no election is required for this release's distributed binaries, but the expression is still recorded for completeness.",
+        "or_election_options": [
+          "MIT",
+          "Apache-2.0"
+        ],
+        "proposed_election": null,
+        "review_date": null,
+        "reviewer": null,
+        "status": "NOT_APPLICABLE",
+        "target_membership": {
+          "aarch64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-apple-ios-sim": [
+            "proc_macro_and_support_closure"
+          ],
+          "aarch64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "armv7-linux-androideabi": [
+            "proc_macro_and_support_closure"
+          ],
+          "i686-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-apple-darwin": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-linux-android": [
+            "proc_macro_and_support_closure"
+          ],
+          "x86_64-unknown-linux-gnu": [
+            "proc_macro_and_support_closure"
+          ]
+        },
+        "version": "1.0.24"
+      }
+    ]
+  },
+  "linked_in_any_target_count": 33,
+  "membership_by_target": {
+    "aarch64-apple-darwin": {
+      "artifact_path": "src/jvmMain/resources/darwin-aarch64/libkardano_ed25519_bip32_signing.dylib",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "aarch64-apple-ios": {
+      "artifact_path": "src/nativeInterop/libs/iosArm64/libkardano_ed25519_bip32_signing.a",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "aarch64-apple-ios-sim": {
+      "artifact_path": "src/nativeInterop/libs/iosSimulatorArm64/libkardano_ed25519_bip32_signing.a",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "aarch64-linux-android": {
+      "artifact_path": "src/androidMain/jniLibs/arm64-v8a/libkardano_ed25519_bip32_signing.so",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#linux-raw-sys@0.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "armv7-linux-androideabi": {
+      "artifact_path": "src/androidMain/jniLibs/armeabi-v7a/libkardano_ed25519_bip32_signing.so",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#linux-raw-sys@0.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "i686-linux-android": {
+      "artifact_path": "src/androidMain/jniLibs/x86/libkardano_ed25519_bip32_signing.so",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#linux-raw-sys@0.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "x86_64-apple-darwin": {
+      "artifact_path": "src/jvmMain/resources/darwin-x86-64/libkardano_ed25519_bip32_signing.dylib",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "x86_64-linux-android": {
+      "artifact_path": "src/androidMain/jniLibs/x86_64/libkardano_ed25519_bip32_signing.so",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#errno@0.3.14",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#linux-raw-sys@0.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    },
+    "x86_64-unknown-linux-gnu": {
+      "artifact_path": "src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so",
+      "dev_dependency_only": [],
+      "host_build_dependency_only": [
+        "registry+https://github.com/rust-lang/crates.io-index#autocfg@1.5.1"
+      ],
+      "linked_into_compiled_artifact": [
+        "registry+https://github.com/rust-lang/crates.io-index#anyhow@1.0.103",
+        "registry+https://github.com/rust-lang/crates.io-index#bitflags@2.13.0",
+        "registry+https://github.com/rust-lang/crates.io-index#bytes@1.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#camino@1.2.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo-platform@0.1.9",
+        "registry+https://github.com/rust-lang/crates.io-index#cargo_metadata@0.19.2",
+        "registry+https://github.com/rust-lang/crates.io-index#cfg-if@1.0.4",
+        "registry+https://github.com/rust-lang/crates.io-index#cryptoxide@0.5.3",
+        "registry+https://github.com/rust-lang/crates.io-index#ed25519-bip32@0.4.2",
+        "registry+https://github.com/rust-lang/crates.io-index#equivalent@1.0.2",
+        "registry+https://github.com/rust-lang/crates.io-index#fastrand@2.4.1",
+        "registry+https://github.com/rust-lang/crates.io-index#getrandom@0.4.3",
+        "registry+https://github.com/rust-lang/crates.io-index#hashbrown@0.17.1",
+        "registry+https://github.com/rust-lang/crates.io-index#heck@0.5.0",
+        "registry+https://github.com/rust-lang/crates.io-index#indexmap@2.14.0",
+        "registry+https://github.com/rust-lang/crates.io-index#itoa@1.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#libc@0.2.186",
+        "registry+https://github.com/rust-lang/crates.io-index#linux-raw-sys@0.12.1",
+        "registry+https://github.com/rust-lang/crates.io-index#memchr@2.8.3",
+        "registry+https://github.com/rust-lang/crates.io-index#once_cell@1.21.4",
+        "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+        "registry+https://github.com/rust-lang/crates.io-index#semver@1.0.28",
+        "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_core@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.150",
+        "registry+https://github.com/rust-lang/crates.io-index#static_assertions@1.1.0",
+        "registry+https://github.com/rust-lang/crates.io-index#tempfile@3.27.0",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_core@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_pipeline@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#zmij@1.0.22"
+      ],
+      "proc_macro_and_support_closure": [
+        "registry+https://github.com/rust-lang/crates.io-index#fs-err@2.11.0",
+        "registry+https://github.com/rust-lang/crates.io-index#proc-macro2@1.0.106",
+        "registry+https://github.com/rust-lang/crates.io-index#quote@1.0.46",
+        "registry+https://github.com/rust-lang/crates.io-index#serde_derive@1.0.228",
+        "registry+https://github.com/rust-lang/crates.io-index#siphasher@0.3.11",
+        "registry+https://github.com/rust-lang/crates.io-index#syn@2.0.118",
+        "registry+https://github.com/rust-lang/crates.io-index#thiserror-impl@2.0.18",
+        "registry+https://github.com/rust-lang/crates.io-index#toml@0.5.11",
+        "registry+https://github.com/rust-lang/crates.io-index#unicode-ident@1.0.24",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_internal_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_macros@0.29.5",
+        "registry+https://github.com/rust-lang/crates.io-index#uniffi_meta@0.29.5"
+      ]
+    }
+  },
+  "method": "Two tools per rustc target triple that produces one of the 9 committed native artifacts (a separate graph for each, not one merged closure): `cargo metadata --locked --offline --filter-platform <triple>` supplies per-package facts (license/version/source/targets), and `cargo tree --locked --offline --target <triple> -e <edges> --prefix none` supplies the ACTUAL feature-activation-correct reachable set for 'normal' and 'normal,build' edges. `cargo metadata`'s own `resolve.nodes[].deps` is not used as the reachability source: it unconditionally lists every dependency edge declared in Cargo.toml, including optional dependencies gated behind an inactive feature (confirmed 2026-08-24 -- `uniffi`'s optional bindgen-CLI dependency chain, `uniffi_bindgen`/`askama`/`goblin`/`nom`/`weedle2`/`textwrap`/`smawk`/`clap`, appeared as metadata edges despite the feature that would enable them never being active for this crate's actual build; `cargo tree` correctly omits all of them). `--offline` means both commands only ever read the local registry cache that an explicit, separate `cargo fetch --locked` network bootstrap step already populated (see docs/LEGAL_REVIEW.md's network-requirement note); neither command run by this script ever touches the network itself. Cargo.lock's own SHA-256 is hashed before and after every `cargo metadata`/`cargo tree` invocation; a mismatch fails generation. Each package records its Cargo.lock checksum (the crates.io tarball digest Cargo itself pins), not a digest invented by this script. A package is 'linked_into_compiled_artifact' for a target only if it is in the real normal-edge set AND reachable from the crate root without passing through a proc-macro crate's own dependency edges -- proc-macro crates and everything reachable only from them run on the host compiler and are not embedded in the cdylib/staticlib/so this crate produces. 'host_build_dependency_only' is the real normal+build set minus the real normal set (e.g. `autocfg`, used only by `fs-err`'s build.rs). 'dev_dependency_only' is always empty: this crate declares no [dev-dependencies], and Cargo never activates a dependency's own dev-dependencies when it is built as a library dependency of another crate.",
+  "mit_only_linked_packages": [
+    "bytes@1.12.1",
+    "cargo_metadata@0.19.2",
+    "zmij@1.0.22"
+  ],
+  "package_count": 46,
+  "packages": [
+    {
+      "cargo_lock_checksum": "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "anyhow",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.103"
+    },
+    {
+      "cargo_lock_checksum": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53",
+      "license": "Apache-2.0 OR MIT",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "host_build_dependency_only"
+        ],
+        "aarch64-apple-ios": [
+          "host_build_dependency_only"
+        ],
+        "aarch64-apple-ios-sim": [
+          "host_build_dependency_only"
+        ],
+        "aarch64-linux-android": [
+          "host_build_dependency_only"
+        ],
+        "armv7-linux-androideabi": [
+          "host_build_dependency_only"
+        ],
+        "i686-linux-android": [
+          "host_build_dependency_only"
+        ],
+        "x86_64-apple-darwin": [
+          "host_build_dependency_only"
+        ],
+        "x86_64-linux-android": [
+          "host_build_dependency_only"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "host_build_dependency_only"
+        ]
+      },
+      "name": "autocfg",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.5.1"
+    },
+    {
+      "cargo_lock_checksum": "b4388bee8683e3d04af747c73422af53102d2bd24d9eadb6cbc100baef4b43f8",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "bitflags",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.13.0"
+    },
+    {
+      "cargo_lock_checksum": "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04",
+      "license": "MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "bytes",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.12.1"
+    },
+    {
+      "cargo_lock_checksum": "5f2d30e4173c4026932d51d31d6b0613b1fd3014bf3f9f8943d4ba139c437ba0",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "camino",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.2.4"
+    },
+    {
+      "cargo_lock_checksum": "e35af189006b9c0f00a064685c727031e3ed2d8020f7ba284d78cc2671bd36ea",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "cargo-platform",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.1.9"
+    },
+    {
+      "cargo_lock_checksum": "dd5eb614ed4c27c5d706420e4320fbe3216ab31fa1c33cd8246ac36dae4479ba",
+      "license": "MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "cargo_metadata",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.19.2"
+    },
+    {
+      "cargo_lock_checksum": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "cfg-if",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.4"
+    },
+    {
+      "cargo_lock_checksum": "850970a274ad3f4cb46366499c0e1f811aa717ea2514329b1dfee2aa377f68b4",
+      "license": "MIT/Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "cryptoxide",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.5.3"
+    },
+    {
+      "cargo_lock_checksum": "a9bf77cf581d1a8c5f73c45e6d31aa45cfcb94438310f2f628b07e4727949115",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "ed25519-bip32",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.4.2"
+    },
+    {
+      "cargo_lock_checksum": "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f",
+      "license": "Apache-2.0 OR MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "equivalent",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.2"
+    },
+    {
+      "cargo_lock_checksum": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "errno",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.3.14"
+    },
+    {
+      "cargo_lock_checksum": "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6",
+      "license": "Apache-2.0 OR MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "fastrand",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.4.1"
+    },
+    {
+      "cargo_lock_checksum": "88a41f105fe1d5b6b34b2055e3dc59bb79b46b48b2040b9e6c7b4b5de097aa41",
+      "license": "MIT/Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "fs-err",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.11.0"
+    },
+    {
+      "cargo_lock_checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "getrandom",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.4.3"
+    },
+    {
+      "cargo_lock_checksum": "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "hashbrown",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.17.1"
+    },
+    {
+      "cargo_lock_checksum": "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "heck",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.5.0"
+    },
+    {
+      "cargo_lock_checksum": "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9",
+      "license": "Apache-2.0 OR MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "indexmap",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.14.0"
+    },
+    {
+      "cargo_lock_checksum": "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "itoa",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.18"
+    },
+    {
+      "cargo_lock_checksum": "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "libc",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.2.186"
+    },
+    {
+      "cargo_lock_checksum": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "linux-raw-sys",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.12.1"
+    },
+    {
+      "cargo_lock_checksum": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+      "license": "Unlicense OR MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "memchr",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.8.3"
+    },
+    {
+      "cargo_lock_checksum": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "once_cell",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.21.4"
+    },
+    {
+      "cargo_lock_checksum": "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "proc-macro2",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.106"
+    },
+    {
+      "cargo_lock_checksum": "dfbc457d0c7a0759a614551b11a6409e5951f6c7537be1f1b7682b9ae9230368",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "quote",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.46"
+    },
+    {
+      "cargo_lock_checksum": "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190",
+      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "rustix",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.1.4"
+    },
+    {
+      "cargo_lock_checksum": "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "semver",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.28"
+    },
+    {
+      "cargo_lock_checksum": "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "serde",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.228"
+    },
+    {
+      "cargo_lock_checksum": "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "serde_core",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.228"
+    },
+    {
+      "cargo_lock_checksum": "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "serde_derive",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.228"
+    },
+    {
+      "cargo_lock_checksum": "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "serde_json",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.150"
+    },
+    {
+      "cargo_lock_checksum": "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d",
+      "license": "MIT/Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "siphasher",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.3.11"
+    },
+    {
+      "cargo_lock_checksum": "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "static_assertions",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.1.0"
+    },
+    {
+      "cargo_lock_checksum": "1b9ae57f904213ebb649ce6895b8a66c66f0203b9319718f69a5612a065b1422",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "syn",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.0.118"
+    },
+    {
+      "cargo_lock_checksum": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "tempfile",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "3.27.0"
+    },
+    {
+      "cargo_lock_checksum": "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "thiserror-impl",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.0.18"
+    },
+    {
+      "cargo_lock_checksum": "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4",
+      "license": "MIT OR Apache-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "thiserror",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "2.0.18"
+    },
+    {
+      "cargo_lock_checksum": "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234",
+      "license": "MIT/Apache-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "toml",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.5.11"
+    },
+    {
+      "cargo_lock_checksum": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+      "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "unicode-ident",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.24"
+    },
+    {
+      "cargo_lock_checksum": "3291800a6b06569f7d3e15bdb6dc235e0f0c8bd3eb07177f430057feb076415f",
+      "license": "MPL-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "uniffi",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.29.5"
+    },
+    {
+      "cargo_lock_checksum": "f38a9a27529ccff732f8efddb831b65b1e07f7dea3fd4cacd4a35a8c4b253b98",
+      "license": "MPL-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "uniffi_core",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.29.5"
+    },
+    {
+      "cargo_lock_checksum": "09acd2ce09c777dd65ee97c251d33c8a972afc04873f1e3b21eb3492ade16933",
+      "license": "MPL-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "uniffi_internal_macros",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.29.5"
+    },
+    {
+      "cargo_lock_checksum": "5596f178c4f7aafa1a501c4e0b96236a96bc2ef92bdb453d83e609dad0040152",
+      "license": "MPL-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "uniffi_macros",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.29.5"
+    },
+    {
+      "cargo_lock_checksum": "beadc1f460eb2e209263c49c4f5b19e9a02e00a3b2b393f78ad10d766346ecff",
+      "license": "MPL-2.0",
+      "linked_in_any_target": false,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-apple-ios-sim": [
+          "proc_macro_and_support_closure"
+        ],
+        "aarch64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "armv7-linux-androideabi": [
+          "proc_macro_and_support_closure"
+        ],
+        "i686-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-apple-darwin": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-linux-android": [
+          "proc_macro_and_support_closure"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "proc_macro_and_support_closure"
+        ]
+      },
+      "name": "uniffi_meta",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.29.5"
+    },
+    {
+      "cargo_lock_checksum": "dd76b3ac8a2d964ca9fce7df21c755afb4c77b054a85ad7a029ad179cc5abb8a",
+      "license": "MPL-2.0",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "uniffi_pipeline",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "0.29.5"
+    },
+    {
+      "cargo_lock_checksum": "bd2f034a4bebf216c9e4b7083603e024cf930873fd67830cfb083c9fa33129d9",
+      "license": "MIT",
+      "linked_in_any_target": true,
+      "membership": {
+        "aarch64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-apple-ios-sim": [
+          "linked_into_compiled_artifact"
+        ],
+        "aarch64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "armv7-linux-androideabi": [
+          "linked_into_compiled_artifact"
+        ],
+        "i686-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-apple-darwin": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-linux-android": [
+          "linked_into_compiled_artifact"
+        ],
+        "x86_64-unknown-linux-gnu": [
+          "linked_into_compiled_artifact"
+        ]
+      },
+      "name": "zmij",
+      "source": "registry+https://github.com/rust-lang/crates.io-index",
+      "version": "1.0.22"
+    }
+  ],
+  "target_triples": [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-linux-android",
+    "armv7-linux-androideabi",
+    "i686-linux-android",
+    "x86_64-linux-android",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
+    "x86_64-unknown-linux-gnu"
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "artifact_count": 9,
+  "artifacts": [
+    {
+      "arch": "arm64-v8a",
+      "path": "src/androidMain/jniLibs/arm64-v8a/libkardano_ed25519_bip32_signing.so",
+      "platform": "Android (JNI)",
+      "provenance": "cargo-ndk cross-build.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (android group)",
+      "sha256": "0110314867664f9856c306e8a5dbd9ea7c78b8811e5614283455775324cb9b51",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "armeabi-v7a",
+      "path": "src/androidMain/jniLibs/armeabi-v7a/libkardano_ed25519_bip32_signing.so",
+      "platform": "Android (JNI)",
+      "provenance": "cargo-ndk cross-build.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (android group)",
+      "sha256": "37751f5668a4be6ffea0fb3cbfa4e39087ededcdc0f577190ac61d63bb2985ac",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "x86",
+      "path": "src/androidMain/jniLibs/x86/libkardano_ed25519_bip32_signing.so",
+      "platform": "Android (JNI)",
+      "provenance": "cargo-ndk cross-build.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (android group)",
+      "sha256": "8a4615594c75ecc628579f19f4a82398fee8bafb3dfc91ddea0408430d05614c",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "x86_64",
+      "path": "src/androidMain/jniLibs/x86_64/libkardano_ed25519_bip32_signing.so",
+      "platform": "Android (JNI)",
+      "provenance": "cargo-ndk cross-build.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (android group)",
+      "sha256": "8c6bd09ec3bdd66198f854461f16c2983edde22932a4710b7175bc940a5b7b98",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "aarch64",
+      "path": "src/jvmMain/resources/darwin-aarch64/libkardano_ed25519_bip32_signing.dylib",
+      "platform": "macOS (JVM/JNA)",
+      "provenance": "Built and runtime-verified on the macOS arm64 host.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (macos-jvm group)",
+      "sha256": "6462fe39abd8628da35c688d58b5c376b6a32919391078fd0ce5981fb032cc84",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "x86-64",
+      "path": "src/jvmMain/resources/darwin-x86-64/libkardano_ed25519_bip32_signing.dylib",
+      "platform": "macOS (JVM/JNA)",
+      "provenance": "Cross-built on macOS arm64; not runtime-verified on this host.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (macos-jvm group)",
+      "sha256": "f696f355c0202a0b1664e9850eb1482ad704c48d8503797b848aba57eab605b7",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "x86-64",
+      "path": "src/jvmMain/resources/linux-x86-64/libkardano_ed25519_bip32_signing.so",
+      "platform": "Linux (JVM/JNA)",
+      "provenance": "Native ubuntu-22.04 rebuild; promoted from run 32678079715 (SHA-256 cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5).",
+      "rebuild_workflow": ".github/workflows/linux-jvm-rebuild-evidence.yml",
+      "sha256": "cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "arm64",
+      "path": "src/nativeInterop/libs/iosArm64/libkardano_ed25519_bip32_signing.a",
+      "platform": "iOS device (Kotlin/Native)",
+      "provenance": "cargo build --target aarch64-apple-ios.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (ios group)",
+      "sha256": "a933ee42dbe098959a1edd3e1f619d652d813863e234919f976f32fa42a76fb2",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    },
+    {
+      "arch": "arm64",
+      "path": "src/nativeInterop/libs/iosSimulatorArm64/libkardano_ed25519_bip32_signing.a",
+      "platform": "iOS simulator (Kotlin/Native)",
+      "provenance": "cargo build --target aarch64-apple-ios-sim.",
+      "rebuild_workflow": ".github/workflows/native-rebuild-evidence.yml (ios group)",
+      "sha256": "a894136bbdb6c9884c25ec9aec171520d7c062ede19e797b2aded48d09202056",
+      "source_owner": "first-party (in-tree crypto-signing-backend crate)"
+    }
+  ],
+  "method": "Every row is required to appear in both crypto-signing-backend/CHECKSUMS.sha256 and this script's NATIVE_ARTIFACT_CATALOG; a mismatch in either direction, a duplicate path, a malformed line, a symlink, or a SHA-256 mismatch against the committed bytes all fail generation.",
+  "windows_candidate_not_promoted": "win32-x86-64/kardano_ed25519_bip32_signing.dll has a technical GO on PE-structure evidence (windows-jvm-rebuild-evidence.yml). Its independent PE technical review is complete (commit c65a20a), which closes ONLY that technical-review gate -- it is not a legal approval and does not promote this candidate or mean any DLL is distributed. It remains unpromoted: not in crypto-signing-backend/CHECKSUMS.sha256, not in this catalog, and not distributed, solely because of the still-open upstream hyperledger-identus/apollo issue #226 (and any separate manual/release decision)."
+}

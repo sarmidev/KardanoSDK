@@ -22,6 +22,12 @@ jobs:
           python3 -m unittest
           scripts.tests.test_check_restricted_claims
           scripts.tests.test_check_handoff_archive
+      - name: Run native-artifact catalog tests
+        run: >-
+          python3 -m unittest
+          discover
+          -s crypto-signing-backend/scripts/tests
+          -p "test_*.py"
       - name: Verify HANDOFF archive bytes
         run: python3 scripts/check_handoff_archive.py
       - name: Scan tracked docs/markdown/source for banned claim language
@@ -29,6 +35,162 @@ jobs:
         # separate job. Phrase list, match-by-match classification, and exact
         # path exclusions live in scripts/check_restricted_claims.py.
         run: python3 scripts/check_restricted_claims.py
+
+  legal-evidence-scan:
+    name: Legal-evidence packet (NOTICE/LICENSES/native/lock inventory)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source (exact PR head SHA for pull_request; full history for scope-binding seal ancestry checks)
+        # For `pull_request`, `ref` is pinned to the exact, already-pushed
+        # PR head commit (`github.event.pull_request.head.sha`) -- NOT
+        # the default `refs/pull/*/merge` two-parent test-merge ref other
+        # jobs in this workflow may still use. A 2026-08-25 independent
+        # review removed the checker-level exception that used to accept
+        # that merge ref; this job now checks the sealed PR head commit
+        # itself directly, so strict seal/evidence checks below always
+        # see literal HEAD as the commit actually being evaluated. For
+        # `push`, `github.sha` is the pushed commit (the checkout
+        # action's own default; pinned explicitly here for clarity).
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Select legal-evidence checkout head (fail-closed; validates a main-branch merge before checking the sealed PR head)
+        # A no-op for `pull_request` (already checked out at the exact PR
+        # head SHA above) and for an ordinary `fix/**` push: HEAD already
+        # IS the commit every later step in this job runs against. Only
+        # for a `push` to `main` whose HEAD is a genuine two-parent merge
+        # commit does this validate the trusted GitHub push event
+        # (repository/ref/before/after/exact parent order/byte-identical
+        # merge tree) and `git checkout --detach` the validated sealed
+        # PR-head parent -- see scripts/select_seal_checkout_head.py's own
+        # module docstring for the exact fail-closed rules and its
+        # documented trust boundary. Any validation failure here fails
+        # this job outright and requires a fresh seal; it never falls
+        # back to silently checking a different commit.
+        run: python3 scripts/select_seal_checkout_head.py
+      - name: Set up Rust (pinned toolchain)
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal --no-self-update
+          rustup default 1.97.0
+      - name: Capture pre-generation worktree state
+        # A fresh actions/checkout has an empty `git status --porcelain`/
+        # `git diff`/`git diff --cached` by construction; this is captured
+        # anyway (rather than assumed) so the later "touched anything
+        # outside docs/evidence/" step is checking against a real recorded
+        # baseline, not an assumption about checkout behavior.
+        run: |
+          git status --porcelain=v1 | tee /tmp/worktree-before.txt
+          git diff --exit-code
+          git diff --cached --exit-code
+          sha256sum crypto-signing-backend/Cargo.lock > /tmp/cargo-lock-before.sha256
+      - name: Bootstrap Cargo registry over the network (--locked only, no lockfile edits)
+        # The FIRST of exactly two steps in this job allowed real network
+        # access (the second is the pinned bcprov-jdk18on fetch immediately
+        # below). This one fetches exactly the crates
+        # crypto-signing-backend/Cargo.lock already pins (a --locked fetch
+        # fails rather than re-resolving), and every later step in this job
+        # runs with CARGO_NET_OFFLINE=true so a generator/test that tried to
+        # reach the network for Cargo resolution specifically would fail
+        # loudly instead of silently re-resolving or mutating the lockfile.
+        run: |
+          cargo fetch --locked --manifest-path crypto-signing-backend/Cargo.toml
+          cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/before.hash
+          sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/after.hash
+          diff /tmp/before.hash /tmp/after.hash
+      - name: Bootstrap the pinned bcprov-jdk18on jar over the network (host-pinned, SHA-256 + size verified)
+        # The SECOND (and last) step in this job allowed real network
+        # access. A 2026-08-24 independent review found the live
+        # java_class_version_evidence.json verifier previously depended
+        # only on this job's own local Gradle module cache, which this job
+        # never populates (it runs no ./gradlew task at all -- see the
+        # "clean temporary GRADLE_USER_HOME" step below) -- silently
+        # returning success with nothing actually checked. This step
+        # downloads the exact org.bouncycastle:bcprov-jdk18on:1.85.2 .jar
+        # directly from Maven Central, independent of any Gradle cache;
+        # generate_legal_evidence.fetch_and_verify_bcprov_jar() pins the
+        # request to repo1.maven.org (refuses any redirect elsewhere) and
+        # requires the downloaded bytes' whole-archive SHA-256 and exact
+        # size to match the committed, reviewed
+        # docs/evidence/java_class_version_evidence.json pin before
+        # returning a path -- a network/host/size/hash failure fails this
+        # step, not a later one. Every later step in this job reuses this
+        # SAME already-verified local copy via
+        # KARDANO_LEGAL_EVIDENCE_BCPROV_JAR instead of re-fetching.
+        run: |
+          mkdir -p "$RUNNER_TEMP/bcprov-fetch"
+          python3 -c "
+          import pathlib, sys
+          sys.path.insert(0, 'scripts')
+          import generate_legal_evidence as evidence
+          jar = evidence.fetch_and_verify_bcprov_jar(pathlib.Path('$RUNNER_TEMP/bcprov-fetch'))
+          print(jar)
+          " | tee /tmp/bcprov-jar-path.txt
+          echo "KARDANO_LEGAL_EVIDENCE_BCPROV_JAR=$(cat /tmp/bcprov-jar-path.txt)" >> "$GITHUB_ENV"
+      - name: Run legal-evidence regression tests
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: >-
+          python3 -m unittest
+          scripts.tests.test_generate_legal_evidence
+          scripts.tests.test_check_release_evidence
+          scripts.tests.test_select_seal_checkout_head
+      - name: Regenerate from a clean temporary GRADLE_USER_HOME (proves no local-cache dependency)
+        # This job never installs a JDK or runs any ./gradlew task, so this
+        # runner's Gradle cache is already empty -- GRADLE_USER_HOME is set
+        # explicitly here anyway so the property is visible in the log, not
+        # just incidental to this job's step order. A 2026-08-24 independent
+        # review found gradle_license_inventory() previously required a
+        # pre-populated local Gradle POM cache to resolve every coordinate;
+        # scripts/license_catalog.py + scripts/license_catalog_harvested.py
+        # are now a complete, committed catalog, and
+        # scripts/generate_legal_evidence.py fails closed (raises, writes
+        # nothing) if any coordinate is still unresolved.
+        # java_class_version_evidence.json's own live verification is
+        # independent of GRADLE_USER_HOME entirely (a different mechanism --
+        # the KARDANO_LEGAL_EVIDENCE_BCPROV_JAR env var set two steps above,
+        # never this job's Gradle cache); this step's cold GRADLE_USER_HOME
+        # only exercises the Gradle-license-resolution independence above.
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          rm -rf "$RUNNER_TEMP/cold-gradle-home"
+          mkdir -p "$RUNNER_TEMP/cold-gradle-home"
+          GRADLE_USER_HOME="$RUNNER_TEMP/cold-gradle-home" python3 scripts/generate_legal_evidence.py
+          cp -r docs/evidence /tmp/legal-evidence-cold-cache
+      - name: Regenerate evidence twice and diff
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          python3 scripts/generate_legal_evidence.py
+          cp -r docs/evidence /tmp/legal-evidence-run1
+          python3 scripts/generate_legal_evidence.py
+          diff -rq /tmp/legal-evidence-run1 docs/evidence
+      - name: Fail if cold-cache output differs from the committed evidence
+        run: diff -rq /tmp/legal-evidence-cold-cache docs/evidence
+      - name: Fail on uncommitted evidence drift
+        run: git diff --exit-code -- docs/evidence
+      - name: Fail if generation touched anything outside docs/evidence/
+        # Defense in depth beyond the per-call Cargo.lock hash guards inside
+        # scripts/generate_legal_evidence.py itself: every generator/test
+        # step above ran with CARGO_NET_OFFLINE=true, so a script that tried
+        # to silently re-resolve or fetch would have failed loudly instead.
+        # This step independently re-diffs the ENTIRE tracked worktree
+        # against the pre-generation baseline captured above, EXCLUDING
+        # docs/evidence/ (which is expected, and separately checked above),
+        # and fails if anything else changed -- e.g. a generator bug that
+        # rewrote Cargo.lock, a gradle.lockfile, or any other tracked
+        # source file would be caught here even if every narrower check
+        # above happened to miss it.
+        run: |
+          git diff --exit-code -- . ':(exclude)docs/evidence'
+          git status --porcelain=v1 -- . ':(exclude)docs/evidence' | tee /tmp/worktree-after-non-evidence.txt
+          test ! -s /tmp/worktree-after-non-evidence.txt
+          cut -d' ' -f1 /tmp/cargo-lock-before.sha256 > /tmp/cargo-lock-before-final.hash
+          sha256sum crypto-signing-backend/Cargo.lock | cut -d' ' -f1 > /tmp/cargo-lock-final.hash
+          diff /tmp/cargo-lock-before-final.hash /tmp/cargo-lock-final.hash
+      - name: Run the release-evidence checker
+        run: python3 scripts/check_release_evidence.py
 
   action-pin-scan:
     name: Action SHA-pin scan
@@ -40,6 +202,8 @@ jobs:
         run: python3 -m unittest scripts.tests.test_check_action_pins
       - name: Verify workflow Action pins and composite metadata
         run: python3 scripts/check_action_pins.py
+      - name: Run legal-evidence-scan checkout/config regression tests
+        run: python3 -m unittest scripts.tests.test_verify_workflow_legal_head
 
   credential-scan:
     name: Full-history credential scan
@@ -101,7 +265,7 @@ jobs:
           :tx:testAndroidHostTest
 
   macos-signing-and-ios:
-    name: macOS signing tests and iOS compile
+    name: macOS signing tests and iOS compile/link
     runs-on: macos-latest
     steps:
       - name: Check out source
@@ -129,7 +293,7 @@ jobs:
           :shared:jvmTest
       - name: Run shared Android host tests
         run: ./gradlew --no-daemon :shared:testAndroidHostTest
-      - name: Compile iOS targets
+      - name: Compile iOS targets and link simulator tests
         run: >-
           ./gradlew --no-daemon
           :core:compileKotlinIosArm64
@@ -140,9 +304,10 @@ jobs:
           :wallet:compileKotlinIosArm64
           :tx:compileKotlinIosArm64
           :shared:compileKotlinIosArm64
+          :crypto-signing-backend:linkDebugTestIosSimulatorArm64
 
   android-lint:
-    name: Android lint Debug and Release
+    name: Android lint and assemble
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -166,3 +331,8 @@ jobs:
           ./gradlew --no-daemon
           :androidApp:lintDebug
           :androidApp:lintRelease
+      - name: Assemble Debug and Release
+        run: >-
+          ./gradlew --no-daemon
+          :androidApp:assembleDebug
+          :androidApp:assembleRelease

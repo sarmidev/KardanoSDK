@@ -1,0 +1,263 @@
+name: Windows JVM rebuild evidence
+
+# Two independent native Windows x86-64 rebuilds of the Windows JVM
+# signing DLL, then a comparison job that requires A==B SHA-256 and
+# matching PE reports before running :crypto-signing-backend:jvmTest.
+# :crypto/:wallet JVM tests stay out of this job (identus 1.8.8 has no
+# win32-x86-64 derivation wrapper). This workflow never copies into
+# committed src/ and never rewrites CHECKSUMS.sha256.
+# Windows ARM is out of scope. Runner is pinned windows-2022 (ImageOS
+# win22), not windows-latest. ImageVersion is recorded; the hosted
+# image is not claimed immutable. Candidate-only until Phase C review.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "fix/**"
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_IMAGE_OS: win22
+  EXPECTED_RUSTC: "1.97.0"
+  EXPECTED_WINDOWS_TARGET: x86_64-pc-windows-msvc
+  RUSTUP_TOOLCHAIN: "1.97.0"
+
+jobs:
+  windows-jvm-build-a:
+    name: Windows JVM candidate A
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require native x86_64 Windows 2022
+        run: |
+          Write-Host "ImageOS=$env:ImageOS"
+          Write-Host "ImageVersion=$env:ImageVersion"
+          Write-Host "RUNNER_OS=$env:RUNNER_OS"
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          if ($env:ImageOS -ne $env:EXPECTED_IMAGE_OS) {
+            Write-Error "ImageOS $($env:ImageOS) != $($env:EXPECTED_IMAGE_OS)"
+            exit 1
+          }
+          if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+            Write-Error "host $($env:PROCESSOR_ARCHITECTURE) is not AMD64"
+            exit 1
+          }
+      - name: Record Windows baseline
+        run: |
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture, OsHardwareAbstractionLayer | Format-List
+          python -c "import sys; sys.path.insert(0, 'crypto-signing-backend/scripts'); import windows_pe_verify as w; print('dumpbin', w.find_dumpbin())"
+      - name: Install rustup 1.29.0 and rustc 1.97.0
+        run: >
+          python crypto-signing-backend/scripts/install_rustup.py
+          --skip-if-present
+          --dest "$env:RUNNER_TEMP/kardano-rustup-init.exe"
+          --cargo-home "$env:USERPROFILE/.cargo"
+          --channel 1.97.0
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+          $env:PATH = "$cargoBin;$env:PATH"
+          $rustup = Join-Path $cargoBin "rustup.exe"
+          $sysroot = & $rustup run $env:EXPECTED_RUSTC rustc --print sysroot
+          if (-not $sysroot) {
+            Write-Error "rustc $($env:EXPECTED_RUSTC) sysroot missing"
+            exit 1
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $cargoBin
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $sysroot.Trim() "bin")
+          Add-Content -Path $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=$($env:EXPECTED_RUSTC)"
+      - name: Require rustc 1.97.0 and host triple
+        run: |
+          rustc --version --verbose
+          $release = (rustc --version).Split(" ")[1]
+          if ($release -ne $env:EXPECTED_RUSTC) {
+            Write-Error "rustc $release != $($env:EXPECTED_RUSTC)"
+            Get-Command rustc | Format-List
+            exit 1
+          }
+          $hostTriple = (rustc -vV | Select-String "^host:").ToString().Split(" ", 2)[1]
+          if ($hostTriple -ne $env:EXPECTED_WINDOWS_TARGET) {
+            Write-Error "rustc host $hostTriple != $($env:EXPECTED_WINDOWS_TARGET)"
+            exit 1
+          }
+          rustup component add llvm-tools-preview --toolchain $env:EXPECTED_RUSTC
+      - name: Pin MSVC 14.44.35207 / link 14.44.35228.0 and Windows SDK 10.0.26100.0
+        run: python crypto-signing-backend/scripts/pin_msvc_linker.py
+      - name: Rebuild Windows JVM into staging A
+        run: >
+          python crypto-signing-backend/scripts/rebuild_into_staging.py
+          --staging "$env:RUNNER_TEMP/windows-jvm-a"
+          --groups windows-jvm
+      - name: Upload Windows JVM candidate A
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-jvm-candidate-a
+          path: ${{ runner.temp }}/windows-jvm-a
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-jvm-build-b:
+    name: Windows JVM candidate B
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require native x86_64 Windows 2022
+        run: |
+          Write-Host "ImageOS=$env:ImageOS"
+          Write-Host "ImageVersion=$env:ImageVersion"
+          if ($env:ImageOS -ne $env:EXPECTED_IMAGE_OS) {
+            Write-Error "ImageOS $($env:ImageOS) != $($env:EXPECTED_IMAGE_OS)"
+            exit 1
+          }
+          if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+            Write-Error "host $($env:PROCESSOR_ARCHITECTURE) is not AMD64"
+            exit 1
+          }
+      - name: Record Windows baseline
+        run: |
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture, OsHardwareAbstractionLayer | Format-List
+          python -c "import sys; sys.path.insert(0, 'crypto-signing-backend/scripts'); import windows_pe_verify as w; print('dumpbin', w.find_dumpbin())"
+      - name: Install rustup 1.29.0 and rustc 1.97.0
+        run: >
+          python crypto-signing-backend/scripts/install_rustup.py
+          --skip-if-present
+          --dest "$env:RUNNER_TEMP/kardano-rustup-init.exe"
+          --cargo-home "$env:USERPROFILE/.cargo"
+          --channel 1.97.0
+      - name: Put pinned rustc 1.97.0 on PATH
+        run: |
+          $cargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
+          $env:PATH = "$cargoBin;$env:PATH"
+          $rustup = Join-Path $cargoBin "rustup.exe"
+          $sysroot = & $rustup run $env:EXPECTED_RUSTC rustc --print sysroot
+          if (-not $sysroot) {
+            Write-Error "rustc $($env:EXPECTED_RUSTC) sysroot missing"
+            exit 1
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $cargoBin
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path $sysroot.Trim() "bin")
+          Add-Content -Path $env:GITHUB_ENV -Value "RUSTUP_TOOLCHAIN=$($env:EXPECTED_RUSTC)"
+      - name: Require rustc 1.97.0 and host triple
+        run: |
+          rustc --version --verbose
+          $release = (rustc --version).Split(" ")[1]
+          if ($release -ne $env:EXPECTED_RUSTC) {
+            Write-Error "rustc $release != $($env:EXPECTED_RUSTC)"
+            Get-Command rustc | Format-List
+            exit 1
+          }
+          $hostTriple = (rustc -vV | Select-String "^host:").ToString().Split(" ", 2)[1]
+          if ($hostTriple -ne $env:EXPECTED_WINDOWS_TARGET) {
+            Write-Error "rustc host $hostTriple != $($env:EXPECTED_WINDOWS_TARGET)"
+            exit 1
+          }
+          rustup component add llvm-tools-preview --toolchain $env:EXPECTED_RUSTC
+      - name: Pin MSVC 14.44.35207 / link 14.44.35228.0 and Windows SDK 10.0.26100.0
+        run: python crypto-signing-backend/scripts/pin_msvc_linker.py
+      - name: Rebuild Windows JVM into staging B
+        run: >
+          python crypto-signing-backend/scripts/rebuild_into_staging.py
+          --staging "$env:RUNNER_TEMP/windows-jvm-b"
+          --groups windows-jvm
+      - name: Upload Windows JVM candidate B
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-jvm-candidate-b
+          path: ${{ runner.temp }}/windows-jvm-b
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-jvm-compare-kat:
+    name: Compare Windows candidates and run JVM KAT
+    runs-on: windows-2022
+    needs: [windows-jvm-build-a, windows-jvm-build-b]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require native x86_64 Windows 2022
+        run: |
+          Write-Host "ImageOS=$env:ImageOS"
+          Write-Host "ImageVersion=$env:ImageVersion"
+          if ($env:ImageOS -ne $env:EXPECTED_IMAGE_OS) {
+            Write-Error "ImageOS $($env:ImageOS) != $($env:EXPECTED_IMAGE_OS)"
+            exit 1
+          }
+          if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") {
+            Write-Error "host $($env:PROCESSOR_ARCHITECTURE) is not AMD64"
+            exit 1
+          }
+      - name: Record Windows baseline
+        run: |
+          Write-Host "ImageOS=$env:ImageOS"
+          Write-Host "ImageVersion=$env:ImageVersion"
+          Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, OsArchitecture | Format-List
+          python -c "import sys; sys.path.insert(0, 'crypto-signing-backend/scripts'); import windows_pe_verify as w; print('dumpbin', w.find_dumpbin())"
+      - name: Pin MSVC 14.44.35207 / link 14.44.35228.0 and Windows SDK 10.0.26100.0
+        run: python crypto-signing-backend/scripts/pin_msvc_linker.py
+      - name: Download candidate A
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-jvm-candidate-a
+          path: ${{ runner.temp }}/windows-jvm-a
+      - name: Download candidate B
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-jvm-candidate-b
+          path: ${{ runner.temp }}/windows-jvm-b
+      - name: Require byte-identical Windows candidates
+        run: >
+          python crypto-signing-backend/scripts/compare_windows_candidates.py
+          --left "$env:RUNNER_TEMP/windows-jvm-a"
+          --right "$env:RUNNER_TEMP/windows-jvm-b"
+          --report "$env:RUNNER_TEMP/windows-jvm-compare/compare-report.json"
+      - name: Place candidate on JNA resource path
+        run: |
+          $dest = "crypto-signing-backend/src/jvmMain/resources/win32-x86-64"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $src = Join-Path $env:RUNNER_TEMP "windows-jvm-a/artifacts/src/jvmMain/resources/win32-x86-64/kardano_ed25519_bip32_signing.dll"
+          if (-not (Test-Path $src)) {
+            Write-Error "candidate A DLL missing at $src"
+            Get-ChildItem -Recurse $env:RUNNER_TEMP/windows-jvm-a | Select-Object FullName
+            exit 1
+          }
+          Copy-Item $src (Join-Path $dest "kardano_ed25519_bip32_signing.dll")
+          Get-FileHash (Join-Path $dest "kardano_ed25519_bip32_signing.dll") -Algorithm SHA256
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          cache-disabled: false
+          cache-read-only: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}
+          cache-write-only: false
+          cache-cleanup: on-success
+      - name: Run Windows signing-backend JVM test
+        run: >
+          .\gradlew.bat --no-daemon
+          :crypto-signing-backend:jvmTest
+      - name: Upload Windows compare report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-jvm-compare-report
+          path: ${{ runner.temp }}/windows-jvm-compare
+          if-no-files-found: error
+          retention-days: 14

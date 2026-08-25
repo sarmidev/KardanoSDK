@@ -184,14 +184,101 @@ The full Phase 1 target matrix is intentionally not equivalent across platforms:
 - Android is the runtime validation surface for the Playground.
 - iOS simulator/device execution requires a local macOS/Xcode environment; compile/link checks are
   run where that environment is unavailable.
-- JVM signing runtime coverage currently requires the committed macOS native artifacts. Linux and
-  Windows JVM signing artifacts are not included.
+- JVM signing runtime coverage uses the committed macOS natives on Darwin. Linux x86-64
+  uses JNA prefix `linux-x86-64/` and is rebuilt only on native `ubuntu-22.04`
+  (glibc >= 2.35, measured at runtime). The `.so` is the ninth CHECKSUMS row
+  (`cb439099…4ed5`), promoted from run `32678079715`. Fresh Linux rebuilds
+  must match A==B and that row. Linux ARM, musl, and older glibc are out
+  of scope. Windows x86-64 JVM is candidate-only (JNA prefix
+  `win32-x86-64/`, `windows-2022` / ImageOS `win22`) and is not a
+  CHECKSUMS row. Rebuild jobs pin rustc 1.97.0 by placing the rustup
+  toolchain `bin` first on PATH; hosted images may otherwise expose
+  rustc 1.97.1.
+
+Native rebuild comparison (does not overwrite committed binaries):
+
+```bash
+python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
+python3 crypto-signing-backend/scripts/rebuild_into_staging.py \
+  --staging /tmp/kardano-native-rebuild \
+  --groups macos-jvm,android,ios \
+  --write-candidates crypto-signing-backend/rebuild-candidates \
+  --mode candidate \
+  --compare
+```
+
+`linux-jvm-rebuild-evidence.yml` rebuilds `x86_64-unknown-linux-gnu` twice on
+pinned `ubuntu-22.04` (ImageOS `ubuntu22`, not `ubuntu-latest`), records
+`/etc/os-release`, `ldd --version`, and compiler/linker versions, compares
+SHA-256 + ELF reports + GNU version requirements against the documented
+glibc 2.35 baseline, then runs `:crypto-signing-backend:jvmTest`
+`:crypto:jvmTest` `:wallet:jvmTest` `:shared:jvmTest` against the candidate
+at `linux-x86-64/`. The ELF verifier accepts only full-string
+`GLIBC_<major>.<minor>` or legacy three-component labels, walks
+Verneed/Vernaux inside one `SHT_GNU_verneed` section, requires canonical
+section 0, one `.dynamic`/`PT_DYNAMIC` pair with exact
+offset/vaddr/filesz/memsz/align, `.dynstr.sh_size == DT_STRSZ`,
+`DT_VERSYM` bound to one allocated `.gnu.version`, parsed Versym
+indices resolved to globally unique `vna_other`/`vd_ndx` values
+(repeated `vd_ndx` is rejected even when the name matches),
+canonical dynsym entry 0, Versym 0 only for the null entry / local /
+undefined weak import, fail-closed `readelf --version-info` and
+`--dyn-syms --wide` corroboration coupled to the parsed sign Versym,
+`UINT64_MAX` checked add/mul, and a two-pass path scan. Permissions
+stay `contents: read`. Uploads use `if-no-files-found: error`. The
+job does not write CHECKSUMS or committed `src/`. After Phase C it
+requires A==B **and** identity with the committed Linux `.so` /
+CHECKSUMS row. Promoted from run `32678079715` (artifacts
+`9503309381` / `9503308946` / `9503350346`, expire 2026-09-07).
+
+`windows-jvm-rebuild-evidence.yml` rebuilds `x86_64-pc-windows-msvc`
+twice on pinned `windows-2022` (ImageOS `win22`, not `windows-latest`;
+`ImageVersion` is recorded and is not an immutable-image claim).
+Jobs select MSVC toolset `14.44.35207` `Hostx64/x64` `link.exe`
+Version `14.44.35228.0` and Windows SDK `10.0.26100.0` via
+`vswhere` plus the pinned Kits tree (required um/ucrt include, lib,
+and `bin/x64`). They prepend those directories, require
+`where.exe link` to match, set `WindowsSdkDir` /
+`WindowsSDKVersion` / `INCLUDE` / `LIB`, and pass `-Clinker=` so
+cargo `--verbose` names that `link.exe`. Toolset/SDK drift fails
+until reviewed. Compares SHA-256 + PE32+ reports
+(AMD64, PE32+, `IMAGE_FILE_DLL`, canonical `SizeOfImage`, exact sign
+export in a `CNT_CODE`+`MEM_EXECUTE` non-writable section, no
+forwarder RVA, export tables/names inside `DataDirectory[EXPORT]`,
+ILT/IAT exactness inside `DataDirectory[IMPORT]`/`[IAT]`, every
+nonempty data directory parsed including resource tree and TLS
+callbacks, allowlisted imports, empty delay-load/Authenticode/CLR/bound-import, no
+CODEVIEW/PDB, `IMAGE_DEBUG_TYPE_REPRO` (PE/COFF empty or
+`uint32`+32-byte hash) and observed `IMAGE_DEBUG_TYPE_POGO`/`coffgrp`
+(`ZERO`/`LTCG`/`PGI`/`PGO`/`PGU` entries, no trailing junk) with matching
+raw pointers, resource structural interval tracking, recorded `/Brepro`
+`TimeDateStamp`, `DYNAMIC_BASE`+`NX_COMPAT`, no overlay). Path scan
+rejects ASCII and UTF-16LE drive-root and UNC candidates from any
+byte offset. Then runs `:crypto-signing-backend:jvmTest` via
+`gradlew.bat`. `:crypto`/`:wallet` JVM tests are not run here
+(`bip32-ed25519` 1.8.8 has no `win32-x86-64` wrapper). The DLL is
+placed only on the runner JNA path for that test. Permissions stay
+`contents: read`. Uploads use `if-no-files-found: error`. CHECKSUMS
+and committed `src/` are unchanged. Promotion waits for independent
+review.
+
+`native-rebuild-evidence.yml` runs the harness tests and `cargo metadata --locked` on
+Ubuntu, and the macOS staged rebuild on pinned `macos-26` + Xcode 26.6. Compare
+mode is chosen before NDK install so a diagnostic failure cannot skip the
+manifest. The job installs NDK `27.2.12479018` into a dest it owns and ignores
+the image `ANDROID_NDK*` value (`27.3.13750724`). It compares
+hashes/arch/symbols/install names against CHECKSUMS (or a candidate
+manifest if one is present during an iteration). Uploads use
+`if-no-files-found: error`. It never writes staged copies over `src/`.
+CARGO_TARGET_DIR is staging-owned and must be empty; the module `target/` is
+refused.
 
 Documentation and claim-language checks:
 
 ```bash
 rg -n "TESTING|fixtures|test vector|commonTest|jvmTest|iosSimulatorArm64Test|testAndroidHostTest" README.md docs/ core/README.md shared/README.md
 python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive scripts.tests.test_check_action_pins
+python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
 python3 scripts/check_handoff_archive.py
 python3 scripts/check_restricted_claims.py
 python3 scripts/check_action_pins.py
@@ -222,6 +309,143 @@ resolved live on 2026-08-23; do not reuse SHAs from older audit notes.
 The previous pins were exact patch releases (`checkout` `v4.3.1`, not the
 moving `v4` tag).
 
+Legal-evidence packet checks (Prompt 7; not legal advice, not approval):
+
+```bash
+python3 scripts/generate_legal_evidence.py
+python3 scripts/generate_legal_evidence.py   # run twice; expect zero diff
+git diff --quiet docs/evidence
+python3 scripts/check_release_evidence.py                    # ci-structural mode (default)
+python3 scripts/check_release_evidence.py --mode release     # expected to fail today (open gates)
+python3 -m unittest scripts.tests.test_generate_legal_evidence scripts.tests.test_check_release_evidence
+```
+
+`scripts/generate_legal_evidence.py` reads only already-locked/committed
+state — Gradle modules discovered dynamically from `settings.gradle.kts`
+(`*/gradle.lockfile`), a per-target-triple `cargo tree --locked --target
+<triple>` graph for each of the 9 committed native target triples against
+`crypto-signing-backend/Cargo.lock`, the dynamically-discovered
+UniFFI-generated Kotlin binding files, and
+`crypto-signing-backend/CHECKSUMS.sha256` — and writes deterministic
+JSON/text under `docs/evidence/`; it never embeds absolute paths,
+timestamps, or hostnames, and it hashes `Cargo.lock` before/after every
+Cargo invocation to fail closed if `--locked` did not actually prevent a
+mutation.
+
+`docs/evidence/java_class_version_evidence.json`'s live verification is the
+one deliberate exception to "no network needed": every plain run above
+resolves an actual `org.bouncycastle:bcprov-jdk18on:1.85.2` `.jar` to scan
+-- an explicit `--bcprov-jar PATH`, the `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR`
+environment variable (a local Gradle-cache copy is convenient for offline
+iteration), or (the default, if neither is set) a fresh download from
+Maven Central. There is no cold-cache/no-op skip branch: a missing/
+wrong-hash jar is a hard failure of the command above, never a silent
+pass. CI bootstraps this once per job via a dedicated step in
+`.github/workflows/verify.yml` and reuses that same verified copy (via
+the environment variable) for every later step in the job, so it is
+fetched from the network only once even though the generator and checker
+both run several times.
+
+That fetch's own request AND response URL are required to be
+byte-identical to the one pinned `https://repo1.maven.org/...` URL --
+exact scheme, host, HTTPS default port only, exact coordinate/version/
+filename path, no query/fragment/userinfo -- and it refuses EVERY HTTP
+redirect outright, even to the identical scheme/host/port/path (see
+`_validate_pinned_artifact_url()`/`_NoRedirectHandler` in
+`scripts/generate_legal_evidence.py`); only after that, and after the
+whole-archive SHA-256 and size both match the committed evidence, are the
+bytes written -- exclusively, via `os.open(O_CREAT | O_EXCL | O_WRONLY
+[| O_NOFOLLOW])`, never a plain truncating write -- refusing to create
+over (or write through a symlink to) anything already at the destination
+path.
+
+`scripts/check_release_evidence.py` fails closed (either mode) if
+a `NOTICE`/`LICENSES/` cross-reference is broken (including a missing
+`LICENSES/MIT.txt` when an MIT-only Gradle or Cargo package is present), the
+native inventory does not match `CHECKSUMS.sha256` exactly (9 rows) or a
+tracked native binary is not one of those rows, any `docs/evidence/*.json`
+file (or `LEGAL_EVIDENCE_DIGEST.txt`'s own recomputed digests/file sets) is
+stale or has a duplicate JSON key, a tracked evidence input is a symlink, a
+newly added module/UniFFI file is not covered by dynamic discovery, or
+`docs/LEGAL_REVIEW.md` contains a generic placeholder, a blank required
+cell, or a bare `open`/`pending` that is not one of the four named
+`ALLOWED_OPEN_GATE_MARKERS` strings. `--mode release` additionally fails
+while any of those four markers is still present anywhere in the file — by
+design this is expected to fail until an actual reviewer resolves each gate;
+CI runs the default `ci-structural` mode so an open counsel/upstream gate
+does not turn ordinary `Verify` red.
+
+`docs/evidence/scope_binding.json`'s two-commit seal
+(`check_scope_binding_seal()`) unconditionally requires the seal commit to
+be the EXACT current literal tip (`HEAD`'s own immediate parent must be
+`evidence_commit`) -- there is no merge-ref or any other exception in this
+checker at all; it never inspects `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH`
+or any other GitHub env var. A 2026-08-25 independent review removed a
+prior checker-level `pull_request` merge-ref exception
+(`_github_pull_request_merge_head()`/`_effective_seal_tip()`) once
+`.github/workflows/verify.yml`'s `legal-evidence-scan` job was changed to
+check out the exact PR head SHA
+(`ref: ${{ github.event_name == 'pull_request' &&
+github.event.pull_request.head.sha || github.sha }}`) directly, rather
+than the default `refs/pull/*/merge` ref -- the checker no longer needs to
+accept a merge-ref commit at all, because literal `HEAD` already IS the
+sealed PR head commit in that case. Every OTHER test/build job in the
+workflow may keep the default merge-ref checkout; only `legal-evidence-scan`
+pins the exact head SHA.
+`scripts.tests.test_verify_workflow_legal_head` parses the real workflow
+file (Ruby stdlib Psych, no new dependency) to assert this checkout
+expression and step ordering structurally.
+`scripts.tests.test_check_release_evidence.ScopeBindingSealCheckTests`
+now proves a two-(or more-)parent merge commit at literal `HEAD` is
+rejected unconditionally, in every mode, with or without a fully
+GitHub-`pull_request`-shaped event/env present (octopus merges included) --
+since the checker no longer reads any of it.
+
+Selecting a commit OTHER than literal `HEAD` to check -- the one
+legitimate remaining case, a future `push` to `refs/heads/main` whose
+`HEAD` is a genuine merge commit -- is handled entirely OUTSIDE
+`check_release_evidence.py`, by a small, separate, fail-closed script,
+`scripts/select_seal_checkout_head.py`, run as its own workflow step
+immediately after checkout and before any evidence/seal check. It leaves
+`HEAD` unchanged for an ordinary branch push, a `pull_request` job
+(already checked out at the exact head SHA above), or a non-merge push
+directly to `main`. Only for a `push` to `refs/heads/main` whose `HEAD`
+has exactly two parents does it validate the trusted GitHub push event
+named by `GITHUB_EVENT_PATH` -- `event.repository.full_name ==
+GITHUB_REPOSITORY`, `event.ref == GITHUB_REF == refs/heads/main`,
+`event.forced`/`event.deleted`/`event.created` are all exactly `False`,
+`event.before`/`event.after` are each a 40-hex-char SHA-1, `event.after ==
+GITHUB_SHA == git rev-parse HEAD`, `HEAD`'s first parent exactly equals
+`event.before` (exact order, not merely present among the parents), and
+`HEAD`'s own tree is byte-identical to its second parent's tree (so no
+conflict-resolution edit slipped in during the merge) -- and, only on
+success, `git checkout --detach`s that validated second parent (the
+sealed PR-head candidate) so every later step in the job runs the strict
+checks against that literal commit instead. Trusted-runner boundary: the
+event FILE handling fails closed on a symlink, a non-regular file, a
+file over 1 MiB, malformed/non-UTF-8/duplicate-key JSON, or a non-object
+top level, and `GITHUB_ACTIONS == "true"` plus the expected
+`GITHUB_SERVER_URL`/`GITHUB_API_URL` values are checked as
+defense-in-depth -- but none of this is a claim that a forged local
+environment cannot be constructed; the actual trust boundary is that this
+script only ever runs as a step inside a GitHub-hosted Actions job. An
+octopus merge, wrong parent order/SHA, a forced/deleted/created push
+event, or a genuine tree-changing merge all fail this script closed (no
+checkout performed, no fallback to a different commit) -- exactly the
+intended "a main-branch merge without a fresh seal must fail" behavior.
+`scripts.tests.test_select_seal_checkout_head` (33 tests) exercises the
+positive GitHub shape plus every named adversarial case: missing
+`GITHUB_ACTIONS`/`GITHUB_EVENT_PATH`/`GITHUB_REPOSITORY`/`GITHUB_SHA`, a
+missing/symlinked/oversized/malformed/duplicate-key/non-object event
+file, wrong repository/ref/before/after/SHA, a forced/deleted/created
+push event, an ordinary one-parent push (no-op), an octopus merge, a
+swapped parent order, an unrelated `before`, a genuine conflict-resolution
+tree mismatch, a forged same-tree candidate built with `git commit-tree`
+naming the wrong event parent, and a mismatched server/API URL.
+`check_full_source_scope_seal()` remains additional, GitHub-event-
+independent defense in depth (it unconditionally diffs `subject_commit`
+against current `HEAD`).
+
 Dependency lock and verification (regenerate only when coordinates
 change; do not hand-edit generated checksums):
 
@@ -238,16 +462,38 @@ locally by flipping the `junit-4.13.2.jar` SHA-256, then restoring it).
 See `docs/DEPENDENCY_REVIEW.md`.
 
 Android lint (warnings fail the build; freshness detectors are off
-because versions are locked and SHA-256 verified):
+because versions are locked and SHA-256 verified) and packaging:
 
 ```bash
 ./gradlew --no-daemon :androidApp:lintDebug :androidApp:lintRelease
+./gradlew --no-daemon :androidApp:assembleDebug :androidApp:assembleRelease
 ```
 
-`verify.yml` job `android-lint` runs both variants. Reports should read
-`No issues found.` Unsuppressed findings fail CI. Owner should still
-glance at pre-API-26 launcher tiles after regenerating the rounded-rect
-legacy silhouette (`scripts/generate_legacy_launcher_icons.py`).
+`verify.yml` job `android-lint` (Ubuntu) runs lint Debug/Release, then
+assemble Debug/Release. Reports should read `No issues found.`
+Unsuppressed findings fail CI. Assemble is packaging only, not
+`connectedAndroidDeviceTest`. Owner should still glance at pre-API-26
+launcher tiles after regenerating the rounded-rect legacy silhouette
+(`scripts/generate_legacy_launcher_icons.py`).
+
+iOS compile and simulator link (macOS Verify job
+`macos-signing-and-ios`):
+
+```bash
+./gradlew --no-daemon \
+  :core:compileKotlinIosArm64 \
+  :crypto:compileKotlinIosArm64 \
+  :crypto-signing-backend:compileKotlinIosArm64 \
+  :provider:compileKotlinIosArm64 \
+  :provider-blockfrost:compileKotlinIosArm64 \
+  :wallet:compileKotlinIosArm64 \
+  :tx:compileKotlinIosArm64 \
+  :shared:compileKotlinIosArm64 \
+  :crypto-signing-backend:linkDebugTestIosSimulatorArm64
+```
+
+That job also runs the macOS signing-path JVM tests. iOS on-simulator
+assertion execution remains future work (compile+link only).
 
 `scripts/check_handoff_archive.py` restores the six documented archive link
 rewrites at the byte level (no newline normalization) and hashes the result
