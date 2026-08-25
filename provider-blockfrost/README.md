@@ -34,7 +34,15 @@ coroutine cancellation), which keeps the API compatible with Swift/ObjC interop.
   represent instead of building around it.
 - `getUtxos` treats a Blockfrost `404` (address never used) as an empty list, not an error.
   Other endpoints keep `404` as `ProviderError.NotFound`.
-- UTxO pagination is capped internally.
+- UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). A page larger than
+  the requested count is `ProviderError.Deserialization` (not sliced). After 100 full pages,
+  a one-item probe of page 101 decides completeness: empty (including HTTP 404, the same
+  empty/end-of-results signal as ordinary UTxO pagination) → `Ok` with exactly 10_000;
+  non-empty → `ProviderError.ResultTruncated`; other probe failures keep the real typed
+  error.
+- Non-success read statuses other than `404`/`429` map to `ProviderError.RemoteStatus(code,
+  detail?)`. `detail` is parsed from the response body only (never request headers or the
+  `project_id`).
 - `submit` rejects empty input with `SubmitError.EmptyTransaction` before any HTTP call, and
   defensively copies the caller's bytes before handing them to the HTTP client.
 
@@ -64,9 +72,31 @@ stay HTTP-free. Per-platform engines: OkHttp (Android), CIO (JVM), Darwin (iOS).
 [ADR-0007](../docs/DECISIONS/0007-http-client-and-blockfrost-provider.md). It depends on the
 `Address.bech32` source string landed in Block 1.3b-pre.
 
+Every client installs Ktor `HttpTimeout` from existing `ktor-client-core` (no extra
+dependency): connect 10 seconds, request 30 seconds, socket 30 seconds. There is no
+Ktor `HttpRequestRetry` plugin. That plugin policy is separate from engine-level
+replay: the Android OkHttp engine sets `engine { config { retryOnConnectionFailure(false) } }`
+so the effective Ktor engine client has retry disabled (Ktor 3.5.1 reapplies `true` after
+a preconfigured client). A preconfigured client with retry disabled is kept as defense
+in depth. CIO (JVM) and Darwin (iOS) do not enable an equivalent automatic request
+replay. Timeout failures map to typed `Transport` errors; coroutine cancellation is
+rethrown.
+
+Error `detail` is read from a bounded prefix of the response body channel
+(`MAX_ERROR_DETAIL_CHARS` characters; the reader pulls at most
+`(MAX_ERROR_DETAIL_CHARS + 1) * 4` UTF-8 bytes and does not materialize the rest).
+A filled byte budget is not parsed as JSON. Envelope `message`/`error` fields are
+capped to the same character budget.
+
 ## API keys / secrets
 
-No key is committed. `BlockfrostConfig.projectId` is supplied at runtime, for both the
+No key is committed. `BlockfrostConfig` is a regular class (pre-alpha source change: it is
+no longer a `data class`). Equality is referential; `toString` redacts `projectId`; there
+is no `copy` / `componentN`. The public `projectId` and `network` accessors remain because
+callers and the HTTP factory need them. The key is never logged, persisted, or hashed into
+`equals`/`hashCode`.
+
+`BlockfrostConfig.projectId` is supplied at runtime, for both the
 read-only and the submit provider:
 
 - Android: the Playground `project_id` field (session memory in `PlaygroundState` plus an

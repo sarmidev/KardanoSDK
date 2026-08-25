@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import org.sarmidev.kardano.KardanoResult
@@ -30,9 +31,12 @@ import kotlin.coroutines.cancellation.CancellationException
  * [ProtocolParameters], [ChainTip], and [ProviderError].
  *
  * All operations are `suspend` and return a [KardanoResult]; they never throw (a thrown
- * exception across the Swift/ObjC boundary would crash iOS consumers). Transport failures,
- * non-success status codes, and decode failures are mapped to [ProviderError] variants.
- * Transaction submission is not part of this provider (ADR-0006 defers submit to Block 1.11).
+ * exception across the Swift/ObjC boundary would crash iOS consumers). Transport failures
+ * (including the explicit [io.ktor.client.plugins.HttpTimeout] bounds installed by
+ * [configureBlockfrost]), non-success status codes, and decode failures are mapped to
+ * [ProviderError] variants. Coroutine cancellation is rethrown. There is no automatic
+ * retry. Transaction submission is not part of this provider (ADR-0006 defers submit to
+ * Block 1.11).
  *
  * Scope limits for the first MVP:
  * - Values are ADA-only: only the `lovelace` component is summed into [Value.coin]. Native-asset
@@ -42,7 +46,13 @@ import kotlin.coroutines.cancellation.CancellationException
  *   `TransactionBuilder`) can honestly reject a UTxO it cannot fully represent.
  * - `getUtxos` treats a Blockfrost `404` (an address that never appeared on-chain) as an
  *   empty UTxO list, not an error. The other endpoints keep `404` as [ProviderError.NotFound].
- * - UTxO pagination is capped at [MAX_PAGES] pages of [PAGE_COUNT] entries.
+ * - UTxO pagination is capped at 100 pages of 100 entries (10_000 UTxOs). A page that
+ *   contains more entries than the requested count is [ProviderError.Deserialization]
+ *   (invalid remote payload; it is not sliced). After 100 full pages, a one-item probe
+ *   of the next page decides completeness: empty (including HTTP 404, the same
+ *   empty/end-of-results signal as ordinary UTxO pagination) → [KardanoResult.Ok]
+ *   with exactly the cap; non-empty → [ProviderError.ResultTruncated]; other probe
+ *   failures keep their real typed error (not a completeness claim).
  *
  * Instances are created with [create]. Tests use the `internal` constructor to inject an
  * [HttpClient] backed by a mock engine, so mapping can be exercised without a real network.
@@ -54,6 +64,7 @@ import kotlin.coroutines.cancellation.CancellationException
 public class BlockfrostChainQueryProvider internal constructor(
     private val config: BlockfrostConfig,
     private val httpClient: HttpClient,
+    private val pagination: UtxoPaginationPolicy = UtxoPaginationPolicy.Default,
 ) : ChainQueryProvider {
 
     override val network: Network = config.network.toCoreNetwork()
@@ -67,17 +78,17 @@ public class BlockfrostChainQueryProvider internal constructor(
 
         val accumulated = mutableListOf<Utxo>()
         var page = 1
-        while (page <= MAX_PAGES) {
+        while (page <= pagination.maxPages) {
             val response = try {
                 httpClient.get("${config.network.baseUrl}/addresses/${address.bech32}/utxos") {
                     parameter("page", page)
-                    parameter("count", PAGE_COUNT)
+                    parameter("count", pagination.pageCount)
                     parameter("order", "asc")
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                return KardanoResult.Err(ProviderError.Transport(e.message ?: "request failed"))
+                return KardanoResult.Err(ProviderError.Transport(transportFailureMessage(e)))
             }
 
             // A 404 here means the address has never been used on-chain, which is an empty
@@ -86,7 +97,7 @@ public class BlockfrostChainQueryProvider internal constructor(
                 return KardanoResult.Ok(accumulated)
             }
             if (!response.status.isSuccess()) {
-                return KardanoResult.Err(statusError(response.status))
+                return KardanoResult.Err(statusError(response))
             }
 
             val dtos = try {
@@ -99,6 +110,15 @@ public class BlockfrostChainQueryProvider internal constructor(
                 )
             }
 
+            if (dtos.size > pagination.pageCount) {
+                return KardanoResult.Err(
+                    ProviderError.Deserialization(
+                        "utxo page contained ${dtos.size} entries; " +
+                            "requested count is ${pagination.pageCount}",
+                    ),
+                )
+            }
+
             for (dto in dtos) {
                 when (val mapped = mapUtxo(dto)) {
                     is KardanoResult.Ok -> accumulated.add(mapped.value)
@@ -106,10 +126,72 @@ public class BlockfrostChainQueryProvider internal constructor(
                 }
             }
 
-            if (dtos.size < PAGE_COUNT) break
+            if (dtos.size < pagination.pageCount) {
+                return KardanoResult.Ok(accumulated)
+            }
             page++
         }
-        return KardanoResult.Ok(accumulated)
+        return probeBeyondCap(address, accumulated)
+    }
+
+    /**
+     * After [UtxoPaginationPolicy.maxPages] full pages, requests exactly one item on the
+     * next page. An empty probe — including HTTP 404, matching ordinary UTxO pagination —
+     * means the cap is the complete result; a non-empty probe is
+     * [ProviderError.ResultTruncated]. Transport, non-404 status, and decode failures
+     * keep their real typed errors — they are not treated as completeness.
+     */
+    private suspend fun probeBeyondCap(
+        address: Address,
+        accumulated: List<Utxo>,
+    ): KardanoResult<List<Utxo>, ProviderError> {
+        val probePage = pagination.maxPages + 1
+        val response = try {
+            httpClient.get("${config.network.baseUrl}/addresses/${address.bech32}/utxos") {
+                parameter("page", probePage)
+                parameter("count", UTXO_CAP_PROBE_COUNT)
+                parameter("order", "asc")
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return KardanoResult.Err(ProviderError.Transport(transportFailureMessage(e)))
+        }
+
+        if (response.status == HttpStatusCode.NotFound) {
+            return KardanoResult.Ok(accumulated)
+        }
+        if (!response.status.isSuccess()) {
+            return KardanoResult.Err(statusError(response))
+        }
+
+        val dtos = try {
+            response.body<List<BlockfrostUtxoDto>>()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return KardanoResult.Err(
+                ProviderError.Deserialization(e.message ?: "utxo probe decode failed"),
+            )
+        }
+
+        if (dtos.size > UTXO_CAP_PROBE_COUNT) {
+            return KardanoResult.Err(
+                ProviderError.Deserialization(
+                    "utxo probe page contained ${dtos.size} entries; requested count is " +
+                        "$UTXO_CAP_PROBE_COUNT",
+                ),
+            )
+        }
+        if (dtos.isEmpty()) {
+            return KardanoResult.Ok(accumulated)
+        }
+        return KardanoResult.Err(
+            ProviderError.ResultTruncated(
+                fetchedCount = accumulated.size,
+                cap = pagination.cap,
+            ),
+        )
     }
 
     override suspend fun getProtocolParameters():
@@ -162,10 +244,10 @@ public class BlockfrostChainQueryProvider internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return KardanoResult.Err(ProviderError.Transport(e.message ?: "request failed"))
+            return KardanoResult.Err(ProviderError.Transport(transportFailureMessage(e)))
         }
         if (!response.status.isSuccess()) {
-            return KardanoResult.Err(statusError(response.status))
+            return KardanoResult.Err(statusError(response))
         }
         return try {
             KardanoResult.Ok(response.body<T>())
@@ -238,15 +320,26 @@ public class BlockfrostChainQueryProvider internal constructor(
     }
 
     /**
-     * Maps a non-success HTTP status to a provider-neutral [ProviderError]. HTTP status codes
-     * are translated to [ProviderError] only here, inside this module: `429` to
+     * Maps a non-success HTTP response to a provider-neutral [ProviderError]. HTTP status
+     * codes are translated to [ProviderError] only here, inside this module: `429` to
      * [ProviderError.RateLimited], `404` to [ProviderError.NotFound], and any other non-2xx
-     * code to [ProviderError.RemoteStatus].
+     * code to [ProviderError.RemoteStatus]. [detailFromBlockfrostResponse] reads a bounded
+     * prefix of the response body channel only — never request headers or request
+     * configuration, and never [io.ktor.client.statement.bodyAsText].
      */
-    private fun statusError(status: HttpStatusCode): ProviderError = when (status) {
-        HttpStatusCode.TooManyRequests -> ProviderError.RateLimited
-        HttpStatusCode.NotFound -> ProviderError.NotFound
-        else -> ProviderError.RemoteStatus(status.value)
+    private suspend fun statusError(response: HttpResponse): ProviderError {
+        val detail = try {
+            detailFromBlockfrostResponse(response)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        return when (response.status) {
+            HttpStatusCode.TooManyRequests -> ProviderError.RateLimited
+            HttpStatusCode.NotFound -> ProviderError.NotFound
+            else -> ProviderError.RemoteStatus(code = response.status.value, detail = detail)
+        }
     }
 
     public companion object {
@@ -254,11 +347,8 @@ public class BlockfrostChainQueryProvider internal constructor(
         /** The Blockfrost amount `unit` value for the ADA (lovelace) component. */
         private const val LOVELACE_UNIT: String = "lovelace"
 
-        /** Entries requested per UTxO page (Blockfrost's maximum page size). */
-        private const val PAGE_COUNT: Int = 100
-
-        /** Upper bound on UTxO pages fetched, so a query never loops unbounded. */
-        private const val MAX_PAGES: Int = 100
+        /** Items requested on the exact-cap completeness probe (never a full extra page). */
+        private const val UTXO_CAP_PROBE_COUNT: Int = 1
 
         /**
          * Creates a [BlockfrostChainQueryProvider] with the default platform HTTP client

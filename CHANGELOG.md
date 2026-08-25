@@ -54,6 +54,23 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   branch is reachable with valid input today; they now return a typed error instead of throwing,
   closing the gap between that guarantee and this module's own never-throw policy.
 
+- Explicit Blockfrost HTTP timeouts via Ktor `HttpTimeout` (already in `ktor-client-core`;
+  no new dependency): connect 10s, request 30s, socket 30s. Timeout failures map to typed
+  `Transport` errors. There is no Ktor `HttpRequestRetry` plugin. Android OkHttp is built
+  with `engine { config { retryOnConnectionFailure(false) } }` so the effective Ktor
+  OkHttp engine client has retry disabled (Ktor 3.5.1 reapplies `true` after a
+  preconfigured client; a preconfigured client with retry disabled is kept as defense
+  in depth). That is engine-level, distinct from the Ktor plugin. CIO and Darwin do
+  not enable an equivalent automatic request replay. Coroutine cancellation is still
+  rethrown.
+- Blockfrost error `detail` is read from a bounded response-body prefix (500 characters
+  publicly; at most 2004 UTF-8 bytes from the channel). A filled byte budget is not parsed
+  as JSON; envelope `message`/`error` fields are capped to the same 500-character budget.
+- `ProviderError.ResultTruncated(fetchedCount, cap)`: the typed failure when a paged UTxO
+  query reaches the provider cap and a one-item probe of the next page is non-empty
+  (production cap: 10_000 UTxOs). An empty probe — including HTTP 404, matching ordinary
+  UTxO pagination — is a complete `Ok` at exactly the cap.
+  A page larger than the requested count is `Deserialization`, not this variant.
 - Playground operation lifecycle: a monotonic `flowGeneration` discards stale Funds/Build/Sign/
   Submit/diagnostic results after ResetFlow or an actual provider-configuration change; in-flight
   jobs are cancelled. Provider explorer UTxO and protocol-parameter loads also carry a request
@@ -83,6 +100,21 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- **Breaking (pre-alpha):** `ProviderError.RemoteStatus` is now
+  `RemoteStatus(code: Int, detail: String? = null)`. Existing source call sites that pass
+  only `code` remain source-compatible because `detail` defaults to `null`. This is still
+  a data-class shape change: generated `equals` / `hashCode` / `toString` / `copy` /
+  `componentN` include `detail`. No binary compatibility and no exhaustive-`when`
+  compatibility are claimed (pre-alpha).
+- **Breaking (pre-alpha):** `ProviderError` gained the subtype
+  `ResultTruncated(fetchedCount, cap)`. Existing exhaustive `when` expressions over
+  `ProviderError` must add a branch. No binary compatibility is claimed (pre-alpha).
+- **Breaking (pre-alpha):** `BlockfrostConfig` is no longer a `data class`. Equality is
+  referential (identity), `toString` still redacts `projectId`, and `copy` / `componentN`
+  are not generated. `equals` / `hashCode` no longer incorporate the project id, so
+  collection-key and assertion-diff paths cannot reconstruct the key from those members.
+  No current call site compared, hashed, copied, or destructured a config. The public
+  `projectId` and `network` accessors are unchanged.
 - **Breaking:** `TransactionDraft` now carries `network: Network` and
   `scope: TransactionDraftScope` (ADR-0019). Both are stamped internally by
   `TransactionBodySerializer` / `TransactionBuilder` and participate in equality, hash code,

@@ -9,7 +9,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.ByteArrayContent
 import io.ktor.http.isSuccess
-import kotlinx.serialization.decodeFromString
 import org.sarmidev.kardano.KardanoResult
 import org.sarmidev.kardano.encoding.hex.Hex
 import org.sarmidev.kardano.primitives.Network
@@ -27,8 +26,10 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * All operations are `suspend` and return a [KardanoResult]; they never throw (a thrown
  * exception across the Swift/ObjC boundary would crash iOS consumers), except to propagate
- * coroutine cancellation. Transport failures, non-success status codes, and response-decode
- * failures are mapped to [SubmitError] variants.
+ * coroutine cancellation. Transport failures (including the explicit
+ * [io.ktor.client.plugins.HttpTimeout] bounds installed by [configureBlockfrost]),
+ * non-success status codes, and response-decode failures are mapped to [SubmitError]
+ * variants. There is no automatic retry; a timed-out or failed submit is not sent again.
  *
  * Instances are created with [create]. Tests use the `internal` constructor to inject an
  * [HttpClient] backed by a mock engine, so mapping can be exercised without a real network.
@@ -69,7 +70,7 @@ public class BlockfrostTxSubmitProvider internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return KardanoResult.Err(SubmitError.Transport(e.message ?: "request failed"))
+            return KardanoResult.Err(SubmitError.Transport(transportFailureMessage(e)))
         }
 
         if (!response.status.isSuccess()) {
@@ -126,18 +127,18 @@ public class BlockfrostTxSubmitProvider internal constructor(
      * codes are translated only here, inside this module: `400` (the node rejected the
      * transaction itself) to [SubmitError.Rejected], `429` to [SubmitError.RateLimited], and
      * any other non-2xx code (for example `403`, `404`, `418`, `425`, `500`) to
-     * [SubmitError.RemoteStatus]. When available, [detailFrom] extracts a human-readable
-     * detail from Blockfrost's JSON error envelope or, failing that, the raw response body.
+     * [SubmitError.RemoteStatus]. When available, [detailFromBlockfrostResponse] reads a
+     * bounded prefix of the response body channel (never request headers, never the full
+     * body via [bodyAsText]) and maps the JSON envelope or raw prefix to detail.
      */
     private suspend fun statusError(response: HttpResponse): SubmitError {
-        val bodyText = try {
-            response.bodyAsText()
+        val detail = try {
+            detailFromBlockfrostResponse(response)
         } catch (e: CancellationException) {
             throw e
-        } catch (e: Exception) {
-            ""
+        } catch (_: Exception) {
+            null
         }
-        val detail = detailFrom(bodyText)
         return when (response.status) {
             HttpStatusCode.BadRequest -> SubmitError.Rejected(
                 code = response.status.value,
@@ -148,29 +149,10 @@ public class BlockfrostTxSubmitProvider internal constructor(
         }
     }
 
-    /**
-     * Extracts a short, human-readable detail from a Blockfrost error [bodyText]: the JSON
-     * envelope's `message` field, falling back to `error`, falling back to the raw (truncated)
-     * body if the envelope cannot be parsed. Returns `null` only when [bodyText] is blank.
-     */
-    private fun detailFrom(bodyText: String): String? {
-        if (bodyText.isBlank()) return null
-        val dto = try {
-            blockfrostJson.decodeFromString<BlockfrostErrorDto>(bodyText)
-        } catch (e: Exception) {
-            null
-        }
-        val fromEnvelope = dto?.message?.takeIf { it.isNotBlank() } ?: dto?.error?.takeIf { it.isNotBlank() }
-        return fromEnvelope ?: bodyText.trim().take(MAX_DETAIL_CHARS)
-    }
-
     public companion object {
 
         /** The `Content-Type` Blockfrost expects for `POST /tx/submit` request bodies. */
         private const val CBOR_CONTENT_TYPE: String = "application/cbor"
-
-        /** Upper bound on how much of a raw (non-JSON-envelope) error body is kept as detail. */
-        private const val MAX_DETAIL_CHARS: Int = 500
 
         /**
          * Creates a [BlockfrostTxSubmitProvider] with the default platform HTTP client

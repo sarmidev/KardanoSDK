@@ -160,3 +160,99 @@ The resulting, narrowly-scoped change to `mapUtxo`: any `amount` entry whose `un
 from the summed `coin`, unchanged from before). Quantities, policy ids, and asset names of
 those entries are still not represented or stored anywhere. No other mapping, endpoint, or
 error-handling decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): `BlockfrostConfig` is no longer a data class
+
+§3 introduced `BlockfrostConfig(projectId, network = PREPROD)` as the public config. It shipped
+as a `data class` with a hand-written redacted `toString()`, but the compiler-generated
+`equals` / `hashCode` / `copy` / `componentN` still retained the raw `projectId`.
+
+A repository-wide search found no call site that compared, hashed, copied, or destructured a
+`BlockfrostConfig`. Value equality is therefore not required. This addendum records the
+pre-alpha source change:
+
+- `BlockfrostConfig` is a regular class. Equality is referential (identity). `hashCode` is the
+  identity hash and is not derived from `projectId`.
+- `toString` remains redacted (`projectId=<redacted>`).
+- The public `projectId` and `network` accessors remain: the HTTP factory sends `projectId` as
+  the `project_id` header, and both providers bind `network`.
+- `copy` / `componentN` are not generated.
+
+No other decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): read-path `RemoteStatus` detail and UTxO cap failure
+
+§4's `getUtxos` pagination ("up to a bounded `MAX_PAGES`") previously returned the accumulated
+list as success after the last permitted page, including when that page was still full (10_000
+UTxOs with the production 100×100 bound). That is a silent partial result. A full last page
+still does not prove more items exist. The implementation now probes the next page for exactly
+one item: empty → `Ok` at the cap; non-empty → `ProviderError.ResultTruncated`; probe HTTP or
+decode failure → the real typed error. A page larger than the requested `count` is
+`Deserialization` (not sliced, not `ResultTruncated`). Tests inject an internal
+`UtxoPaginationPolicy` so the cap path can be exercised without allocating a 10_000-entry
+page; that seam is not public.
+
+§5's error mapping now parses an optional `detail` for `ProviderError.RemoteStatus`, matching
+`SubmitError.RemoteStatus`. Detail is taken from the response body only (Blockfrost's
+`{status_code, error, message}` envelope, or a truncated raw body). Request headers and request
+configuration, including `project_id`, are never read into `detail`. Coroutine cancellation is
+still rethrown.
+
+No other decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): explicit `HttpTimeout`, no automatic retries
+
+§2 installed Ktor `client-core` plus content-negotiation and per-platform engines, but did not
+name a timeout or retry policy. Engine defaults then differed by platform (CIO vs OkHttp vs
+Darwin). This addendum records the explicit policy now installed in `configureBlockfrost`:
+
+- `HttpTimeout` from existing `ktor-client-core` (no new dependency): connect 10s, request 30s,
+  socket 30s.
+- No `HttpRequestRetry` plugin and no other automatic retry. A failed attempt is returned as a
+  typed `Transport` (or the matching `SubmitError.Transport` on submit). Submit is never retried.
+- `CancellationException` is still rethrown.
+
+Tests assert the installed plugin and the documented bounds through an internal
+`BlockfrostHttpTimeoutPolicy` seam, and use a shortened request timeout plus a delayed
+`MockEngine` handler to map timeout to `Transport` without sleeping for 30s.
+
+This addendum's "no automatic retry" refers to the Ktor plugin layer. Engine-level replay
+is a separate switch: OkHttp defaults to `retryOnConnectionFailure(true)`, which can
+replay `POST /tx/submit` after a connection failure. The Android engine now builds OkHttp
+with `retryOnConnectionFailure(false)`. CIO and Darwin do not expose an equivalent
+automatic replay default.
+
+Error `detail` is read from a bounded prefix of the response body channel (500 characters
+publicly; the reader pulls at most 2004 UTF-8 bytes — `(500 + 1) * 4` — and does not
+materialize the rest). A filled byte budget is not parsed as JSON. Envelope `message` /
+`error` fields are capped to the same 500-character budget.
+
+No other decision in this ADR changes.
+
+---
+
+## Addendum (2026-08-23): effective OkHttp engine retry, probe 404, pagination arithmetic
+
+Ktor 3.5.1's `OkHttpEngine.createOkHttpClient` applies the default `OkHttpConfig.config`
+lambda (`retryOnConnectionFailure(true)`) after `preconfigured.newBuilder()`. A
+preconfigured client with retry disabled is therefore overwritten. The Android
+`defaultHttpClient` now also sets `engine { config { retryOnConnectionFailure(false) } }`
+so the effective engine client has retry disabled; the preconfigured client remains as
+defense in depth. Tests assert that reconstructed Ktor apply-order on the live
+`HttpClient` engine config, not a live connection-failure replay.
+
+The exact-cap one-item probe treats HTTP 404 as empty/end-of-results, matching ordinary
+`getUtxos` pagination, and returns `Ok` at the cap. Non-404 probe failures stay typed
+errors.
+
+`UtxoPaginationPolicy` validates bounds at construction, before `cap` or `maxPages + 1`
+are used: `pageCount` and `maxPages` must be positive; `maxPages < Int.MAX_VALUE`;
+`pageCount * maxPages` must fit in `Int`. The type remains an internal test seam.
+
+No other decision in this ADR changes.

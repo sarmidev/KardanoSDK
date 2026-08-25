@@ -663,12 +663,21 @@ internal object PlaygroundPresenter {
     /** Maps a [ProviderError] to a human-readable single-line message. */
     internal fun presentProviderError(error: ProviderError): String = when (error) {
         is ProviderError.Transport -> "Transport error: ${error.message}"
-        is ProviderError.RemoteStatus -> "Remote status: ${error.code}"
+        is ProviderError.RemoteStatus ->
+            if (error.detail != null) {
+                "Remote status: ${error.code} (${error.detail})"
+            } else {
+                "Remote status: ${error.code}"
+            }
         is ProviderError.NotFound -> "Not found"
         is ProviderError.Deserialization -> "Decode error: ${error.detail}"
         is ProviderError.RateLimited -> "Rate limited"
         is ProviderError.NetworkMismatch ->
             "Network mismatch: provider=${error.expected.name}, address=${error.actual.name}"
+        is ProviderError.ResultTruncated ->
+            "UTxO query stopped at the provider cap of ${error.cap} items " +
+                "(fetched ${error.fetchedCount}). At least one further output exists " +
+                "and was not returned."
         is ProviderError.Unknown -> "Unknown provider error"
     }
 

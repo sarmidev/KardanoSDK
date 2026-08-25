@@ -186,4 +186,17 @@ internal object BlockfrostFixtures {
           "message": "sanitized: invalid project token"
         }
         """.trimIndent()
+
+    /** A `500` Blockfrost error envelope. */
+    val SERVER_ERROR_BODY: String =
+        """
+        {
+          "status_code": 500,
+          "error": "Internal Server Error",
+          "message": "sanitized: backend unavailable"
+        }
+        """.trimIndent()
+
+    /** A non-JSON error body used to exercise the raw-text detail fallback. */
+    const val MALFORMED_ERROR_BODY: String = "not a json error envelope"
 }

@@ -275,6 +275,18 @@ class PlaygroundDemoFlowTest {
     }
 
     @Test
+    fun friendlyReason_resultTruncated_mapsToPlainSentence() {
+        val message = PlaygroundPresenter.presentProviderError(
+            ProviderError.ResultTruncated(fetchedCount = 4, cap = 4),
+        )
+        assertEquals(
+            "This address has more unspent outputs than the provider will load. " +
+                "At least one further output exists and was not returned.",
+            PlaygroundDemoFlow.friendlyReason(PlaygroundStep.FUNDS, message),
+        )
+    }
+
+    @Test
     fun friendlyReason_networkMismatch_mapsToPlainSentence() {
         val message = PlaygroundPresenter.presentProviderError(
             ProviderError.NetworkMismatch(expected = Network.TESTNET, actual = Network.MAINNET),

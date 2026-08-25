@@ -605,6 +605,50 @@ Date: 2026-08-23
 
 Summary:
 
+- **Provider boundaries and timeouts on `fix/provider-boundaries-and-timeouts` (three
+  commits, stacked on Prompt 3 `a34afdc`) — DONE.**
+  - **Commit 1 — `BlockfrostConfig` identity equality.** The type is no longer a `data
+    class`. Equality is referential; `toString` stays redacted; `equals`/`hashCode` do
+    not incorporate `projectId`. A repository search found no `copy` / destructuring /
+    value-equality call site. Tests cover `toString`, assertion messages, and
+    `List`/`Set`/`Map` rendering.
+  - **Commit 2 — typed remote detail and UTxO cap.** `ProviderError.RemoteStatus` gained
+    optional response-body `detail` (no request headers / `project_id`). A full last page
+    at the 10_000-UTxO cap is `ProviderError.ResultTruncated` rather than a partial `Ok`.
+    Tests inject an internal `UtxoPaginationPolicy`. Playground presenter and demo
+    `friendlyReason` mappings are exhaustive.
+  - **Commit 3 — explicit HTTP timeouts.** `configureBlockfrost` installs Ktor
+    `HttpTimeout` from existing `ktor-client-core` (connect 10s, request 30s, socket 30s).
+    No `HttpRequestRetry`; submit is never retried. Timeout failures map to typed
+    `Transport`; cancellation is rethrown. Delayed `MockEngine` tests use a shortened
+    request-timeout seam.
+  - **Independent-review NO-GO fixes (additive; original three commits preserved).**
+    Android OkHttp is built with `retryOnConnectionFailure(false)` so a connection failure
+    cannot replay submit (engine-level; distinct from Ktor `HttpRequestRetry`). Error
+    `detail` is read from a bounded body-channel prefix (500 characters / 2004 UTF-8
+    bytes). `getUtxos` rejects an oversized page as `Deserialization` and uses a one-item
+    probe of the next page for exact-cap completeness. `RemoteStatus`/`ResultTruncated`
+    are documented as pre-alpha source breaks (no binary or exhaustive-`when` claim).
+  - **Third review-fix commit (additive).** The Android `defaultHttpClient` now sets
+    `engine { config { retryOnConnectionFailure(false) } }` so the *effective* Ktor 3.5.1
+    OkHttp engine client has retry disabled (Ktor's default `config` lambda reapplies
+    `true` after `preconfigured`). Exact-cap probe HTTP 404 is treated as an empty probe
+    (`Ok` at the cap), matching ordinary UTxO pagination; non-404 probe failures stay
+    typed. `UtxoPaginationPolicy` rejects overflowing `pageCount * maxPages` and
+    `maxPages == Int.MAX_VALUE` at construction.
+  - **Residual limitations.** Live Blockfrost connect/socket timeouts still depend on the
+    platform engine honoring `HttpTimeout`. OkHttp replay disablement is asserted on the
+    effective engine configuration/client Ktor would build, not by inducing a live
+    connection failure. Opt-in `BLOCKFROST_PROJECT_ID` live tests and the manual Android
+    submit checkpoint remain the only live-network coverage. The factory cache key is
+    still a second in-memory copy of the project id.
+
+### Session Summary (Final-review Medium lifecycle race)
+
+Date: 2026-08-23
+
+Summary:
+
 - **Final-review Medium lifecycle race on `fix/playground-operation-lifecycle` (one additive
   commit; prior commits preserved) — DONE.** No SDK protocol behavior changed.
   - **Commit 8 — upstream rerun invalidates downstream guided steps.** Starting Funds
