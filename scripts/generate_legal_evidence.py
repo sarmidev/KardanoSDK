@@ -4309,12 +4309,14 @@ def java_class_version_evidence(bcprov_jar_path: Path | None = None) -> dict[str
 # this binding independently of regeneration: it confirms `evidence_commit`
 # and `subject_commit` exist as real git objects, that `subject_commit` is
 # EXACTLY `evidence_commit`'s immediate parent, that `evidence_commit` is
-# EXACTLY current HEAD's immediate parent (i.e. the seal commit itself must
-# BE the current tip -- a 2026-08-24 independent review found the prior
-# "ancestor of HEAD" wording let an unrelated later commit sit on top of an
-# old seal without invalidating it; any commit added after the seal commit
-# now requires a fresh subject/evidence/seal sequence before this check
-# passes again), and that every evidence file's CURRENT bytes match both
+# EXACTLY the effective seal tip's immediate parent (HEAD itself, or a
+# GitHub `pull_request` two-parent merge-ref whose tree is byte-identical
+# to a parent that *is* the seal commit -- a 2026-08-24 independent review
+# found the prior "ancestor of HEAD" wording let an unrelated later commit
+# sit on top of an old seal without invalidating it; any commit added after
+# the seal commit still requires a fresh subject/evidence/seal sequence
+# before this check passes again), and that every evidence file's CURRENT
+# bytes match both
 # the digest recorded here AND the actual bytes committed at
 # `evidence_commit`'s tree (`git show <evidence_commit>:<path>`) -- so an
 # evidence file edited by some later commit without a re-seal is caught
@@ -4599,8 +4601,10 @@ def seal_scope_binding() -> dict[str, Any]:
             "tooling_sha256 from both the current worktree and "
             "`git show <evidence_commit>:<path>` / "
             "`git show <subject_commit>:<path>`, requires evidence_commit to "
-            "be current HEAD's own immediate parent (the seal commit must "
-            "remain the exact tip -- any later commit requires a fresh "
+            "be the effective seal tip's immediate parent (HEAD itself, or "
+            "a GitHub pull_request two-parent merge-ref whose tree equals a "
+            "parent that is the seal commit -- the seal must remain the "
+            "exact tip; any later commit requires a fresh "
             "subject/evidence/seal sequence), and separately diffs EVERY "
             "tracked file between subject_commit and HEAD, failing on any "
             "change outside the exact reviewed set of generated evidence/ "

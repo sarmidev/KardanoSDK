@@ -414,7 +414,11 @@ worktree bytes:
   `evidence_tree`/`subject_tree` are exactly those commits' own trees.
 - `subject_commit` is EXACTLY `evidence_commit`'s immediate parent (not
   merely some ancestor).
-- `evidence_commit` is an ancestor of (or equal to) current `HEAD`.
+- `evidence_commit` is the effective seal tip's exact immediate parent.
+  The tip is current `HEAD` itself, or — only for a GitHub `pull_request`
+  two-parent merge-ref checkout — a merge whose tree is byte-identical to
+  a parent that is the seal commit. An extra commit on top of the seal
+  still fails and requires a fresh subject/evidence/seal sequence.
 - Every sealed evidence file's CURRENT bytes match both the recorded digest
   in `scope_binding.json` AND the actual bytes committed at
   `evidence_commit`'s tree (`git show <evidence_commit>:<path>`) — so a

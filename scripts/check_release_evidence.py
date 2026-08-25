@@ -70,10 +70,13 @@ Fails closed (either mode) on any of:
 8. docs/evidence/scope_binding.json's two-commit seal is independently
    verified against git history (not by regeneration): evidence_commit and
    subject_commit exist, subject_commit is evidence_commit's exact
-   immediate parent, evidence_commit is current HEAD's exact immediate
-   parent (the seal commit itself must remain the current tip), and every
-   sealed evidence file's current bytes match both the recorded digest and
-   the actual bytes committed at evidence_commit's tree.
+   immediate parent, evidence_commit is the effective seal tip's exact
+   immediate parent (HEAD itself, or -- for a GitHub `pull_request`
+   merge-ref checkout -- a two-parent merge whose tree is byte-identical
+   to a parent that *is* the seal commit), and every sealed evidence
+   file's current bytes match both the recorded digest and the actual
+   bytes committed at evidence_commit's tree. An extra commit on top of
+   the seal still fails.
 9. Every tracked file that differs at all between scope_binding.json's
    subject_commit and current HEAD is one of the exact, small, reviewed
    generated-evidence/seal output paths (docs/evidence/ generated outputs,
@@ -245,6 +248,48 @@ def run_git_ok(*args: str) -> bool:
         ["git", *args], cwd=REPO_ROOT, capture_output=True, text=True
     )
     return result.returncode == 0
+
+
+def _commit_parents(oid: str) -> list[str]:
+    """Immediate parents of `oid`, first-parent first.
+
+    `git rev-parse <oid>^@` lists every parent and is empty for a root
+    commit.
+    """
+    output = run_git("rev-parse", f"{oid}^@").strip()
+    return output.splitlines() if output else []
+
+
+def _commit_tree(oid: str) -> str | None:
+    if not run_git_ok("rev-parse", "--verify", f"{oid}^{{tree}}"):
+        return None
+    return run_git("rev-parse", f"{oid}^{{tree}}").strip()
+
+
+def _effective_seal_tip(head: str, evidence_commit: str) -> str:
+    """The commit whose parent must be `evidence_commit`.
+
+    Normally `HEAD` itself: the seal commit must remain the exact tip.
+    GitHub `pull_request` jobs check out `refs/pull/*/merge` (two
+    parents: base, then PR head). That ephemeral merge is not a later
+    subject change when its tree is byte-identical to a parent whose own
+    immediate first-parent is `evidence_commit` -- i.e. the PR head *is*
+    the seal commit. Extra commits on top of the seal still fail,
+    because that parent's first-parent is the seal, not `evidence_commit`.
+    """
+    parents = _commit_parents(head)
+    if len(parents) != 2:
+        return head
+    head_tree = _commit_tree(head)
+    if head_tree is None:
+        return head
+    for parent in parents:
+        parent_parents = _commit_parents(parent)
+        if not parent_parents or parent_parents[0] != evidence_commit:
+            continue
+        if _commit_tree(parent) == head_tree:
+            return parent
+    return head
 
 
 def run_git_bytes(*args: str) -> bytes:
@@ -1080,8 +1125,9 @@ def check_scope_binding_seal() -> list[str]:
         )
 
     head = run_git("rev-parse", "HEAD").strip()
-    if run_git_ok("rev-parse", "--verify", f"{head}^"):
-        actual_head_parent = run_git("rev-parse", f"{head}^").strip()
+    effective_tip = _effective_seal_tip(head, evidence_commit)
+    if run_git_ok("rev-parse", "--verify", f"{effective_tip}^"):
+        actual_head_parent = run_git("rev-parse", f"{effective_tip}^").strip()
     else:
         actual_head_parent = None
     if actual_head_parent != evidence_commit:

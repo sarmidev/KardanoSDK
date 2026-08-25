@@ -267,6 +267,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- `check_scope_binding_seal()` treats a GitHub `pull_request` two-parent
+  merge-ref whose tree is byte-identical to the seal commit as that seal
+  tip, so the legal-evidence job can pass on the merge checkout. An extra
+  commit on top of the seal still fails.
 - Android lint is now a CI gate (`:androidApp:lintDebug` and
   `lintRelease`, `warningsAsErrors`). Online freshness detectors
   (`GradleDependency`, `NewerVersionAvailable`,

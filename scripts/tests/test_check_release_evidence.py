@@ -1905,6 +1905,32 @@ class ScopeBindingSealCheckTests(unittest.TestCase):
             any("is not current HEAD" in e and "immediate parent" in e for e in errors)
         )
 
+    def test_github_style_merge_ref_of_seal_tip_passes(self) -> None:
+        # GitHub pull_request jobs check out refs/pull/*/merge: a two-parent
+        # merge of the PR head into the base. When the PR head is the seal
+        # commit and the merge tree equals that seal, this is the same
+        # sealed tip, not a later commit on top of it.
+        self._seal()
+        seal = _git_output(self.repo, "rev-parse", "HEAD")
+        subject = _git_output(self.repo, "rev-parse", "HEAD^^")
+        _git(self.repo, "checkout", "-q", "-B", "base", subject)
+        _git(self.repo, "merge", "--no-ff", "-q", "-m", "Merge seal into base", seal)
+        self.assertEqual(checker.check_scope_binding_seal(), [])
+
+    def test_github_style_merge_ref_of_post_seal_commit_is_rejected(self) -> None:
+        self._seal()
+        (self.repo / "UNRELATED4.txt").write_text("x\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-q", "-m", "later commit on top of the seal")
+        extra = _git_output(self.repo, "rev-parse", "HEAD")
+        subject = _git_output(self.repo, "rev-parse", "HEAD^^^")
+        _git(self.repo, "checkout", "-q", "-B", "base", subject)
+        _git(self.repo, "merge", "--no-ff", "-q", "-m", "Merge extra into base", extra)
+        errors = checker.check_scope_binding_seal()
+        self.assertTrue(
+            any("is not current HEAD" in e and "immediate parent" in e for e in errors)
+        )
+
     def test_evidence_changed_after_seal_is_rejected(self) -> None:
         self._seal()
         any_name = next(iter(evidence.evidence_output_files()))
