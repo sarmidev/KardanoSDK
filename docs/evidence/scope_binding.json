@@ -1,0 +1,24 @@
+{
+  "evidence_commit": "badf7dca84f91a57768a84a2eb128365c3d1630a",
+  "evidence_tree": "f62ac896a35763b5823703e4338a50d1816f0e9e",
+  "note": "Two-commit seal (see scripts/generate_legal_evidence.py's module docstring 'Scope binding'). evidence_commit/evidence_tree are the commit/tree that carried the evidence-content files listed in sealed_evidence_digests (this commit's own hash, read back via `git rev-parse HEAD` while sealing). subject_commit/subject_tree are that commit's immediate parent -- the immutable subject-source commit actually inventoried (crypto-signing-backend/Cargo.lock, every */gradle.lockfile, CHECKSUMS.sha256, NOTICE, LICENSES/*.txt as they existed there, PLUS every file listed as a key of tooling_sha256 as it existed there -- the subject commit is where the sealed tool version is pinned). sealed_evidence_digests is the SHA-256 of each evidence file's bytes as committed at evidence_commit. tooling_sha256 is the SHA-256 of every scripts/generate_legal_evidence.py SEALED_TOOLING_FILES entry's bytes as of this same evidence-content commit's worktree -- kept as additional, narrower audit detail alongside the authoritative check, not the completeness proof itself (see the 'Full source-scope binding' module docstring). scripts/check_release_evidence.py's check_scope_binding_seal() independently recomputes sealed_evidence_digests and tooling_sha256 from both the current worktree and `git show <evidence_commit>:<path>` / `git show <subject_commit>:<path>`, requires evidence_commit to be current HEAD's own immediate parent (the seal commit must remain the exact tip -- any later commit requires a fresh subject/evidence/seal sequence), and separately diffs EVERY tracked file between subject_commit and HEAD, failing on any change outside the exact reviewed set of generated evidence/ seal outputs -- see check_full_source_scope_seal().",
+  "sealed_evidence_digests": {
+    "bouncycastle_license_source.json": "0f95f9ef6bcd1acb4a73570d77f8672fd468cf851a4a7b2dd31e99e9e21f8f77",
+    "cargo_dependency_inventory.json": "61f316c5c424baa2677649b48fa2d55b67900899c7732981302c0743dbc3a2ca",
+    "gradle_dependency_inventory.json": "07875fe73d24520230f76765447965e5afe31280c519a5e850b855aa89363d11",
+    "gradle_license_inventory.json": "08dd0adf45ffec9af6d44312e32671584d1024a861fed0e8a39bdcca494c48bc",
+    "java_class_version_evidence.json": "7a3a3cf22dd19b1a48ef87e14993dddc32a310fc36365386d4aa24f80c83caf3",
+    "maven_native_carriers_inventory.json": "3cab5db3feb887c5cddb4b603754c7496553758ee61e037a937dbe7e29a2d8fd",
+    "native_artifacts_inventory.json": "f3b506ba443ad7ba1e1117b8c0cab326b41dadfda63852fe659d8363d3d9060d",
+    "uniffi_bindings_inventory.json": "1fad20d6cb77edc45bb2e9e673ff984c5a14748cc0c8b50f1858440423f6f9f9"
+  },
+  "subject_commit": "fe2aedcc2d689cf4fe249b897b17e6b66b93fbd5",
+  "subject_tree": "bf08dd3f7d6182b8748959e3ad330582355a1ef2",
+  "tooling_sha256": {
+    "scripts/cargo_election_catalog.py": "2eca66513880996e2ae29967dc8189097cb0b071d9610b23f08bd5e90b82956f",
+    "scripts/check_release_evidence.py": "36e3c8e8818129b8810db23911afd26a37fc207be39f955b2fdddd02d39e56ad",
+    "scripts/generate_legal_evidence.py": "d422ac75d8745bca0c3a263593867e5a8c6c17c3db933af833eb92f3ee88f36e",
+    "scripts/license_catalog.py": "512740b6e10e5b8863f01fbab7bcd631634ac1b328d8df2a649654a35d3b8d24",
+    "scripts/license_catalog_harvested.py": "2f21e6736351cd19111f3e09ddf5326a2fb0fd4390497124f9eb2c994e11110a"
+  }
+}
