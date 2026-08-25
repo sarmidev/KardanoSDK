@@ -34,10 +34,18 @@ promise and they do not keep exhaustive `when` expressions compiling without edi
 ## Release checklist
 
 1. Choose a semantic version and create a release branch if the change needs stabilisation.
-2. Run the JVM, Android-host, and iOS compile checks documented in `TESTING.md`.
-3. Run `git diff --check` and `python3 scripts/check_restricted_claims.py`.
-   The script classifies each phrase match on its own and prints
-   `path:line:column`. It is not a credential scanner.
+2. Run the JVM, Android-host, iOS compile, and Android lint Debug/Release
+   checks documented in `TESTING.md`. Lint warnings fail the build.
+   Confirm the wrapper SHA-256 still matches
+   `https://services.gradle.org/distributions/gradle-9.5.0-bin.zip.sha256`
+   when that is the pinned wrapper.
+3. Run `git diff --check`, `python3 scripts/check_restricted_claims.py`,
+   and `python3 scripts/check_action_pins.py`.
+   The claim script classifies each phrase match on its own and prints
+   `path:line:column`. It is not a credential scanner. The pin script
+   requires every external workflow `uses:` to be a 40-character lowercase
+   SHA recorded in `scripts/action_pin_inventory.py` and
+   `docs/DEPENDENCY_REVIEW.md`.
 4. Run the full-history credential scan: `python3 scripts/install_gitleaks.py`
    then `python3 scripts/check_gitleaks.py`. Confirm zero non-allowlisted
    findings. Output is redacted; do not paste raw matches into notes.
@@ -92,10 +100,48 @@ third-party GitHub Action wrapper.
 | Licence | MIT (upstream `gitleaks/gitleaks`) |
 | Installer | `scripts/install_gitleaks.py` — verifies the checksums file, then the selected archive, reads the member into memory, writes every byte to an exclusive temp sibling, `fchmod`s `0755` on that descriptor, and atomically replaces a non-symlink destination. The binary is never committed. |
 | Why not an Action wrapper | This repo pins Actions by commit SHA already; a wrapper would add a second, unverified tool chain. Installing the CLI lets CI and a local checkout run the same pinned binary. |
-| Scan scope | Full git history (`fetch-depth: 0`, `git fetch --prune --tags origin`, `gitleaks detect --log-opts=--all`). Output is redacted. |
+| Scan scope | After `fetch-depth: 0` and `git fetch --prune --tags origin`, reachable commits are `git rev-list --all`. Gitleaks (v8.30.1 `--log-opts` string) scans `git log --full-history --all -m`: every ref, no history simplification, one diff per merge parent. A credential introduced only in a merge resolution is therefore visible. Output is redacted (`--redact`). |
 | Allowlist | Match-level only in `.gitleaks.toml`: the cited CIP-19 payment-credential hex **and** an exact repo-root path (`^…$`). Paths are the cited test files plus `scripts/gitleaks_allowlist.py` (the helper historically embedded the same vector). No directory, rule, or commit exclusions. |
 
 This tool is CI-only. It is not redistributed in an SDK artifact.
+
+## CI tool review — GitHub Action pins
+
+Third-party Actions are pinned by commit SHA, not by a moving major tag.
+`docs/DEPENDENCY_REVIEW.md` records the live 2026-08-23 resolution,
+including the v4 versus `v4.3.1` correction (the previous pins were exact
+patch releases, not `@v4`) and the Pages upload composite's transitive
+`actions/upload-artifact` SHA.
+
+| Item | Value |
+|---|---|
+| Checker | `scripts/check_action_pins.py` |
+| Inventory | `scripts/action_pin_inventory.py` |
+| Human review | `docs/DEPENDENCY_REVIEW.md` |
+| Checkout | `v7.0.1` `3d3c42e5aac5ba805825da76410c181273ba90b1` |
+| setup-java | `v5.7.0` `b6effb05e454b25005698d916606bdc6ffcbf961` |
+| setup-gradle | `v5.0.2` `0723195856401067f7a2779048b490ace7a47d7c` (v6 not adopted) |
+| configure-pages | `v6.0.0` `45bfe0192ca1faeb007ade9deae92b16b8254a0d` |
+| upload-pages-artifact | `v5.0.0` `fc324d3547104276b827a68afc52ff2a11cc49c9` |
+| deploy-pages | `v5.0.0` `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128` |
+| Transitive Pages upload | `actions/upload-artifact` `v7.0.0` `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f` |
+
+`gradle/actions` v6.3.0 remains unused because its default cache provider
+is a separate commercial component with a Terms of Use gate.
+
+## Dependency locking and verification
+
+Library coordinates are locked per project in `*/gradle.lockfile` with
+`LockMode.STRICT` on compile/runtime classpaths. Artifact bytes are
+checked against SHA-256 rows in `gradle/verification-metadata.xml`.
+The Rust wrapper uses `rust-toolchain.toml` channel `1.97.0` and
+`cargo --locked`. Regeneration commands and the tamper-check record
+are in `docs/DEPENDENCY_REVIEW.md` and `docs/TESTING.md`.
+
+Before a release that changes a catalog version, regenerate lock
+state and verification metadata, review the generated diff, and keep
+`Cargo.lock` matched to the exact `Cargo.toml` pins. Do not rewrite
+generated checksums by hand.
 
 ## Publishing artifacts later
 

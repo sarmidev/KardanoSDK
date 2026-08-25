@@ -1,0 +1,4 @@
+# rustup pin for offline native regeneration. Channel is the exact
+# toolchain recorded in README.md (verified 2026-08-23).
+[toolchain]
+channel = "1.97.0"

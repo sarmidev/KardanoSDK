@@ -2,3 +2,7 @@
 # file, including its trailing blank line. Scope the check to this path only
 # so `git diff --check` stays clean without disabling whitespace globally.
 docs/archive/handoff/2026-08-23-pre-curation.md whitespace=-blank-at-eof
+
+# Gradle wrapper task emits trailing spaces on several @rem lines.
+# Keep the generated file; do not hand-edit it to silence git diff --check.
+gradlew.bat whitespace=-trailing-space,-blank-at-eol

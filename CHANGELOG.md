@@ -58,7 +58,7 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   no new dependency): connect 10s, request 30s, socket 30s. Timeout failures map to typed
   `Transport` errors. There is no Ktor `HttpRequestRetry` plugin. Android OkHttp is built
   with `engine { config { retryOnConnectionFailure(false) } }` so the effective Ktor
-  OkHttp engine client has retry disabled (Ktor 3.5.1 reapplies `true` after a
+  OkHttp engine client has retry disabled (Ktor 3.5.2 reapplies `true` after a
   preconfigured client; a preconfigured client with retry disabled is kept as defense
   in depth). That is engine-level, distinct from the Ktor plugin. CIO and Darwin do
   not enable an equivalent automatic request replay. Coroutine cancellation is still
@@ -100,6 +100,46 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- Android lint is now a CI gate (`:androidApp:lintDebug` and
+  `lintRelease`, `warningsAsErrors`). Online freshness detectors
+  (`GradleDependency`, `NewerVersionAvailable`,
+  `AndroidGradlePluginVersion`) are disabled because coordinates are
+  catalog-pinned, lockfiled, and SHA-256 verified. Adaptive icons gained
+  a monochrome layer from the first-party mark; splash PNGs moved to
+  `drawable-nodpi` / `drawable-night-nodpi`. Legacy square launchers
+  were regenerated from the approved marks as a rounded-rect silhouette
+  with 12.5% transparent padding (`scripts/generate_legacy_launcher_icons.py`).
+  Adaptive icon layers were not changed. Owner should still glance at
+  the pre-API-26 launcher tiles.
+- Dependency locking and verification (2026-08-23): every lockable
+  compile/runtime classpath uses `LockMode.STRICT` with per-project
+  `gradle.lockfile`s; `gradle/verification-metadata.xml` records
+  SHA-256 only. `crypto-signing-backend/rust-toolchain.toml` pins
+  Rust `1.97.0`. Cargo directs are `ed25519-bip32 = "=0.4.2"` and
+  `uniffi = "=0.29.5"`; documented rebuilds use `--locked`. Lock
+  regeneration produced no diff; a tampered `junit` checksum failed
+  the build and was restored.
+- Crypto/native support review (2026-08-23, ADR-0020): Bouncy Castle
+  `bcprov-jdk18on` 1.84 → 1.85.2 and JNA 5.17.0 → 5.19.1 after changelog
+  review. `:crypto:jvmTest` (78) after the Castle bump;
+  `:crypto-signing-backend:jvmTest` (4), `:crypto:jvmTest` (78), and
+  `:wallet:jvmTest` (30) after the JNA bump. KotlinCrypto 0.8.0, IonSpin
+  0.9.5, atomicfu 0.26.1, `ed25519-bip32` 0.4.2, UniFFI 0.29.x, and
+  Material3 1.11.0-alpha07 stay pinned; ADR-0020 records why, the KAT
+  evidence, and replacement criteria. No signing/hashing backend was
+  replaced.
+- Build-platform compatibility group (2026-08-23 review-fix): moved from
+  the locally passing Gradle 9.7.1 / AGP 9.3.1 / API 37 pair to the
+  official Kotlin 2.4.10 envelope — Gradle **9.5.0** (distribution
+  SHA-256 `553c78f50dafcd54d65b9a444649057857469edf836431389695608536d6b746`),
+  AGP **9.1.0**, compile/target SDK **36**, JetBrains lifecycle Compose
+  **2.10.0**. API 37 is deferred (ADR-0021). Locks use
+  `lockAllConfigurations()`; publisher checksum comparison is in
+  `docs/DEPENDENCY_PROVENANCE.md`. Ktor stays 3.5.2. Compose Multiplatform
+  stays 1.11.1 and Material3 stays 1.11.0-alpha07.
+- Build-platform compatibility group (2026-08-23, historical Prompt 6
+  commit 2): Gradle 9.7.1 / AGP 9.3.1 / API 37 / lifecycle 2.11.0. That
+  pairing is superseded by the review-fix row above.
 - **Breaking (pre-alpha):** `ProviderError.RemoteStatus` is now
   `RemoteStatus(code: Int, detail: String? = null)`. Existing source call sites that pass
   only `code` remain source-compatible because `detail` defaults to `null`. This is still
@@ -157,6 +197,24 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - CI (`verify.yml`, `deploy-site.yml`) now pins every third-party GitHub Action `uses:` line to a
   full commit SHA with a version comment instead of a floating major-version tag, so a
   compromised or re-tagged upstream release can no longer silently change CI behavior (W9-2).
+- CI Action pins were re-resolved live on 2026-08-23 and upgraded from the previous exact
+  patch pins (checkout `v4.3.1`, setup-java `v4.9.1`, setup-gradle `v4.4.3`, configure-pages
+  `v5.0.0`, upload-pages-artifact `v3.0.1`, deploy-pages `v4.0.5`) to maintained Node 24
+  releases: checkout `v7.0.1`, setup-java `v5.7.0`, setup-gradle `v5.0.2`, configure-pages
+  `v6.0.0`, upload-pages-artifact `v5.0.0`, deploy-pages `v5.0.0`. The previous pins were
+  those patch releases, not the moving `v4` major tags named in the 2026-08-22 audit
+  (`actions/checkout@v4` is `v4.4.0` as of this resolution). `gradle/actions` v6.3.0 is
+  not adopted: v6 defaults to a separate commercial cache component and a Terms of Use
+  gate that this commit does not accept. setup-gradle cache inputs are set explicitly to
+  the v4.4.3/v5.0.2 defaults. upload-pages-artifact v3.0.1's floating
+  `actions/upload-artifact@v4` transitive use is gone; v5.0.0 pins
+  `actions/upload-artifact` to `bbbca2ddaa5d8feaa63e36b76fdaad77386f024f` (v7.0.0)
+  (W9-2 / NF-4).
+- `scripts/check_action_pins.py` (and `scripts.tests.test_check_action_pins`) require every
+  external workflow `uses:` to be `owner/name@<40-char lowercase SHA>` matching
+  `scripts/action_pin_inventory.py`, and require recorded composite transitives plus those
+  SHAs to appear in `docs/DEPENDENCY_REVIEW.md`. `verify.yml` runs the tests and the
+  check in a dedicated `action-pin-scan` job.
 - `verify.yml` gained a `restricted-claim-scan` job that runs the restricted-claim
   and archive unit tests, the HANDOFF archive byte check, then
   `scripts/check_restricted_claims.py`. The script classifies each phrase match on its

@@ -40,8 +40,12 @@ def build_command(
     if no_git:
         command.append("--no-git")
     else:
-        # Scan every ref the checkout made available (CI uses fetch-depth: 0).
-        command.append("--log-opts=--all")
+        # Single --log-opts string, compatible with pinned Gitleaks v8.30.1.
+        # --full-history disables history simplification. --all covers every
+        # ref the checkout fetched. -m emits one diff per merge parent so a
+        # resolution-only line is visible. Reachable commits are
+        # `git rev-list --all`; scanned diffs are `git log` with these opts.
+        command.append("--log-opts=--full-history --all -m")
     if report_path is not None:
         command.extend(["--report-format", "json", "--report-path", str(report_path)])
     return command

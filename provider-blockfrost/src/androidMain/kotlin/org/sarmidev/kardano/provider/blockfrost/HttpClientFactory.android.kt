@@ -8,7 +8,7 @@ import okhttp3.OkHttpClient
 /**
  * Builds the OkHttp client used as Ktor's Android `preconfigured` starting point.
  *
- * Defense in depth only. Ktor 3.5.1's `OkHttpEngine.createOkHttpClient` does
+ * Defense in depth only. Ktor 3.5.2's `OkHttpEngine.createOkHttpClient` does
  * `(preconfigured ?: prototype).newBuilder().apply(config.config)`, and the default
  * `OkHttpConfig.config` lambda sets `retryOnConnectionFailure(true)` on that builder.
  * A preconfigured client with retry disabled is therefore overwritten unless
@@ -22,7 +22,7 @@ internal fun blockfrostOkHttpClient(): OkHttpClient =
 
 /**
  * Appends `retryOnConnectionFailure(false)` onto the Ktor OkHttp engine `config` so it
- * runs after Ktor 3.5.1's default `retryOnConnectionFailure(true)`.
+ * runs after Ktor 3.5.2's default `retryOnConnectionFailure(true)`.
  *
  * This is the setting that determines the effective engine client. Callers should also
  * set [OkHttpConfig.preconfigured] to [blockfrostOkHttpClient] as defense in depth.

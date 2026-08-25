@@ -1,5 +1,5 @@
 # Project-owned Rust wrapper for the `:crypto-signing-backend` SDK module (ADR-0016 §9, Option R1).
-# Wraps `ed25519-bip32 = "0.4.2"` (MIT OR Apache-2.0) via UniFFI to expose Cardano extended
+# Wraps `ed25519-bip32 = "=0.4.2"` (MIT OR Apache-2.0) via UniFFI to expose Cardano extended
 # Ed25519-BIP32 signing — `XPrv::sign` / `XPub::verify`. No handwritten crypto: both exported
 # functions delegate directly to the reference crate.
 #
@@ -19,5 +19,5 @@ crate-type = ["cdylib", "staticlib"]
 path = "src/commonMain/rust/lib.rs"
 
 [dependencies]
-uniffi = "0.29.4"
-ed25519-bip32 = "0.4.2"
+uniffi = "=0.29.5"
+ed25519-bip32 = "=0.4.2"

@@ -19,10 +19,12 @@
   icon's own `ic_launcher_foreground` because the splash icon container can be scaled up to
   288dp — larger than the adaptive-icon foreground's largest density bucket (432px,
   `drawable-xxxhdpi`), which visibly upscaled/blurred on higher-density devices.
-  `ic_launcher_foreground_splash.png` (and its `-night` pair) is a single, non-density-bucketed
+  `ic_launcher_foreground_splash.png` (and its `-night` pair) is a single nodpi
   1200x1200px PNG generated straight from the original high-resolution source mark, at the same
   0.43 content ratio as the adaptive-icon foreground, so it looks identical in proportion but
-  does not need to be upscaled by the splash renderer.
+  does not need to be upscaled by the splash renderer. The files live in
+  `drawable-nodpi/` and `drawable-night-nodpi/` so lint does not treat them as
+  missing-density drawables.
 -->
 <resources>
     <style name="Theme.KardanoSDK" parent="android:Theme.Material.Light.NoActionBar">

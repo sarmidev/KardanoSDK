@@ -63,7 +63,7 @@ Read these first:
 - Manual owner device pass still outstanding: TalkBack, VoiceOver, 200% font, 360dp,
   light/dark, in-flight Reset, Mock→Live→Mock, and landing keyboard/hash navigation.
 - Live Blockfrost connect/socket timeouts still depend on the platform engine honoring
-  `HttpTimeout`. OkHttp replay disablement is asserted on the effective Ktor 3.5.1
+  `HttpTimeout`. OkHttp replay disablement is asserted on the effective Ktor 3.5.2
   engine client, not by inducing a live connection failure. Opt-in
   `BLOCKFROST_PROJECT_ID` live tests and the manual Android submit checkpoint remain
   the only live-network coverage.
@@ -72,8 +72,12 @@ Read these first:
 - iOS runtime execution of CIP-3 / signing vectors is still future verification
   (compile/link only on this host). Linux/Windows JVM signing artifacts are not
   included (W9-4).
-- Still-open hygiene items outside this stacked batch: CI `androidApp:lint` (W3-3),
-  tag-triggered release CI (W4-5), pre-1.0 pinned dependencies (W5-4, by design).
+- Still-open hygiene items outside this stacked batch: tag-triggered
+  release CI (W4-5). Android lint Debug/Release is a CI error (W3-3
+  closed). Owner should still glance at pre-API-26 launcher tiles.
+  Pre-1.0 pins are accepted in ADR-0020 (W5-4).
+- `gradle/actions` v6.3.0 is not adopted (proprietary cache component / Terms of
+  Use). setup-gradle stays on v5.0.2. See `docs/DEPENDENCY_REVIEW.md`.
 - Restricted-claim and full-history Gitleaks scans now run in CI. They are not a
   substitute for an owner-authenticated GitHub secret-scanning pass.
 
@@ -87,7 +91,8 @@ Stacked remediations, each additive (no amend / no force-push):
 | 2 | `fix/signing-scope-enforcement` | `a632b7d` | ADR-0019 draft binding and fixture-identity checks |
 | 3 | `fix/playground-operation-lifecycle` | `a34afdc` | Generation/token lifecycle and accessibility semantics |
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
-| 5 | `fix/release-docs-and-scanners` | four original + review-fix commits, stacked on `3936047` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Review-fix commits tighten scanners, archive bytes, and CI. |
+| 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
+| 6 | `fix/build-and-ci-reproducibility` | in progress, stacked on `90fe0ee` | Original five commits plus review-fix commits. Verify is green on run `32655202142`. |
 
 `origin/main` is behind this stack. Do not merge from this session.
 
@@ -97,6 +102,20 @@ Stacked remediations, each additive (no amend / no force-push):
 
 Date: 2026-08-23
 
+- **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
+  Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
+  commits move the toolchain to the official Kotlin 2.4.10 envelope
+  (Gradle 9.5.0 / AGP 9.1.0 / SDK 36 / lifecycle 2.10.0; API 37 deferred
+  in ADR-0021), lock every configuration, record publisher checksums,
+  scan merge-parent diffs, parse Action pins with Psych, and permanently
+  run Verify on `push` to `fix/**`. Legacy square launchers were
+  regenerated as a rounded-rect silhouette. Android lint Debug/Release
+  is a CI error (`warningsAsErrors`); that lint-CI finding is **closed**.
+  Verify run `32654915900` (head `0786237`) failed on Ubuntu and
+  macOS-arm64: four Maven Central parent/BOM metadata files missing
+  from `gradle/verification-metadata.xml`. Run `32655202142` (head
+  `5201d63`) is **green** (all six jobs):
+  https://github.com/sarmidev/KardanoSDK/actions/runs/32655202142
 - **Release docs and scanners on `fix/release-docs-and-scanners` (stacked on Prompt 4
   `3936047`) — four original commits complete, plus review-fix commits.**
   - **Commit 1 — documentation reconciliation (`cb7b40d`).** ADR-0015 header now
@@ -199,10 +218,11 @@ Do not use:
 
 ## Next Recommended Task
 
-Prompt 5 on this branch is complete (four original commits plus review-fix
-commits). Residual owner work: an authenticated GitHub secret-scanning /
-Dependabot pass, the manual accessibility walkthrough, and a human review of
-the stacked PRs. Do not merge from an automated session.
+Prompt 6 commits 1–5 are on this branch. Residual owner work from
+Prompt 5: an authenticated GitHub secret-scanning / Dependabot pass, the
+manual accessibility walkthrough, and a human review of the stacked PRs. Do
+not merge from an automated session. `gradle/actions` v6 needs an explicit
+license decision if it is ever adopted.
 
 ## Prompt For Cursor Business/Product Work
 

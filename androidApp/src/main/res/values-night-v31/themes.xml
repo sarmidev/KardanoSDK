@@ -7,7 +7,7 @@
   night mode.
 
   `windowSplashScreenAnimatedIcon` references the same `@drawable/ic_launcher_foreground_splash`
-  name as `values-v31/themes.xml`; Android resolves it to `drawable-night/
+  name as `values-v31/themes.xml`; Android resolves it to `drawable-night-nodpi/
   ic_launcher_foreground_splash.png` (the dark mark) under system dark mode the same way any
   other drawable reference would, so no separate name is needed here. See
   `values-v31/themes.xml` for why a plain, dedicated foreground drawable (not the full adaptive

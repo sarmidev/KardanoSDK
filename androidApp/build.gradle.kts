@@ -45,4 +45,18 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    lint {
+        abortOnError = true
+        warningsAsErrors = true
+        checkReleaseBuilds = true
+        // Online freshness detectors. Coordinates are catalog-pinned,
+        // lockfiled, and SHA-256 verified (docs/DEPENDENCY_REVIEW.md).
+        // A newer-library lint hit must not bypass that review.
+        disable += "GradleDependency"
+        disable += "NewerVersionAvailable"
+        disable += "AndroidGradlePluginVersion"
+        // ADR-0021: API 37 is deferred until a Kotlin-supported AGP
+        // can target it. OldTargetApi would otherwise fail CI on 36.
+        disable += "OldTargetApi"
+    }
 }

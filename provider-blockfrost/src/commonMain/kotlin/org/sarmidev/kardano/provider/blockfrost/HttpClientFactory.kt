@@ -33,7 +33,7 @@ internal val blockfrostJson: Json = Json { ignoreUnknownKeys = true }
  * no `HttpRequestRetry` plugin: a failed attempt is returned as a typed error. That plugin
  * policy is separate from engine-level replay. On Android, the OkHttp engine used by
  * [defaultHttpClient] sets `engine { config { retryOnConnectionFailure(false) } }` so
- * the effective Ktor engine client has retry disabled: Ktor 3.5.1's default
+ * the effective Ktor engine client has retry disabled: Ktor 3.5.2's default
  * `OkHttpConfig.config` reapplies `retryOnConnectionFailure(true)` after a preconfigured
  * client. A preconfigured client with retry disabled is kept as defense in depth. CIO
  * (JVM) and Darwin (iOS) do not enable an equivalent automatic request replay.

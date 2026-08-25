@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 /**
  * Engine-level OkHttp replay is distinct from Ktor's `HttpRequestRetry` plugin.
  *
- * Ktor 3.5.1's default `OkHttpConfig.config` sets `retryOnConnectionFailure(true)` and
+ * Ktor 3.5.2's default `OkHttpConfig.config` sets `retryOnConnectionFailure(true)` and
  * `OkHttpEngine.createOkHttpClient` applies that lambda after `preconfigured.newBuilder()`.
  * These tests assert the effective engine client used by the production [defaultHttpClient]
  * Ktor `HttpClient`, not only the standalone [blockfrostOkHttpClient] helper. They do not
@@ -35,7 +35,7 @@ class BlockfrostOkHttpEngineTest {
             .build()
         assertTrue(
             afterKtorDefaults.retryOnConnectionFailure,
-            "Ktor 3.5.1 default OkHttpConfig.config sets retryOnConnectionFailure(true) " +
+            "Ktor 3.5.2 default OkHttpConfig.config sets retryOnConnectionFailure(true) " +
                 "after preconfigured.newBuilder(); preconfigured alone is not enough",
         )
     }
@@ -56,7 +56,7 @@ class BlockfrostOkHttpEngineTest {
     }
 
     /**
-     * Ktor 3.5.1 default `OkHttpConfig.config` lambda
+     * Ktor 3.5.2 default `OkHttpConfig.config` lambda
      * (`ktor-client-okhttp` `OkHttpConfig.kt`).
      */
     private val ktor351DefaultOkHttpConfig: OkHttpClient.Builder.() -> Unit = {
@@ -66,7 +66,7 @@ class BlockfrostOkHttpEngineTest {
     }
 
     /**
-     * Mirrors Ktor 3.5.1 `OkHttpEngine.createOkHttpClient`:
+     * Mirrors Ktor 3.5.2 `OkHttpEngine.createOkHttpClient`:
      * `(preconfigured ?: prototype).newBuilder().apply(config.config)`.
      *
      * The composed `config` lambda is `internal` to `ktor-client-okhttp`; this test seam

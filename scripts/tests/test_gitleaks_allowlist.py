@@ -126,6 +126,113 @@ class GitleaksIntegrationTests(unittest.TestCase):
     def test_cited_value_on_suffixed_path_fails(self) -> None:
         self.assertNotEqual(self._scan_git_fixture(f"{ALLOWED_WALLET}.bak", _cited()), 0)
 
+    def test_command_uses_full_history_merge_parent_diffs(self) -> None:
+        command = check_gitleaks.build_command(
+            binary=self.binary,
+            source=REPO_ROOT,
+            config=REPO_ROOT / ".gitleaks.toml",
+            no_git=False,
+        )
+        self.assertIn("--redact", command)
+        self.assertIn("--log-opts=--full-history --all -m", command)
+
+    def test_merge_resolution_secret_absent_from_parents_is_found(self) -> None:
+        # Same assignment shape the default generic-api-key rule flags in
+        # this repository. The value is the cited CIP-19 hex on a path that
+        # is not allowlisted.
+        secret = _cited()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".gitleaks.toml").write_bytes(
+                (REPO_ROOT / ".gitleaks.toml").read_bytes()
+            )
+            _init_git_repo(root)
+            subprocess.run(
+                ["git", "checkout", "-B", "main"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            note = root / "note.txt"
+            note.write_text("parent-a\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "parent-a"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "checkout", "-b", "other"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            note.write_text("parent-b\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "parent-b"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "checkout", "main"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "merge", "--no-commit", "--no-ff", "other"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+            )
+            # Merge resolution introduces a credential that is not in either
+            # parent blob, whether or not git reported a conflict.
+            note.write_text(_assignment(secret), encoding="utf-8")
+            subprocess.run(["git", "add", "note.txt"], cwd=root, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "merge-resolution"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+            )
+            parent_a = subprocess.run(
+                ["git", "show", "HEAD^1:note.txt"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            parent_b = subprocess.run(
+                ["git", "show", "HEAD^2:note.txt"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            merge_blob = subprocess.run(
+                ["git", "show", "HEAD:note.txt"],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            self.assertNotIn(secret, parent_a)
+            self.assertNotIn(secret, parent_b)
+            self.assertIn(secret, merge_blob)
+            command = check_gitleaks.build_command(
+                binary=self.binary,
+                source=root,
+                config=root / ".gitleaks.toml",
+                no_git=False,
+            )
+            completed = subprocess.run(command, cwd=root, capture_output=True, text=True)
+            self.assertNotEqual(completed.returncode, 0)
+            combined = completed.stdout + completed.stderr
+            self.assertNotIn(secret, combined)
+
 
 class InstallHelperTests(unittest.TestCase):
     def test_archive_name_for_supported_platforms(self) -> None:
