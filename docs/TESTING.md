@@ -375,6 +375,33 @@ design this is expected to fail until an actual reviewer resolves each gate;
 CI runs the default `ci-structural` mode so an open counsel/upstream gate
 does not turn ordinary `Verify` red.
 
+`docs/evidence/scope_binding.json`'s two-commit seal
+(`check_scope_binding_seal()`) normally requires the seal commit to be the
+EXACT current tip (`HEAD`'s own immediate parent must be `evidence_commit`).
+The one exception is a genuine GitHub `pull_request` merge-ref checkout
+(`refs/pull/*/merge`): `_github_pull_request_merge_head()` grants it ONLY
+when the current process's `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH` name a
+readable, valid (no duplicate key) `pull_request` event whose payload
+cross-checks, self-consistently, against `GITHUB_SHA`/`GITHUB_REPOSITORY`/
+`GITHUB_BASE_REF`/`GITHUB_HEAD_REF` AND against `HEAD`'s actual two parents
+in exact GitHub order (`parents[0] == pull_request.base.sha`,
+`parents[1] == pull_request.head.sha`) AND a byte-identical merge tree --
+same repository only (no fork exception), `main` base ref only. A stale,
+forged, mismatched, or missing event/env never grants the exception; it
+silently falls back to the strict tip-only path, which a genuine merge
+commit fails (its own first parent is the base branch, not the seal).
+`scripts.tests.test_check_release_evidence.ScopeBindingSealCheckTests`
+exercises the positive GitHub shape plus every named adversarial escape
+(octopus/one-parent, swapped/unrelated parents, a genuine tree mismatch, a
+forged same-tree candidate with the wrong parent order, a wrong/stale
+base/head/event SHA, a stale `GITHUB_SHA`, a wrong repository/ref, a
+fork-repository head, a post-seal commit named as the PR head, and no
+event env at all) against a disposable temp git repo.
+`check_full_source_scope_seal()` remains additional, GitHub-event-
+independent defense in depth (it unconditionally diffs `subject_commit`
+against current `HEAD`); it is not itself what binds the merge-ref
+exception to the event.
+
 Dependency lock and verification (regenerate only when coordinates
 change; do not hand-edit generated checksums):
 

@@ -460,6 +460,44 @@ Date: 2026-08-24
   `cb4390996d30cb9a6f64ad4cbc1bd301d4400dff0806a41829d574cd1f1b4ed5`.
   Device runtime remains historical (W5-2). Windows x86-64 JVM is
   already in progress as candidate-only Gate 3 work. Do not merge/tag.
+- **Merge-ref seal exception tightened to be GitHub-event-bound (same
+  branch, after merging `main`/PR #14).** A later independent review
+  found the `pull_request` merge-ref exception in
+  `check_scope_binding_seal()`/`_effective_seal_tip()` accepted a
+  two-parent commit by TREE SHAPE alone (any parent whose own first
+  parent was `evidence_commit`, with a matching tree) and only relied on
+  `check_full_source_scope_seal()`'s unconditional full-tree diff as a
+  backstop -- it could not itself distinguish a genuine GitHub
+  merge-ref from an octopus merge, swapped/unrelated parents, or a
+  fabricated same-tree candidate. Fix:
+  `_github_pull_request_merge_head()` now requires the CURRENT
+  `GITHUB_EVENT_NAME == "pull_request"` plus every one of
+  `GITHUB_EVENT_PATH`/`GITHUB_SHA`/`GITHUB_REPOSITORY`/`GITHUB_BASE_REF`/
+  `GITHUB_HEAD_REF` set; a readable, valid (no duplicate key) event
+  payload; `GITHUB_SHA == HEAD`; same-repository `base`/`head` (no fork
+  exception); `main` base ref; matching head ref; `pull_request.
+  merge_commit_sha` (when present) equal to `HEAD`; `HEAD`'s exact two
+  parents matched, in exact GitHub order, against the event's own
+  `base.sha`/`head.sha`; and a byte-identical merge tree. Any doubt --
+  missing env, unreadable/malformed/duplicate-key event, wrong
+  repo/ref/SHA, wrong parent order, or a tree mismatch -- denies the
+  exception and falls back to the strict "HEAD's own first parent must
+  be `evidence_commit`" path, which a genuine merge commit fails.
+  `check_full_source_scope_seal()` is kept as GitHub-event-independent
+  defense in depth, documented as not itself binding the exception to
+  the event. `scripts.tests.test_check_release_evidence
+  .ScopeBindingSealCheckTests` gained the positive GitHub shape plus
+  every named adversarial escape (octopus/one-parent, swapped/unrelated
+  parents, a genuine tree mismatch, a forged same-tree candidate built
+  with `git commit-tree` using the wrong parent order, wrong/stale
+  base/head/event SHAs, a stale `GITHUB_SHA`, a wrong repository/ref, a
+  fork-repository head, a post-seal commit named as the PR head, and no
+  event env at all). This round also merges `main` (PR #14, `34c174b`)
+  into this branch with a normal merge commit (no rebase/squash) and
+  freshly regenerates+reseals the Prompt 7 evidence packet against the
+  merged tree plus the hardening code itself. Still does not mark
+  Prompt 7, the Windows candidate, or any release as GO, and does not
+  start Prompt 8.
 - **Build and CI reproducibility on `fix/build-and-ci-reproducibility` (stacked on
   Prompt 5 `90fe0ee`).** The original five commits remain. Review-fix
   commits move the toolchain to the official Kotlin 2.4.10 envelope

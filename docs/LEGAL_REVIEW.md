@@ -415,10 +415,25 @@ worktree bytes:
 - `subject_commit` is EXACTLY `evidence_commit`'s immediate parent (not
   merely some ancestor).
 - `evidence_commit` is the effective seal tip's exact immediate parent.
-  The tip is current `HEAD` itself, or — only for a GitHub `pull_request`
-  two-parent merge-ref checkout — a merge whose tree is byte-identical to
-  a parent that is the seal commit. An extra commit on top of the seal
-  still fails and requires a fresh subject/evidence/seal sequence.
+  The tip is current `HEAD` itself, or — only when
+  `_github_pull_request_merge_head()` validates HEAD as a genuine,
+  fully event-bound GitHub `pull_request` merge-ref of exactly the sealed
+  branch (current `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH` event payload;
+  same repository; `main` base ref; matching head ref; `HEAD`'s exact two
+  parents matched, in exact GitHub order, against the event's own
+  `base.sha`/`head.sha`; a byte-identical merge tree — never by tree
+  shape alone) — the validated PR-head parent, which is the seal commit.
+  A stale, forged, mismatched, or missing event/env never grants this;
+  it falls back to the strict tip-only path, which a genuine merge
+  commit fails (its own first parent is the base branch, not the seal).
+  An extra commit on top of the seal still fails and requires a fresh
+  subject/evidence/seal sequence. `scripts.tests.test_check_release_evidence
+  .ScopeBindingSealCheckTests` covers the positive GitHub shape and every
+  named adversarial escape (octopus/one-parent, swapped/unrelated
+  parents, a genuine tree mismatch, a forged same-tree candidate with the
+  wrong parent order, wrong/stale base/head/event SHAs, a wrong
+  repository/ref, a fork-repository head, a post-seal commit named as the
+  PR head, and no event env at all).
 - Every sealed evidence file's CURRENT bytes match both the recorded digest
   in `scope_binding.json` AND the actual bytes committed at
   `evidence_commit`'s tree (`git show <evidence_commit>:<path>`) — so a

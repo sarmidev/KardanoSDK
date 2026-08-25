@@ -268,9 +268,14 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 ### Changed
 
 - `check_scope_binding_seal()` treats a GitHub `pull_request` two-parent
-  merge-ref whose tree is byte-identical to the seal commit as that seal
-  tip, so the legal-evidence job can pass on the merge checkout. An extra
-  commit on top of the seal still fails.
+  merge-ref as that seal tip ONLY when `_github_pull_request_merge_head()`
+  validates it as fully event-bound: the current `GITHUB_EVENT_NAME`/
+  `GITHUB_EVENT_PATH` event payload, same repository, `main` base ref,
+  matching head ref, `HEAD`'s exact two parents matched in exact GitHub
+  order against the event's own `base.sha`/`head.sha`, and a
+  byte-identical merge tree -- never by tree shape alone. A stale,
+  forged, mismatched, or missing event/env falls back to the strict
+  tip-only path. An extra commit on top of the seal still fails.
 - Android lint is now a CI gate (`:androidApp:lintDebug` and
   `lintRelease`, `warningsAsErrors`). Online freshness detectors
   (`GradleDependency`, `NewerVersionAvailable`,

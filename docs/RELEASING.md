@@ -28,6 +28,13 @@ tag plus release notes that identify the source revision, verified targets, and 
    addresses. Run `python3 scripts/check_gitleaks.py` after
    `python3 scripts/install_gitleaks.py`. This does not replace an owner-authenticated
    GitHub secret-scanning pass.
+   - `docs/evidence/scope_binding.json`'s seal must be the exact tip of the
+     branch pushed for review. A GitHub PR check run against the
+     `refs/pull/*/merge` ref is the one narrow exception, and only when it
+     is fully bound to the actual `pull_request` event (see
+     `docs/TESTING.md` and `_github_pull_request_merge_head()` in
+     `scripts/check_release_evidence.py`); it never accepts a merge-ref by
+     tree shape alone, and never accepts any commit added after the seal.
 4. Confirm the public README, quickstart, roadmap, and security-reporting path match delivered
    behavior.
 5. Run the CI-equivalent test matrix and record platform limitations.

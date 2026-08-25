@@ -4309,14 +4309,29 @@ def java_class_version_evidence(bcprov_jar_path: Path | None = None) -> dict[str
 # this binding independently of regeneration: it confirms `evidence_commit`
 # and `subject_commit` exist as real git objects, that `subject_commit` is
 # EXACTLY `evidence_commit`'s immediate parent, that `evidence_commit` is
-# EXACTLY the effective seal tip's immediate parent (HEAD itself, or a
-# GitHub `pull_request` two-parent merge-ref whose tree is byte-identical
-# to a parent that *is* the seal commit -- a 2026-08-24 independent review
-# found the prior "ancestor of HEAD" wording let an unrelated later commit
-# sit on top of an old seal without invalidating it; any commit added after
-# the seal commit still requires a fresh subject/evidence/seal sequence
-# before this check passes again), and that every evidence file's CURRENT
-# bytes match both
+# EXACTLY the effective seal tip's immediate parent (HEAD itself, or --
+# ONLY when `_github_pull_request_merge_head()` validates HEAD as a
+# genuine, fully event-bound GitHub `pull_request` merge-ref of exactly
+# the sealed branch: exact `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH` event
+# payload, same repository, `main` base ref, matching head ref, exact
+# GitHub parent order matched against the event's own `base.sha`/
+# `head.sha`, and a byte-identical merge tree -- never by tree shape
+# alone -- the validated PR-head parent, i.e. that parent *is* the seal
+# commit. A 2026-08-24 independent review found the prior "ancestor of
+# HEAD" wording let an unrelated later commit sit on top of an old seal
+# without invalidating it; any commit added after the seal commit still
+# requires a fresh subject/evidence/seal sequence before this check
+# passes again. A later, independent review found the tree-shape-only
+# merge-ref acceptance (no event binding at all) could not distinguish a
+# genuine GitHub merge-ref from any other two-parent commit with a
+# matching tree shape -- octopus merges, swapped/unrelated parents, and a
+# fabricated same-tree merge candidate are all rejected now because
+# `_github_pull_request_merge_head()` validates parent order and identity
+# against the actual GitHub event payload FIRST, before any tree
+# comparison, and denies the exception outright on a stale, forged,
+# mismatched, or missing event/env -- falling back to the strict
+# HEAD-must-be-the-exact-tip path, which a genuine merge commit does not
+# satisfy), and that every evidence file's CURRENT bytes match both
 # the digest recorded here AND the actual bytes committed at
 # `evidence_commit`'s tree (`git show <evidence_commit>:<path>`) -- so an
 # evidence file edited by some later commit without a re-seal is caught
@@ -4602,10 +4617,16 @@ def seal_scope_binding() -> dict[str, Any]:
             "`git show <evidence_commit>:<path>` / "
             "`git show <subject_commit>:<path>`, requires evidence_commit to "
             "be the effective seal tip's immediate parent (HEAD itself, or "
-            "a GitHub pull_request two-parent merge-ref whose tree equals a "
-            "parent that is the seal commit -- the seal must remain the "
-            "exact tip; any later commit requires a fresh "
-            "subject/evidence/seal sequence), and separately diffs EVERY "
+            "-- only when the current GITHUB_EVENT_NAME/GITHUB_EVENT_PATH "
+            "event payload validates HEAD as a genuine, same-repository "
+            "GitHub pull_request merge-ref of exactly the sealed branch, "
+            "checked via exact GitHub parent order against the event's "
+            "own base.sha/head.sha plus a byte-identical merge tree, never "
+            "by tree shape alone; see _github_pull_request_merge_head() -- "
+            "the validated PR-head parent that is the seal commit). The "
+            "seal must remain the exact effective tip; any later commit "
+            "requires a fresh subject/evidence/seal sequence), and "
+            "separately diffs EVERY "
             "tracked file between subject_commit and HEAD, failing on any "
             "change outside the exact reviewed set of generated evidence/ "
             "seal outputs -- see check_full_source_scope_seal()."

@@ -71,12 +71,16 @@ Fails closed (either mode) on any of:
    verified against git history (not by regeneration): evidence_commit and
    subject_commit exist, subject_commit is evidence_commit's exact
    immediate parent, evidence_commit is the effective seal tip's exact
-   immediate parent (HEAD itself, or -- for a GitHub `pull_request`
-   merge-ref checkout -- a two-parent merge whose tree is byte-identical
-   to a parent that *is* the seal commit), and every sealed evidence
-   file's current bytes match both the recorded digest and the actual
-   bytes committed at evidence_commit's tree. An extra commit on top of
-   the seal still fails.
+   immediate parent (HEAD itself, or -- ONLY for a fully event-bound
+   GitHub `pull_request` merge-ref checkout -- the validated PR-head
+   parent of a two-parent merge; see `_github_pull_request_merge_head()`
+   for the exact GITHUB_EVENT_NAME/GITHUB_EVENT_PATH/parent-order/repo/
+   ref/SHA/tree binding this requires, all validated against the actual
+   event payload and current git history, not by tree shape alone), and
+   every sealed evidence file's current bytes match both the recorded
+   digest and the actual bytes committed at evidence_commit's tree. An
+   extra commit on top of the seal still fails, as does any merge-ref
+   whose event binding does not check out exactly.
 9. Every tracked file that differs at all between scope_binding.json's
    subject_commit and current HEAD is one of the exact, small, reviewed
    generated-evidence/seal output paths (docs/evidence/ generated outputs,
@@ -266,30 +270,202 @@ def _commit_tree(oid: str) -> str | None:
     return run_git("rev-parse", f"{oid}^{{tree}}").strip()
 
 
+# Every one of these must be set (non-empty) in the process environment for
+# the GitHub `pull_request` merge-ref exception to even be considered. A
+# real `pull_request` job always sets all of these itself; a missing one is
+# treated as untrustworthy, not merely "not applicable" -- see
+# `_github_pull_request_merge_head()`.
+_REQUIRED_PULL_REQUEST_ENV_VARS: tuple[str, ...] = (
+    "GITHUB_EVENT_NAME",
+    "GITHUB_EVENT_PATH",
+    "GITHUB_SHA",
+    "GITHUB_REPOSITORY",
+    "GITHUB_BASE_REF",
+    "GITHUB_HEAD_REF",
+)
+
+
+def _read_github_event() -> dict[str, Any] | None:
+    """Parse `GITHUB_EVENT_PATH` strictly, or return `None`.
+
+    `None` means "unusable for the merge-ref exception" for ANY reason --
+    unset env var, missing/unreadable file, invalid JSON, a duplicate
+    object key (via the same `_reject_duplicate_keys` every other sealed
+    JSON input in this module fails closed on), or a non-object top level.
+    Callers must treat `None` as "the exception does not apply", never as
+    an error to raise -- denying the exception always falls back to the
+    strict "seal must be the exact tip" path.
+    """
+    event_path = os.environ.get("GITHUB_EVENT_PATH")
+    if not event_path:
+        return None
+    path = Path(event_path)
+    try:
+        if not path.is_file():
+            return None
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        event = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except ValueError:
+        return None
+    if not isinstance(event, dict):
+        return None
+    return event
+
+
+def _github_pull_request_merge_head(head: str, parents: list[str]) -> str | None:
+    """The validated PR-head parent SHA if `head` is a genuine,
+    fully event-bound GitHub `pull_request` merge-ref of exactly that PR
+    -- or `None` if the exception does not apply, in which case the
+    caller MUST fall back to the strict "seal must be the exact tip"
+    path. This function only ever narrows what is accepted; it never
+    widens acceptance on any doubt, missing field, or ambiguous value.
+
+    Every one of the following must hold, sourced only from the CURRENT
+    process environment and the event payload it names (never trusted
+    individually, always cross-checked against each other and against
+    actual git history):
+
+    - `GITHUB_EVENT_NAME == "pull_request"`, and every name in
+      `_REQUIRED_PULL_REQUEST_ENV_VARS` is set to a non-empty value.
+    - `GITHUB_EVENT_PATH` names a readable file containing a valid JSON
+      object with no duplicate key (`_read_github_event()`).
+    - `GITHUB_SHA` equals `head` -- the commit this checker is actually
+      running against, not some other checkout the event payload might
+      describe.
+    - `event["repository"]["full_name"]` and
+      `event["pull_request"]["base"]["repo"]["full_name"]` and
+      `event["pull_request"]["head"]["repo"]["full_name"]` all equal
+      `GITHUB_REPOSITORY` -- same-repository pull requests only; a fork's
+      head/base is never accepted here.
+    - `event["pull_request"]["base"]["ref"] == "main" ==
+      GITHUB_BASE_REF`, and `event["pull_request"]["head"]["ref"]` is a
+      non-empty string equal to `GITHUB_HEAD_REF`.
+    - `event["pull_request"]["merge_commit_sha"]`, if present at all,
+      equals `head` too.
+    - `head` has EXACTLY two parents (already checked by the caller
+      before this is invoked), in exact GitHub order:
+      `parents[0] == event["pull_request"]["base"]["sha"]` and
+      `parents[1] == event["pull_request"]["head"]["sha"]`. An octopus
+      merge, a one-parent commit, or parents that are swapped, unrelated,
+      or simply do not match these exact event SHAs are all rejected
+      here -- before any tree comparison, so a same-tree-by-construction
+      candidate with the wrong parents is still rejected.
+    - `head`'s own tree is byte-identical to `parents[1]`'s tree -- the
+      merge-ref checkout introduced no change beyond what the PR head
+      commit already had.
+
+    Deliberately does NOT itself check that `parents[1]`'s own first
+    parent is `evidence_commit`: the caller (`_effective_seal_tip`)
+    returns `parents[1]` and lets the ordinary
+    `check_scope_binding_seal()` seal-parent check verify that exactly as
+    it would for any other tip -- so "sealed head's immediate parent is
+    evidence_commit" and every ordinary scope/tool/evidence seal check
+    still runs against that exact head, unchanged by this exception.
+    """
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+        return None
+    if any(not os.environ.get(name) for name in _REQUIRED_PULL_REQUEST_ENV_VARS):
+        return None
+
+    event = _read_github_event()
+    if event is None:
+        return None
+
+    if os.environ["GITHUB_SHA"] != head:
+        return None
+
+    repository = os.environ["GITHUB_REPOSITORY"]
+    top_repo = event.get("repository")
+    if not isinstance(top_repo, dict) or top_repo.get("full_name") != repository:
+        return None
+
+    pr = event.get("pull_request")
+    if not isinstance(pr, dict):
+        return None
+    base = pr.get("base")
+    head_side = pr.get("head")
+    if not isinstance(base, dict) or not isinstance(head_side, dict):
+        return None
+
+    base_repo = base.get("repo")
+    head_repo = head_side.get("repo")
+    if not isinstance(base_repo, dict) or not isinstance(head_repo, dict):
+        return None
+    if base_repo.get("full_name") != repository or head_repo.get("full_name") != repository:
+        return None  # same-repository PRs only; no fork exception
+
+    base_ref = base.get("ref")
+    if base_ref != "main" or base_ref != os.environ["GITHUB_BASE_REF"]:
+        return None
+    head_ref = head_side.get("ref")
+    if not isinstance(head_ref, str) or not head_ref or head_ref != os.environ["GITHUB_HEAD_REF"]:
+        return None
+
+    merge_commit_sha = pr.get("merge_commit_sha")
+    if merge_commit_sha is not None and merge_commit_sha != head:
+        return None
+
+    base_sha = base.get("sha")
+    head_sha = head_side.get("sha")
+    if not isinstance(base_sha, str) or not GIT_SHA1_RE.match(base_sha):
+        return None
+    if not isinstance(head_sha, str) or not GIT_SHA1_RE.match(head_sha):
+        return None
+
+    if len(parents) != 2 or parents[0] != base_sha or parents[1] != head_sha:
+        return None
+
+    head_tree = _commit_tree(head)
+    head_side_tree = _commit_tree(head_sha)
+    if head_tree is None or head_side_tree is None or head_tree != head_side_tree:
+        return None
+
+    return head_sha
+
+
 def _effective_seal_tip(head: str, evidence_commit: str) -> str:
     """The commit whose parent must be `evidence_commit`.
 
-    Normally `HEAD` itself: the seal commit must remain the exact tip.
-    GitHub `pull_request` jobs check out `refs/pull/*/merge` (two
-    parents: base, then PR head). That ephemeral merge is not a later
-    subject change when its tree is byte-identical to a parent whose own
-    immediate first-parent is `evidence_commit` -- i.e. the PR head *is*
-    the seal commit. Extra commits on top of the seal still fail,
-    because that parent's first-parent is the seal, not `evidence_commit`.
+    Normally `HEAD` itself: the seal commit must remain the exact tip --
+    this applies unconditionally to every normal push or local checkout,
+    and to any two-parent merge commit that is not a fully event-bound
+    GitHub `pull_request` merge-ref (see `_github_pull_request_merge_head`
+    for exactly what "fully event-bound" requires; on ANY doubt this
+    falls back to `head` unchanged, which then requires `head`'s own
+    first parent -- not either merge parent -- to be `evidence_commit`,
+    correctly failing a merge commit that is not a genuine, current,
+    same-repository `pull_request` merge-ref of the sealed branch).
+
+    Only when `head` has exactly two parents AND
+    `_github_pull_request_merge_head()` validates the current
+    `GITHUB_EVENT_NAME`/`GITHUB_EVENT_PATH`/event payload against `head`'s
+    actual parents (exact GitHub parent order, exact event SHAs, same
+    repository, `main` base ref, matching head ref, and a byte-identical
+    merge tree) does this return the validated PR-head parent instead --
+    i.e. the PR head *is* the seal commit. Extra commits on top of the
+    seal still fail, because that parent's first parent is the seal
+    commit, not `evidence_commit`; a stale, forged, mismatched, or
+    missing event/env is never a silent pass, because
+    `_github_pull_request_merge_head()` returns `None` for all of those,
+    which this function maps to the strict `head`-unchanged path.
+
+    `check_full_source_scope_seal()` remains defense-in-depth (it does
+    not depend on GitHub events at all -- it diffs `subject_commit`
+    against current `HEAD` unconditionally), but this function's own
+    validation is what actually binds acceptance of a merge-ref to the
+    GitHub event: it does not rely on `check_full_source_scope_seal()`
+    to reject a forged/mismatched merge shape.
     """
     parents = _commit_parents(head)
     if len(parents) != 2:
         return head
-    head_tree = _commit_tree(head)
-    if head_tree is None:
+    validated_head = _github_pull_request_merge_head(head, parents)
+    if validated_head is None:
         return head
-    for parent in parents:
-        parent_parents = _commit_parents(parent)
-        if not parent_parents or parent_parents[0] != evidence_commit:
-            continue
-        if _commit_tree(parent) == head_tree:
-            return parent
-    return head
+    return validated_head
 
 
 def run_git_bytes(*args: str) -> bytes:
@@ -1025,15 +1201,31 @@ def check_scope_binding_seal() -> list[str]:
       merely some ancestor -- the evidence-content commit must directly
       follow the subject-source commit it inventories, with no intervening
       commit that could have silently changed the inventoried state).
-    - `evidence_commit` is EXACTLY current HEAD's immediate parent (not
-      merely an ancestor -- the seal commit itself must BE the current
-      tip; a 2026-08-24 independent review found the prior "ancestor of
-      HEAD" wording let an unrelated later commit sit on top of an old
-      seal without invalidating it. This function does NOT independently
-      re-verify this requirement beyond that immediate-parent check --
+    - `evidence_commit` is EXACTLY the *effective seal tip*'s immediate
+      parent (not merely an ancestor -- the seal commit itself must BE
+      the current tip; a 2026-08-24 independent review found the prior
+      "ancestor of HEAD" wording let an unrelated later commit sit on top
+      of an old seal without invalidating it). The effective seal tip is
+      current HEAD itself UNLESS HEAD is a two-parent merge that
+      `_effective_seal_tip()`/`_github_pull_request_merge_head()`
+      validates as a genuine, fully event-bound GitHub `pull_request`
+      merge-ref of exactly the sealed branch (exact `GITHUB_EVENT_NAME`/
+      `GITHUB_EVENT_PATH` event payload, same repository, `main` base
+      ref, matching head ref, exact parent-order SHA match against the
+      event's own `base.sha`/`head.sha`, and a byte-identical merge
+      tree) -- in which case the effective tip is the validated PR-head
+      parent instead. A stale, forged, mismatched, or missing event/env
+      never grants the exception; it silently falls back to requiring
+      HEAD's own first parent to be `evidence_commit`, which a genuine
+      merge commit will not satisfy, so this fails closed rather than
+      passing. This function does NOT independently re-verify full
+      source-scope completeness beyond that immediate-parent check --
       see `check_full_source_scope_seal()` below for the broader,
       import-graph-independent completeness check this two-commit design
-      relies on).
+      relies on as defense-in-depth (that check does not itself depend
+      on any GitHub event and is not what binds the merge-ref exception
+      to the event -- `_github_pull_request_merge_head()` does that on
+      its own).
     - Every sealed evidence file's CURRENT on-disk bytes match both the
       recorded `sealed_evidence_digests` entry AND the actual bytes
       committed at `evidence_commit`'s tree (`git show
