@@ -25,12 +25,18 @@ design (a live re-scan against the local Gradle module cache only, treated
 as pure defense-in-depth) returns success with nothing actually checked at
 all on this repo's own legal-evidence-scan CI job, whose Gradle cache is
 always cold -- silently defeating the point of "live" evidence in exactly
-the environment it is supposed to be authoritative in. The fetch is pinned
-to Maven Central's own host, refuses any redirect elsewhere, and requires
-the downloaded bytes' whole-archive SHA-256 and size to match the
-committed, reviewed evidence before any member is scanned; a missing
-explicit path, a failed fetch, or any mismatch is a hard failure, never a
-silent skip.
+the environment it is supposed to be authoritative in. The fetch's request
+and response URLs are both required to be byte-identical to the one pinned
+`https://` Maven Central URL (exact host, default port only, exact path,
+no query/fragment/userinfo -- see `_validate_pinned_artifact_url()`); it
+refuses EVERY HTTP redirect outright, even to the same host (see
+`_NoRedirectHandler`); it requires the downloaded bytes' whole-archive
+SHA-256 and size to match the committed, reviewed evidence before any
+member is scanned; and it writes the verified bytes to a fresh destination
+path using an exclusive, symlink-refusing create (`_create_exclusive_file()`)
+rather than a plain truncating write. A missing explicit path, a failed
+fetch, a redirect, a URL that does not exactly match, or any mismatch is a
+hard failure, never a silent skip.
 
 Determinism rules (checked by `scripts/check_release_evidence.py` and
 `scripts/tests/test_generate_legal_evidence.py`):
@@ -3486,8 +3492,8 @@ def _read_java_class_header_version(data: bytes) -> tuple[int, int] | None:
 
 
 # Maven Central's own canonical host -- `fetch_and_verify_bcprov_jar()`
-# refuses any HTTP redirect to a different host (see
-# `_PinnedHostRedirectHandler` below), and this evidence's own
+# refuses EVERY HTTP redirect, to any host including this one (see
+# `_NoRedirectHandler` below), and this evidence's own
 # `artifact_maven_central_url` field is required to already be an
 # `https://` URL on exactly this host (`_validate_sealed_java_class_version_evidence()`).
 BCPROV_MAVEN_CENTRAL_HOST = "repo1.maven.org"
@@ -3800,59 +3806,187 @@ _validate_sealed_java_class_version_evidence(JAVA_CLASS_VERSION_EVIDENCE)
 # own directory-listing convention, independently confirmed 2026-08-25).
 BCPROV_MAVEN_CENTRAL_URL = JAVA_CLASS_VERSION_EVIDENCE["artifact_maven_central_url"]
 
+# The pinned URL's own path component, split out once so
+# `_validate_pinned_artifact_url()` can require an EXACT match rather than
+# re-deriving it ad hoc at each call site.
+BCPROV_MAVEN_CENTRAL_PATH = urllib.parse.urlsplit(BCPROV_MAVEN_CENTRAL_URL).path
 
-class _PinnedHostRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Refuses any HTTP redirect whose target host is not in
-    `_allowed_hosts` -- the one anomaly a plain `urllib.request.urlopen()`
-    call would otherwise follow silently. A hijacked mirror, a captive
-    portal, or a misconfigured proxy redirecting a Maven Central request
-    elsewhere is exactly what this exists to catch; a same-host redirect
-    (e.g. an `http://` request the server 301s to `https://` on the SAME
-    host) is still allowed, same as it always was.
+
+def _validate_pinned_artifact_url(url: str, *, expected_path: str) -> None:
+    """Structural provenance check on `url`, independent of and prior to
+    any network I/O: exactly scheme `https`, exactly host
+    `BCPROV_MAVEN_CENTRAL_HOST`, no explicit port other than the HTTPS
+    default (443), exactly `expected_path`, and no query string,
+    fragment, or userinfo. A 2026-08-25 independent review found this
+    fetch previously validated only the *hostname* of the initial and
+    final URLs -- a URL like
+    ``https://user:pass@repo1.maven.org:8443/../evil/path?x#y`` has the
+    pinned hostname yet is not remotely the one pinned artifact URL.
+    Called on the URL about to be requested AND (see `_fetch_url_bytes`)
+    the actual final response URL, so neither a corrupted constant nor a
+    same-host response whose URL otherwise drifted can silently pass.
+    Raises `EvidenceError` on any deviation; never touches the network.
     """
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "https":
+        raise EvidenceError(f"{url!r}: scheme must be exactly 'https', got {parsed.scheme!r}")
+    if parsed.username is not None or parsed.password is not None:
+        raise EvidenceError(f"{url!r}: userinfo (user:pass@) is not allowed in a pinned artifact URL")
+    if parsed.hostname != BCPROV_MAVEN_CENTRAL_HOST:
+        raise EvidenceError(
+            f"{url!r}: host must be exactly {BCPROV_MAVEN_CENTRAL_HOST!r}, "
+            f"got {parsed.hostname!r}"
+        )
+    if parsed.port is not None and parsed.port != 443:
+        raise EvidenceError(
+            f"{url!r}: only the default HTTPS port is allowed, got explicit port {parsed.port!r}"
+        )
+    if parsed.query:
+        raise EvidenceError(f"{url!r}: a query string is not allowed in a pinned artifact URL")
+    if parsed.fragment:
+        raise EvidenceError(f"{url!r}: a fragment is not allowed in a pinned artifact URL")
+    if parsed.path != expected_path:
+        raise EvidenceError(
+            f"{url!r}: path must be exactly {expected_path!r}, got {parsed.path!r}"
+        )
 
-    def __init__(self, allowed_hosts: frozenset[str]) -> None:
-        super().__init__()
-        self._allowed_hosts = allowed_hosts
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuses EVERY HTTP 3xx redirect, unconditionally -- including one
+    that would land on the exact same scheme/host/port/path this fetch
+    already pinned. A 2026-08-25 independent review found the prior
+    design's "same host is fine" exception meant a captive portal, an
+    on-path proxy, or a compromised intermediate hop could redirect an
+    already-in-flight request through an arbitrary detour (still
+    reporting the same final host) before it ever reached Maven Central,
+    without this ever being flagged; a same-host redirect through a
+    *different path/port/query* was also never checked at all. There is
+    no legitimate reason this fetch's one pinned URL should ever redirect,
+    so the simplest and strictest fix is to reject every redirect, full
+    stop, before a single byte of the redirected response is read --
+    `redirect_request()` raises directly instead of calling
+    `super().redirect_request()`, so urllib never opens the new request.
+    This also makes a redirect loop moot: the very first hop already
+    fails closed, with no chance to loop.
+    """
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
-        new_host = urllib.parse.urlsplit(newurl).hostname
-        if new_host not in self._allowed_hosts:
-            raise EvidenceError(
-                f"refusing HTTP {code} redirect from {req.full_url!r} to "
-                f"unexpected host {new_host!r} (allowed: {sorted(self._allowed_hosts)})"
-            )
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        raise EvidenceError(
+            f"refusing HTTP {code} redirect from {req.full_url!r} to {newurl!r} -- "
+            "this fetch never follows a redirect, even to the same host/scheme/path"
+        )
 
 
-def _fetch_url_bytes(
-    url: str, *, allowed_hosts: frozenset[str], max_bytes: int, timeout: float
-) -> tuple[bytes, str | None]:
+def _fetch_url_bytes(url: str, *, expected_path: str, max_bytes: int, timeout: float) -> tuple[bytes, str | None]:
     """The one function in this file that makes a real HTTP request --
     kept this small and separate specifically so tests can monkeypatch
-    exactly this seam instead of exercising real network I/O. Every
-    redirect (including the initial request's own final response) is
-    required to land on a host in `allowed_hosts` (`_PinnedHostRedirectHandler`
-    covers redirects; the check on `response.url`'s own host below covers a
-    same-host non-redirect response that urllib itself never validates).
-    Returns `(body_bytes, declared_content_length_header_or_None)`; never
-    reads more than `max_bytes + 1` bytes, so an oversized response is
+    exactly this seam instead of exercising real network I/O.
+
+    `url` is validated against the pinned scheme/host/port/path/no-query/
+    no-fragment/no-userinfo rule (`_validate_pinned_artifact_url()`)
+    BEFORE any request is made. The opener never follows a redirect
+    (`_NoRedirectHandler`): any 3xx response raises immediately, before
+    a single byte of the redirected response is read. After a successful
+    (non-redirected) response, the actual `response.url` is required to
+    be byte-for-byte IDENTICAL to the requested `url` -- not just same-
+    host -- and is independently re-validated through the same pinned-URL
+    check, so a same-host response that otherwise did not go through our
+    redirect handler (in principle impossible via `urllib`, but never
+    assumed) still cannot silently substitute a different path/port/
+    query for the one pinned artifact. Returns
+    `(body_bytes, declared_content_length_header_or_None)`; never reads
+    more than `max_bytes + 1` bytes, so an oversized response is
     reported, not silently truncated into looking valid.
     """
-    opener = urllib.request.build_opener(_PinnedHostRedirectHandler(allowed_hosts))
+    _validate_pinned_artifact_url(url, expected_path=expected_path)
+    opener = urllib.request.build_opener(_NoRedirectHandler())
     request = urllib.request.Request(
         url, headers={"User-Agent": "KardanoSDK-legal-evidence-fetch/1.0"}
     )
     with opener.open(request, timeout=timeout) as response:
-        final_host = urllib.parse.urlsplit(response.url).hostname
-        if final_host not in allowed_hosts:
+        final_url = response.url
+        if final_url != url:
             raise EvidenceError(
-                f"{url}: final response host {final_host!r} is not in the allowed "
-                f"set {sorted(allowed_hosts)}"
+                f"{url}: final response URL {final_url!r} is not byte-identical to the "
+                "requested URL -- refusing to trust a request that changed in flight"
             )
+        _validate_pinned_artifact_url(final_url, expected_path=expected_path)
         declared_length = response.headers.get("Content-Length")
         data = response.read(max_bytes + 1)
     return data, declared_length
+
+
+def _write_all_to_fd(fd: int, data: bytes) -> None:
+    """Write every byte of `data` to raw file descriptor `fd`, looping on
+    both a partial write (a `write()` that returns fewer bytes than
+    given -- always legal per POSIX, common on a full pipe/slow disk) and
+    `InterruptedError` (EINTR) rather than trusting a single `os.write()`
+    call to consume the whole buffer. Raises `EvidenceError` if a
+    `write()` call ever returns 0 with bytes still remaining (would
+    otherwise loop forever).
+    """
+    view = memoryview(data)
+    total = len(view)
+    written = 0
+    while written < total:
+        try:
+            n = os.write(fd, view[written:])
+        except InterruptedError:
+            continue
+        if n == 0:
+            raise EvidenceError(
+                f"os.write() returned 0 bytes with {total - written} of {total} bytes "
+                "still unwritten"
+            )
+        written += n
+
+
+def _create_exclusive_file(path: Path, data: bytes) -> None:
+    """Create `path` and write `data` to it, refusing to write through OR
+    over anything already at that exact path -- a regular file, a
+    symlink (to anywhere), or a directory. A 2026-08-25 independent
+    review found the prior code (`Path.write_bytes()`, i.e. `open(path,
+    "wb")`) opens with `O_CREAT | O_TRUNC` and no `O_EXCL`: if `path`
+    already existed as a symlink, it would silently write through that
+    symlink to whatever it pointed at, and a prior `dest_path.is_symlink()`
+    check-then-write is itself a check-then-act TOCTOU race, not a fix.
+
+    This uses `os.open()` with `O_CREAT | O_EXCL | O_WRONLY` (plus
+    `O_NOFOLLOW` where the platform defines it, e.g. not on Windows) in
+    ONE atomic syscall: `O_EXCL` makes creation fail with `EEXIST` if
+    `path` already exists at all -- file, symlink, or directory, with no
+    separate stat-then-open window for a race to land in -- and
+    `O_NOFOLLOW` is a second, independent guard against ever traversing a
+    symlink at the final path component even in the hypothetical case an
+    OS's `O_EXCL` semantics ever diverged from POSIX. On ANY failure
+    (creation failure, or a write failure partway through -- e.g. disk
+    full, `OSError` mid-write) this removes whatever partial file it
+    created rather than leaving a half-written file that a later, unaware
+    read could mistake for complete; a failure to create in the first
+    place obviously leaves nothing to clean up.
+    """
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(str(path), flags, 0o644)
+    except FileExistsError as exc:
+        raise EvidenceError(
+            f"{path}: refusing to write -- a file, symlink, or directory already exists "
+            "at this exact path"
+        ) from exc
+    except OSError as exc:
+        raise EvidenceError(f"{path}: failed to create destination file: {exc}") from exc
+    try:
+        _write_all_to_fd(fd, data)
+    except BaseException:
+        os.close(fd)
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        raise
+    else:
+        os.close(fd)
 
 
 def _best_effort_verify_bcprov_sha256_sidecar(actual_sha256: str) -> None:
@@ -3870,7 +4004,7 @@ def _best_effort_verify_bcprov_sha256_sidecar(actual_sha256: str) -> None:
     try:
         sidecar_bytes, _ = _fetch_url_bytes(
             BCPROV_MAVEN_CENTRAL_URL + ".sha256",
-            allowed_hosts=frozenset({BCPROV_MAVEN_CENTRAL_HOST}),
+            expected_path=BCPROV_MAVEN_CENTRAL_PATH + ".sha256",
             max_bytes=4096,
             timeout=BCPROV_FETCH_TIMEOUT_SECONDS,
         )
@@ -3900,22 +4034,28 @@ def fetch_and_verify_bcprov_jar(dest_dir: Path) -> Path:
     that the prior Gradle-cache-only design silently no-ops (returns
     success, checks nothing) on this repo's own always-cold-cache CI job.
 
-    Fails closed (`EvidenceError`) on: a symlinked `dest_dir`; any HTTP
-    error; a redirect to, or a final response from, a host other than
-    `BCPROV_MAVEN_CENTRAL_HOST`; a byte count that disagrees with either
-    the response's own declared `Content-Length` or the pinned
+    Fails closed (`EvidenceError`) on: a symlinked or non-directory
+    `dest_dir`; any HTTP error; a request/response URL that is not
+    byte-identical to the one pinned Maven Central URL (scheme, host,
+    port, path, no query/fragment/userinfo -- see
+    `_validate_pinned_artifact_url()`); any HTTP redirect at all (see
+    `_NoRedirectHandler`); a byte count that disagrees with either the
+    response's own declared `Content-Length` or the pinned
     `artifact_size_bytes` (covers both a truncated download and one with
-    unexpected extra bytes); or a whole-archive SHA-256 mismatch. Also
-    best-effort verifies Maven Central's own published `.sha256` sidecar
-    (never mandatory on its own; see `_best_effort_verify_bcprov_sha256_sidecar()`).
+    unexpected extra bytes); a whole-archive SHA-256 mismatch; or a
+    destination path that already exists in any form, file, symlink, or
+    directory (see `_create_exclusive_file()`). Also best-effort verifies
+    Maven Central's own published `.sha256` sidecar (never mandatory on
+    its own; see `_best_effort_verify_bcprov_sha256_sidecar()`).
     """
     if dest_dir.is_symlink():
         raise EvidenceError(f"{dest_dir}: refusing a symlinked download destination directory")
-    allowed_hosts = frozenset({BCPROV_MAVEN_CENTRAL_HOST})
+    if not dest_dir.is_dir():
+        raise EvidenceError(f"{dest_dir}: download destination directory does not exist")
     try:
         data, declared_length = _fetch_url_bytes(
             BCPROV_MAVEN_CENTRAL_URL,
-            allowed_hosts=allowed_hosts,
+            expected_path=BCPROV_MAVEN_CENTRAL_PATH,
             max_bytes=MAX_BCPROV_DOWNLOAD_BYTES,
             timeout=BCPROV_FETCH_TIMEOUT_SECONDS,
         )
@@ -3949,9 +4089,7 @@ def fetch_and_verify_bcprov_jar(dest_dir: Path) -> Path:
         )
 
     dest_path = dest_dir / "bcprov-jdk18on-1.85.2.jar"
-    dest_path.write_bytes(data)
-    if dest_path.is_symlink():
-        raise EvidenceError(f"{dest_path}: refusing a symlinked download destination file")
+    _create_exclusive_file(dest_path, data)
 
     _best_effort_verify_bcprov_sha256_sidecar(actual_sha256)
     return dest_path

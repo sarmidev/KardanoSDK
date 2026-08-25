@@ -3778,38 +3778,313 @@ class LiveVerifyJavaClassVersionEvidenceTests(unittest.TestCase):
         )
 
 
-class PinnedHostRedirectHandlerTests(unittest.TestCase):
-    """_PinnedHostRedirectHandler -- refuses a redirect to any host outside
-    the allowed set, passes an allowed-host redirect through unchanged."""
+class NoRedirectHandlerTests(unittest.TestCase):
+    """_NoRedirectHandler -- refuses EVERY HTTP redirect unconditionally,
+    regardless of the target's host/scheme/path/port/query/fragment, and
+    regardless of the redirect status code."""
 
     def _fake_request(self, url: str) -> Any:
         return urllib.request.Request(url)
 
-    def test_disallowed_host_redirect_raises(self) -> None:
-        handler = evidence._PinnedHostRedirectHandler(frozenset({"repo1.maven.org"}))
+    def _assert_redirect_rejected(self, code: int, newurl: str) -> None:
+        handler = evidence._NoRedirectHandler()
         with self.assertRaises(evidence.EvidenceError) as ctx:
             handler.redirect_request(
-                self._fake_request("https://repo1.maven.org/some.jar"),
+                self._fake_request("https://repo1.maven.org/maven2/org/bouncycastle/"
+                                    "bcprov-jdk18on/1.85.2/bcprov-jdk18on-1.85.2.jar"),
                 None,
-                302,
-                "Found",
+                code,
+                "redirected",
                 {},
-                "https://evil.example.com/some.jar",
+                newurl,
             )
-        self.assertIn("unexpected host", str(ctx.exception))
-        self.assertIn("evil.example.com", str(ctx.exception))
+        self.assertIn("never follows a redirect", str(ctx.exception))
+        self.assertIn(newurl, str(ctx.exception))
 
-    def test_allowed_host_redirect_passes_through(self) -> None:
-        handler = evidence._PinnedHostRedirectHandler(frozenset({"repo1.maven.org"}))
-        result = handler.redirect_request(
-            self._fake_request("http://repo1.maven.org/some.jar"),
-            None,
+    def test_https_downgraded_to_http_same_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
             301,
-            "Moved Permanently",
-            {},
-            "https://repo1.maven.org/some.jar",
+            "http://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/"
+            "bcprov-jdk18on-1.85.2.jar",
         )
-        self.assertEqual(result.full_url, "https://repo1.maven.org/some.jar")
+
+    def test_different_path_same_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
+            302, "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/9.9.9/other.jar"
+        )
+
+    def test_different_version_same_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
+            302,
+            "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/"
+            "bcprov-jdk18on-1.85.2-sources.jar",
+        )
+
+    def test_different_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
+            303,
+            "https://evil.example.com/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/"
+            "bcprov-jdk18on-1.85.2.jar",
+        )
+
+    def test_added_port_same_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
+            307,
+            "https://repo1.maven.org:8443/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/"
+            "bcprov-jdk18on-1.85.2.jar",
+        )
+
+    def test_added_query_same_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
+            302,
+            "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/"
+            "bcprov-jdk18on-1.85.2.jar?x=1",
+        )
+
+    def test_added_fragment_same_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
+            302,
+            "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/"
+            "bcprov-jdk18on-1.85.2.jar#frag",
+        )
+
+    def test_added_userinfo_same_host_rejected(self) -> None:
+        self._assert_redirect_rejected(
+            302,
+            "https://attacker@repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/"
+            "1.85.2/bcprov-jdk18on-1.85.2.jar",
+        )
+
+    def test_exact_same_url_redirect_still_rejected(self) -> None:
+        # A same-URL "redirect" is the degenerate case of a redirect loop:
+        # the server redirects back to the exact URL we already requested.
+        # This handler rejects it on the very first hop -- there is no
+        # multi-hop loop-detection logic to bypass because a second hop
+        # never happens.
+        self._assert_redirect_rejected(
+            302,
+            "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/"
+            "bcprov-jdk18on-1.85.2.jar",
+        )
+
+    def test_never_calls_base_class_redirect_request(self) -> None:
+        # Regression guard for the exact prior bug: the old handler called
+        # super().redirect_request() for an "allowed" host, which actually
+        # follows the redirect. Patch the base class method and assert it
+        # is never reached.
+        handler = evidence._NoRedirectHandler()
+        with mock.patch.object(
+            urllib.request.HTTPRedirectHandler, "redirect_request"
+        ) as base_redirect:
+            with self.assertRaises(evidence.EvidenceError):
+                handler.redirect_request(
+                    self._fake_request("https://repo1.maven.org/x.jar"),
+                    None,
+                    302,
+                    "Found",
+                    {},
+                    "https://repo1.maven.org/x.jar",
+                )
+        base_redirect.assert_not_called()
+
+
+class ValidatePinnedArtifactUrlTests(unittest.TestCase):
+    """_validate_pinned_artifact_url() -- exact scheme/host/port/path,
+    no query/fragment/userinfo, checked before any network I/O."""
+
+    PINNED_PATH = "/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/bcprov-jdk18on-1.85.2.jar"
+    PINNED_URL = "https://repo1.maven.org" + PINNED_PATH
+
+    def test_exact_pinned_url_passes(self) -> None:
+        evidence._validate_pinned_artifact_url(self.PINNED_URL, expected_path=self.PINNED_PATH)
+
+    def test_explicit_default_port_443_passes(self) -> None:
+        evidence._validate_pinned_artifact_url(
+            "https://repo1.maven.org:443" + self.PINNED_PATH, expected_path=self.PINNED_PATH
+        )
+
+    def test_http_scheme_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                "http://repo1.maven.org" + self.PINNED_PATH, expected_path=self.PINNED_PATH
+            )
+        self.assertIn("scheme", str(ctx.exception))
+
+    def test_different_host_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                "https://evil.example.com" + self.PINNED_PATH, expected_path=self.PINNED_PATH
+            )
+        self.assertIn("host", str(ctx.exception))
+
+    def test_subdomain_host_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                "https://repo1.maven.org.evil.example.com" + self.PINNED_PATH,
+                expected_path=self.PINNED_PATH,
+            )
+        self.assertIn("host", str(ctx.exception))
+
+    def test_nondefault_port_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                "https://repo1.maven.org:8443" + self.PINNED_PATH, expected_path=self.PINNED_PATH
+            )
+        self.assertIn("port", str(ctx.exception))
+
+    def test_different_path_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/9.9.9/other.jar",
+                expected_path=self.PINNED_PATH,
+            )
+        self.assertIn("path", str(ctx.exception))
+
+    def test_query_string_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                self.PINNED_URL + "?x=1", expected_path=self.PINNED_PATH
+            )
+        self.assertIn("query", str(ctx.exception))
+
+    def test_fragment_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                self.PINNED_URL + "#frag", expected_path=self.PINNED_PATH
+            )
+        self.assertIn("fragment", str(ctx.exception))
+
+    def test_userinfo_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                "https://attacker@repo1.maven.org" + self.PINNED_PATH,
+                expected_path=self.PINNED_PATH,
+            )
+        self.assertIn("userinfo", str(ctx.exception))
+
+    def test_userinfo_with_password_raises(self) -> None:
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._validate_pinned_artifact_url(
+                "https://attacker:hunter2@repo1.maven.org" + self.PINNED_PATH,
+                expected_path=self.PINNED_PATH,
+            )
+        self.assertIn("userinfo", str(ctx.exception))
+
+    def test_real_pinned_constants_agree(self) -> None:
+        # The real BCPROV_MAVEN_CENTRAL_URL/BCPROV_MAVEN_CENTRAL_PATH pair
+        # (derived from JAVA_CLASS_VERSION_EVIDENCE) must itself pass this
+        # validator -- otherwise fetch_and_verify_bcprov_jar() could never
+        # succeed against the real Maven Central host.
+        evidence._validate_pinned_artifact_url(
+            evidence.BCPROV_MAVEN_CENTRAL_URL, expected_path=evidence.BCPROV_MAVEN_CENTRAL_PATH
+        )
+
+
+class _FakeHttpResponse:
+    """Minimal stand-in for `http.client.HTTPResponse` as returned by
+    `OpenerDirector.open()` -- just enough surface for `_fetch_url_bytes()`:
+    a context manager with `.url`, `.headers.get(...)`, and `.read(n)`."""
+
+    def __init__(self, *, url: str, data: bytes, content_length: str | None) -> None:
+        self.url = url
+        self._data = data
+        self.headers = {"Content-Length": content_length} if content_length is not None else {}
+
+    def __enter__(self) -> "_FakeHttpResponse":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def read(self, n: int) -> bytes:
+        return self._data[:n]
+
+
+class FetchUrlBytesTests(unittest.TestCase):
+    """_fetch_url_bytes() -- the one real-network seam. Mocks
+    `urllib.request.build_opener` so these tests exercise the function's
+    OWN pre-request URL validation and post-response URL/provenance
+    re-validation with no real HTTP call, while still calling the real
+    (non-mocked) `_validate_pinned_artifact_url()` and `_NoRedirectHandler`
+    construction logic.
+    """
+
+    PINNED_PATH = "/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/bcprov-jdk18on-1.85.2.jar"
+    PINNED_URL = "https://repo1.maven.org" + PINNED_PATH
+
+    def _mock_opener(self, response: _FakeHttpResponse) -> Any:
+        fake_opener = mock.Mock()
+        fake_opener.open.return_value = response
+        return mock.patch.object(urllib.request, "build_opener", return_value=fake_opener)
+
+    def test_malformed_url_rejected_before_any_network_call(self) -> None:
+        with mock.patch.object(urllib.request, "build_opener") as build_opener_mock:
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence._fetch_url_bytes(
+                    "https://evil.example.com" + self.PINNED_PATH,
+                    expected_path=self.PINNED_PATH,
+                    max_bytes=1024,
+                    timeout=1.0,
+                )
+        self.assertIn("host", str(ctx.exception))
+        build_opener_mock.assert_not_called()
+
+    def test_builds_opener_with_no_redirect_handler(self) -> None:
+        response = _FakeHttpResponse(url=self.PINNED_URL, data=b"abc", content_length="3")
+        with mock.patch.object(
+            urllib.request, "build_opener", return_value=mock.Mock(open=mock.Mock(return_value=response))
+        ) as build_opener_mock:
+            evidence._fetch_url_bytes(
+                self.PINNED_URL, expected_path=self.PINNED_PATH, max_bytes=1024, timeout=1.0
+            )
+        (handler_arg,), _kwargs = build_opener_mock.call_args
+        self.assertIsInstance(handler_arg, evidence._NoRedirectHandler)
+
+    def test_exact_url_success_returns_bytes_and_declared_length(self) -> None:
+        response = _FakeHttpResponse(url=self.PINNED_URL, data=b"hello world", content_length="11")
+        with self._mock_opener(response):
+            data, declared_length = evidence._fetch_url_bytes(
+                self.PINNED_URL, expected_path=self.PINNED_PATH, max_bytes=1024, timeout=1.0
+            )
+        self.assertEqual(data, b"hello world")
+        self.assertEqual(declared_length, "11")
+
+    def test_final_url_mismatch_raises_even_with_correct_bytes(self) -> None:
+        # The response body is exactly what a correct fetch would return
+        # (would pass a hash check if this reached one), but the response
+        # claims a different final URL on the SAME host -- provenance
+        # drift must be rejected before hash verification ever runs.
+        drifted_url = "https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/1.85.2/other.jar"
+        response = _FakeHttpResponse(url=drifted_url, data=b"hello world", content_length="11")
+        with self._mock_opener(response):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence._fetch_url_bytes(
+                    self.PINNED_URL, expected_path=self.PINNED_PATH, max_bytes=1024, timeout=1.0
+                )
+        self.assertIn("not byte-identical", str(ctx.exception))
+
+    def test_final_url_with_added_query_raises(self) -> None:
+        drifted_url = self.PINNED_URL + "?x=1"
+        response = _FakeHttpResponse(url=drifted_url, data=b"hello world", content_length="11")
+        with self._mock_opener(response):
+            with self.assertRaises(evidence.EvidenceError) as ctx:
+                evidence._fetch_url_bytes(
+                    self.PINNED_URL, expected_path=self.PINNED_PATH, max_bytes=1024, timeout=1.0
+                )
+        self.assertIn("not byte-identical", str(ctx.exception))
+
+    def test_reads_at_most_max_bytes_plus_one(self) -> None:
+        response = mock.Mock()
+        response.url = self.PINNED_URL
+        response.headers = {"Content-Length": "3"}
+        response.read = mock.Mock(return_value=b"abc")
+        response.__enter__ = mock.Mock(return_value=response)
+        response.__exit__ = mock.Mock(return_value=False)
+        with self._mock_opener(response):
+            evidence._fetch_url_bytes(
+                self.PINNED_URL, expected_path=self.PINNED_PATH, max_bytes=5, timeout=1.0
+            )
+        response.read.assert_called_once_with(6)
 
 
 class FetchAndVerifyBcprovJarTests(unittest.TestCase):
@@ -3960,6 +4235,202 @@ class FetchAndVerifyBcprovJarTests(unittest.TestCase):
         with mock.patch.object(evidence, "_fetch_url_bytes", side_effect=side_effect):
             jar_path = evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
         self.assertEqual(jar_path.read_bytes(), self.real_bytes)
+
+    def test_preexisting_destination_symlink_raises_and_target_unchanged(self) -> None:
+        # End-to-end wiring proof that fetch_and_verify_bcprov_jar() really
+        # does call the exclusive-write path: a symlink already sitting at
+        # the exact destination filename must abort the whole fetch rather
+        # than write through it, and the symlink's target content must be
+        # byte-for-byte untouched.
+        target = self.dest_dir / "elsewhere.bin"
+        target.write_bytes(b"must not be overwritten")
+        link = self.dest_dir / "bcprov-jdk18on-1.85.2.jar"
+        link.symlink_to(target)
+        with self._mock_fetch(data=self.real_bytes, declared_length=str(self.real_size)):
+            with mock.patch.object(evidence, "_best_effort_verify_bcprov_sha256_sidecar"):
+                with self.assertRaises(evidence.EvidenceError) as ctx:
+                    evidence.fetch_and_verify_bcprov_jar(self.dest_dir)
+        self.assertIn("already exists", str(ctx.exception))
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(target.read_bytes(), b"must not be overwritten")
+
+    def test_nonexistent_dest_dir_raises(self) -> None:
+        missing = self.dest_dir / "does-not-exist"
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence.fetch_and_verify_bcprov_jar(missing)
+        self.assertIn("does not exist", str(ctx.exception))
+
+
+class WriteAllToFdTests(unittest.TestCase):
+    """_write_all_to_fd() -- retries on a partial write and on
+    `InterruptedError` (EINTR) instead of trusting a single `os.write()`
+    call to consume the whole buffer; raises rather than looping forever
+    on a zero-byte write with data still remaining."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+
+    def _open_fd(self) -> tuple[int, Path]:
+        path = Path(self._tmp.name) / f"out-{id(self)}-{os.getpid()}.bin"
+        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        return fd, path
+
+    def test_single_write_success(self) -> None:
+        fd, path = self._open_fd()
+        try:
+            evidence._write_all_to_fd(fd, b"hello")
+        finally:
+            os.close(fd)
+        self.assertEqual(path.read_bytes(), b"hello")
+
+    def test_partial_writes_are_retried_until_complete(self) -> None:
+        fd, path = self._open_fd()
+        data = b"0123456789" * 5
+        real_write = os.write
+        calls: list[bytes] = []
+
+        def flaky_write(fd_: int, buf: bytes) -> int:
+            chunk = bytes(buf)[:3]
+            calls.append(chunk)
+            return real_write(fd_, chunk)
+
+        try:
+            with mock.patch.object(os, "write", side_effect=flaky_write):
+                evidence._write_all_to_fd(fd, data)
+        finally:
+            os.close(fd)
+        self.assertEqual(path.read_bytes(), data)
+        self.assertGreater(len(calls), 1)
+
+    def test_interrupted_error_is_retried_without_losing_bytes(self) -> None:
+        fd, path = self._open_fd()
+        data = b"hello world, this is a test of EINTR retry handling"
+        real_write = os.write
+        raised = {"count": 0}
+
+        def flaky_write(fd_: int, buf: bytes) -> int:
+            if raised["count"] < 2:
+                raised["count"] += 1
+                raise InterruptedError()
+            return real_write(fd_, bytes(buf))
+
+        try:
+            with mock.patch.object(os, "write", side_effect=flaky_write):
+                evidence._write_all_to_fd(fd, data)
+        finally:
+            os.close(fd)
+        self.assertEqual(path.read_bytes(), data)
+        self.assertEqual(raised["count"], 2)
+
+    def test_zero_byte_write_with_remaining_data_raises(self) -> None:
+        fd, path = self._open_fd()
+        try:
+            with mock.patch.object(os, "write", return_value=0):
+                with self.assertRaises(evidence.EvidenceError) as ctx:
+                    evidence._write_all_to_fd(fd, b"data")
+        finally:
+            os.close(fd)
+        self.assertIn("0 bytes", str(ctx.exception))
+
+    def test_zero_length_data_never_calls_write(self) -> None:
+        fd, path = self._open_fd()
+        try:
+            with mock.patch.object(os, "write") as write_mock:
+                evidence._write_all_to_fd(fd, b"")
+            write_mock.assert_not_called()
+        finally:
+            os.close(fd)
+
+
+class CreateExclusiveFileTests(unittest.TestCase):
+    """_create_exclusive_file() -- atomic O_CREAT|O_EXCL(|O_NOFOLLOW)
+    creation, refusing to write through or over anything already at the
+    destination path (file, symlink, or directory), with cleanup of any
+    partially written file on failure."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_success_creates_file_with_exact_content(self) -> None:
+        path = self.dir / "out.bin"
+        evidence._create_exclusive_file(path, b"hello world")
+        self.assertEqual(path.read_bytes(), b"hello world")
+        self.assertFalse(path.is_symlink())
+        self.assertTrue(path.is_file())
+
+    def test_zero_byte_content_creates_empty_file(self) -> None:
+        path = self.dir / "out.bin"
+        evidence._create_exclusive_file(path, b"")
+        self.assertEqual(path.read_bytes(), b"")
+
+    def test_preexisting_regular_file_raises_and_is_unchanged(self) -> None:
+        path = self.dir / "out.bin"
+        path.write_bytes(b"original content")
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._create_exclusive_file(path, b"new content")
+        self.assertIn("already exists", str(ctx.exception))
+        self.assertEqual(path.read_bytes(), b"original content")
+
+    def test_preexisting_symlink_target_is_unchanged(self) -> None:
+        target = self.dir / "target.bin"
+        target.write_bytes(b"target content, must not change")
+        link = self.dir / "out.bin"
+        link.symlink_to(target)
+        with self.assertRaises(evidence.EvidenceError) as ctx:
+            evidence._create_exclusive_file(link, b"attacker-controlled bytes")
+        self.assertIn("already exists", str(ctx.exception))
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(os.readlink(str(link)), str(target))
+        self.assertEqual(target.read_bytes(), b"target content, must not change")
+
+    def test_preexisting_dangling_symlink_raises_without_creating_target(self) -> None:
+        link = self.dir / "out.bin"
+        missing_target = self.dir / "does-not-exist.bin"
+        link.symlink_to(missing_target)
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._create_exclusive_file(link, b"data")
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(missing_target.exists())
+
+    def test_preexisting_directory_raises(self) -> None:
+        path = self.dir / "out.bin"
+        path.mkdir()
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._create_exclusive_file(path, b"data")
+        self.assertTrue(path.is_dir())
+
+    def test_race_simulated_via_preexisting_file(self) -> None:
+        # os.open(O_CREAT|O_EXCL) is a single atomic syscall, so there is
+        # no separate check-then-create window to simulate a race inside
+        # -- the most faithful simulation of "something else won the
+        # race" is simply a file that already exists by the time this
+        # function runs.
+        path = self.dir / "out.bin"
+        path.write_bytes(b"winner of the race")
+        with self.assertRaises(evidence.EvidenceError):
+            evidence._create_exclusive_file(path, b"loser of the race")
+        self.assertEqual(path.read_bytes(), b"winner of the race")
+
+    def test_write_failure_cleans_up_partial_file(self) -> None:
+        path = self.dir / "out.bin"
+        with mock.patch.object(evidence, "_write_all_to_fd", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                evidence._create_exclusive_file(path, b"data")
+        self.assertFalse(os.path.lexists(str(path)))
+
+    def test_interrupted_write_failure_still_cleans_up(self) -> None:
+        path = self.dir / "out.bin"
+        with mock.patch.object(
+            evidence, "_write_all_to_fd", side_effect=evidence.EvidenceError("0 bytes remaining")
+        ):
+            with self.assertRaises(evidence.EvidenceError):
+                evidence._create_exclusive_file(path, b"data")
+        self.assertFalse(os.path.lexists(str(path)))
 
 
 class ScopeBindingSealTests(unittest.TestCase):

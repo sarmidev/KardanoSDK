@@ -337,14 +337,27 @@ one deliberate exception to "no network needed": every plain run above
 resolves an actual `org.bouncycastle:bcprov-jdk18on:1.85.2` `.jar` to scan
 -- an explicit `--bcprov-jar PATH`, the `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR`
 environment variable (a local Gradle-cache copy is convenient for offline
-iteration), or (the default, if neither is set) a fresh pinned-host,
-SHA-256-and-size-verified download from Maven Central. There is no
-cold-cache/no-op skip branch: a missing/wrong-hash jar is a hard failure of
-the command above, never a silent pass. CI bootstraps this once per job via
-a dedicated step in `.github/workflows/verify.yml` and reuses that same
-verified copy (via the environment variable) for every later step in the
-job, so it is fetched from the network only once even though the generator
-and checker both run several times.
+iteration), or (the default, if neither is set) a fresh download from
+Maven Central. There is no cold-cache/no-op skip branch: a missing/
+wrong-hash jar is a hard failure of the command above, never a silent
+pass. CI bootstraps this once per job via a dedicated step in
+`.github/workflows/verify.yml` and reuses that same verified copy (via
+the environment variable) for every later step in the job, so it is
+fetched from the network only once even though the generator and checker
+both run several times.
+
+That fetch's own request AND response URL are required to be
+byte-identical to the one pinned `https://repo1.maven.org/...` URL --
+exact scheme, host, HTTPS default port only, exact coordinate/version/
+filename path, no query/fragment/userinfo -- and it refuses EVERY HTTP
+redirect outright, even to the identical scheme/host/port/path (see
+`_validate_pinned_artifact_url()`/`_NoRedirectHandler` in
+`scripts/generate_legal_evidence.py`); only after that, and after the
+whole-archive SHA-256 and size both match the committed evidence, are the
+bytes written -- exclusively, via `os.open(O_CREAT | O_EXCL | O_WRONLY
+[| O_NOFOLLOW])`, never a plain truncating write -- refusing to create
+over (or write through a symlink to) anything already at the destination
+path.
 
 `scripts/check_release_evidence.py` fails closed (either mode) if
 a `NOTICE`/`LICENSES/` cross-reference is broken (including a missing

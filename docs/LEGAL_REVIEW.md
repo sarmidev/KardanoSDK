@@ -470,14 +470,38 @@ cache at all -- exactly the environment it needed to be authoritative in.
 The fix: `live_verify_java_class_version_evidence()` always resolves an
 ACTUAL `org.bouncycastle:bcprov-jdk18on:1.85.2` `.jar` to scan --
 `--bcprov-jar PATH`, the `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR` environment
-variable, or (the default) `fetch_and_verify_bcprov_jar()`'s pinned-host
-(`repo1.maven.org`, no redirect elsewhere), SHA-256-and-size-verified
-download from Maven Central. There is no skip branch: a missing or
-unreachable jar is a hard failure of generation/checking, never a silent
-pass. `.github/workflows/verify.yml`'s `legal-evidence-scan` job bootstraps
-this once via a dedicated step (immediately after the Cargo bootstrap
-step) and every later step in that job reuses the SAME already-verified
-local copy via the environment variable instead of re-fetching.
+variable, or (the default) `fetch_and_verify_bcprov_jar()`'s SHA-256-and-
+size-verified download from Maven Central. There is no skip branch: a
+missing or unreachable jar is a hard failure of generation/checking,
+never a silent pass. `.github/workflows/verify.yml`'s `legal-evidence-scan`
+job bootstraps this once via a dedicated step (immediately after the
+Cargo bootstrap step) and every later step in that job reuses the SAME
+already-verified local copy via the environment variable instead of
+re-fetching.
+
+**The Maven Central fetch's own URL/redirect/write provenance was
+independently re-reviewed and tightened on 2026-08-25.** The prior fetch
+validated only the *hostname* of the request/response and allowed a
+same-host redirect through unchanged; it also wrote the downloaded bytes
+with a plain truncating `Path.write_bytes()`, which follows (and
+overwrites through) a pre-existing symlink at the destination path. Both
+gaps are now closed: `_validate_pinned_artifact_url()` requires the
+request URL AND the actual final response URL to be byte-identical to
+the one pinned `https://repo1.maven.org/...` URL -- exact scheme, exact
+host, the HTTPS default port only, the exact coordinate/version/filename
+path, and no query string, fragment, or userinfo -- checked before any
+network I/O and again on the response; `_NoRedirectHandler` refuses
+EVERY HTTP redirect outright, including one that would land on the
+identical scheme/host/port/path, so a redirect loop is moot (the first
+hop already fails closed). The verified bytes are written with
+`_create_exclusive_file()`, which opens the destination with
+`os.open(..., O_CREAT | O_EXCL | O_WRONLY [| O_NOFOLLOW])` in one atomic
+syscall -- refusing to create over an existing file, symlink (to
+anywhere), or directory, with no separate check-then-write race window --
+writes every byte in an EINTR/partial-write retry loop, and removes any
+partially written file on failure. A correct SHA-256/size can no longer
+override a provenance failure: both checks run before the hash is even
+computed.
 
 **Cargo network access is explicit, bounded to one bootstrap step, and
 never implicit inside generation.** The only Cargo command in this

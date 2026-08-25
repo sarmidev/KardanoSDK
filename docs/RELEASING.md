@@ -175,13 +175,19 @@ python3 -m unittest discover -s scripts/tests -p "test_*.py"
 
 Both commands above resolve an actual `org.bouncycastle:bcprov-jdk18on:1.85.2`
 `.jar` to live-scan for `docs/evidence/java_class_version_evidence.json` --
-by default a fresh, pinned-host, SHA-256-and-size-verified download from
-Maven Central (no local Gradle cache required); an already-verified local
-copy can be supplied instead via `--bcprov-jar PATH` (generator only) or the
+by default a fresh download from Maven Central (no local Gradle cache
+required), whose request and response URL must be byte-identical to the
+one pinned `https://repo1.maven.org/...` URL (exact scheme/host/port/
+path, no query/fragment/userinfo, no redirect followed -- not even to the
+same host) and whose bytes are SHA-256-and-size-verified before being
+written exclusively (never over, or through a symlink at, anything
+already at the destination path); an already-verified local copy can be
+supplied instead via `--bcprov-jar PATH` (generator only) or the
 `KARDANO_LEGAL_EVIDENCE_BCPROV_JAR` environment variable (both commands). A
-missing or unreachable jar is a hard failure, never a silent pass -- this
-is deliberate: the point of this evidence file is that it is live-verified
-against real resolved artifact bytes every time, not merely a static claim.
+missing or unreachable jar, or any provenance mismatch, is a hard
+failure, never a silent pass -- this is deliberate: the point of this
+evidence file is that it is live-verified against real resolved artifact
+bytes every time, not merely a static claim.
 
 The checker fails if: a `NOTICE`/`LICENSES/` reference is broken; the native
 inventory does not exactly match `crypto-signing-backend/CHECKSUMS.sha256`

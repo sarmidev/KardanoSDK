@@ -319,6 +319,47 @@ Date: 2026-08-24
   no silent-skip branch left at either the generator or the checker. This
   fix still does not mark Prompt 7, the Windows candidate, or any release
   as GO, and does not start Prompt 8.
+- **Legal-evidence packet: two Medium bcprov-fetch findings (same branch,
+  same fetch this round's own fail-closed fix introduced).** A
+  2026-08-25 follow-up independent review found the freshly added Maven
+  Central fetch itself had two provenance/write gaps. (1) It validated
+  only the request/response *hostname*, and its redirect handler
+  explicitly allowed a same-host redirect through unchanged -- a URL
+  with an unexpected port/query/fragment/userinfo, or a same-host
+  redirect to a different path/version, was never checked at all. Fix:
+  `_validate_pinned_artifact_url()` requires the request URL AND the
+  actual final response URL to be byte-identical to the one pinned
+  `https://repo1.maven.org/...` URL (exact scheme, host, HTTPS default
+  port only, exact coordinate/version/filename path, no query/fragment/
+  userinfo), checked before any network I/O and again on the response;
+  `_NoRedirectHandler` (replacing the old host-allowlist handler) refuses
+  EVERY HTTP redirect outright, including one to the identical scheme/
+  host/port/path, so a redirect loop is moot -- the first hop already
+  fails closed. (2) The verified bytes were written with a plain
+  `Path.write_bytes()` (`O_CREAT | O_TRUNC`, no `O_EXCL`), which follows
+  and overwrites through a pre-existing symlink at the destination path,
+  and a separate `is_symlink()` check afterward is a check-then-act
+  TOCTOU race, not a fix. Fix: `_create_exclusive_file()` opens the
+  destination with `os.open(..., O_CREAT | O_EXCL | O_WRONLY
+  [| O_NOFOLLOW])` in one atomic syscall (refuses to create over an
+  existing file, symlink to anywhere, or directory, with no separate
+  check-then-write window), writes every byte through a new
+  `_write_all_to_fd()` retry loop (handles both a partial `write()` and
+  `InterruptedError`/EINTR), and removes any partially written file on
+  failure. Both fixes run before the SHA-256/size check, so a correct
+  hash can never override a provenance failure. New tests cover: every
+  redirect variant (HTTP downgrade, different path/version/host/port/
+  query/fragment/userinfo, same-URL "loop") on the handler directly, the
+  URL validator's own scheme/host/port/path/query/fragment/userinfo
+  rules, `_fetch_url_bytes()`'s pre-request rejection and post-response
+  URL re-validation (including a response with the exact correct bytes
+  but a drifted URL), and `_create_exclusive_file()`/`_write_all_to_fd()`
+  against a pre-existing file/symlink/dangling-symlink/directory, a
+  simulated race, a write failure with cleanup, and partial/EINTR write
+  retries -- confirming the symlink target's own content is left
+  byte-for-byte unchanged in every rejected case. This fix still does not
+  mark Prompt 7, the Windows candidate, or any release as GO, and does
+  not start Prompt 8.
 - **Gate 3 Windows x86-64 JVM (candidate-only) on
   `fix/native-build-and-platform-evidence`.** Linux promotion GO at
   `58f82a2`. JNA 5.19.1 resource is
