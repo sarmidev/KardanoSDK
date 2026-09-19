@@ -1,0 +1,75 @@
+# CodeQL analysis for the Java/Kotlin sources in this Kotlin Multiplatform
+# repository. Kotlin requires a build (`autobuild` or `manual`); `none` would
+# skip Kotlin. The manual graph compiles SDK JVM targets plus the Android
+# debug and Desktop main compilations so androidMain / Desktop implementations
+# are extracted. iOS/native Kotlin/Native targets stay outside Java/Kotlin
+# CodeQL and are not compiled here.
+#
+# `--no-daemon --no-build-cache --no-configuration-cache --rerun-tasks`
+# is required so CodeQL sees a real compilation rather than Gradle cache
+# hits. The job runs on macos-latest because LockMode.STRICT records
+# `desktop-jvm-macos-arm64` and Ubuntu fails to resolve
+# `desktop-jvm-linux-x64` (the same reason Verify does not compile
+# `:desktopApp` on Ubuntu).
+#
+# Do not treat a workflow file as a passing code-scanning result. A CodeQL
+# job must complete on GitHub. Default-branch analysis is still required
+# before claiming repository code-scanning status on `main`.
+
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze Java and Kotlin
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          languages: java-kotlin
+          build-mode: manual
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        with:
+          cache-disabled: false
+          cache-read-only: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}
+          cache-write-only: false
+          cache-cleanup: on-success
+      - name: Compile Java and Kotlin sources for CodeQL
+        run: >-
+          ./gradlew --no-daemon --no-build-cache --no-configuration-cache --rerun-tasks
+          :core:compileKotlinJvm
+          :crypto:compileKotlinJvm
+          :crypto-signing-backend:compileKotlinJvm
+          :provider:compileKotlinJvm
+          :provider-blockfrost:compileKotlinJvm
+          :wallet:compileKotlinJvm
+          :tx:compileKotlinJvm
+          :shared:compileKotlinJvm
+          :androidApp:compileDebugKotlin
+          :desktopApp:compileKotlin
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          category: "/language:java-kotlin"

@@ -1,7 +1,10 @@
 # Release Process
 
-Kardano SDK does not publish Maven artifacts yet. Until publication, a release is a reviewed Git
+Kardano SDK does not publish Maven artifacts yet. No Git tag or GitHub Release
+exists yet. Until publication, a release is a reviewed Git
 tag plus release notes that identify the source revision, verified targets, and known limits.
+CodeQL, Dependabot, and the Intersect attestation workflow are repository-hygiene
+evidence; they do not create a release and they do not replace this checklist.
 
 ## Before the first public release
 

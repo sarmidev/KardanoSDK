@@ -1,0 +1,42 @@
+# Weekly dependency update proposals. Dependabot opens pull requests only.
+# There is no auto-merge. Every update must keep versions pinned, regenerate
+# lockfiles and Gradle verification metadata where the change touches them,
+# and pass ordinary review. See docs/DEPENDENCY_REVIEW.md.
+
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 4
+    labels:
+      - dependencies
+    groups:
+      gradle-weekly:
+        patterns:
+          - "*"
+
+  - package-ecosystem: cargo
+    directory: /crypto-signing-backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+    groups:
+      cargo-weekly:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+    groups:
+      github-actions-weekly:
+        patterns:
+          - "*"

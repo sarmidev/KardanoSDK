@@ -69,7 +69,7 @@ It does not implement:
 
 Android is the Phase 1 runtime-validation target. iOS and JVM/Desktop share Kotlin targets, but
 they do not have equivalent Phase 1 runtime-validation claims. See the
-[security policy](SECURITY.md) and [testing guide](TESTING.md) for the full boundary and target
+[security policy](../SECURITY.md) and [testing guide](TESTING.md) for the full boundary and target
 matrix.
 
 ## Phase 2 — Native-Asset Pilot and Provider Expansion
@@ -110,7 +110,9 @@ proposal discipline, is in the [funding and pilot playbook](FUNDING_AND_PILOT_PL
 - [Decision records](DECISIONS/) — architecture and dependency decisions.
 - [Testing guide](TESTING.md) — commands, target matrix, fixture policy, and environment limits.
 - [Release process](RELEASING.md) — release prerequisites and verification.
-- [Security policy](SECURITY.md) — reporting path and current boundaries.
+- [Security policy](../SECURITY.md) — reporting path and current boundaries.
+- [Governance](../GOVERNANCE.md) — sole-maintainer decision process.
+- [Support](../SUPPORT.md) — Discussions, issues, and vulnerability routing.
 
 ## Operating Principle
 

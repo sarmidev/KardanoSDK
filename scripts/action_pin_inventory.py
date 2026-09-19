@@ -187,6 +187,37 @@ ACTION_PINS: tuple[ActionPin, ...] = (
             "contents: read."
         ),
     ),
+    ActionPin(
+        action="github/codeql-action/init",
+        sha="1c5b675653bb5c22dbe9b12b556ec555138e09fd",
+        release="v4.38.1",
+        resolved_on="2026-09-19",
+        source="https://github.com/github/codeql-action/releases/tag/v4.38.1",
+        runtime="node24",
+        kind="javascript",
+        note=(
+            "Resolved live 2026-09-19 from the GitHub Releases API. "
+            "Annotated tag v4.38.1 peeled to commit "
+            "1c5b675653bb5c22dbe9b12b556ec555138e09fd (published "
+            "2026-09-18T13:11:14Z). init/action.yml is javascript "
+            "(runs.using: node24) with no nested uses:."
+        ),
+    ),
+    ActionPin(
+        action="github/codeql-action/analyze",
+        sha="1c5b675653bb5c22dbe9b12b556ec555138e09fd",
+        release="v4.38.1",
+        resolved_on="2026-09-19",
+        source="https://github.com/github/codeql-action/releases/tag/v4.38.1",
+        runtime="node24",
+        kind="javascript",
+        note=(
+            "Same peeled v4.38.1 commit as github/codeql-action/init. "
+            "analyze/action.yml is javascript (runs.using: node24) with "
+            "no nested uses:. Used only from .github/workflows/codeql.yml "
+            "with security-events: write."
+        ),
+    ),
 )
 
 REVIEW_DOC = "docs/DEPENDENCY_REVIEW.md"
