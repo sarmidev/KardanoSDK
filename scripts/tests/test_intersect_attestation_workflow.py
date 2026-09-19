@@ -90,20 +90,47 @@ class IntersectAttestationWorkflowTests(unittest.TestCase):
         self.assertIsInstance(on_block, dict)
         self.assertEqual(set(on_block.keys()), {"workflow_dispatch"})
 
-    def test_permissions_are_contents_read_only(self) -> None:
-        self.assertEqual(self.workflow["permissions"], {"contents": "read"})
-        self.assertEqual(self.job["permissions"], {"contents": "read"})
+    def test_permissions_are_exact_minimal_read_set(self) -> None:
+        expected = {"contents": "read", "security-events": "read"}
+        self.assertEqual(self.workflow["permissions"], expected)
+        self.assertEqual(self.job["permissions"], expected)
+        self.assertIsInstance(self.workflow["permissions"], dict)
+        self.assertIsInstance(self.job["permissions"], dict)
+        self.assertNotIn("read-all", self.text)
+        self.assertNotIn("write-all", self.text)
+        self.assertIn("security-events: read", self.text)
+        self.assertIn("contents: read", self.text)
 
-    def test_job_does_not_request_write_scopes(self) -> None:
-        forbidden = {
-            "contents": "write",
-            "pull-requests": "write",
-            "packages": "write",
-            "security-events": "write",
+    def test_job_does_not_request_write_or_broad_scopes(self) -> None:
+        forbidden_write = (
+            "actions",
+            "attestations",
+            "checks",
+            "contents",
+            "deployments",
+            "discussions",
+            "id-token",
+            "issues",
+            "packages",
+            "pages",
+            "pull-requests",
+            "security-events",
+            "statuses",
+        )
+        for key in forbidden_write:
+            self.assertNotEqual(self.workflow["permissions"].get(key), "write")
+            self.assertNotEqual(self.job["permissions"].get(key), "write")
+        self.assertNotIn("vulnerability-alerts", self.workflow["permissions"])
+        self.assertNotIn("vulnerability-alerts", self.job["permissions"])
+        extra_keys = set(self.workflow["permissions"]) - {
+            "contents",
+            "security-events",
         }
-        for key, value in forbidden.items():
-            self.assertNotEqual(self.workflow["permissions"].get(key), value)
-            self.assertNotEqual(self.job["permissions"].get(key), value)
+        self.assertEqual(extra_keys, set())
+        job_extra = set(self.job["permissions"]) - {"contents", "security-events"}
+        self.assertEqual(job_extra, set())
+        self.assertNotIn("${{ secrets.", self.text)
+        self.assertNotRegex(self.text, r"(?m)^  secrets:")
 
     def test_upload_artifact_uses_inventory_pin(self) -> None:
         upload = inventory.PIN_BY_ACTION["actions/upload-artifact"]

@@ -122,6 +122,8 @@ class Phase1ReadinessDocsTests(unittest.TestCase):
         self.assertIn("RED", text)
         self.assertIn("does not drive overall", text.lower())
         self.assertIn("do not claim green", text.lower())
+        self.assertIn("security-events: read", text)
+        self.assertIn("default-branch CodeQL", text)
 
     def test_codeql_workflow_compiles_android_and_desktop(self) -> None:
         text = (REPO_ROOT / ".github" / "workflows" / "codeql.yml").read_text(

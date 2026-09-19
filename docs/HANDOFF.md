@@ -97,7 +97,8 @@ Stacked remediations, each additive (no amend / no force-push):
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
 | 7 | `fix/native-build-and-platform-evidence` | merged via PR #15 | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`; independent PE technical review is COMPLETE at `c65a20a`. Phase C remains NO-GO solely pending Identus #226 (PE re-review is no longer a blocking gate). Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
 | — | `docs/funding-readiness-alignment` | merged via PR #16 | Owner-recorded catalog elections (2026-09-19; Javier Sarmiento Mañus (project owner)): 26 Cargo Apache-2.0 rows, `memchr` MIT, JNA Apache-2.0. Owner acceptance is not a counsel determination. Prompts 3–7 are on `origin/main`. |
-| — | `docs/intersect-phase1-readiness` | current | Intersect Tooling Sustainability Phase 1 readiness plus independent-review fixes: xvfb attestation PDF path, Android/Desktop CodeQL compile graph, contributor-RED / overall-AMBER honesty, attestation restored to `workflow_dispatch` only. No intake submission, no tag, no Band 2/adoption/counsel claim. |
+| — | `docs/intersect-phase1-readiness` | merged via PR #17 | Intersect Tooling Sustainability Phase 1 readiness plus independent-review fixes: xvfb attestation PDF path, Android/Desktop CodeQL compile graph, contributor-RED / overall-AMBER honesty, attestation restored to `workflow_dispatch` only. No intake submission, no tag, no Band 2/adoption/counsel claim. |
+| — | `fix/intersect-attestation-codeql-permission` | current | Grant attestation `GITHUB_TOKEN` `security-events: read` (keep `contents: read`; no write) so the official script can see the existing default-branch CodeQL analysis. Official run 35452860848 was Overall AMBER solely from the previous token visibility gap. No intake submission, no overwrite of that downloaded PDF, no GREEN claim unless an official generated report says GREEN. |
 
 Prompts 3–7 are merged to `origin/main` (PR #15 was the last stacked Prompt 7 merge). Do not merge, auto-merge, force-push, or tag from this session.
 
@@ -107,17 +108,33 @@ Prompts 3–7 are merged to `origin/main` (PR #15 was the last stacked Prompt 7 
 
 Date: 2026-09-19
 
+- **Attestation CodeQL visibility on
+  `fix/intersect-attestation-codeql-permission`, from `origin/main` after
+  PR #17.** Default-branch CodeQL already exists; owner-token alerts API
+  is HTTP 200 / zero alerts. Official run 35452860848 is valid but
+  Overall AMBER solely because the workflow `GITHUB_TOKEN` had only
+  `contents: read`. This change adds `security-events: read` (keep
+  `contents: read`; no write scopes; no PAT/secrets) so the official
+  script can list code-scanning alerts. Tests assert that exact pair and
+  reject write/broad scopes. Do not claim GREEN unless an official
+  generated report says GREEN. Do not overwrite the downloaded official
+  PDF. Do not submit intake. Reviewer/PR CI cannot validate
+  `workflow_dispatch`; a post-merge owner run on `main` is required.
+
+### Prior Session Summary
+
+Date: 2026-09-19
+
 - **Attestation workflow restored to `workflow_dispatch` only on
-  `docs/intersect-phase1-readiness` (PR #17 still open).** The temporary
+  `docs/intersect-phase1-readiness` (PR #17 merged).** The temporary
   diagnostic pull-request trigger is gone. Historical evidence that the
   xvfb/PDF path works:
   https://github.com/sarmidev/KardanoSDK/actions/runs/35451128768 and
   https://github.com/sarmidev/KardanoSDK/actions/runs/35451205414
-  (`intersect-self-attestation`; Overall: Fail on current `main`). The
-  submission PDF is a post-merge owner action:
+  (`intersect-self-attestation`; Overall: Fail on then-current `main`).
+  The submission PDF is a post-merge owner action:
   `gh workflow run intersect-attestation.yml --ref main`. No recurring
-  PR cost. No merge, tag, dispatch, or intake submission in this
-  session.
+  PR cost. No merge, tag, or intake submission in that session.
 
 ### Prior Session Summary
 

@@ -31,6 +31,13 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   attestation workflow is `workflow_dispatch` only again after a
   one-time diagnostic proved the xvfb/PDF path; the submission PDF is a
   post-merge dispatch on `main`.
+- Intersect attestation workflow now grants `security-events: read`
+  (keeps `contents: read`; no write scopes; no PAT/secrets) so the
+  official script can list repository code-scanning alerts. Default-branch
+  CodeQL analysis already exists; official run 35452860848 was Overall
+  AMBER solely because the previous `GITHUB_TOKEN` could not see it. This
+  is read-only attestation visibility, not a new scanner. Do not claim
+  GREEN unless a later official generated report says GREEN.
 - Kotlin Multiplatform Cardano SDK modules for primitives, encoding, structural addresses,
   key derivation, providers, wallet orchestration, transaction building, and the signing backend.
 - ADA-only, fixture-scoped transaction build/sign/submit demonstration for Blockfrost preprod.
