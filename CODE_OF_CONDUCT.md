@@ -15,6 +15,6 @@ business information.
 ## Reporting
 
 For conduct concerns, email [sarmidev@outlook.es](mailto:sarmidev@outlook.es). For technical
-vulnerabilities, follow [docs/SECURITY.md](docs/SECURITY.md) instead.
+vulnerabilities, follow [SECURITY.md](SECURITY.md) instead.
 
 Reports will be handled privately where possible and with attention to the information provided.

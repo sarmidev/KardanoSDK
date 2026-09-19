@@ -58,7 +58,10 @@ README and the documents below rather than duplicating them.
 - [Release process](docs/RELEASING.md) — public release prerequisites and verification.
 - [Third-party notices](docs/THIRD_PARTY_NOTICES.md) — initial dependency notice inventory.
 - [Decision records](docs/DECISIONS/) — architecture decisions and scope boundaries.
-- [Security reporting](docs/SECURITY.md) — private reporting path and known scope limits.
+- [Security reporting](SECURITY.md) — private reporting path and known scope limits.
+- [Governance](GOVERNANCE.md) — sole-maintainer decision process.
+- [Support](SUPPORT.md) — Discussions, issues, and vulnerability routing.
+- [Maintainers](MAINTAINERS.md) — current owner and bus-factor note.
 
 ## Try the Playground
 
@@ -91,8 +94,11 @@ environment limits.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Changes to transaction,
-key-material, provider, or serialization behavior require tests and matching documentation.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [GOVERNANCE.md](GOVERNANCE.md) before opening
+a change. How-to questions belong in [Discussions](https://github.com/sarmidev/KardanoSDK/discussions)
+([SUPPORT.md](SUPPORT.md)); vulnerabilities follow [SECURITY.md](SECURITY.md). Changes to
+transaction, key-material, provider, or serialization behavior require tests and matching
+documentation.
 
 ## License
 

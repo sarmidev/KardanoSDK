@@ -199,7 +199,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run action-pin regression tests
-        run: python3 -m unittest scripts.tests.test_check_action_pins
+        run: >-
+          python3 -m unittest
+          scripts.tests.test_check_action_pins
+          scripts.tests.test_intersect_attestation_workflow
+          scripts.tests.test_phase1_readiness_docs
       - name: Verify workflow Action pins and composite metadata
         run: python3 scripts/check_action_pins.py
       - name: Run legal-evidence-scan checkout/config regression tests

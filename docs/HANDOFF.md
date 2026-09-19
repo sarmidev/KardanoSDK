@@ -46,7 +46,9 @@ Read these first:
 - `docs/DELIVERY_RECORD.md`
 - `docs/ROADMAP.md`
 - `docs/AI_WORKING_AGREEMENT.md`
-- `docs/SECURITY.md`
+- `SECURITY.md` (canonical; `docs/SECURITY.md` is a pointer)
+- `GOVERNANCE.md`, `SUPPORT.md`, `MAINTAINERS.md`
+- `docs/INTERSECT_PHASE1_APPLICATION.md`
 - `docs/RELEASING.md`
 - `docs/TESTING.md`
 - ADR files under `docs/DECISIONS/`
@@ -94,13 +96,33 @@ Stacked remediations, each additive (no amend / no force-push):
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
 | 7 | `fix/native-build-and-platform-evidence` | merged via PR #15 | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`; independent PE technical review is COMPLETE at `c65a20a`. Phase C remains NO-GO solely pending Identus #226 (PE re-review is no longer a blocking gate). Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
-| — | `docs/funding-readiness-alignment` | current | Owner-recorded catalog elections (2026-09-19; Javier Sarmiento Mañus (project owner)): 26 Cargo Apache-2.0 rows, `memchr` MIT, JNA Apache-2.0. Owner acceptance is not a counsel determination. Prompts 3–7 are on `origin/main`. |
+| — | `docs/funding-readiness-alignment` | merged via PR #16 | Owner-recorded catalog elections (2026-09-19; Javier Sarmiento Mañus (project owner)): 26 Cargo Apache-2.0 rows, `memchr` MIT, JNA Apache-2.0. Owner acceptance is not a counsel determination. Prompts 3–7 are on `origin/main`. |
+| — | `docs/intersect-phase1-readiness` | current | Intersect Tooling Sustainability Phase 1 readiness: root policy files, CodeQL, Dependabot, attestation workflow, application draft. No intake submission, no tag, no Band 2/adoption/counsel claim. |
 
 Prompts 3–7 are merged to `origin/main` (PR #15 was the last stacked Prompt 7 merge). Do not merge, auto-merge, force-push, or tag from this session.
 
 ## Recent Sessions
 
 ### Last Session Summary
+
+Date: 2026-09-19
+
+- **Intersect Tooling Sustainability Phase 1 readiness on
+  `docs/intersect-phase1-readiness`, from `origin/main` after PR #16.**
+  Added canonical root `SECURITY.md` (docs copy is a pointer), honest
+  sole-maintainer `GOVERNANCE.md` / `SUPPORT.md` / `MAINTAINERS.md`, a
+  SHA-pinned CodeQL workflow (Java/Kotlin, manual JVM compile), weekly
+  Dependabot for Gradle/Cargo/GitHub Actions with no auto-merge, a
+  `workflow_dispatch` attestation workflow pinned to
+  `IntersectMBO/Project-Compliance-Attestation@e8dc883517a116f745dda0d9b23204e76326445b`,
+  and `docs/INTERSECT_PHASE1_APPLICATION.md`. No intake form was
+  submitted, no tag/release was created, no Band 2 or adoption claim was
+  made, and no pitch deck was added. Code scanning is not claimed GREEN
+  until a real default-branch CodeQL run succeeds. The attestation PDF
+  that can be attached to Phase 1 must be generated after this change
+  merges to `main`.
+
+### Prior Session Summary
 
 Date: 2026-09-19
 
@@ -723,11 +745,15 @@ technical review is COMPLETE at `c65a20a`, but Identus #226 still blocks
 elections (2026-09-19) close only those Cargo/JNA rows; they are not a
 counsel determination. Remaining named open gates: counsel review,
 MPL/Identus/Bouncy determinations, Identus #226, and release/tag.
-Residual owner work: funding research (pitch deck follows that research),
-authenticated GitHub artifact download, secret-scanning / Dependabot, the
+Residual owner work: Phase 1 intake remains unsubmitted until `main`
+has this change, a post-merge attestation PDF exists, and owner
+LinkedIn/payment/`[OWNER TO ADD]` fields are filled; CodeQL default-branch
+status is still unclaimed; counsel review and Identus #226 remain open;
+pitch deck is Phase 2 work; authenticated GitHub artifact download, the
 manual accessibility walkthrough, and a post-replacement Android device
-`connectedAndroidDeviceTest`. Do not merge, auto-merge, force-push, or
-tag from an automated session.
+`connectedAndroidDeviceTest` remain. Dependabot config is present and
+does not auto-merge. Do not merge, auto-merge, force-push, tag, or
+submit the Intersect intake from an automated session.
 
 ## Prompt For Cursor Business/Product Work
 
@@ -743,7 +769,10 @@ Use these files as source of truth:
 - docs/HANDOFF.md
 - docs/archive/handoff/README.md
 - docs/AI_WORKING_AGREEMENT.md
-- docs/SECURITY.md
+- SECURITY.md
+- GOVERNANCE.md
+- SUPPORT.md
+- MAINTAINERS.md
 - ADR files under docs/DECISIONS/
 
 Do not edit source code.
@@ -775,7 +804,10 @@ Read:
 - docs/HANDOFF.md
 - docs/archive/handoff/README.md
 - docs/AI_WORKING_AGREEMENT.md
-- docs/SECURITY.md
+- SECURITY.md
+- GOVERNANCE.md
+- SUPPORT.md
+- MAINTAINERS.md
 - ADR files under docs/DECISIONS/
 
 Do not edit files yet.

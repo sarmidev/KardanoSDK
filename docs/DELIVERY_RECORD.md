@@ -39,7 +39,7 @@ Delivered:
 Primary references:
 
 - [AI working agreement](AI_WORKING_AGREEMENT.md)
-- [Security policy](SECURITY.md)
+- [Security policy](../SECURITY.md)
 - [Project brief](PROJECT_BRIEF.md)
 
 ### 0.2 Module structure and testing foundation

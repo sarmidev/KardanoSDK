@@ -277,7 +277,7 @@ Documentation and claim-language checks:
 
 ```bash
 rg -n "TESTING|fixtures|test vector|commonTest|jvmTest|iosSimulatorArm64Test|testAndroidHostTest" README.md docs/ core/README.md shared/README.md
-python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive scripts.tests.test_check_action_pins
+python3 -m unittest scripts.tests.test_check_restricted_claims scripts.tests.test_check_handoff_archive scripts.tests.test_check_action_pins scripts.tests.test_intersect_attestation_workflow scripts.tests.test_phase1_readiness_docs
 python3 -m unittest discover -s crypto-signing-backend/scripts/tests -p "test_*.py"
 python3 scripts/check_handoff_archive.py
 python3 scripts/check_restricted_claims.py
@@ -307,7 +307,32 @@ SHA-pinned; a floating transitive `uses:` is a finding. CI runs
 `scripts.tests.test_check_action_pins` before the check. The inventory was
 resolved live on 2026-08-23; do not reuse SHAs from older audit notes.
 The previous pins were exact patch releases (`checkout` `v4.3.1`, not the
-moving `v4` tag).
+moving `v4` tag). `github/codeql-action/init` and
+`github/codeql-action/analyze` v4.38.1 were resolved live on 2026-09-19
+(`1c5b675653bb5c22dbe9b12b556ec555138e09fd`). A CodeQL workflow file is
+not itself a passing code-scanning result.
+
+`.github/workflows/codeql.yml` analyzes Java/Kotlin with `build-mode:
+manual` and a JVM `compileKotlinJvm` graph so Ubuntu does not attempt
+iOS/native targets. It writes `security-events` only. Do not claim the
+repository code-scanning signal is GREEN until a GitHub run on the
+default branch succeeds and the alerts API is reachable.
+
+`.github/workflows/intersect-attestation.yml` is `workflow_dispatch`
+only. It clones `IntersectMBO/Project-Compliance-Attestation` at
+`e8dc883517a116f745dda0d9b23204e76326445b`, runs the official script
+against `sarmidev/KardanoSDK`, and uploads HTML/PDF/Markdown plus an
+environment sidecar. The official script queries the default branch, so
+a pull-request or pre-merge run is diagnostic of `main` only. apt PDF
+tools are runner-image packages; PDF bytes are not claimed
+deterministic. See `scripts/intersect_attestation_pin.py` and
+`scripts.tests.test_intersect_attestation_workflow`.
+
+`.github/dependabot.yml` proposes weekly Gradle, Cargo, and GitHub
+Actions updates with conservative open-PR limits and no auto-merge.
+Dependabot PRs still have to keep pins exact, regenerate lockfiles and
+`gradle/verification-metadata.xml` when coordinates change, and pass
+review. Those proposals are not a CycloneDX/SPDX SBOM.
 
 Legal-evidence packet checks (Prompt 7; not legal advice, not approval):
 

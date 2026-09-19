@@ -1,0 +1,111 @@
+# Manual Intersect Tooling Sustainability self-attestation.
+#
+# The official script
+# (IntersectMBO/Project-Compliance-Attestation@e8dc883517a116f745dda0d9b23204e76326445b)
+# queries the repository default branch through the GitHub API. A run from
+# this feature branch is therefore diagnostic of `main` only. Generate the
+# PDF that will be attached to an intake form after this change is merged
+# to `main`, then dispatch this workflow again.
+#
+# Third-party script output is evidence for the application, not a
+# certification. apt-installed PDF tools follow the runner image; this
+# workflow records those package versions and does not claim deterministic
+# PDF bytes.
+
+name: Intersect self-attestation
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Activity window in days passed to the official script
+        required: false
+        default: "90"
+
+permissions:
+  contents: read
+
+jobs:
+  attest:
+    name: Run official Intersect attestation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_PROMPT_DISABLED: "1"
+      ATTESTATION_UPSTREAM_SHA: e8dc883517a116f745dda0d9b23204e76326445b
+      ATTESTATION_TARGET_REPO: sarmidev/KardanoSDK
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Record runner identity
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/attest-out"
+          {
+            echo "runner_os=${RUNNER_OS}"
+            echo "image_os=${ImageOS:-unknown}"
+            . /etc/os-release
+            echo "pretty_name=${PRETTY_NAME}"
+            echo "id=${ID}"
+            echo "version_id=${VERSION_ID}"
+            echo "upstream_commit=${ATTESTATION_UPSTREAM_SHA}"
+            echo "target_repo=${ATTESTATION_TARGET_REPO}"
+            echo "default_branch_note=official script queries the repository default branch"
+            echo "pdf_bytes_note=apt PDF tools are runner-image packages; bytes are not claimed deterministic"
+          } | tee "$RUNNER_TEMP/attest-out/attestation-environment.txt"
+      - name: Install PDF tools from the runner apt repositories
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wkhtmltopdf pandoc
+          {
+            echo "wkhtmltopdf=$(wkhtmltopdf --version 2>&1 | tr '\n' ' ')"
+            echo "pandoc=$(pandoc --version | head -n 1)"
+            echo "jq=$(jq --version)"
+            echo "gh=$(gh --version | head -n 1)"
+          } | tee -a "$RUNNER_TEMP/attest-out/attestation-environment.txt"
+      - name: Fetch official attestation script at the pinned commit
+        run: |
+          set -euo pipefail
+          git clone https://github.com/IntersectMBO/Project-Compliance-Attestation.git \
+            "$RUNNER_TEMP/attest-src"
+          git -C "$RUNNER_TEMP/attest-src" checkout --detach "$ATTESTATION_UPSTREAM_SHA"
+          test "$(git -C "$RUNNER_TEMP/attest-src" rev-parse HEAD)" = "$ATTESTATION_UPSTREAM_SHA"
+          test -f "$RUNNER_TEMP/attest-src/src/intersect_ost_self_attest.sh"
+      - name: Run official self-attestation
+        working-directory: ${{ runner.temp }}/attest-out
+        run: |
+          set -euo pipefail
+          chmod +x "$RUNNER_TEMP/attest-src/src/intersect_ost_self_attest.sh"
+          "$RUNNER_TEMP/attest-src/src/intersect_ost_self_attest.sh" \
+            "$ATTESTATION_TARGET_REPO" \
+            --out kardano-sdk-self-attest.pdf \
+            --days "${{ github.event.inputs.days }}"
+          test -f kardano-sdk-self-attest.html
+          test -f kardano-sdk-self-attest.md
+          test -f kardano-sdk-self-attest.pdf
+      - name: Confirm reports do not contain runner token bytes
+        run: |
+          set -euo pipefail
+          python3 -c "
+          from pathlib import Path
+          import os
+          out = Path(os.environ['RUNNER_TEMP']) / 'attest-out'
+          token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN') or ''
+          if token:
+              for path in out.iterdir():
+                  if path.is_file() and token.encode() in path.read_bytes():
+                      raise SystemExit('token bytes found in ' + path.name)
+          print('no token bytes in attestation outputs')
+          "
+      - name: Upload attestation artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: intersect-self-attestation
+          path: |
+            ${{ runner.temp }}/attest-out/kardano-sdk-self-attest.html
+            ${{ runner.temp }}/attest-out/kardano-sdk-self-attest.pdf
+            ${{ runner.temp }}/attest-out/kardano-sdk-self-attest.md
+            ${{ runner.temp }}/attest-out/attestation-environment.txt

@@ -28,6 +28,14 @@ bounded-parser, and cross-platform design.
 The detailed engineering rules are in [docs/AI_WORKING_AGREEMENT.md](docs/AI_WORKING_AGREEMENT.md)
 and the repository rules under `.cursor/rules/`.
 
+Project process and contact paths:
+
+- [GOVERNANCE.md](GOVERNANCE.md) — sole-maintainer decisions and ADRs
+- [MAINTAINERS.md](MAINTAINERS.md) — who reviews changes
+- [SUPPORT.md](SUPPORT.md) — Discussions versus Issues
+- [SECURITY.md](SECURITY.md) — private vulnerability reports
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — expected behaviour
+
 ## Tests and documentation
 
 Every behavior change needs valid, invalid, and edge coverage where applicable. Run the narrowest

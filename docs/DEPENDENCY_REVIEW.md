@@ -58,6 +58,8 @@ This batch upgrades from the exact patch pins above, not from a moving
 | `actions/deploy-pages` | v5.0.0 | `cd2ce8fcbc39b97be8ca5fce6e763baed58fa128` | node24 | javascript |
 | `actions/upload-artifact` | v7.0.1 | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | node24 | javascript |
 | `actions/download-artifact` | v8.0.1 | `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c` | node24 | javascript |
+| `github/codeql-action/init` | v4.38.1 | `1c5b675653bb5c22dbe9b12b556ec555138e09fd` | node24 | javascript |
+| `github/codeql-action/analyze` | v4.38.1 | `1c5b675653bb5c22dbe9b12b556ec555138e09fd` | node24 | javascript |
 
 Release pages:
 
@@ -69,6 +71,7 @@ Release pages:
 - https://github.com/actions/deploy-pages/releases/tag/v5.0.0
 - https://github.com/actions/upload-artifact/releases/tag/v7.0.1
 - https://github.com/actions/download-artifact/releases/tag/v8.0.1
+- https://github.com/github/codeql-action/releases/tag/v4.38.1
 
 `checkout` v7.0.1, `setup-java` v5.7.0, `configure-pages` v6.0.0, and
 `deploy-pages` v5.0.0 are javascript Actions (`runs.using: node24`).
@@ -355,3 +358,60 @@ copied from CI log text. Lockfiles were not rewritten for this miss.
 
 `cargo metadata --locked` was run twice after the pin edit; `Cargo.lock`
 had no diff. Natives were not rebuilt.
+
+## CodeQL Action pins (2026-09-19)
+
+`github/codeql-action` `v4.38.1` was resolved live on 2026-09-19 from
+`GET /repos/github/codeql-action/releases` (published 2026-09-18). The
+annotated tag peeled to commit `1c5b675653bb5c22dbe9b12b556ec555138e09fd`.
+`init/action.yml` and `analyze/action.yml` at that tag are javascript
+(`runs.using: node24`) with no nested `uses:`.
+
+`.github/workflows/codeql.yml` uses `languages: java-kotlin` and
+`build-mode: manual` with a JVM `compileKotlinJvm` graph. Kotlin cannot
+use `build-mode: none`. A committed workflow is not a passing
+code-scanning result.
+
+## Dependabot (2026-09-19)
+
+`.github/dependabot.yml` watches three ecosystems that this repository
+actually uses:
+
+| Ecosystem | Directory | Cadence | Open-PR limit |
+|---|---|---|---|
+| `gradle` | `/` | weekly | 4 |
+| `cargo` | `/crypto-signing-backend` | weekly | 3 |
+| `github-actions` | `/` | weekly | 3 |
+
+There is no npm, pip, or Bundler manifest, so those ecosystems are not
+configured. Dependabot opens pull requests only. There is no auto-merge
+workflow and no automerge key.
+
+A Dependabot PR is still an ordinary change against this repository's
+pin rules:
+
+- no dynamic (`+`) or unpinned versions;
+- regenerate Gradle lockfiles and `gradle/verification-metadata.xml` when
+  coordinates change;
+- keep `crypto-signing-backend/Cargo.lock` `--locked`;
+- record a new GitHub Action SHA in `scripts/action_pin_inventory.py`
+  and this file before the workflow may use it;
+- pass `scripts/check_action_pins.py` and ordinary review.
+
+Dependabot does not replace those checks.
+
+## Software bill of materials (not present)
+
+The committed Gradle lockfiles, Cargo lockfile, verification metadata,
+`docs/evidence/` inventories, and native-carrier inventory are **not** a
+CycloneDX or SPDX SBOM. They are lock and evidence lists for this
+repository's review process.
+
+**Recommended follow-up (not done here):** generate a formal CycloneDX
+or SPDX SBOM from the existing lock/evidence inputs before any binary or
+package distribution, or sooner if a Phase 1 form field explicitly
+requires one. A no-dependency converter was not added in this change
+because validating against a published SBOM schema would either invent a
+partial document or pull in a new generator dependency for optics
+alone.
+

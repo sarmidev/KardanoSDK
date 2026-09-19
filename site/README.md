@@ -42,7 +42,7 @@ wording invented for the site:
 - [`../docs/QUICKSTART.md`](../docs/QUICKSTART.md)
 - [`../docs/PHASE_2_PLAN.md`](../docs/PHASE_2_PLAN.md)
 - [`../docs/FUNDING_AND_PILOT_PLAYBOOK.md`](../docs/FUNDING_AND_PILOT_PLAYBOOK.md)
-- [`../docs/SECURITY.md`](../docs/SECURITY.md)
+- [`../SECURITY.md`](../SECURITY.md)
 - [`../docs/ROADMAP.md`](../docs/ROADMAP.md)
 
 Before editing copy, re-read the "Current limits" section of `../README.md` and the "Public-content

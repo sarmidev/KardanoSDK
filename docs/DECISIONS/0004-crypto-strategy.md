@@ -407,7 +407,7 @@ implementation blocks:
 - No crypto implementation lands before a candidate evaluation updates this matrix with
   verified facts and records a decision.
 - This ADR is part of the project's decision record and is referenced from
-  `docs/AI_WORKING_AGREEMENT.md` and `docs/SECURITY.md`. Do not delete it.
+  `docs/AI_WORKING_AGREEMENT.md` and the repository-root `SECURITY.md`. Do not delete it.
 
 ---
 

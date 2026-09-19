@@ -9,6 +9,19 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Added
 
+- Root `SECURITY.md`, `GOVERNANCE.md`, `SUPPORT.md`, and `MAINTAINERS.md` for
+  Intersect Tooling Sustainability Phase 1 repository hygiene. `docs/SECURITY.md`
+  is now a pointer to the root policy so the two copies cannot drift.
+- A SHA-pinned CodeQL workflow for Java/Kotlin (`manual` JVM compile) and a
+  weekly Dependabot config for Gradle, Cargo, and GitHub Actions. Dependabot
+  does not auto-merge; lockfiles and verification metadata still need review.
+- A manual `workflow_dispatch` Intersect self-attestation workflow that runs the
+  official script at a pinned commit and uploads HTML/PDF artifacts. The
+  official script queries the default branch, so a submission PDF must be
+  generated after merge to `main`.
+- An internal Phase 1 application draft at `docs/INTERSECT_PHASE1_APPLICATION.md`.
+  It does not submit the intake form, does not set a funding band, and does not
+  claim external adoption.
 - Kotlin Multiplatform Cardano SDK modules for primitives, encoding, structural addresses,
   key derivation, providers, wallet orchestration, transaction building, and the signing backend.
 - ADA-only, fixture-scoped transaction build/sign/submit demonstration for Blockfrost preprod.

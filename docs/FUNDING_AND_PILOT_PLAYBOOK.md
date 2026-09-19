@@ -135,11 +135,25 @@ Use social networks to point to evidence, not as a substitute for it.
 
 ## Funding preparation
 
+### Intersect Tooling Sustainability Program (Phase 1)
+
+A separate OSC programme funds open-source tooling. Phase 1 is an intake form
+plus an official self-attestation PDF. Phase 2 is a short demo and Q&A. Phase 3
+is where funding amount, band, milestones, and disbursement are aligned.
+
+The internal draft is [INTERSECT_PHASE1_APPLICATION.md](INTERSECT_PHASE1_APPLICATION.md).
+It does not submit the form, does not set a payout or band, and does not claim
+external adoption. A pitch deck belongs to Phase 2 and is not part of that
+draft.
+
+Official page:
+https://committees.docs.intersectmbo.org/intersect-open-source-committee/about/paid-open-source-model-posm/tooling-sustainability
+
 ### Intersect budget process
 
 The 2026 submission window is closed. Intersect is preparing the 2027 budget process, but has not
 published a new submission calendar. Prepare the proposal now and verify current rules when a
-window opens.
+window opens. This budget process is not the Tooling Sustainability Phase 1 intake above.
 
 Useful official references:
 
