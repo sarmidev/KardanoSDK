@@ -113,8 +113,12 @@ Date: 2026-09-19
   and passes `days` through `ATTESTATION_DAYS` with a 1–365 decimal
   check. CodeQL compile graph now includes
   `:androidApp:compileDebugKotlin` and `:desktopApp:compileKotlin` with
-  `--no-build-cache --rerun-tasks`; iOS/native stays outside Java/Kotlin
-  CodeQL. Phase 1 draft now records one unique committer as RED (does
+  `--no-build-cache --no-configuration-cache --rerun-tasks` on
+  `macos-latest` (Ubuntu cannot resolve the Desktop Linux classifier
+  against the committed lockfile); iOS/native stays outside Java/Kotlin
+  CodeQL. A diagnostic `pull_request` trigger was added to the
+  attestation workflow because GitHub 404s `workflow_dispatch` until the
+  file exists on the default branch. Phase 1 draft now records one unique committer as RED (does
   not drive overall) and post-merge overall as AMBER; do not claim
   GREEN. No merge, tag, or intake submission.
 

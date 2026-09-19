@@ -368,11 +368,14 @@ annotated tag peeled to commit `1c5b675653bb5c22dbe9b12b556ec555138e09fd`.
 (`runs.using: node24`) with no nested `uses:`.
 
 `.github/workflows/codeql.yml` uses `languages: java-kotlin` and
-`build-mode: manual`. The compile graph is the SDK `compileKotlinJvm`
-tasks plus `:androidApp:compileDebugKotlin` and `:desktopApp:compileKotlin`,
-run with `--no-build-cache --rerun-tasks`. iOS/native targets are outside
-Java/Kotlin CodeQL. Kotlin cannot use `build-mode: none`. A committed
-workflow is not a passing code-scanning result.
+`build-mode: manual` on `macos-latest`. The compile graph is the SDK
+`compileKotlinJvm` tasks plus `:androidApp:compileDebugKotlin` and
+`:desktopApp:compileKotlin`, run with `--no-build-cache
+--no-configuration-cache --rerun-tasks`. Ubuntu cannot resolve
+`desktop-jvm-linux-x64` against the committed macOS Compose lockfile.
+iOS/native targets are outside Java/Kotlin CodeQL. Kotlin cannot use
+`build-mode: none`. A committed workflow is not a passing
+code-scanning result.
 
 ## Dependabot (2026-09-19)
 

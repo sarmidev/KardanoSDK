@@ -72,14 +72,15 @@ class IntersectAttestationWorkflowTests(unittest.TestCase):
         findings = pins.check_workflow_structure(REPO_ROOT, attest.WORKFLOW_PATH)
         self.assertEqual(findings, [])
 
-    def test_trigger_is_manual_dispatch_only(self) -> None:
+    def test_trigger_is_dispatch_and_diagnostic_pull_request(self) -> None:
         document = pins.parse_yaml_document(self.text, source_path=attest.WORKFLOW_PATH)
         keys = [str(key) for key in document["top_level_keys"]]
         self.assertIn("on", keys)
         self.assertIn("workflow_dispatch:", self.text)
+        self.assertIn("pull_request:", self.text)
         self.assertNotRegex(self.text, r"(?m)^  push:")
-        self.assertNotRegex(self.text, r"(?m)^  pull_request:")
         self.assertNotRegex(self.text, r"(?m)^on:\n  push:")
+        self.assertIn("diagnostic only", self.text)
 
     def test_permissions_are_contents_read_only(self) -> None:
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
@@ -139,7 +140,7 @@ class IntersectAttestationWorkflowTests(unittest.TestCase):
         self.assertIn("apt-get install -y --no-install-recommends xvfb wkhtmltopdf", self.text)
 
     def test_days_input_is_env_passed_and_range_checked(self) -> None:
-        self.assertIn("ATTESTATION_DAYS: ${{ github.event.inputs.days }}", self.text)
+        self.assertIn("ATTESTATION_DAYS: ${{ github.event.inputs.days || '90' }}", self.text)
         self.assertNotIn("--days \"${{ github.event.inputs.days }}\"", self.text)
         self.assertNotIn("--days ${{ github.event.inputs.days }}", self.text)
         self.assertIn("--days \"${ATTESTATION_DAYS}\"", self.text)

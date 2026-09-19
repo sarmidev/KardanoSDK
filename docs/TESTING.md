@@ -313,19 +313,26 @@ moving `v4` tag). `github/codeql-action/init` and
 not itself a passing code-scanning result.
 
 `.github/workflows/codeql.yml` analyzes Java/Kotlin with `build-mode:
-manual`. The compile graph, verified with `./gradlew :androidApp:tasks`
-and `:desktopApp:tasks` on 2026-09-19, is the SDK `compileKotlinJvm`
-tasks plus `:androidApp:compileDebugKotlin` (so `androidMain`
-implementations including crypto/signing/provider compile) and
-`:desktopApp:compileKotlin`. The invocation uses `--no-daemon
---no-build-cache --rerun-tasks` so CodeQL observes a real compilation.
-iOS/native Kotlin/Native targets are outside Java/Kotlin CodeQL and are
-not compiled in that job. It writes `security-events` only. Do not claim
+manual` on `macos-latest`. The compile graph, verified with
+`./gradlew :androidApp:tasks` and `:desktopApp:tasks` on 2026-09-19, is
+the SDK `compileKotlinJvm` tasks plus `:androidApp:compileDebugKotlin`
+(so `androidMain` implementations including crypto/signing/provider
+compile) and `:desktopApp:compileKotlin`. Ubuntu cannot run
+`:desktopApp:compileKotlin` under `LockMode.STRICT` because the
+committed lockfile has `desktop-jvm-macos-arm64` and not
+`desktop-jvm-linux-x64` (Verify already omits `:desktopApp` on Ubuntu).
+The invocation uses `--no-daemon --no-build-cache --no-configuration-cache
+--rerun-tasks` so CodeQL observes a real compilation. iOS/native
+Kotlin/Native targets are outside Java/Kotlin CodeQL and are not
+compiled in that job. It writes `security-events` only. Do not claim
 the repository code-scanning signal is GREEN until a GitHub run on the
 default branch succeeds.
 
-`.github/workflows/intersect-attestation.yml` is `workflow_dispatch`
-only on `ubuntu-24.04`. It clones `IntersectMBO/Project-Compliance-Attestation` at
+`.github/workflows/intersect-attestation.yml` is `workflow_dispatch` plus
+a diagnostic `pull_request` trigger on `ubuntu-24.04`. GitHub will not
+register a new dispatch-only workflow until the file exists on the
+default branch, so a pre-merge `gh workflow run` 404s; the PR trigger
+exists only so a diagnostic artifact can be produced before merge. It clones `IntersectMBO/Project-Compliance-Attestation` at
 `e8dc883517a116f745dda0d9b23204e76326445b`, installs `xvfb` and
 `wkhtmltopdf`, validates `days` (decimal integer 1–365) from
 `ATTESTATION_DAYS`, and runs the official script under `xvfb-run -a`

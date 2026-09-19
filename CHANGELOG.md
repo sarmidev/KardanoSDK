@@ -25,7 +25,9 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - Review follow-up on the Phase 1 readiness workflows: attestation runs on
   `ubuntu-24.04` under `xvfb-run -a` with a validated `days` env input;
   CodeQL compiles `:androidApp:compileDebugKotlin` and
-  `:desktopApp:compileKotlin` with `--no-build-cache --rerun-tasks`.
+  `:desktopApp:compileKotlin` on `macos-latest` with `--no-build-cache
+  --no-configuration-cache --rerun-tasks` because Ubuntu cannot resolve
+  the Desktop Linux classifier against the committed lockfile.
 - Kotlin Multiplatform Cardano SDK modules for primitives, encoding, structural addresses,
   key derivation, providers, wallet orchestration, transaction building, and the signing backend.
 - ADA-only, fixture-scoped transaction build/sign/submit demonstration for Blockfrost preprod.

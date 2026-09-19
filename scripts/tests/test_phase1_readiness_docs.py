@@ -130,5 +130,7 @@ class Phase1ReadinessDocsTests(unittest.TestCase):
         self.assertIn(":androidApp:compileDebugKotlin", text)
         self.assertIn(":desktopApp:compileKotlin", text)
         self.assertIn("--no-build-cache", text)
+        self.assertIn("--no-configuration-cache", text)
         self.assertIn("--rerun-tasks", text)
+        self.assertIn("macos-latest", text)
         self.assertIn("iOS/native", text)

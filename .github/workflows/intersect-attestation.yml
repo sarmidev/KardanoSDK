@@ -18,6 +18,11 @@
 name: Intersect self-attestation
 
 on:
+  # pull_request is diagnostic only: GitHub will not register a new
+  # workflow_dispatch file until it exists on the default branch, so a
+  # pre-merge `gh workflow run` 404s. The official script still queries
+  # `main`. Do not treat a PR artifact as the submission PDF.
+  pull_request:
   workflow_dispatch:
     inputs:
       days:
@@ -39,7 +44,7 @@ jobs:
       GH_PROMPT_DISABLED: "1"
       ATTESTATION_UPSTREAM_SHA: e8dc883517a116f745dda0d9b23204e76326445b
       ATTESTATION_TARGET_REPO: sarmidev/KardanoSDK
-      ATTESTATION_DAYS: ${{ github.event.inputs.days }}
+      ATTESTATION_DAYS: ${{ github.event.inputs.days || '90' }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
