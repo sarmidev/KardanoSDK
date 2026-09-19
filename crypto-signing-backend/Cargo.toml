@@ -19,5 +19,5 @@ crate-type = ["cdylib", "staticlib"]
 path = "src/commonMain/rust/lib.rs"
 
 [dependencies]
-uniffi = "=0.29.5"
-ed25519-bip32 = "=0.4.2"
+uniffi = "=0.32.1"
+ed25519-bip32 = "=0.4.3"
