@@ -72,15 +72,23 @@ class IntersectAttestationWorkflowTests(unittest.TestCase):
         findings = pins.check_workflow_structure(REPO_ROOT, attest.WORKFLOW_PATH)
         self.assertEqual(findings, [])
 
-    def test_trigger_is_dispatch_and_diagnostic_pull_request(self) -> None:
+    def test_trigger_is_workflow_dispatch_only(self) -> None:
         document = pins.parse_yaml_document(self.text, source_path=attest.WORKFLOW_PATH)
         keys = [str(key) for key in document["top_level_keys"]]
         self.assertIn("on", keys)
         self.assertIn("workflow_dispatch:", self.text)
-        self.assertIn("pull_request:", self.text)
+        self.assertNotIn("pull_request:", self.text)
         self.assertNotRegex(self.text, r"(?m)^  push:")
         self.assertNotRegex(self.text, r"(?m)^on:\n  push:")
-        self.assertIn("diagnostic only", self.text)
+        # Psych maps the YAML key `on` to boolean true; JSON.generate then
+        # stringifies that key as "true".
+        on_block = (
+            self.workflow.get("on")
+            or self.workflow.get(True)
+            or self.workflow.get("true")
+        )
+        self.assertIsInstance(on_block, dict)
+        self.assertEqual(set(on_block.keys()), {"workflow_dispatch"})
 
     def test_permissions_are_contents_read_only(self) -> None:
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})

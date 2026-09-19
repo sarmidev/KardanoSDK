@@ -97,13 +97,29 @@ Stacked remediations, each additive (no amend / no force-push):
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
 | 7 | `fix/native-build-and-platform-evidence` | merged via PR #15 | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`; independent PE technical review is COMPLETE at `c65a20a`. Phase C remains NO-GO solely pending Identus #226 (PE re-review is no longer a blocking gate). Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
 | — | `docs/funding-readiness-alignment` | merged via PR #16 | Owner-recorded catalog elections (2026-09-19; Javier Sarmiento Mañus (project owner)): 26 Cargo Apache-2.0 rows, `memchr` MIT, JNA Apache-2.0. Owner acceptance is not a counsel determination. Prompts 3–7 are on `origin/main`. |
-| — | `docs/intersect-phase1-readiness` | current | Intersect Tooling Sustainability Phase 1 readiness plus independent-review fixes: xvfb attestation PDF path, Android/Desktop CodeQL compile graph, contributor-RED / overall-AMBER honesty. No intake submission, no tag, no Band 2/adoption/counsel claim. |
+| — | `docs/intersect-phase1-readiness` | current | Intersect Tooling Sustainability Phase 1 readiness plus independent-review fixes: xvfb attestation PDF path, Android/Desktop CodeQL compile graph, contributor-RED / overall-AMBER honesty, attestation restored to `workflow_dispatch` only. No intake submission, no tag, no Band 2/adoption/counsel claim. |
 
 Prompts 3–7 are merged to `origin/main` (PR #15 was the last stacked Prompt 7 merge). Do not merge, auto-merge, force-push, or tag from this session.
 
 ## Recent Sessions
 
 ### Last Session Summary
+
+Date: 2026-09-19
+
+- **Attestation workflow restored to `workflow_dispatch` only on
+  `docs/intersect-phase1-readiness` (PR #17 still open).** The temporary
+  diagnostic pull-request trigger is gone. Historical evidence that the
+  xvfb/PDF path works:
+  https://github.com/sarmidev/KardanoSDK/actions/runs/35451128768 and
+  https://github.com/sarmidev/KardanoSDK/actions/runs/35451205414
+  (`intersect-self-attestation`; Overall: Fail on current `main`). The
+  submission PDF is a post-merge owner action:
+  `gh workflow run intersect-attestation.yml --ref main`. No recurring
+  PR cost. No merge, tag, dispatch, or intake submission in this
+  session.
+
+### Prior Session Summary
 
 Date: 2026-09-19
 
@@ -116,11 +132,12 @@ Date: 2026-09-19
   `--no-build-cache --no-configuration-cache --rerun-tasks` on
   `macos-latest` (Ubuntu cannot resolve the Desktop Linux classifier
   against the committed lockfile); iOS/native stays outside Java/Kotlin
-  CodeQL. A diagnostic `pull_request` trigger was added to the
-  attestation workflow because GitHub 404s `workflow_dispatch` until the
-  file exists on the default branch. Phase 1 draft now records one unique committer as RED (does
-  not drive overall) and post-merge overall as AMBER; do not claim
-  GREEN. No merge, tag, or intake submission.
+  CodeQL. A one-time diagnostic pull-request trigger was used so a
+  pre-merge artifact could be produced before GitHub would register
+  `workflow_dispatch`; that trigger is no longer kept. Phase 1 draft
+  records one unique committer as RED (does not drive overall) and
+  post-merge overall as AMBER; do not claim GREEN. No merge, tag, or
+  intake submission.
 
 ### Prior Session Summary
 
@@ -765,8 +782,9 @@ elections (2026-09-19) close only those Cargo/JNA rows; they are not a
 counsel determination. Remaining named open gates: counsel review,
 MPL/Identus/Bouncy determinations, Identus #226, and release/tag.
 Residual owner work: Phase 1 intake remains unsubmitted until `main`
-has this change, a post-merge attestation PDF exists (a pre-merge
-`workflow_dispatch` PDF is diagnostic of current `main` only), and owner
+has this change, a post-merge attestation PDF exists (`gh workflow run
+intersect-attestation.yml --ref main`; pre-merge diagnostic runs
+35451128768 / 35451205414 are historical only), and owner
 LinkedIn/payment/`[OWNER TO ADD]` fields are filled; CodeQL default-branch
 status is still unclaimed and overall attestation must stay AMBER; counsel review and Identus #226 remain open;
 pitch deck is Phase 2 work; authenticated GitHub artifact download, the

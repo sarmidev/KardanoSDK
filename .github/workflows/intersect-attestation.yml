@@ -1,11 +1,17 @@
 # Manual Intersect Tooling Sustainability self-attestation.
 #
+# workflow_dispatch only. Do not add an automatic pull-request or push
+# trigger. A one-time diagnostic on docs/intersect-phase1-readiness
+# already proved the xvfb/PDF path (runs 35451128768 and 35451205414).
+# Recurring PR runs would query default `main` through a third-party
+# script on every push and are not wanted.
+#
 # The official script
 # (IntersectMBO/Project-Compliance-Attestation@e8dc883517a116f745dda0d9b23204e76326445b)
-# queries the repository default branch through the GitHub API. A run from
-# this feature branch is therefore diagnostic of `main` only. Generate the
-# PDF that will be attached to an intake form after this change is merged
-# to `main`, then dispatch this workflow again.
+# queries the repository default branch through the GitHub API. Generate
+# the PDF that will be attached to an intake form after this change is
+# merged to `main`, then dispatch this workflow on `main`:
+#   gh workflow run intersect-attestation.yml --ref main
 #
 # Distro wkhtmltopdf needs a display. This job pins ubuntu-24.04, installs
 # xvfb + wkhtmltopdf, and runs the official script under `xvfb-run -a` so
@@ -18,11 +24,6 @@
 name: Intersect self-attestation
 
 on:
-  # pull_request is diagnostic only: GitHub will not register a new
-  # workflow_dispatch file until it exists on the default branch, so a
-  # pre-merge `gh workflow run` 404s. The official script still queries
-  # `main`. Do not treat a PR artifact as the submission PDF.
-  pull_request:
   workflow_dispatch:
     inputs:
       days:

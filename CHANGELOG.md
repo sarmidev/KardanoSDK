@@ -27,7 +27,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
   CodeQL compiles `:androidApp:compileDebugKotlin` and
   `:desktopApp:compileKotlin` on `macos-latest` with `--no-build-cache
   --no-configuration-cache --rerun-tasks` because Ubuntu cannot resolve
-  the Desktop Linux classifier against the committed lockfile.
+  the Desktop Linux classifier against the committed lockfile. The
+  attestation workflow is `workflow_dispatch` only again after a
+  one-time diagnostic proved the xvfb/PDF path; the submission PDF is a
+  post-merge dispatch on `main`.
 - Kotlin Multiplatform Cardano SDK modules for primitives, encoding, structural addresses,
   key derivation, providers, wallet orchestration, transaction building, and the signing backend.
 - ADA-only, fixture-scoped transaction build/sign/submit demonstration for Blockfrost preprod.

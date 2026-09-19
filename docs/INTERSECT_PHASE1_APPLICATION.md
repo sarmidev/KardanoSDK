@@ -38,7 +38,9 @@ into the intake answers below.
 - Counsel review and several named legal-evidence gates remain open
   (`docs/LEGAL_REVIEW.md`).
 - The official attestation script queries the **default branch**. A PDF
-  generated before this change merges to `main` is diagnostic only.
+  generated before this change merges to `main` is diagnostic only. The
+  workflow is `workflow_dispatch` only; do not add a recurring
+  pull-request trigger.
 
 ## Draft form answers
 
@@ -157,9 +159,19 @@ Use repository-root and documentation URLs on `main` after merge:
 | Landing page | https://sarmidev.github.io/KardanoSDK/ |
 | Attestation workflow | https://github.com/sarmidev/KardanoSDK/blob/main/.github/workflows/intersect-attestation.yml |
 
-Attach the attestation PDF generated **after** merge by dispatching
-`Intersect self-attestation`. Treat the HTML/PDF/Markdown artifacts as
-script output, not as certification.
+Attach the attestation PDF generated **after** merge by a manual
+dispatch on `main`:
+
+```text
+gh workflow run intersect-attestation.yml --ref main
+```
+
+Treat the HTML/PDF/Markdown artifacts as script output, not as
+certification. A one-time pre-merge diagnostic
+(https://github.com/sarmidev/KardanoSDK/actions/runs/35451128768 and
+https://github.com/sarmidev/KardanoSDK/actions/runs/35451205414)
+already proved HTML/PDF/Markdown generation under `xvfb-run -a`. Do not
+attach that diagnostic PDF as the Phase 1 submission evidence.
 
 ## Owner placeholders
 
@@ -214,9 +226,10 @@ signals.
   is missing, code scanning is RED, or 90-day activity is RED; contributor
   RED and release AMBER are warnings, not that overall driver |
 
-A pull-request dispatch of the attestation workflow can still be used to
-confirm that HTML/PDF generation works. Do not attach that PDF as the
-Phase 1 submission evidence.
+The attestation workflow has no automatic pull-request or push trigger.
+The diagnostic runs above are historical evidence that the xvfb/PDF path
+works. After merge, dispatch on `main` for the submission PDF. Do not
+attach a pre-merge artifact.
 
 ## ClickUp intake checklist (manual)
 
