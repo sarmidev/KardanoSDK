@@ -22,6 +22,10 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 - An internal Phase 1 application draft at `docs/INTERSECT_PHASE1_APPLICATION.md`.
   It does not submit the intake form, does not set a funding band, and does not
   claim external adoption.
+- Review follow-up on the Phase 1 readiness workflows: attestation runs on
+  `ubuntu-24.04` under `xvfb-run -a` with a validated `days` env input;
+  CodeQL compiles `:androidApp:compileDebugKotlin` and
+  `:desktopApp:compileKotlin` with `--no-build-cache --rerun-tasks`.
 - Kotlin Multiplatform Cardano SDK modules for primitives, encoding, structural addresses,
   key derivation, providers, wallet orchestration, transaction building, and the signing backend.
 - ADA-only, fixture-scoped transaction build/sign/submit demonstration for Blockfrost preprod.

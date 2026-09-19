@@ -201,12 +201,18 @@ signals.
 | LICENSE, README, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, GOVERNANCE, SUPPORT, CHANGELOG | GREEN (present at top level) |
 | Maintainers file | GREEN |
 | Workflows | GREEN |
-| Code scanning | AMBER until a default-branch CodeQL run succeeds and
-  `/repos/sarmidev/KardanoSDK/code-scanning/alerts` is reachable; a pull-request
-  CodeQL job is not enough to claim GREEN |
+| Code scanning | AMBER until a default-branch CodeQL analysis is the
+  recorded `main` analysis. A pull-request CodeQL job, or an alerts API
+  that became reachable from a PR run, is not enough to claim GREEN |
 | Releases | AMBER (still no tag) |
-| Contributors (180d unique emails) | AMBER while this remains a sole-maintainer history |
-| Overall | AMBER until code scanning (and any other remaining warnings) clear |
+| Contributors (180d unique emails) | **RED** while there is one unique
+  committer (`traffic_light_count` thresholds are GREEN ≥ 5, AMBER ≥ 2,
+  otherwise RED). This row does not drive overall |
+| Overall | **AMBER**. Do not claim GREEN. Expect AMBER until a
+  default-branch CodeQL run exists and the remaining release/contributor
+  warnings are understood. Overall becomes RED only if a must-have file
+  is missing, code scanning is RED, or 90-day activity is RED; contributor
+  RED and release AMBER are warnings, not that overall driver |
 
 A pull-request dispatch of the attestation workflow can still be used to
 confirm that HTML/PDF generation works. Do not attach that PDF as the

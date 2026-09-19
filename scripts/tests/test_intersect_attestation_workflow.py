@@ -128,3 +128,21 @@ class IntersectAttestationWorkflowTests(unittest.TestCase):
         self.assertIn("token.encode()", self.text)
         self.assertNotIn("print(token)", self.text)
         self.assertNotIn("print(os.environ.get('GH_TOKEN')", self.text)
+
+    def test_runner_is_pinned_ubuntu_24_04(self) -> None:
+        self.assertEqual(self.job["runs-on"], "ubuntu-24.04")
+        self.assertNotIn("ubuntu-latest", self.text)
+
+    def test_official_script_runs_under_xvfb(self) -> None:
+        self.assertIn("xvfb-run -a", self.text)
+        self.assertIn("wkhtmltopdf", self.text)
+        self.assertIn("apt-get install -y --no-install-recommends xvfb wkhtmltopdf", self.text)
+
+    def test_days_input_is_env_passed_and_range_checked(self) -> None:
+        self.assertIn("ATTESTATION_DAYS: ${{ github.event.inputs.days }}", self.text)
+        self.assertNotIn("--days \"${{ github.event.inputs.days }}\"", self.text)
+        self.assertNotIn("--days ${{ github.event.inputs.days }}", self.text)
+        self.assertIn("--days \"${ATTESTATION_DAYS}\"", self.text)
+        self.assertIn("[!0-9]*", self.text)
+        self.assertIn("-lt 1", self.text)
+        self.assertIn("-gt 365", self.text)

@@ -119,3 +119,16 @@ class Phase1ReadinessDocsTests(unittest.TestCase):
         self.assertIn("No external adoption", text)
         self.assertIn("not an application claim", text.lower())
         self.assertIn("No pitch deck is added", text)
+        self.assertIn("RED", text)
+        self.assertIn("does not drive overall", text.lower())
+        self.assertIn("do not claim green", text.lower())
+
+    def test_codeql_workflow_compiles_android_and_desktop(self) -> None:
+        text = (REPO_ROOT / ".github" / "workflows" / "codeql.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(":androidApp:compileDebugKotlin", text)
+        self.assertIn(":desktopApp:compileKotlin", text)
+        self.assertIn("--no-build-cache", text)
+        self.assertIn("--rerun-tasks", text)
+        self.assertIn("iOS/native", text)

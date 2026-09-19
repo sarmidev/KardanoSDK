@@ -97,13 +97,28 @@ Stacked remediations, each additive (no amend / no force-push):
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
 | 7 | `fix/native-build-and-platform-evidence` | merged via PR #15 | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`; independent PE technical review is COMPLETE at `c65a20a`. Phase C remains NO-GO solely pending Identus #226 (PE re-review is no longer a blocking gate). Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
 | — | `docs/funding-readiness-alignment` | merged via PR #16 | Owner-recorded catalog elections (2026-09-19; Javier Sarmiento Mañus (project owner)): 26 Cargo Apache-2.0 rows, `memchr` MIT, JNA Apache-2.0. Owner acceptance is not a counsel determination. Prompts 3–7 are on `origin/main`. |
-| — | `docs/intersect-phase1-readiness` | current | Intersect Tooling Sustainability Phase 1 readiness: root policy files, CodeQL, Dependabot, attestation workflow, application draft. No intake submission, no tag, no Band 2/adoption/counsel claim. |
+| — | `docs/intersect-phase1-readiness` | current | Intersect Tooling Sustainability Phase 1 readiness plus independent-review fixes: xvfb attestation PDF path, Android/Desktop CodeQL compile graph, contributor-RED / overall-AMBER honesty. No intake submission, no tag, no Band 2/adoption/counsel claim. |
 
 Prompts 3–7 are merged to `origin/main` (PR #15 was the last stacked Prompt 7 merge). Do not merge, auto-merge, force-push, or tag from this session.
 
 ## Recent Sessions
 
 ### Last Session Summary
+
+Date: 2026-09-19
+
+- **Independent-review fixes on `docs/intersect-phase1-readiness` (PR #17
+  still open).** Attestation workflow now pins `ubuntu-24.04`, installs
+  `xvfb` + `wkhtmltopdf`, runs the official script under `xvfb-run -a`,
+  and passes `days` through `ATTESTATION_DAYS` with a 1–365 decimal
+  check. CodeQL compile graph now includes
+  `:androidApp:compileDebugKotlin` and `:desktopApp:compileKotlin` with
+  `--no-build-cache --rerun-tasks`; iOS/native stays outside Java/Kotlin
+  CodeQL. Phase 1 draft now records one unique committer as RED (does
+  not drive overall) and post-merge overall as AMBER; do not claim
+  GREEN. No merge, tag, or intake submission.
+
+### Prior Session Summary
 
 Date: 2026-09-19
 
@@ -746,9 +761,10 @@ elections (2026-09-19) close only those Cargo/JNA rows; they are not a
 counsel determination. Remaining named open gates: counsel review,
 MPL/Identus/Bouncy determinations, Identus #226, and release/tag.
 Residual owner work: Phase 1 intake remains unsubmitted until `main`
-has this change, a post-merge attestation PDF exists, and owner
+has this change, a post-merge attestation PDF exists (a pre-merge
+`workflow_dispatch` PDF is diagnostic of current `main` only), and owner
 LinkedIn/payment/`[OWNER TO ADD]` fields are filled; CodeQL default-branch
-status is still unclaimed; counsel review and Identus #226 remain open;
+status is still unclaimed and overall attestation must stay AMBER; counsel review and Identus #226 remain open;
 pitch deck is Phase 2 work; authenticated GitHub artifact download, the
 manual accessibility walkthrough, and a post-replacement Android device
 `connectedAndroidDeviceTest` remain. Dependabot config is present and

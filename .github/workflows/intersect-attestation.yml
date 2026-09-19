@@ -7,10 +7,13 @@
 # PDF that will be attached to an intake form after this change is merged
 # to `main`, then dispatch this workflow again.
 #
-# Third-party script output is evidence for the application, not a
-# certification. apt-installed PDF tools follow the runner image; this
-# workflow records those package versions and does not claim deterministic
-# PDF bytes.
+# Distro wkhtmltopdf needs a display. This job pins ubuntu-24.04, installs
+# xvfb + wkhtmltopdf, and runs the official script under `xvfb-run -a` so
+# the script keeps the wkhtmltopdf path instead of exiting or falling
+# through to a reduced-fidelity branch. apt PDF tools follow the runner
+# image; this workflow records those package versions and does not claim
+# deterministic PDF bytes. Third-party script output is evidence for the
+# application, not a certification.
 
 name: Intersect self-attestation
 
@@ -28,7 +31,7 @@ permissions:
 jobs:
   attest:
     name: Run official Intersect attestation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     env:
@@ -36,6 +39,7 @@ jobs:
       GH_PROMPT_DISABLED: "1"
       ATTESTATION_UPSTREAM_SHA: e8dc883517a116f745dda0d9b23204e76326445b
       ATTESTATION_TARGET_REPO: sarmidev/KardanoSDK
+      ATTESTATION_DAYS: ${{ github.event.inputs.days }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -46,6 +50,7 @@ jobs:
           {
             echo "runner_os=${RUNNER_OS}"
             echo "image_os=${ImageOS:-unknown}"
+            echo "runs_on=ubuntu-24.04"
             . /etc/os-release
             echo "pretty_name=${PRETTY_NAME}"
             echo "id=${ID}"
@@ -55,14 +60,30 @@ jobs:
             echo "default_branch_note=official script queries the repository default branch"
             echo "pdf_bytes_note=apt PDF tools are runner-image packages; bytes are not claimed deterministic"
           } | tee "$RUNNER_TEMP/attest-out/attestation-environment.txt"
-      - name: Install PDF tools from the runner apt repositories
+      - name: Validate activity-window days
+        run: |
+          set -euo pipefail
+          case "${ATTESTATION_DAYS}" in
+            ''|*[!0-9]*)
+              echo "ATTESTATION_DAYS must be a decimal integer"
+              exit 1
+              ;;
+          esac
+          if [ "${ATTESTATION_DAYS}" -lt 1 ] || [ "${ATTESTATION_DAYS}" -gt 365 ]; then
+            echo "ATTESTATION_DAYS must be between 1 and 365 inclusive"
+            exit 1
+          fi
+          echo "attestation_days=${ATTESTATION_DAYS}" | tee -a "$RUNNER_TEMP/attest-out/attestation-environment.txt"
+      - name: Install xvfb and wkhtmltopdf from the runner apt repositories
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends wkhtmltopdf pandoc
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xvfb wkhtmltopdf
+          command -v xvfb-run
+          command -v wkhtmltopdf
           {
             echo "wkhtmltopdf=$(wkhtmltopdf --version 2>&1 | tr '\n' ' ')"
-            echo "pandoc=$(pandoc --version | head -n 1)"
+            echo "xvfb_run=$(command -v xvfb-run)"
             echo "jq=$(jq --version)"
             echo "gh=$(gh --version | head -n 1)"
           } | tee -a "$RUNNER_TEMP/attest-out/attestation-environment.txt"
@@ -74,15 +95,15 @@ jobs:
           git -C "$RUNNER_TEMP/attest-src" checkout --detach "$ATTESTATION_UPSTREAM_SHA"
           test "$(git -C "$RUNNER_TEMP/attest-src" rev-parse HEAD)" = "$ATTESTATION_UPSTREAM_SHA"
           test -f "$RUNNER_TEMP/attest-src/src/intersect_ost_self_attest.sh"
-      - name: Run official self-attestation
+      - name: Run official self-attestation under xvfb
         working-directory: ${{ runner.temp }}/attest-out
         run: |
           set -euo pipefail
           chmod +x "$RUNNER_TEMP/attest-src/src/intersect_ost_self_attest.sh"
-          "$RUNNER_TEMP/attest-src/src/intersect_ost_self_attest.sh" \
+          xvfb-run -a "$RUNNER_TEMP/attest-src/src/intersect_ost_self_attest.sh" \
             "$ATTESTATION_TARGET_REPO" \
             --out kardano-sdk-self-attest.pdf \
-            --days "${{ github.event.inputs.days }}"
+            --days "${ATTESTATION_DAYS}"
           test -f kardano-sdk-self-attest.html
           test -f kardano-sdk-self-attest.md
           test -f kardano-sdk-self-attest.pdf

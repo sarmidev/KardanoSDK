@@ -313,17 +313,26 @@ moving `v4` tag). `github/codeql-action/init` and
 not itself a passing code-scanning result.
 
 `.github/workflows/codeql.yml` analyzes Java/Kotlin with `build-mode:
-manual` and a JVM `compileKotlinJvm` graph so Ubuntu does not attempt
-iOS/native targets. It writes `security-events` only. Do not claim the
-repository code-scanning signal is GREEN until a GitHub run on the
-default branch succeeds and the alerts API is reachable.
+manual`. The compile graph, verified with `./gradlew :androidApp:tasks`
+and `:desktopApp:tasks` on 2026-09-19, is the SDK `compileKotlinJvm`
+tasks plus `:androidApp:compileDebugKotlin` (so `androidMain`
+implementations including crypto/signing/provider compile) and
+`:desktopApp:compileKotlin`. The invocation uses `--no-daemon
+--no-build-cache --rerun-tasks` so CodeQL observes a real compilation.
+iOS/native Kotlin/Native targets are outside Java/Kotlin CodeQL and are
+not compiled in that job. It writes `security-events` only. Do not claim
+the repository code-scanning signal is GREEN until a GitHub run on the
+default branch succeeds.
 
 `.github/workflows/intersect-attestation.yml` is `workflow_dispatch`
-only. It clones `IntersectMBO/Project-Compliance-Attestation` at
-`e8dc883517a116f745dda0d9b23204e76326445b`, runs the official script
-against `sarmidev/KardanoSDK`, and uploads HTML/PDF/Markdown plus an
-environment sidecar. The official script queries the default branch, so
-a pull-request or pre-merge run is diagnostic of `main` only. apt PDF
+only on `ubuntu-24.04`. It clones `IntersectMBO/Project-Compliance-Attestation` at
+`e8dc883517a116f745dda0d9b23204e76326445b`, installs `xvfb` and
+`wkhtmltopdf`, validates `days` (decimal integer 1–365) from
+`ATTESTATION_DAYS`, and runs the official script under `xvfb-run -a`
+against `sarmidev/KardanoSDK`. It fails if HTML, PDF, or Markdown is
+missing, then uploads those files plus an environment sidecar. The
+official script queries the default branch, so a pull-request or
+pre-merge run is diagnostic of `main` only and may be RED/AMBER. apt PDF
 tools are runner-image packages; PDF bytes are not claimed
 deterministic. See `scripts/intersect_attestation_pin.py` and
 `scripts.tests.test_intersect_attestation_workflow`.
