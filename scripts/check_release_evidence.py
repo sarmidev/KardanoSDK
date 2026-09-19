@@ -158,11 +158,15 @@ NATIVE_BINARY_SUFFIXES = (".so", ".dylib", ".a", ".dll")
 # Hand-written documents that describe license elections in prose (as
 # opposed to `docs/evidence/*.json`, which is generated and already
 # schema-validated by check_cargo_license_elections/check_gradle_license_elections).
-# Every one of these must describe an OPEN election as merely *proposed* --
-# never as already elected/accepted -- because the only thing that can make
-# an election accepted is a `status: "ACCEPTED"` row with a reviewer and an
-# ISO-8601 date (see docs/LEGAL_REVIEW.md §5a), and none of the elections in
-# this packet has that today.
+# An OPEN election must be described as merely *proposed* -- never as
+# already elected/accepted. A row becomes owner-recorded ACCEPTED only
+# once its generated `status` is exactly `"ACCEPTED"` with a non-empty
+# reviewer and an ISO-8601 date (see docs/LEGAL_REVIEW.md §5a/§5b).
+# Owner-recorded ACCEPTED is still not a counsel determination. The
+# completed-election phrase list below stays fail-closed for OPEN rows;
+# owner-recorded ACCEPTED rows should be described as owner-recorded
+# ACCEPTED without using those phrases unless a disclaimer pattern
+# matches.
 ELECTION_WORDING_WATCHED_FILES = (
     "NOTICE",
     "LICENSES/README.md",
@@ -311,15 +315,14 @@ def check_no_completed_election_wording() -> list[str]:
     """No hand-written document may describe an OPEN license election as
     already elected/accepted.
 
-    `docs/LEGAL_REVIEW.md` §5a is the single source of truth for election
-    acceptance: a row becomes accepted only once its generated `status` is
-    exactly `"ACCEPTED"` with a non-empty `reviewer` and an ISO-8601
-    `review_date` (see check_cargo_license_elections /
-    check_gradle_license_elections). Every election in this packet is
-    `status: "OPEN"` today, so no prose document may use completed-election
-    language such as "elected branch" or "SDK elects" for it -- only
-    "proposes electing" / "proposed election", with an explicit statement
-    that the election is not yet accepted.
+    `docs/LEGAL_REVIEW.md` §5a/§5b is the single source of truth for
+    election acceptance: a row becomes owner-recorded ACCEPTED only once
+    its generated `status` is exactly `"ACCEPTED"` with a non-empty
+    `reviewer` and an ISO-8601 `review_date` (see
+    check_cargo_license_elections / check_gradle_license_elections).
+    OPEN elections must still be described as proposed, never as already
+    elected. Owner-recorded ACCEPTED catalog rows may be described as
+    owner-recorded ACCEPTED; that is not a counsel determination.
 
     Detection is affirmative-language-first: every occurrence of a
     `COMPLETED_ELECTION_PHRASES` substring is a violation UNLESS the exact

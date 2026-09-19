@@ -567,8 +567,10 @@ class CargoLicenseElectionTests(unittest.TestCase):
         report = evidence.cargo_license_elections(packages)
         self.assertEqual(len(report["rows"]), 1)
         row = report["rows"][0]
-        self.assertEqual(row["status"], "OPEN")
+        self.assertEqual(row["status"], "ACCEPTED")
         self.assertEqual(row["proposed_election"], "Apache-2.0")
+        self.assertEqual(row["reviewer"], "Javier Sarmiento Mañus (project owner)")
+        self.assertEqual(row["review_date"], "2026-09-19")
         self.assertEqual(row["or_election_options"], ["MIT", "Apache-2.0"])
 
     def test_unknown_linked_package_with_or_expression_raises(self) -> None:
@@ -597,20 +599,34 @@ class CargoLicenseElectionTests(unittest.TestCase):
         with self.assertRaises(evidence.EvidenceError):
             evidence.cargo_license_elections(packages)
 
-    def test_all_mandatory_elections_accepted_is_false_while_any_open(self) -> None:
+    def test_all_mandatory_elections_accepted_after_owner_recording(self) -> None:
         report = evidence.cargo_dependency_inventory_per_target()
         elections = report["license_elections"]
         self.assertGreater(elections["mandatory_row_count"], 0)
-        self.assertFalse(elections["all_mandatory_elections_accepted"])
+        self.assertTrue(elections["all_mandatory_elections_accepted"])
+        apache_count = 0
+        memchr_seen = False
         for row in elections["rows"]:
-            if row["linked_in_any_target"]:
-                self.assertEqual(row["status"], "OPEN")
+            if not row["linked_in_any_target"]:
+                continue
+            self.assertEqual(row["status"], "ACCEPTED")
+            self.assertEqual(row["reviewer"], "Javier Sarmiento Mañus (project owner)")
+            self.assertEqual(row["review_date"], "2026-09-19")
+            if row["name"] == "memchr":
+                self.assertEqual(row["proposed_election"], "MIT")
+                memchr_seen = True
+            else:
+                self.assertEqual(row["proposed_election"], "Apache-2.0")
+                apache_count += 1
+        self.assertTrue(memchr_seen)
+        self.assertEqual(apache_count, 26)
 
-    def test_memchr_has_no_proposed_election(self) -> None:
+    def test_memchr_has_owner_recorded_mit_election(self) -> None:
         report = evidence.cargo_dependency_inventory_per_target()
         for row in report["license_elections"]["rows"]:
             if row["name"] == "memchr":
-                self.assertIsNone(row["proposed_election"])
+                self.assertEqual(row["proposed_election"], "MIT")
+                self.assertEqual(row["status"], "ACCEPTED")
                 return
         self.fail("memchr not found in license_elections rows")
 

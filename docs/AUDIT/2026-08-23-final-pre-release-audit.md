@@ -430,3 +430,17 @@ addendum, like every one above, does not certify anything or mark this
 audit, Prompt 7, or any release as GO; the counsel review, upstream
 `hyperledger-identus/apollo` issue #226, and every per-election reviewer
 acceptance remain open gates.
+
+### 8.5 Addendum — 2026-09-19, owner-recorded catalog elections (not counsel)
+
+On 2026-09-19 the project owner (Javier Sarmiento Mañus) recorded catalog
+status ACCEPTED for every applicable target-linked Cargo OR row (26
+Apache-2.0 selections, including the plain Apache-2.0 branch for
+`rustix`/`linux-raw-sys`) and MIT for `memchr` (`Unlicense OR MIT`), plus
+Apache-2.0 for JNA. That is owner acceptance of those catalog rows only.
+It is not a counsel determination, not release clearance, and it does
+not close counsel review, MPL/Identus/Bouncy determinations, Identus
+#226, or the release/tag decision. Mandatory AND-component rows were not
+invented as accepted. `LICENSES/Unlicense.txt` remains as the other
+`memchr` OR-branch reference. This addendum does not mark this audit,
+Prompt 7, or any release as GO.

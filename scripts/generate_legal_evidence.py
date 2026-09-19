@@ -1632,9 +1632,10 @@ MAVEN_NATIVE_CARRIERS: tuple[dict[str, Any], ...] = (
         "maven_coordinate": "net.java.dev.jna:jna:5.19.1",
         "carrier_kind": "JVM/Android jar (also used directly by crypto-signing-backend)",
         "license": (
-            "Apache-2.0 OR LGPL-2.1-or-later (Kardano SDK proposes electing "
-            "Apache-2.0; not yet ACCEPTED -- OPEN row pending reviewer/date, "
-            "see docs/LEGAL_REVIEW.md §5a)"
+            "Apache-2.0 OR LGPL-2.1-or-later (owner recorded Apache-2.0 as "
+            "the catalog option on 2026-09-19; Javier Sarmiento Mañus "
+            "(project owner); owner acceptance is not a counsel "
+            "determination -- see docs/LEGAL_REVIEW.md §5b)"
         ),
         "distribution_status": "redistributed_by_kardano",
         "distributed_by_kardano": True,

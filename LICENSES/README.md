@@ -105,14 +105,16 @@ Evaluated against the locked Gradle/Cargo dependency graph as of 2026-08-24:
 
 - **Apache-2.0** — directly applies to Kotlin/Ktor/kotlinx/Compose-AndroidX/
   KotlinCrypto/Skiko, `org.hyperledger.identus:bip32-ed25519`, the IonSpin
-  libsodium bindings, and is the **proposed election** (not yet
-  **ACCEPTED** — each remains an OPEN row pending reviewer, ISO-8601 date,
-  and status; no election is accepted until all three are recorded, see
-  `docs/LEGAL_REVIEW.md` §5a) for every dual `Apache-2.0 OR X` redistributed
-  component this review has found: JNA 5.19.1 (`Apache-2.0 OR
-  LGPL-2.1-or-later`, confirmed from its own POM), and the `ed25519-bip32`
-  Rust crate and its `cryptoxide` dependency (`MIT OR Apache-2.0`, compiled
-  into the nine committed native artifacts).
+  libsodium bindings, and is the owner-recorded catalog option
+  (2026-09-19; reviewer Javier Sarmiento Mañus (project owner); owner
+  acceptance is not a counsel determination; see `docs/LEGAL_REVIEW.md`
+  §5a/§5b) for every dual `Apache-2.0 OR X` redistributed component this
+  review has found: JNA 5.19.1 (`Apache-2.0 OR LGPL-2.1-or-later`,
+  confirmed from its own POM), and the `ed25519-bip32` Rust crate and its
+  `cryptoxide` dependency (`MIT OR Apache-2.0`, compiled into the nine
+  committed native artifacts). The same owner-recorded Apache-2.0 option
+  applies to every other applicable target-linked Cargo OR row whose
+  expression includes an explicit Apache-2.0 branch.
 - **MPL-2.0** — applies to `com.goterl:lazysodium-android` (Android native
   libsodium carrier; MPL-2.0 is file-level copyleft, not chosen by election)
   and to the `uniffi` Rust crate (`=0.29.5`), a **single-license** MPL-2.0
@@ -138,10 +140,10 @@ Evaluated against the locked Gradle/Cargo dependency graph as of 2026-08-24:
   its own permissive license text, not the generic MIT template (see above).
 - **The Unlicense** — the `memchr` Rust crate (`2.8.3`, target-linked, per its
   own Cargo.toml `Unlicense OR MIT` expression) offers this as one of its two
-  OR branches. No election is proposed here between `Unlicense` and `MIT` —
-  see `docs/LEGAL_REVIEW.md` §5a, an explicit
-  **OPEN — pending per-election reviewer acceptance** field. This file is
-  committed so both branches of that unresolved OR are independently
-  reviewable, not just the one this repository might eventually elect.
+  OR branches. Owner recorded MIT as the catalog option on 2026-09-19
+  (reviewer: Javier Sarmiento Mañus (project owner); see
+  `docs/LEGAL_REVIEW.md` §5a). Owner acceptance of that row is not a
+  counsel determination. This file remains committed as the other
+  OR-branch text so both branches stay independently reviewable.
 
 This evaluation is a factual dependency-graph finding, not legal advice.

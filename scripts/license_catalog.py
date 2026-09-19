@@ -32,8 +32,11 @@ count) into `docs/evidence/gradle_license_inventory.json`'s
 `election_status` only ever becomes `"ACCEPTED"` by a human editing this
 file to also fill in `election_reviewer`/`election_review_date` (ISO 8601)
 -- this script never sets it itself, and `release` mode fails while any
-such row is not `"ACCEPTED"`. `net.java.dev.jna:jna` is currently the only
-Gradle coordinate in this catalog with more than one license.
+such row is not `"ACCEPTED"`. Owner-recorded `"ACCEPTED"` is owner
+acceptance of that row's `election`; it is not a counsel determination.
+`net.java.dev.jna:jna` is currently the only Gradle coordinate in this
+catalog with more than one license. On 2026-09-19 the project owner
+recorded Apache-2.0 as ACCEPTED for that coordinate.
 """
 
 from __future__ import annotations
@@ -172,17 +175,18 @@ GRADLE_LICENSE_CATALOG: dict[str, dict[str, Any]] = {
     "net.java.dev.jna:jna": {
         "licenses": ["LGPL-2.1-or-later", "Apache-2.0"],
         "election": "Apache-2.0",
-        "election_status": "OPEN",
-        "election_reviewer": None,
-        "election_review_date": None,
+        "election_status": "ACCEPTED",
+        "election_reviewer": "Javier Sarmiento Mañus (project owner)",
+        "election_review_date": "2026-09-19",
         "source": "https://github.com/java-native-access/jna/blob/master/LICENSE",
         "note": (
             "The POM lists LGPL-2.1-or-later first, Apache-2.0 second, both under "
             "<distribution>repo</distribution> as a real disjunctive choice (confirmed from the "
-            "artifact's own POM, not assumed). Kardano SDK proposes electing Apache-2.0, but "
-            "election_status is OPEN -- no reviewer has actually accepted this election yet (see "
+            "artifact's own POM, not assumed). Owner recorded Apache-2.0 as the catalog option "
+            "on 2026-09-19 (reviewer: Javier Sarmiento Mañus (project owner)). Owner acceptance "
+            "of this row is not a counsel determination (see "
             "docs/evidence/gradle_license_inventory.json 'license_elections' and "
-            "docs/LEGAL_REVIEW.md \u00a75a). Ships a jar that itself bundles 27 platform-specific "
+            "docs/LEGAL_REVIEW.md \u00a75b). Ships a jar that itself bundles 27 platform-specific "
             "libjnidispatch native binaries; see docs/evidence/maven_native_carriers_inventory.json. "
             "Do not classify JNA as source-only: it is source-plus-embedded-native-carrier."
         ),
