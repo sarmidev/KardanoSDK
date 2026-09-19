@@ -38,9 +38,18 @@ into the intake answers below.
 - Counsel review and several named legal-evidence gates remain open
   (`docs/LEGAL_REVIEW.md`).
 - The official attestation script queries the **default branch**. A PDF
-  generated before this change merges to `main` is diagnostic only. The
-  workflow is `workflow_dispatch` only; do not add a recurring
+  generated before this permission change merges to `main` is diagnostic
+  only. The workflow is `workflow_dispatch` only; do not add a recurring
   pull-request trigger.
+- Default-branch CodeQL analysis already exists. Owner-token
+  `GET /repos/sarmidev/KardanoSDK/code-scanning/alerts` returns HTTP 200
+  with zero alerts. Official attestation run
+  https://github.com/sarmidev/KardanoSDK/actions/runs/35452860848 is a
+  valid HTML/PDF/Markdown artifact whose Overall was AMBER solely
+  because the workflow `GITHUB_TOKEN` had only `contents: read` and
+  could not see that existing analysis. This change adds
+  `security-events: read` so the official script can list alerts. Do
+  not claim GREEN unless a later official generated report says GREEN.
 
 ## Draft form answers
 
@@ -167,11 +176,15 @@ gh workflow run intersect-attestation.yml --ref main
 ```
 
 Treat the HTML/PDF/Markdown artifacts as script output, not as
-certification. A one-time pre-merge diagnostic
+certification. Early pre-merge diagnostics
 (https://github.com/sarmidev/KardanoSDK/actions/runs/35451128768 and
 https://github.com/sarmidev/KardanoSDK/actions/runs/35451205414)
-already proved HTML/PDF/Markdown generation under `xvfb-run -a`. Do not
-attach that diagnostic PDF as the Phase 1 submission evidence.
+proved HTML/PDF/Markdown generation under `xvfb-run -a`. Official run
+https://github.com/sarmidev/KardanoSDK/actions/runs/35452860848 is the
+current downloaded final artifact (Overall AMBER from the previous
+token permission). Do not overwrite that downloaded PDF from a branch
+diagnostic, and do not attach a pre-merge artifact as the Phase 1
+submission evidence.
 
 ## Owner placeholders
 
@@ -194,7 +207,7 @@ commit `e8dc883517a116f745dda0d9b23204e76326445b` (2025-09-24). The script
 checks top-level files on the **default branch** and a few GitHub API
 signals.
 
-### Before this change is on `main`
+### Before Phase 1 readiness was on `main`
 
 | Check | Expected |
 |---|---|
@@ -206,30 +219,62 @@ signals.
 | Tagged releases | AMBER (none) |
 | Overall | RED because missing root `SECURITY.md` is a hard fail in the script |
 
-### After this change merges to `main`
+### After Phase 1 readiness merged, before this permission change
+
+Default-branch CodeQL analysis exists. The owner-token alerts API
+returns HTTP 200 and zero alerts. Official run 35452860848 is valid
+but Overall AMBER solely because the attestation workflow
+`GITHUB_TOKEN` had only `contents: read`, so the script's
+`/code-scanning/alerts` call could not see that analysis.
 
 | Check | Expected |
 |---|---|
 | LICENSE, README, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, GOVERNANCE, SUPPORT, CHANGELOG | GREEN (present at top level) |
 | Maintainers file | GREEN |
 | Workflows | GREEN |
-| Code scanning | AMBER until a default-branch CodeQL analysis is the
-  recorded `main` analysis. A pull-request CodeQL job, or an alerts API
-  that became reachable from a PR run, is not enough to claim GREEN |
+| Code scanning | AMBER in the official script while the workflow token
+  cannot list alerts (`contents: read` only). The missing signal is
+  token visibility, not a missing default-branch CodeQL analysis |
 | Releases | AMBER (still no tag) |
 | Contributors (180d unique emails) | **RED** while there is one unique
   committer (`traffic_light_count` thresholds are GREEN ≥ 5, AMBER ≥ 2,
   otherwise RED). This row does not drive overall |
-| Overall | **AMBER**. Do not claim GREEN. Expect AMBER until a
-  default-branch CodeQL run exists and the remaining release/contributor
-  warnings are understood. Overall becomes RED only if a must-have file
-  is missing, code scanning is RED, or 90-day activity is RED; contributor
-  RED and release AMBER are warnings, not that overall driver |
+| Overall | **AMBER** on official run 35452860848. Do not claim GREEN |
+
+### After this permission change merges to `main`
+
+The attestation workflow keeps `contents: read` and adds
+`security-events: read` (GitHub Actions permissions schema; official
+script calls `GET /repos/{owner}/{repo}/code-scanning/alerts`). No
+write scopes and no PAT/secrets. CodeQL already exists; the
+permission only lets the official script observe it.
+
+| Check | Expected |
+|---|---|
+| LICENSE, README, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, GOVERNANCE, SUPPORT, CHANGELOG | GREEN (present at top level) |
+| Maintainers file | GREEN |
+| Workflows | GREEN |
+| Code scanning | Visible to the official script if the alerts API
+  succeeds with this token. Do not claim GREEN until the official
+  generated report says GREEN |
+| Releases | AMBER (still no tag) |
+| Contributors (180d unique emails) | **RED** while there is one unique
+  committer (`traffic_light_count` thresholds are GREEN ≥ 5, AMBER ≥ 2,
+  otherwise RED). This row does not drive overall |
+| Overall | Record whatever the official generated report prints.
+  Do not claim GREEN unless that report says GREEN. Contributor RED
+  and release AMBER are warnings, not that overall driver; overall
+  becomes RED only if a must-have file is missing, code scanning is
+  RED, or 90-day activity is RED |
 
 The attestation workflow has no automatic pull-request or push trigger.
 The diagnostic runs above are historical evidence that the xvfb/PDF path
-works. After merge, dispatch on `main` for the submission PDF. Do not
-attach a pre-merge artifact.
+works. A branch dispatch can exercise the new token permission while the
+script still reads default-branch content; it is not the submission PDF
+and must not overwrite the downloaded official run 35452860848 artifact.
+After merge, dispatch on `main` for the submission PDF. Do not attach a
+pre-merge artifact. Reviewer/PR CI cannot validate `workflow_dispatch`
+behavior; a post-merge owner run on `main` is required.
 
 ## ClickUp intake checklist (manual)
 

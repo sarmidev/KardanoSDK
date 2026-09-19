@@ -8,8 +8,13 @@
 #
 # The official script
 # (IntersectMBO/Project-Compliance-Attestation@e8dc883517a116f745dda0d9b23204e76326445b)
-# queries the repository default branch through the GitHub API. Generate
-# the PDF that will be attached to an intake form after this change is
+# queries the repository default branch through the GitHub API, including
+# GET /repos/{owner}/{repo}/code-scanning/alerts. A default-branch CodeQL
+# analysis already exists. GitHub Actions GITHUB_TOKEN needs
+# `security-events: read` to list those alerts (workflow-syntax
+# permissions schema; there is no narrower Actions key). `contents: read`
+# stays for checkout. No write scopes and no PAT/secrets. Generate the
+# PDF that will be attached to an intake form after this change is
 # merged to `main`, then dispatch this workflow on `main`:
 #   gh workflow run intersect-attestation.yml --ref main
 #
@@ -33,6 +38,7 @@ on:
 
 permissions:
   contents: read
+  security-events: read
 
 jobs:
   attest:
@@ -40,6 +46,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      security-events: read
     env:
       GH_TOKEN: ${{ github.token }}
       GH_PROMPT_DISABLED: "1"
