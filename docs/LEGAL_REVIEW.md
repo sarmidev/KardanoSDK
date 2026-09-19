@@ -33,9 +33,10 @@ every gap is now closed to counsel's satisfaction.
 
 | Field | Value |
 |---|---|
-| Candidate commit | `c65a20acf485bf842b90655fcc6967ade4474671` (start of this packet's work; see §12 for why this is not the same as "the commit that carries this file") |
+| Candidate commit | `c65a20acf485bf842b90655fcc6967ade4474671` (historical start of this packet's work; see §12 for why this is not the same as "the commit that carries this file") |
+| Alignment base | `036991488ee12a95cb9919af242a86c16e85d4bd` (`origin/main` after Prompt 7 merge, PR #15) |
 | Candidate tag | None. No tag exists yet; this packet is prepared for a future tagged review, not for one commit alone. |
-| Branch | `fix/native-build-and-platform-evidence` (stacked; Prompt 7) |
+| Branch | `docs/funding-readiness-alignment` |
 | Scope statement | ADA-only, testnet/preprod, Phase 1 fixture-scoped signing (ADR-0015/ADR-0019). No mainnet. Windows x86-64 JVM signing backend is candidate-only and excluded from this scope (see §11). |
 
 ## 1a. Distribution scope: modules, sample apps, installers
@@ -76,6 +77,9 @@ GO — this packet does not attempt to guess what such a build would embed.
 |---|---|
 | Preparer | Automated evidence-generation session (this repository's AI working agreement, `docs/AI_WORKING_AGREEMENT.md`) |
 | Preparation date | 2026-08-24 |
+| Owner election reviewer | Javier Sarmiento Mañus (project owner) |
+| Owner election date | 2026-09-19 |
+| Owner election scope | Mandatory target-linked Cargo OR rows and the JNA Gradle row only; not counsel review |
 | Counsel reviewer | OPEN — pending owner/counsel review |
 | Counsel review date | OPEN — pending owner/counsel review |
 | Counsel determination | OPEN — pending owner/counsel review |
@@ -93,7 +97,7 @@ the files present on disk (no extra, no missing).
 | Gradle lock digest (all Gradle modules discovered from `settings.gradle.kts`, concatenated in sorted module-name order) | `4339a9ed4fb19ba4aae22eb4dae1abc8334d557ba4a2f3c2278acc6b92ad007e` |
 | Cargo.lock digest (`crypto-signing-backend/Cargo.lock`) | `855373baa265413f3929a85bb90aa83f137674fe58c6324b5d4de3cce2f93d8e` |
 | Native CHECKSUMS digest (`crypto-signing-backend/CHECKSUMS.sha256`) | `55c3b131434372528c1f824fee35ab2df2092e6261f8e496e2b0b128110393d9` |
-| NOTICE digest | `99f67c0bb0ba4386bf697815b9613e1e811ce3fb74eccb10b60e41940dd9971d` |
+| NOTICE digest | `30ceda7731db35cc3d3df0ec8deaadeabe5959814acc1b87b5586363ff40140b` |
 | LICENSES digest (all `LICENSES/*.txt`, concatenated in sorted filename order) | `3553cfb8536b72b63824e4248751e1c9057b5a449dce6e3a79523dd330de9c26` |
 
 ## 4. NOTICE / LICENSES inventory
@@ -134,8 +138,10 @@ unambiguous SPDX license); `scripts/cargo_election_catalog.py` is the
 hand-reviewed catalog backing it, and
 `scripts/check_release_evidence.py --mode release` fails while any mandatory
 row's `status` is not exactly `"ACCEPTED"` (with a non-empty `reviewer` and
-an ISO-8601 `review_date`) — **all 27 are `status: "OPEN"` today; none has
-been accepted.** A prior version of this table hand-picked 3 dual-license
+an ISO-8601 `review_date`) — **all 27 mandatory target-linked rows are
+`status: "ACCEPTED"` as of 2026-09-19 (reviewer: Javier Sarmiento Mañus
+(project owner)); 26 Apache-2.0 selections plus `memchr` MIT. Owner
+acceptance of those catalog rows is not a counsel determination.** A prior version of this table hand-picked 3 dual-license
 crates plus 2 compound-expression crates and a since-corrected, non-existent
 `r-efi` entry (that package is not actually present in this crate's
 Cargo.lock or dependency graph for any of the 9 targets — removed here); this
@@ -145,38 +151,39 @@ the identical `MIT OR Apache-2.0` (or legacy `/`-separated) expression.
 
 | Coordinate | Expression | Proposed election | AND-required (always mandatory) | Status |
 |---|---|---|---|---|
-| `anyhow` 1.0.103 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `bitflags` 2.13.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `camino` 1.2.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `cargo-platform` 0.1.9 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `cfg-if` 1.0.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `cryptoxide` 0.5.3 (transitive) | `MIT/Apache-2.0` (legacy slash syntax) | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `ed25519-bip32` 0.4.2 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `equivalent` 1.0.2 | `Apache-2.0 OR MIT` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `errno` 0.3.14 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `fastrand` 2.4.1 | `Apache-2.0 OR MIT` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `getrandom` 0.4.3 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `hashbrown` 0.17.1 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `heck` 0.5.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `indexmap` 2.14.0 | `Apache-2.0 OR MIT` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `itoa` 1.0.18 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `libc` 0.2.186 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `linux-raw-sys` 0.12.1 | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | Apache-2.0 (plain, no exception) | — | OPEN — pending per-election reviewer acceptance |
-| `memchr` 2.8.3 | `Unlicense OR MIT` | **none proposed** | — | OPEN — pending per-election reviewer acceptance |
-| `once_cell` 1.21.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `rustix` 1.1.4 | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | Apache-2.0 (plain, no exception) | — | OPEN — pending per-election reviewer acceptance |
-| `semver` 1.0.28 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `serde` 1.0.228 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `serde_core` 1.0.228 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `serde_json` 1.0.150 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `static_assertions` 1.1.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `tempfile` 3.27.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
-| `thiserror` 2.0.18 | `MIT OR Apache-2.0` | Apache-2.0 | — | OPEN — pending per-election reviewer acceptance |
+| `anyhow` 1.0.103 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `bitflags` 2.13.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `camino` 1.2.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `cargo-platform` 0.1.9 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `cfg-if` 1.0.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `cryptoxide` 0.5.3 (transitive) | `MIT/Apache-2.0` (legacy slash syntax) | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `ed25519-bip32` 0.4.2 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `equivalent` 1.0.2 | `Apache-2.0 OR MIT` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `errno` 0.3.14 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `fastrand` 2.4.1 | `Apache-2.0 OR MIT` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `getrandom` 0.4.3 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `hashbrown` 0.17.1 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `heck` 0.5.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `indexmap` 2.14.0 | `Apache-2.0 OR MIT` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `itoa` 1.0.18 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `libc` 0.2.186 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `linux-raw-sys` 0.12.1 | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | Apache-2.0 (plain, no exception) | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `memchr` 2.8.3 | `Unlicense OR MIT` | MIT | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `once_cell` 1.21.4 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `rustix` 1.1.4 | `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT` | Apache-2.0 (plain, no exception) | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `semver` 1.0.28 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `serde` 1.0.228 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `serde_core` 1.0.228 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `serde_json` 1.0.150 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `static_assertions` 1.1.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `tempfile` 3.27.0 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
+| `thiserror` 2.0.18 | `MIT OR Apache-2.0` | Apache-2.0 | — | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination |
 
-`memchr` is a deliberate exception to the "propose Apache-2.0" pattern: no
-election is proposed between `Unlicense` and `MIT`, and `LICENSES/Unlicense.txt`
-is committed and cited in NOTICE precisely because that election has not been
-made — see `scripts/cargo_election_catalog.py`'s module docstring.
+`memchr` is a deliberate exception to the Apache-2.0 pattern: the owner-recorded
+catalog option is `MIT` (2026-09-19; Javier Sarmiento Mañus (project owner)).
+`LICENSES/Unlicense.txt` remains committed and cited in NOTICE as the other
+OR-branch text. Owner acceptance of this row is not a counsel determination —
+see `scripts/cargo_election_catalog.py`'s module docstring.
 
 Non-target-linked packages with the same kind of non-single expression
 (`autocfg`, `fs-err`, `proc-macro2`, `quote`, `serde_derive`, `siphasher`,
@@ -193,9 +200,16 @@ NOTICE, since Unicode-3.0 is never satisfied merely by electing a side of the
 No election is recorded for `org.slf4j:slf4j-api`, `com.goterl:resource-loader`,
 `bytes`, `cargo_metadata`, or `zmij` (all single-license MIT, no `OR` clause
 in their own metadata) — they need only `LICENSES/MIT.txt` (§4), not an
-election. `net.java.dev.jna:jna:5.19.1` (Gradle side, Apache-2.0 OR
-LGPL-2.1-or-later) keeps its existing OPEN election row in
-`docs/evidence/gradle_license_inventory.json`.
+election.
+
+### 5b. Gradle election (JNA)
+
+`net.java.dev.jna:jna:5.19.1` is the only Gradle-runtime coordinate whose
+own POM lists more than one license (`Apache-2.0 OR LGPL-2.1-or-later`).
+Owner recorded Apache-2.0 as the catalog option on 2026-09-19 (reviewer:
+Javier Sarmiento Mañus (project owner)) in
+`docs/evidence/gradle_license_inventory.json` `"license_elections"`. Owner
+acceptance of that row is not a counsel determination.
 
 ## 6. MPL-2.0 obligations — OPEN, not asserted satisfied
 
@@ -588,7 +602,7 @@ legal-evidence job.
 | Counsel review | OPEN — pending owner/counsel review | Every §2/§5a/§6/§6b/§7 field naming this marker |
 | Upstream Identus win32-x86-64 build | OPEN — pending upstream hyperledger-identus/apollo issue #226 | §6b, §11 |
 | Windows signing-backend independent PE technical review | COMPLETE at `c65a20a` (this is a technical structural review, not a legal or counsel determination) | §11 |
-| Per-election reviewer acceptance | OPEN — pending per-election reviewer acceptance | §5a/§5b (mandatory target-linked Cargo election rows plus mandatory Gradle election rows, one per non-single-license coordinate) |
+| Per-election reviewer acceptance | Owner-recorded ACCEPTED 2026-09-19 (Javier Sarmiento Mañus (project owner)); not a counsel determination | §5a/§5b (mandatory target-linked Cargo election rows plus mandatory Gradle election rows, one per non-single-license coordinate) |
 | Release / tag decision | Not made in this packet | This packet prepares evidence only; it does not recommend, schedule, or make a release decision |
 
 ## 15. Gate cross-references
@@ -605,8 +619,11 @@ legal-evidence job.
   Recommended Task" and `docs/DEPENDENCY_PROVENANCE.md`.
 - MPL-2.0/Identus-embedded-native counsel determinations: §6/§6b above; not
   restated with different wording anywhere else.
-- This packet closes only the PE technical-review gate above; every other
-  gate's status is unchanged by this change.
+- Owner-recorded catalog elections (Cargo §5a and Gradle §5b) are
+  ACCEPTED as of 2026-09-19. That is owner acceptance of those catalog
+  rows, not a counsel determination, and it does not close counsel,
+  MPL/Identus/Bouncy, Identus #226, or release/tag fields.
+- This packet does not mark any release as cleared.
 
 ## Regeneration and verification
 

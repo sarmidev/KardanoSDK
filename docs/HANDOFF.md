@@ -93,13 +93,34 @@ Stacked remediations, each additive (no amend / no force-push):
 | 4 | `fix/provider-boundaries-and-timeouts` | `3936047` | Config identity, remote detail, UTxO cap, HTTP timeouts. Independent review passed; PR-ready. |
 | 5 | `fix/release-docs-and-scanners` | `90fe0ee` | Docs, HANDOFF archive, restricted-claim scanner, Gitleaks. Independent review passed; PR-ready. |
 | 6 | `fix/build-and-ci-reproducibility` | `2b85ed7` | Independent review passed; PR-ready. Verify run `32656606067` green. |
-| 7 | `fix/native-build-and-platform-evidence` | Legal-evidence packet | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`; independent PE technical review is COMPLETE at `c65a20a`. Phase C remains NO-GO solely pending Identus #226 (PE re-review is no longer a blocking gate). Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
+| 7 | `fix/native-build-and-platform-evidence` | merged via PR #15 | Linux Gate 2 promotion GO at `58f82a2`. Windows x86-64 JVM is candidate-only (JNA `win32-x86-64/`). PE evidence A/B `32724622118` at `73da4f4`; independent PE technical review is COMPLETE at `c65a20a`. Phase C remains NO-GO solely pending Identus #226 (PE re-review is no longer a blocking gate). Non-counsel legal-evidence packet added at/after `c65a20a` (`NOTICE`, `LICENSES/`, `docs/LEGAL_REVIEW.md`, `docs/evidence/`); counsel review and Identus #226 remain open. |
+| — | `docs/funding-readiness-alignment` | current | Owner-recorded catalog elections (2026-09-19; Javier Sarmiento Mañus (project owner)): 26 Cargo Apache-2.0 rows, `memchr` MIT, JNA Apache-2.0. Owner acceptance is not a counsel determination. Prompts 3–7 are on `origin/main`. |
 
-`origin/main` is behind this stack. Do not merge from this session.
+Prompts 3–7 are merged to `origin/main` (PR #15 was the last stacked Prompt 7 merge). Do not merge, auto-merge, force-push, or tag from this session.
 
 ## Recent Sessions
 
 ### Last Session Summary
+
+Date: 2026-09-19
+
+- **Funding-readiness factual/legal-evidence alignment on
+  `docs/funding-readiness-alignment`, from `origin/main` after PR #15.**
+  Owner recorded catalog status ACCEPTED for every applicable target-linked
+  Cargo OR row (26 Apache-2.0 selections, including the plain Apache-2.0
+  branch for `rustix`/`linux-raw-sys`) and MIT for `memchr`, plus Apache-2.0
+  for JNA, reviewer Javier Sarmiento Mañus (project owner), date
+  2026-09-19. Owner acceptance of those catalog rows is not a counsel
+  determination. Public status text was re-checked after Prompts 3–7
+  merged: README Linux JVM signing now matches the 9 committed CHECKSUMS
+  artifacts; Windows remains candidate-only; LEGAL_REVIEW NOTICE digest
+  was aligned to current NOTICE bytes; HANDOFF no longer claims
+  `origin/main` is behind the Prompt 7 stack. Unlicense text is retained
+  as the other `memchr` OR-branch reference. Counsel, MPL/Identus/Bouncy,
+  and Identus #226 remain open gates. This does not mark any release as
+  cleared and does not create a pitch deck.
+
+### Prior Session Summary
 
 Date: 2026-08-25
 
@@ -695,23 +716,18 @@ Do not use:
 
 ## Next Recommended Task
 
-Prompt 7 is on `fix/native-build-and-platform-evidence`. Gate 1 is GO at
-`d09db44`. Gate 2 Linux Phase C promotion from run `32678079715` is on
-the branch (ninth CHECKSUMS row). Gate 3 Windows x86-64 JVM is
-candidate-only: independent PE technical review is COMPLETE at `c65a20a`,
-but Identus #226 still blocks `:crypto`/`:wallet` JVM tests and promotion
-(PE technical-review completion does not promote the candidate or imply
-DLL distribution). The non-counsel legal-evidence
-packet on this same branch has been through two independent-review
-NO-GO rounds (see "Recent Sessions" above); a reviewer should check
-whether a third round finds further engineering gaps before treating the
-packet itself as engineering-complete — separately, and regardless of
-engineering completeness, the packet's owner/counsel/Identus/Windows
-open gates in `docs/LEGAL_REVIEW.md` are not something an automated
-session can close. Residual owner work: authenticated GitHub artifact
-download, secret-scanning / Dependabot, the manual accessibility
-walkthrough, and a post-replacement Android device
-`connectedAndroidDeviceTest`. Do not merge from an automated session.
+Prompts 3–7 are on `origin/main`. Linux x86-64 JVM is promoted (ninth
+CHECKSUMS row). Windows x86-64 JVM remains candidate-only: independent PE
+technical review is COMPLETE at `c65a20a`, but Identus #226 still blocks
+`:crypto`/`:wallet` JVM tests and promotion. Owner-recorded catalog
+elections (2026-09-19) close only those Cargo/JNA rows; they are not a
+counsel determination. Remaining named open gates: counsel review,
+MPL/Identus/Bouncy determinations, Identus #226, and release/tag.
+Residual owner work: funding research (pitch deck follows that research),
+authenticated GitHub artifact download, secret-scanning / Dependabot, the
+manual accessibility walkthrough, and a post-replacement Android device
+`connectedAndroidDeviceTest`. Do not merge, auto-merge, force-push, or
+tag from an automated session.
 
 ## Prompt For Cursor Business/Product Work
 

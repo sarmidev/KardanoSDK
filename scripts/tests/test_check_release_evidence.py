@@ -82,11 +82,8 @@ class RealTreeChecksTests(unittest.TestCase):
     def test_cargo_license_elections_ci_structural_passes(self) -> None:
         self.assertEqual(checker.check_cargo_license_elections("ci-structural"), [])
 
-    def test_cargo_license_elections_release_mode_lists_every_open_row(self) -> None:
-        errors = checker.check_cargo_license_elections("release")
-        self.assertEqual(len(errors), 1)
-        self.assertIn("memchr@2.8.3", errors[0])
-        self.assertIn("anyhow@1.0.103", errors[0])
+    def test_cargo_license_elections_release_mode_passes_when_owner_recorded(self) -> None:
+        self.assertEqual(checker.check_cargo_license_elections("release"), [])
 
     def test_legal_review_has_no_placeholders_ci_structural(self) -> None:
         self.assertEqual(checker.check_legal_review_placeholders("ci-structural"), [])
@@ -854,10 +851,9 @@ class CargoElectionSchemaTests(unittest.TestCase):
         )
 
     def test_accepted_with_missing_proposed_election_is_rejected(self) -> None:
-        # memchr's real shape: proposed_election is deliberately None (no
-        # blanket Unlicense-vs-MIT election). Accepting the row anyway
-        # (status ACCEPTED, proposed_election still None) must fail even
-        # though status/reviewer/review_date all look superficially valid.
+        # Synthetic shape only: an ACCEPTED row whose proposed_election is
+        # still None must fail even though status/reviewer/review_date all
+        # look superficially valid. The real memchr row now records MIT.
         report = self._report(
             [
                 {
@@ -1079,20 +1075,22 @@ class GradleElectionSchemaTests(unittest.TestCase):
             errors = checker.check_gradle_license_elections("release")
         self.assertTrue(any("net.java.dev.jna:jna:5.19.1" in e for e in errors))
 
-    def test_real_tree_jna_row_is_open_in_ci_structural(self) -> None:
+    def test_real_tree_jna_row_is_owner_recorded_accepted(self) -> None:
         # Integration check against the real committed license_catalog.py:
-        # JNA's real row must exist, be schema-valid, and currently be OPEN
-        # (no blanket acceptance) -- this is the actual gap-2 regression
-        # this class exists to prevent from silently reappearing.
+        # JNA's real row must exist, be schema-valid, and carry the
+        # 2026-09-19 owner-recorded Apache-2.0 ACCEPTED fields. Owner
+        # acceptance is not a counsel determination.
         gradle_report = evidence.gradle_dependency_inventory(evidence.discover_gradle_modules())
         report = evidence.gradle_license_inventory(gradle_report)
         rows = report["license_elections"]["rows"]
         jna_rows = [r for r in rows if r["coordinate"].startswith("net.java.dev.jna:jna:")]
         self.assertEqual(len(jna_rows), 1)
-        self.assertEqual(jna_rows[0]["status"], "OPEN")
+        self.assertEqual(jna_rows[0]["status"], "ACCEPTED")
+        self.assertEqual(jna_rows[0]["proposed_election"], "Apache-2.0")
+        self.assertEqual(jna_rows[0]["reviewer"], "Javier Sarmiento Mañus (project owner)")
+        self.assertEqual(jna_rows[0]["review_date"], "2026-09-19")
         self.assertEqual(checker.check_gradle_license_elections("ci-structural"), [])
-        release_errors = checker.check_gradle_license_elections("release")
-        self.assertTrue(any("jna" in e for e in release_errors))
+        self.assertEqual(checker.check_gradle_license_elections("release"), [])
 
 
 class CargoInventoryHostAmbiguousFreshnessTests(unittest.TestCase):

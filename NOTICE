@@ -58,8 +58,9 @@ The following are used under the Apache License, Version 2.0:
   compiled libsodium binaries for macOS/Linux/Windows; see the ISC entry
   below for libsodium's own license.
 - net.java.dev.jna:jna 5.19.1 (dual Apache-2.0 OR LGPL-2.1-or-later, per its
-  own POM; Kardano SDK proposes electing Apache-2.0 for this distribution,
-  but that election is not yet ACCEPTED -- see docs/LEGAL_REVIEW.md §5a and
+  own POM; owner recorded Apache-2.0 as the catalog option on 2026-09-19,
+  reviewer Javier Sarmiento Mañus (project owner); owner acceptance is not
+  a counsel determination -- see docs/LEGAL_REVIEW.md §5b and
   docs/evidence/gradle_license_inventory.json "license_elections"). Copyright
   the JNA contributors. This coordinate is also a native carrier across TWO
   separate resolved artifacts: the main `.jar` bundles 27 platform-specific
@@ -69,12 +70,12 @@ The following are used under the Apache License, Version 2.0:
   25; see docs/evidence/maven_native_carriers_inventory.json. Do not read
   this entry as "JNA is source-only".
 - ed25519-bip32 (Rust crate, 0.4.2) and cryptoxide (0.5.3, transitive; dual
-  MIT OR Apache-2.0; Kardano SDK proposes electing Apache-2.0 for this
-  distribution, but that election is not yet ACCEPTED -- see
-  docs/LEGAL_REVIEW.md §5a and docs/evidence/cargo_dependency_inventory.json
-  "license_elections"). Compiled into all nine committed
-  crypto-signing-backend native artifacts listed in
-  crypto-signing-backend/CHECKSUMS.sha256.
+  MIT OR Apache-2.0; owner recorded Apache-2.0 as the catalog option on
+  2026-09-19, reviewer Javier Sarmiento Mañus (project owner); owner
+  acceptance is not a counsel determination -- see docs/LEGAL_REVIEW.md §5a
+  and docs/evidence/cargo_dependency_inventory.json "license_elections").
+  Compiled into all nine committed crypto-signing-backend native artifacts
+  listed in crypto-signing-backend/CHECKSUMS.sha256.
 
 ================================================================================
 Bouncy Castle License (see LICENSES/BouncyCastle.txt)
@@ -106,6 +107,12 @@ MIT License (see LICENSES/MIT.txt)
   linked into all nine committed native artifacts via uniffi's own default
   "cargo-metadata" Cargo feature (confirmed via `cargo tree`, not assumed —
   see docs/evidence/cargo_dependency_inventory.json "method").
+- memchr (Rust crate, 2.8.3). Dual-licensed `Unlicense OR MIT` per its own
+  Cargo.toml; linked into all nine committed crypto-signing-backend native
+  artifacts. Owner recorded MIT as the catalog option on 2026-09-19
+  (reviewer: Javier Sarmiento Mañus (project owner)). Owner acceptance of
+  this catalog row is not a counsel determination. The Unlicense text
+  remains cited below as the other OR-branch reference.
 
 An earlier version of this file claimed no MIT-only distributed component
 existed; that claim was false and is corrected by this section — see
@@ -135,11 +142,13 @@ The Unlicense (see LICENSES/Unlicense.txt)
 - memchr (Rust crate, 2.8.3). Dual-licensed `Unlicense OR MIT` per its own
   Cargo.toml; linked into all nine committed crypto-signing-backend native
   artifacts (see docs/evidence/cargo_dependency_inventory.json
-  "license_elections" for the full per-target membership). No election is
-  made here between Unlicense and MIT — status OPEN, see
-  docs/LEGAL_REVIEW.md §5a and scripts/cargo_election_catalog.py. This text
-  is committed and cited specifically so it is present unless/until a
-  reviewer explicitly accepts an MIT election for this package.
+  "license_elections" for the full per-target membership). Owner recorded
+  MIT as the catalog option on 2026-09-19 (reviewer: Javier Sarmiento
+  Mañus (project owner)); owner acceptance is not a counsel determination.
+  This Unlicense text remains committed and cited as the other OR-branch
+  reference; it is not the owner-recorded catalog option for this
+  distribution. See docs/LEGAL_REVIEW.md §5a and
+  scripts/cargo_election_catalog.py.
 
 ================================================================================
 Mozilla Public License, Version 2.0 (see LICENSES/MPL-2.0.txt)

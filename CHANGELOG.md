@@ -267,6 +267,16 @@ are not published yet; entries remain under **Unreleased** until a tagged releas
 
 ### Changed
 
+- Owner-recorded catalog elections (2026-09-19; reviewer Javier Sarmiento
+  Mañus (project owner)): Apache-2.0 for every applicable target-linked
+  Cargo OR row (26, including the plain Apache-2.0 branch for
+  `rustix`/`linux-raw-sys`) and for JNA (`Apache-2.0 OR LGPL-2.1-or-later`);
+  MIT for `memchr` (`Unlicense OR MIT`). Owner acceptance of those catalog
+  rows is not a counsel determination and does not mark any release as
+  cleared. Public status text now matches the 9 committed CHECKSUMS
+  artifacts (Linux x86-64 JVM is promoted; Windows remains candidate-only)
+  and the current NOTICE digest. Counsel, MPL/Identus/Bouncy, and Identus
+  #226 fields remain open gates.
 - `.github/workflows/verify.yml`'s `legal-evidence-scan` job now checks
   out the exact `pull_request` head SHA
   (`github.event.pull_request.head.sha`) directly, instead of the default

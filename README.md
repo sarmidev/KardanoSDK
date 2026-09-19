@@ -32,8 +32,9 @@ and can submit to preprod. It is a developer demo, not a general-purpose wallet.
 - Mainnet, arbitrary wallet import, general-purpose wallet signing, native-asset transactions,
   scripts, staking, metadata, and hardware-wallet support are not implemented.
 - iOS and JVM/Desktop compile as shared targets; Phase 1 runtime validation is Android-primary.
-- The signing backend includes macOS JVM artifacts, Android artifacts, and iOS static libraries;
-  Linux and Windows JVM signing artifacts are future work.
+- The signing backend includes the 9 committed CHECKSUMS artifacts: macOS JVM
+  dylibs, Android `.so` files, iOS static libraries, and the promoted Linux
+  x86-64 JVM `.so`. Windows x86-64 JVM remains candidate-only and unpromoted.
 
 ## Public landing page
 

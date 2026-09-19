@@ -14,9 +14,12 @@ tag plus release notes that identify the source revision, verified targets, and 
    passes. Before an actual release, also run
    `python3 scripts/check_release_evidence.py --mode release`, which
    additionally fails while any `docs/LEGAL_REVIEW.md` field still carries one
-   of the three named `ALLOWED_OPEN_GATE_MARKERS` strings (counsel review,
-   Identus issue #226, per-election reviewer acceptance) — it is expected to
-   fail until every one of those gates is actually resolved by a human. The
+   of the named `ALLOWED_OPEN_GATE_MARKERS` strings. Owner-recorded catalog
+   elections (Cargo §5a and Gradle/JNA §5b, 2026-09-19) close only those
+   election rows; they are not a counsel determination. Release mode is
+   still expected to fail on the remaining named gates (counsel review,
+   Identus issue #226, and any other still-present marker) until a human
+   actually resolves them. The
    independent PE (native-artifact structural) technical review is a
    separate, already-COMPLETE gate (commit `c65a20a`); its completion is a
    technical finding only, not a legal approval, and does not promote the
