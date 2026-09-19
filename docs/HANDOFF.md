@@ -111,7 +111,7 @@ Date: 2026-09-19
   branch for `rustix`/`linux-raw-sys`) and MIT for `memchr`, plus Apache-2.0
   for JNA, reviewer Javier Sarmiento Mañus (project owner), date
   2026-09-19. Owner acceptance of those catalog rows is not a counsel
-  determination. Public status text was re-audited after Prompts 3–7
+  determination. Public status text was re-checked after Prompts 3–7
   merged: README Linux JVM signing now matches the 9 committed CHECKSUMS
   artifacts; Windows remains candidate-only; LEGAL_REVIEW NOTICE digest
   was aligned to current NOTICE bytes; HANDOFF no longer claims
