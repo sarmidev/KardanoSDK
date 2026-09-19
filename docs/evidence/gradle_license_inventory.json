@@ -1,7 +1,7 @@
 {
   "license_elections": {
-    "accepted_count": 0,
-    "all_mandatory_elections_accepted": false,
+    "accepted_count": 1,
+    "all_mandatory_elections_accepted": true,
     "mandatory_row_count": 1,
     "method": "Every resolved Gradle-runtime coordinate whose own POM lists more than one <license> (a real disjunctive choice, not a compound AND expression -- Maven POMs do not express AND-required licenses the way Cargo.toml's SPDX `license` field can) gets one row here, sourced from scripts/license_catalog.GRADLE_LICENSE_CATALOG's election_status/election_reviewer/election_review_date fields. status only ever becomes ACCEPTED by a human editing that catalog; this generator never sets it itself, and scripts/check_release_evidence.py's release mode fails while any row here is not ACCEPTED with a non-empty reviewer, an ISO-8601 review_date, and a proposed_election that is exactly one of the row's own or_election_options.",
     "rows": [
@@ -16,9 +16,9 @@
           "Apache-2.0"
         ],
         "proposed_election": "Apache-2.0",
-        "review_date": null,
-        "reviewer": null,
-        "status": "OPEN"
+        "review_date": "2026-09-19",
+        "reviewer": "Javier Sarmiento Ma\u00f1us (project owner)",
+        "status": "ACCEPTED"
       }
     ]
   },
@@ -1956,9 +1956,9 @@
     },
     "net.java.dev.jna:jna:5.19.1": {
       "election": "Apache-2.0",
-      "election_review_date": null,
-      "election_reviewer": null,
-      "election_status": "OPEN",
+      "election_review_date": "2026-09-19",
+      "election_reviewer": "Javier Sarmiento Ma\u00f1us (project owner)",
+      "election_status": "ACCEPTED",
       "licenses": [
         "LGPL-2.1-or-later",
         "Apache-2.0"

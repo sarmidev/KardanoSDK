@@ -520,7 +520,7 @@
         }
       ],
       "inspected_2026_08_24": true,
-      "license": "Apache-2.0 OR LGPL-2.1-or-later (Kardano SDK proposes electing Apache-2.0; not yet ACCEPTED -- OPEN row pending reviewer/date, see docs/LEGAL_REVIEW.md \u00a75a)",
+      "license": "Apache-2.0 OR LGPL-2.1-or-later (owner recorded Apache-2.0 as the catalog option on 2026-09-19; Javier Sarmiento Ma\u00f1us (project owner); owner acceptance is not a counsel determination -- see docs/LEGAL_REVIEW.md \u00a75b)",
       "maven_coordinate": "net.java.dev.jna:jna:5.19.1",
       "note": "JNA is both a direct SDK dependency and its own native carrier. Only one of the 27 `.jar`-packaged platform-specific libjnidispatch binaries loads at runtime per host; a JVM-only consumer's jar as distributed contains all 27. Android consumers instead resolve the separate `.aar` variant (see additional_artifacts above), which bundles only the 7 Android-ABI-named binaries also listed here -- 34 total rows, not 27, once both real, resolved artifacts of this coordinate are counted. A prior version of this catalog said 25 -- aix-ppc and aix-ppc64 were missed; corrected here after a full zip-member enumeration. Do not classify JNA as a source-only dependency.",
       "primary_artifact_kind": "jar",
