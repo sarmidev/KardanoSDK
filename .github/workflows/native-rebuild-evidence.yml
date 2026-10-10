@@ -220,7 +220,7 @@ jobs:
           --report "$RUNNER_TEMP/native-rebuild-macos-jvm/compare-report.json"
       - name: Upload macOS JVM evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-rebuild-evidence-macos-jvm
           path: ${{ runner.temp }}/native-rebuild-macos-jvm
@@ -247,7 +247,7 @@ jobs:
           --ndk-home "$ANDROID_NDK_HOME"
       - name: Upload Android evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-rebuild-evidence-android
           path: ${{ runner.temp }}/native-rebuild-android
@@ -273,7 +273,7 @@ jobs:
           --report "$RUNNER_TEMP/native-rebuild-ios/compare-report.json"
       - name: Upload iOS evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-rebuild-evidence-ios
           path: ${{ runner.temp }}/native-rebuild-ios
