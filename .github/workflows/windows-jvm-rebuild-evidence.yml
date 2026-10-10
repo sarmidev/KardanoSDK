@@ -97,7 +97,7 @@ jobs:
           --staging "$env:RUNNER_TEMP/windows-jvm-a"
           --groups windows-jvm
       - name: Upload Windows JVM candidate A
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-jvm-candidate-a
           path: ${{ runner.temp }}/windows-jvm-a
@@ -172,7 +172,7 @@ jobs:
           --staging "$env:RUNNER_TEMP/windows-jvm-b"
           --groups windows-jvm
       - name: Upload Windows JVM candidate B
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-jvm-candidate-b
           path: ${{ runner.temp }}/windows-jvm-b
@@ -210,12 +210,12 @@ jobs:
       - name: Pin MSVC 14.44.35207 / link 14.44.35228.0 and Windows SDK 10.0.26100.0
         run: python crypto-signing-backend/scripts/pin_msvc_linker.py
       - name: Download candidate A
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-jvm-candidate-a
           path: ${{ runner.temp }}/windows-jvm-a
       - name: Download candidate B
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: windows-jvm-candidate-b
           path: ${{ runner.temp }}/windows-jvm-b
@@ -238,12 +238,12 @@ jobs:
           Copy-Item $src (Join-Path $dest "kardano_ed25519_bip32_signing.dll")
           Get-FileHash (Join-Path $dest "kardano_ed25519_bip32_signing.dll") -Algorithm SHA256
       - name: Set up JDK
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "17"
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-disabled: false
           cache-read-only: ${{ github.event.repository != null && github.ref_name != github.event.repository.default_branch }}
@@ -255,7 +255,7 @@ jobs:
           :crypto-signing-backend:jvmTest
       - name: Upload Windows compare report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-jvm-compare-report
           path: ${{ runner.temp }}/windows-jvm-compare
